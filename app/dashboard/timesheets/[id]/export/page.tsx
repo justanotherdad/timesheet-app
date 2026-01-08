@@ -35,11 +35,11 @@ export default async function ExportTimesheetPage({
   )
 
   if (!timesheet) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Timesheet not found</h1>
-          <a href="/dashboard/timesheets" className="text-blue-600 hover:text-blue-700">
+      return (
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Timesheet not found</h1>
+            <a href="/dashboard/timesheets" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
             ← Back to Timesheets
           </a>
         </div>
@@ -86,11 +86,11 @@ export default async function ExportTimesheetPage({
   )
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
               Export Timesheet - Week Ending {formatWeekEnding(timesheet.week_ending)}
             </h1>
             <WeeklyTimesheetExport 

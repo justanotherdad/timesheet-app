@@ -23,10 +23,10 @@ export default async function ApprovalsPage() {
 
   if (!reports || reports.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <div className="container mx-auto px-4 py-8">
-          <div className="max-w-4xl mx-auto bg-white rounded-lg shadow p-8 text-center">
-            <p className="text-gray-600">No direct reports found. You don't have any timesheets to approve.</p>
+          <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
+            <p className="text-gray-600 dark:text-gray-300">No direct reports found. You don't have any timesheets to approve.</p>
           </div>
         </div>
       </div>
@@ -49,26 +49,26 @@ export default async function ApprovalsPage() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Pending Approvals</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-6">Pending Approvals</h1>
 
           {timesheets && timesheets.length > 0 ? (
             <div className="space-y-4">
               {timesheets.map((ts: any) => (
-                <div key={ts.id} className="bg-white rounded-lg shadow p-6">
+                <div key={ts.id} className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                         {ts.user_profiles.name}
                       </h3>
-                      <p className="text-sm text-gray-600">{ts.user_profiles.email}</p>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-gray-600 dark:text-gray-300">{ts.user_profiles.email}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                         Week Ending: {formatWeekEnding(ts.week_ending)}
                       </p>
                     </div>
-                    <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800">
+                    <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">
                       <Clock className="h-4 w-4" />
                       Submitted {ts.submitted_at ? new Date(ts.submitted_at).toLocaleDateString() : ''}
                     </span>
@@ -95,7 +95,7 @@ export default async function ApprovalsPage() {
                     </form>
                     <Link
                       href={`/dashboard/timesheets/${ts.id}`}
-                      className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                      className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                     >
                       View Details
                     </Link>
@@ -104,9 +104,9 @@ export default async function ApprovalsPage() {
               ))}
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow p-12 text-center">
-              <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
-              <p className="text-gray-600">No pending approvals.</p>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
+              <CheckCircle className="h-12 w-12 text-green-400 dark:text-green-500 mx-auto mb-4" />
+              <p className="text-gray-600 dark:text-gray-300">No pending approvals.</p>
             </div>
           )}
         </div>

@@ -51,7 +51,7 @@ npm run dev
 
 ---
 
-### 3. **Deploy to Cloudflare (When Ready)**
+### 3. **Deploy to Vercel (When Ready)**
 
 Once your changes are tested and ready:
 
@@ -69,15 +69,16 @@ git commit -m "Description of your changes"
 git push
 ```
 
-**That's it!** Cloudflare Pages will automatically:
+**That's it!** Vercel will automatically:
 - ✅ Detect the push to GitHub
 - ✅ Build your application
 - ✅ Deploy to `ctgtimesheet.com`
-- ✅ Usually takes 2-5 minutes
+- ✅ Usually takes 2-3 minutes
 
 **Check deployment status:**
-- Go to: https://dash.cloudflare.com → Pages → `timesheet-app` → Deployments
+- Go to: https://vercel.com/dashboard → `timesheet-app` → Deployments
 - You'll see the build progress and status
+- Green checkmark = Success ✅
 
 ---
 
@@ -91,9 +92,20 @@ git push
 
 ### Test Changes
 ```bash
-npm run dev          # Start server
-# Test in browser at http://localhost:3000
-# Press Ctrl+C to stop when done
+# 1. Open Terminal (Cmd + Space, type "Terminal")
+
+# 2. Navigate to project
+cd "/Users/davefletes/Library/Mobile Documents/com~apple~CloudDocs/Buisness/CTG/website/timesheet-app"
+
+# 3. Start dev server
+npm run dev
+
+# 4. (Server starts - you see "Ready" message)
+#    Open browser to http://localhost:3000
+#    Make changes, test, etc.
+
+# 5. When done testing, press Ctrl+C in Terminal
+#    (Server stops, resources freed)
 ```
 
 ### Deploy Changes
@@ -110,10 +122,11 @@ git push
 
 After pushing:
 
-1. **Check Cloudflare Dashboard:**
-   - https://dash.cloudflare.com
-   - Pages → `timesheet-app` → Deployments
+1. **Check Vercel Dashboard:**
+   - https://vercel.com/dashboard
+   - Click `timesheet-app` → Deployments tab
    - Look for green checkmark ✅
+   - Usually takes 2-3 minutes
 
 2. **Check Your Site:**
    - Visit https://ctgtimesheet.com
@@ -135,7 +148,7 @@ After pushing:
 - Each push triggers a new deployment
 
 ### If Build Fails
-1. Check Cloudflare → Deployments → Latest build logs
+1. Check Vercel Dashboard → Deployments → Latest → Build Logs
 2. Look for error messages
 3. Fix the issue locally
 4. Test with `npm run build` (builds without starting server)
@@ -219,7 +232,7 @@ git push
 
 ## 📞 Quick Links
 
-- **Cloudflare Dashboard:** https://dash.cloudflare.com
+- **Vercel Dashboard:** https://vercel.com/dashboard
 - **GitHub Repository:** https://github.com/justanotherdad/timesheet-app
 - **Live Site:** https://ctgtimesheet.com
 - **Supabase Dashboard:** https://app.supabase.com

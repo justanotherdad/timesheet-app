@@ -39,9 +39,9 @@ export default async function TimesheetDetailPage({
 
   if (!timesheet) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Timesheet not found</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Timesheet not found</h1>
           <Link href="/dashboard/timesheets" className="text-blue-600 hover:text-blue-700">
             ← Back to Timesheets
           </Link>
@@ -129,26 +129,26 @@ export default async function TimesheetDetailPage({
   const unbillableTotal = unbillable?.reduce((sum, e) => sum + calculateTotal(e), 0) || 0
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-4">
             <Link
               href="/dashboard/timesheets"
-              className="text-gray-600 hover:text-gray-900"
+              className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
             >
               ← Back to Timesheets
             </Link>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div className="flex justify-between items-start mb-6">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Weekly Timesheet Details</h1>
-                <p className="text-gray-600 mt-1">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Weekly Timesheet Details</h1>
+                <p className="text-gray-600 dark:text-gray-300 mt-1">
                   Week Ending: {formatWeekEnding(timesheet.week_ending)}
                 </p>
-                <p className="text-gray-600">
+                <p className="text-gray-600 dark:text-gray-300">
                   Employee: {timesheet.user_profiles.name}
                 </p>
               </div>
@@ -161,40 +161,40 @@ export default async function TimesheetDetailPage({
             {/* Billable Entries */}
             {entries && entries.length > 0 && (
               <div className="mb-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Billable Time</h2>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
                 <div className="overflow-x-auto">
                   <table className="min-w-full border-collapse border border-gray-300">
                     <thead>
                       <tr className="bg-gray-100">
-                        <th className="border border-gray-300 px-3 py-2 text-left text-sm">Client/Project</th>
-                        <th className="border border-gray-300 px-3 py-2 text-left text-sm">PO#</th>
-                        <th className="border border-gray-300 px-3 py-2 text-left text-sm">Task Description</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">Client/Project</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">PO#</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">Task Description</th>
                         {weekDates.days.map((day, idx) => (
-                          <th key={idx} className="border border-gray-300 px-2 py-2 text-center text-sm">
+                          <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm text-gray-900 dark:text-gray-100">
                             {format(day, 'EEE').toUpperCase().slice(0, 2)}
                           </th>
                         ))}
-                        <th className="border border-gray-300 px-3 py-2 text-center text-sm">Total</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm text-gray-900 dark:text-gray-100">Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       {entries.map((entry, idx) => (
                         <tr key={idx}>
-                          <td className="border border-gray-300 px-3 py-2 text-sm">
+                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
                             {entry.sites?.name || 'N/A'}
                           </td>
-                          <td className="border border-gray-300 px-3 py-2 text-sm">
+                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
                             {entry.purchase_orders?.po_number || 'N/A'}
                           </td>
-                          <td className="border border-gray-300 px-3 py-2 text-sm">
+                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
                             {entry.task_description}
                           </td>
                           {days.map((day) => (
-                            <td key={day} className="border border-gray-300 px-2 py-2 text-sm text-right">
+                            <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
                               {(entry[`${day}_hours`] || 0).toFixed(2)}
                             </td>
                           ))}
-                          <td className="border border-gray-300 px-3 py-2 text-sm text-right font-medium">
+                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-right font-medium text-gray-900 dark:text-gray-100">
                             {calculateTotal(entry).toFixed(2)}
                           </td>
                         </tr>
@@ -202,39 +202,39 @@ export default async function TimesheetDetailPage({
                     </tbody>
                   </table>
                 </div>
-                <p className="mt-2 text-sm text-gray-600">Billable Total: {billableTotal.toFixed(2)} hours</p>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Billable Total: {billableTotal.toFixed(2)} hours</p>
               </div>
             )}
 
             {/* Unbillable Entries */}
             {unbillable && unbillable.length > 0 && (
               <div className="mb-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Unbillable Time</h2>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Unbillable Time</h2>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse border border-gray-300">
+                  <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
                     <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-gray-300 px-3 py-2 text-left text-sm">Description</th>
+                      <tr className="bg-gray-100 dark:bg-gray-700">
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">Description</th>
                         {weekDates.days.map((day, idx) => (
-                          <th key={idx} className="border border-gray-300 px-2 py-2 text-center text-sm">
+                          <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm text-gray-900 dark:text-gray-100">
                             {format(day, 'EEE').toUpperCase().slice(0, 2)}
                           </th>
                         ))}
-                        <th className="border border-gray-300 px-3 py-2 text-center text-sm">Total</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm text-gray-900 dark:text-gray-100">Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       {unbillable.map((entry) => (
                         <tr key={entry.id}>
-                          <td className="border border-gray-300 px-3 py-2 text-sm font-medium">
+                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">
                             {entry.description}
                           </td>
                           {days.map((day) => (
-                            <td key={day} className="border border-gray-300 px-2 py-2 text-sm text-right">
+                            <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
                               {(entry[`${day}_hours`] || 0).toFixed(2)}
                             </td>
                           ))}
-                          <td className="border border-gray-300 px-3 py-2 text-sm text-right font-medium">
+                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-right font-medium text-gray-900 dark:text-gray-100">
                             {calculateTotal(entry).toFixed(2)}
                           </td>
                         </tr>
@@ -242,30 +242,30 @@ export default async function TimesheetDetailPage({
                     </tbody>
                   </table>
                 </div>
-                <p className="mt-2 text-sm text-gray-600">Unbillable Total: {unbillableTotal.toFixed(2)} hours</p>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Unbillable Total: {unbillableTotal.toFixed(2)} hours</p>
               </div>
             )}
 
             {/* Grand Total */}
-            <div className="bg-green-100 p-4 rounded-lg mb-6">
+            <div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-lg mb-6">
               <div className="flex justify-between items-center">
-                <span className="text-lg font-bold text-gray-900">GRAND TOTAL</span>
-                <span className="text-lg font-bold text-gray-900">{(billableTotal + unbillableTotal).toFixed(2)} hours</span>
+                <span className="text-lg font-bold text-gray-900 dark:text-gray-100">GRAND TOTAL</span>
+                <span className="text-lg font-bold text-gray-900 dark:text-gray-100">{(billableTotal + unbillableTotal).toFixed(2)} hours</span>
               </div>
             </div>
 
             {/* Signatures */}
             {timesheet.timesheet_signatures && timesheet.timesheet_signatures.length > 0 && (
               <div className="border-t pt-6 mt-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Approvals</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Approvals</h3>
                 <div className="space-y-3">
                   {timesheet.timesheet_signatures.map((sig: any, index: number) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded">
                       <div>
-                        <p className="font-medium text-gray-900 capitalize">{sig.signer_role}</p>
-                        <p className="text-sm text-gray-600">{sig.user_profiles.name}</p>
+                        <p className="font-medium text-gray-900 dark:text-gray-100 capitalize">{sig.signer_role}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">{sig.user_profiles.name}</p>
                       </div>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         {new Date(sig.signed_at).toLocaleString()}
                       </p>
                     </div>
@@ -276,9 +276,9 @@ export default async function TimesheetDetailPage({
 
             {timesheet.status === 'rejected' && timesheet.rejection_reason && (
               <div className="border-t pt-6 mt-6">
-                <div className="p-4 bg-red-50 border border-red-200 rounded">
-                  <p className="font-semibold text-red-900 mb-1">Rejection Reason:</p>
-                  <p className="text-red-700">{timesheet.rejection_reason}</p>
+                <div className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded">
+                  <p className="font-semibold text-red-900 dark:text-red-300 mb-1">Rejection Reason:</p>
+                  <p className="text-red-700 dark:text-red-300">{timesheet.rejection_reason}</p>
                 </div>
               </div>
             )}
