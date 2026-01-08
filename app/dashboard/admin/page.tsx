@@ -2,15 +2,16 @@ import { redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
 import Link from 'next/link'
 import { Users, Settings, FileText, Building, ShoppingCart, Activity, Package } from 'lucide-react'
+import Header from '@/components/Header'
 
 export default async function AdminPage() {
   const user = await requireRole(['admin', 'super_admin'])
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Header title="Admin Panel" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8">Admin Panel</h1>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <Link
@@ -39,6 +40,21 @@ export default async function AdminPage() {
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Sites</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-300">Add and edit site options</p>
+                </div>
+              </div>
+            </Link>
+
+            <Link
+              href="/dashboard/admin/departments"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-yellow-100 dark:bg-yellow-900/30 p-3 rounded-lg">
+                  <Building className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Departments</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Add and edit departments by site</p>
                 </div>
               </div>
             </Link>

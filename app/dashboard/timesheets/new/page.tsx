@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import WeeklyTimesheetForm from '@/components/WeeklyTimesheetForm'
 import { getWeekEnding, formatDateForInput } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
+import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
 
@@ -29,10 +30,10 @@ export default async function NewTimesheetPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Header title="New Weekly Timesheet" showBack backUrl="/dashboard/timesheets" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">New Weekly Timesheet</h1>
             <WeeklyTimesheetForm
               sites={sites || []}
               purchaseOrders={purchaseOrders || []}

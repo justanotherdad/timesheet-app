@@ -6,6 +6,7 @@ import { formatWeekEnding, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
+import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
 
@@ -130,17 +131,9 @@ export default async function TimesheetDetailPage({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Header title="Timesheet Details" showBack backUrl="/dashboard/timesheets" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-4">
-            <Link
-              href="/dashboard/timesheets"
-              className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-            >
-              ← Back to Timesheets
-            </Link>
-          </div>
-
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div className="flex justify-between items-start mb-6">
               <div>

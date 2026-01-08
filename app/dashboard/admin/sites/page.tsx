@@ -3,35 +3,38 @@ import { requireRole } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import OptionsManager from '@/components/admin/OptionsManager'
+import Header from '@/components/Header'
+import { withQueryTimeout } from '@/lib/timeout'
 
 export default async function SitesAdminPage() {
-  await requireRole(['admin', 'super_admin'])
+  const user = await requireRole(['admin', 'super_admin'])
   const supabase = await createClient()
 
-  const { data: sites } = await supabase
-    .from('sites')
-    .select('*')
-    .order('name')
+  const { data: sites } = await withQueryTimeout(() =>
+    supabase
+      .from('sites')
+      .select('*')
+      .order('name')
+  )
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Header title="Manage Sites" showBack backUrl="/dashboard/admin" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          <div className="flex items-center gap-4 mb-6">
-            <Link
-              href="/dashboard/admin"
-              className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-            >
-              ← Back to Admin
-            </Link>
+          <div className="mb-6">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Configure sites (clients) and set their week starting day. Week starting day: 0=Sunday, 1=Monday, 2=Tuesday, etc.
+            </p>
           </div>
           <OptionsManager
             options={sites || []}
             tableName="sites"
             title="Sites"
             fields={[
-              { name: 'name', label: 'Name', required: true },
-              { name: 'code', label: 'Code' },
+              { name: 'name', label: 'Site Name', type: 'text', required: true },
+              { name: 'code', label: 'Code', type: 'text', required: false },
+              { name: 'week_starting_day', label: 'Week Starts On (0=Sun, 1=Mon, etc.)', type: 'number', required: true },
             ]}
           />
         </div>
@@ -39,4 +42,3 @@ export default async function SitesAdminPage() {
     </div>
   )
 }
-

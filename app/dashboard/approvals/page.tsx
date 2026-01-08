@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { formatWeekEnding } from '@/lib/utils'
 import { CheckCircle, XCircle, Clock } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
+import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
 
@@ -50,9 +51,9 @@ export default async function ApprovalsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Header title="Pending Approvals" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-6">Pending Approvals</h1>
 
           {timesheets && timesheets.length > 0 ? (
             <div className="space-y-4">

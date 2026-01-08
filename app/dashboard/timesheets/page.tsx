@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { formatWeekEnding } from '@/lib/utils'
 import { FileText, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
+import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
 
@@ -55,10 +56,10 @@ export default async function TimesheetsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Header title="My Timesheets" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">My Timesheets</h1>
+          <div className="flex justify-end mb-6">
             <Link
               href="/dashboard/timesheets/new"
               className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -100,7 +101,7 @@ export default async function TimesheetsPage() {
                           {new Date(ts.week_starting).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ts.status)} dark:${getStatusColor(ts.status).replace('bg-', 'dark:bg-').replace('text-', 'dark:text-')}`}>
+                          <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ts.status)}`}>
                             {getStatusIcon(ts.status)}
                             {ts.status}
                           </span>

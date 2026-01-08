@@ -6,19 +6,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function getWeekEnding(date: Date = new Date()): Date {
-  // Week ending is Sunday
-  return endOfWeek(date, { weekStartsOn: 1 }) // Week starts on Monday
+export function getWeekEnding(date: Date = new Date(), weekStartsOn: number = 1): Date {
+  // weekStartsOn: 0=Sunday, 1=Monday, etc.
+  return endOfWeek(date, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })
 }
 
-export function getWeekStarting(date: Date = new Date()): Date {
-  // Week starting is Monday
-  return startOfWeek(date, { weekStartsOn: 1 })
+export function getWeekStarting(date: Date = new Date(), weekStartsOn: number = 1): Date {
+  // weekStartsOn: 0=Sunday, 1=Monday, etc.
+  return startOfWeek(date, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })
 }
 
-export function getWeekDates(weekEnding: Date | string): { start: Date; end: Date; days: Date[] } {
+export function getWeekDates(weekEnding: Date | string, weekStartsOn: number = 1): { start: Date; end: Date; days: Date[] } {
   const end = typeof weekEnding === 'string' ? parseISO(weekEnding) : weekEnding
-  const start = startOfWeek(end, { weekStartsOn: 1 })
+  const start = startOfWeek(end, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })
   const days: Date[] = []
   
   for (let i = 0; i < 7; i++) {

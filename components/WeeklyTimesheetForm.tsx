@@ -307,7 +307,7 @@ export default function WeeklyTimesheetForm({
                       type="text"
                       value={entry.task_description}
                       onChange={(e) => updateBillableEntry(entryIdx, 'task_description', e.target.value)}
-                      className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                      className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                       placeholder="Task description..."
                     />
                   </td>
@@ -320,7 +320,7 @@ export default function WeeklyTimesheetForm({
                         max="24"
                         value={entry[`${day}_hours`] || ''}
                         onChange={(e) => updateBillableEntry(entryIdx, `${day}_hours` as keyof BillableEntry, parseFloat(e.target.value) || 0)}
-                        className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800"
+                        className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                       />
                     </td>
                   ))}
@@ -397,7 +397,7 @@ export default function WeeklyTimesheetForm({
                         max="24"
                         value={entry[`${day}_hours`] || ''}
                         onChange={(e) => updateUnbillableEntry(entryIdx, day, parseFloat(e.target.value) || 0)}
-                        className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800"
+                        className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                       />
                     </td>
                   ))}

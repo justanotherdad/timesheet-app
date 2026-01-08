@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Calendar, FileText, Users, Settings, LogOut } from 'lucide-react'
 import { formatWeekEnding, getWeekEnding, formatDateForInput } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
+import Header from '@/components/Header'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10 // Maximum duration for this route in seconds
@@ -58,27 +59,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <nav className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Timesheet Dashboard</h1>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600 dark:text-gray-300">
-                {user.profile.name} ({user.profile.role})
-              </span>
-              <form action="/auth/logout" method="post">
-                <button
-                  type="submit"
-                  className="flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign Out
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Header title="Timesheet Dashboard" user={user} />
 
       <div className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
