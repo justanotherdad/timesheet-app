@@ -222,6 +222,28 @@ git push
 
 ## 🔧 Common Issues & Solutions
 
+### Issue: Error 522: Connection timed out
+**Solution:**
+1. **Check deployment logs:**
+   - Go to Cloudflare Pages → Your project → Deployments
+   - Click on latest deployment → View build logs
+   - Look for runtime errors or crashes
+2. **Verify build settings:**
+   - Build command: `npm run build`
+   - Build output directory: `.next`
+   - Node.js version: 18 or 20
+3. **Check environment variables:**
+   - Verify all 3 Supabase env vars are set in Cloudflare Pages
+   - Ensure they're set for Production environment
+4. **Remove standalone output:**
+   - Check `next.config.ts` - should NOT have `output: 'standalone'`
+   - Cloudflare Pages handles this automatically
+5. **Check for runtime errors:**
+   - Review function logs in Cloudflare Pages
+   - Check if app is crashing on startup
+6. **Retry deployment:**
+   - Go to Deployments → Click three dots on latest → Retry deployment
+
 ### Issue: Error 1016: Origin DNS error
 **Solution:**
 1. Go to Cloudflare Pages → Your project → Custom domains
