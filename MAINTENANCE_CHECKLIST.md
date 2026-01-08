@@ -222,6 +222,28 @@ git push
 
 ## 🔧 Common Issues & Solutions
 
+### Issue: Error 1016: Origin DNS error
+**Solution:**
+1. Go to Cloudflare Pages → Your project → Custom domains
+2. Verify `ctgtimesheet.com` is listed and active
+3. If not listed, add it: "Set up a custom domain" → Enter domain → Continue
+4. Check Cloudflare DNS → Records:
+   - Verify CNAME records point to correct Pages URL
+   - Ensure records are Proxied (orange cloud)
+5. Wait 5-10 minutes for DNS propagation
+6. Test domain again
+
+### Issue: Corporate firewall blocking site (Zscaler/Sanofi)
+**Solution:**
+1. **Immediate:** Test from outside corporate network or use Pages URL
+2. **Short-term:** Contact IT: AIMS.EnterpriseSecurity@sanofi.com
+   - Request whitelist for `ctgtimesheet.com`
+   - Provide business justification
+3. **Long-term:** After 30 days, submit Zscaler Site Review
+   - Click "Continue" on warning page
+   - Submit site review request
+   - Request categorization as "Business" or "Productivity"
+
 ### Issue: App not updating after GitHub push
 **Solution:**
 1. Check Cloudflare Pages → Deployments for build status
