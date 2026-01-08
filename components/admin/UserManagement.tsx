@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { User, UserRole } from '@/types/database'
 import { Plus, Edit, Trash2 } from 'lucide-react'
+import { createUser } from '@/app/actions/create-user'
 
 interface UserManagementProps {
   users: User[]
@@ -31,18 +32,12 @@ export default function UserManagement({ users: initialUsers, currentUserRole }:
     const role = formData.get('role') as UserRole
 
     try {
-      // Note: In production, you'd want to send an invitation email
-      // For now, we'll just create the profile entry
-      // The user will need to sign up separately
-      const { error: insertError } = await supabase
-        .from('user_profiles')
-        .insert({
-          email,
-          name,
-          role,
-        })
+      // Use server action to create user (handles auth user + profile creation)
+      const result = await createUser(formData)
 
-      if (insertError) throw insertError
+      if (result.error) {
+        throw new Error(result.error)
+      }
 
       // Refresh the page to show new user
       window.location.reload()
