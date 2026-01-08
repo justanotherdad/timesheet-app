@@ -1,0 +1,75 @@
+import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser, requireRole } from '@/lib/auth'
+import { NextResponse } from 'next/server'
+
+export async function POST(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
+    const supabase = await createClient()
+    const { id } = params
+
+    // Get the timesheet
+    const { data: timesheet, error: fetchError } = await supabase
+      .from('weekly_timesheets')
+      .select('*, user_profiles!inner(reports_to_id)')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !timesheet) {
+      return NextResponse.json({ error: 'Timesheet not found' }, { status: 404 })
+    }
+
+    // Verify the user can approve this timesheet
+    const canApprove = 
+      timesheet.user_profiles.reports_to_id === user.id ||
+      timesheet.user_id === user.id ||
+      ['admin', 'super_admin'].includes(user.profile.role)
+
+    if (!canApprove) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
+    if (timesheet.status !== 'submitted') {
+      return NextResponse.json({ error: 'Timesheet is not in submitted status' }, { status: 400 })
+    }
+
+    // Determine signer role
+    const signerRole = ['manager', 'admin', 'super_admin'].includes(user.profile.role)
+      ? 'manager'
+      : 'supervisor'
+
+    // Create signature
+    const { error: signatureError } = await supabase
+      .from('timesheet_signatures')
+      .insert({
+        timesheet_id: id,
+        signer_id: user.id,
+        signer_role: signerRole,
+      })
+
+    if (signatureError) {
+      return NextResponse.json({ error: signatureError.message }, { status: 500 })
+    }
+
+    // Update timesheet status
+    const { error: updateError } = await supabase
+      .from('weekly_timesheets')
+      .update({
+        status: 'approved',
+        approved_by_id: user.id,
+        approved_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    return NextResponse.redirect(new URL('/dashboard/approvals', request.url))
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}

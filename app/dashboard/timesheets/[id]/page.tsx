@@ -1,0 +1,290 @@
+import { redirect } from 'next/navigation'
+import { getCurrentUser } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
+import Link from 'next/link'
+import { formatWeekEnding, getWeekDates } from '@/lib/utils'
+import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
+
+export default async function TimesheetDetailPage({
+  params,
+}: {
+  params: { id: string }
+}) {
+  const user = await getCurrentUser()
+  if (!user) redirect('/login')
+
+  const supabase = await createClient()
+
+  const { data: timesheet } = await supabase
+    .from('weekly_timesheets')
+    .select(`
+      *,
+      user_profiles(name, email),
+      timesheet_signatures(
+        signer_role,
+        signed_at,
+        user_profiles(name)
+      )
+    `)
+    .eq('id', params.id)
+    .single()
+
+  if (!timesheet) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Timesheet not found</h1>
+          <Link href="/dashboard/timesheets" className="text-blue-600 hover:text-blue-700">
+            ← Back to Timesheets
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // Verify user can view this timesheet
+  if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
+    // Check if user is manager/supervisor of the timesheet owner
+    const { data: owner } = await supabase
+      .from('user_profiles')
+      .select('reports_to_id')
+      .eq('id', timesheet.user_id)
+      .single()
+
+    if (owner?.reports_to_id !== user.id) {
+      redirect('/dashboard')
+    }
+  }
+
+  // Get entries
+  const { data: entries } = await supabase
+    .from('timesheet_entries')
+    .select(`
+      *,
+      sites(name, code),
+      purchase_orders(po_number, description)
+    `)
+    .eq('timesheet_id', params.id)
+    .order('created_at')
+
+  // Get unbillable entries
+  const { data: unbillable } = await supabase
+    .from('timesheet_unbillable')
+    .select('*')
+    .eq('timesheet_id', params.id)
+    .order('description')
+
+  const weekDates = getWeekDates(timesheet.week_ending)
+  const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
+
+  const calculateTotal = (entry: any): number => {
+    return (entry.mon_hours || 0) + (entry.tue_hours || 0) + (entry.wed_hours || 0) + 
+           (entry.thu_hours || 0) + (entry.fri_hours || 0) + (entry.sat_hours || 0) + (entry.sun_hours || 0)
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return <CheckCircle className="h-5 w-5 text-green-600" />
+      case 'rejected':
+        return <XCircle className="h-5 w-5 text-red-600" />
+      case 'submitted':
+        return <Clock className="h-5 w-5 text-orange-600" />
+      default:
+        return <FileText className="h-5 w-5 text-gray-600" />
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return 'bg-green-100 text-green-800'
+      case 'rejected':
+        return 'bg-red-100 text-red-800'
+      case 'submitted':
+        return 'bg-orange-100 text-orange-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const billableTotal = entries?.reduce((sum, e) => sum + calculateTotal(e), 0) || 0
+  const unbillableTotal = unbillable?.reduce((sum, e) => sum + calculateTotal(e), 0) || 0
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-4">
+            <Link
+              href="/dashboard/timesheets"
+              className="text-gray-600 hover:text-gray-900"
+            >
+              ← Back to Timesheets
+            </Link>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Weekly Timesheet Details</h1>
+                <p className="text-gray-600 mt-1">
+                  Week Ending: {formatWeekEnding(timesheet.week_ending)}
+                </p>
+                <p className="text-gray-600">
+                  Employee: {timesheet.user_profiles.name}
+                </p>
+              </div>
+              <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(timesheet.status)}`}>
+                {getStatusIcon(timesheet.status)}
+                {timesheet.status}
+              </span>
+            </div>
+
+            {/* Billable Entries */}
+            {entries && entries.length > 0 && (
+              <div className="mb-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Billable Time</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-300 px-3 py-2 text-left text-sm">Client/Project</th>
+                        <th className="border border-gray-300 px-3 py-2 text-left text-sm">PO#</th>
+                        <th className="border border-gray-300 px-3 py-2 text-left text-sm">Task Description</th>
+                        {weekDates.days.map((day, idx) => (
+                          <th key={idx} className="border border-gray-300 px-2 py-2 text-center text-sm">
+                            {day.toUpperCase().slice(0, 2)}
+                          </th>
+                        ))}
+                        <th className="border border-gray-300 px-3 py-2 text-center text-sm">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.map((entry, idx) => (
+                        <tr key={idx}>
+                          <td className="border border-gray-300 px-3 py-2 text-sm">
+                            {entry.sites?.name || 'N/A'}
+                          </td>
+                          <td className="border border-gray-300 px-3 py-2 text-sm">
+                            {entry.purchase_orders?.po_number || 'N/A'}
+                          </td>
+                          <td className="border border-gray-300 px-3 py-2 text-sm">
+                            {entry.task_description}
+                          </td>
+                          {days.map((day) => (
+                            <td key={day} className="border border-gray-300 px-2 py-2 text-sm text-right">
+                              {(entry[`${day}_hours`] || 0).toFixed(2)}
+                            </td>
+                          ))}
+                          <td className="border border-gray-300 px-3 py-2 text-sm text-right font-medium">
+                            {calculateTotal(entry).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-2 text-sm text-gray-600">Billable Total: {billableTotal.toFixed(2)} hours</p>
+              </div>
+            )}
+
+            {/* Unbillable Entries */}
+            {unbillable && unbillable.length > 0 && (
+              <div className="mb-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Unbillable Time</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-300 px-3 py-2 text-left text-sm">Description</th>
+                        {weekDates.days.map((day, idx) => (
+                          <th key={idx} className="border border-gray-300 px-2 py-2 text-center text-sm">
+                            {day.toUpperCase().slice(0, 2)}
+                          </th>
+                        ))}
+                        <th className="border border-gray-300 px-3 py-2 text-center text-sm">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unbillable.map((entry) => (
+                        <tr key={entry.id}>
+                          <td className="border border-gray-300 px-3 py-2 text-sm font-medium">
+                            {entry.description}
+                          </td>
+                          {days.map((day) => (
+                            <td key={day} className="border border-gray-300 px-2 py-2 text-sm text-right">
+                              {(entry[`${day}_hours`] || 0).toFixed(2)}
+                            </td>
+                          ))}
+                          <td className="border border-gray-300 px-3 py-2 text-sm text-right font-medium">
+                            {calculateTotal(entry).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-2 text-sm text-gray-600">Unbillable Total: {unbillableTotal.toFixed(2)} hours</p>
+              </div>
+            )}
+
+            {/* Grand Total */}
+            <div className="bg-green-100 p-4 rounded-lg mb-6">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-bold text-gray-900">GRAND TOTAL</span>
+                <span className="text-lg font-bold text-gray-900">{(billableTotal + unbillableTotal).toFixed(2)} hours</span>
+              </div>
+            </div>
+
+            {/* Signatures */}
+            {timesheet.timesheet_signatures && timesheet.timesheet_signatures.length > 0 && (
+              <div className="border-t pt-6 mt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Approvals</h3>
+                <div className="space-y-3">
+                  {timesheet.timesheet_signatures.map((sig: any, index: number) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                      <div>
+                        <p className="font-medium text-gray-900 capitalize">{sig.signer_role}</p>
+                        <p className="text-sm text-gray-600">{sig.user_profiles.name}</p>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        {new Date(sig.signed_at).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {timesheet.status === 'rejected' && timesheet.rejection_reason && (
+              <div className="border-t pt-6 mt-6">
+                <div className="p-4 bg-red-50 border border-red-200 rounded">
+                  <p className="font-semibold text-red-900 mb-1">Rejection Reason:</p>
+                  <p className="text-red-700">{timesheet.rejection_reason}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="border-t pt-6 mt-6 flex gap-4">
+              <Link
+                href={`/dashboard/timesheets/${timesheet.id}/export`}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+              >
+                Export Timesheet
+              </Link>
+              {timesheet.status === 'draft' && timesheet.user_id === user.id && (
+                <Link
+                  href={`/dashboard/timesheets/${timesheet.id}/edit`}
+                  className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                >
+                  Edit
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
