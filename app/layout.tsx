@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   description: "Streamline your time tracking and approval workflow",
 };
 
+export const dynamic = 'force-dynamic'
+
 export default function RootLayout({
   children,
 }: Readonly<{

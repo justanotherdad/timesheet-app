@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { Calendar, FileText, Users, Settings, LogOut } from 'lucide-react'
 import { formatWeekEnding, getWeekEnding, formatDateForInput } from '@/lib/utils'
 
+export const dynamic = 'force-dynamic'
+
 export default async function DashboardPage() {
   const user = await getCurrentUser()
   
