@@ -22,18 +22,18 @@ export default async function TimesheetDetailPage({
 
   const timesheetResult = await withQueryTimeout(() =>
     supabase
-      .from('weekly_timesheets')
-      .select(`
-        *,
-        user_profiles(name, email),
-        timesheet_signatures(
-          signer_role,
-          signed_at,
-          user_profiles(name)
-        )
-      `)
-      .eq('id', id)
-      .single()
+    .from('weekly_timesheets')
+    .select(`
+      *,
+      user_profiles(name, email),
+      timesheet_signatures(
+        signer_role,
+        signed_at,
+        user_profiles(name)
+      )
+    `)
+    .eq('id', id)
+    .single()
   )
   const timesheet = timesheetResult.data as any
 
@@ -55,10 +55,10 @@ export default async function TimesheetDetailPage({
     // Check if user is manager/supervisor of the timesheet owner
     const ownerResult = await withQueryTimeout(() =>
       supabase
-        .from('user_profiles')
-        .select('reports_to_id')
-        .eq('id', timesheet.user_id)
-        .single()
+      .from('user_profiles')
+      .select('reports_to_id')
+      .eq('id', timesheet.user_id)
+      .single()
     )
     const owner = ownerResult.data as any
 
@@ -70,24 +70,24 @@ export default async function TimesheetDetailPage({
   // Get entries
   const entriesResult = await withQueryTimeout(() =>
     supabase
-      .from('timesheet_entries')
-      .select(`
-        *,
-        sites(name, code),
-        purchase_orders(po_number, description)
-      `)
-      .eq('timesheet_id', id)
-      .order('created_at')
+    .from('timesheet_entries')
+    .select(`
+      *,
+      sites(name, code),
+      purchase_orders(po_number, description)
+    `)
+    .eq('timesheet_id', id)
+    .order('created_at')
   )
   const entries = (entriesResult.data || []) as any[]
 
   // Get unbillable entries
   const unbillableResult = await withQueryTimeout(() =>
     supabase
-      .from('timesheet_unbillable')
-      .select('*')
-      .eq('timesheet_id', id)
-      .order('description')
+    .from('timesheet_unbillable')
+    .select('*')
+    .eq('timesheet_id', id)
+    .order('description')
   )
   const unbillable = (unbillableResult.data || []) as any[]
 

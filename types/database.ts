@@ -64,28 +64,6 @@ export interface TimesheetUnbillable {
   updated_at: string
 }
 
-// Legacy interface for backward compatibility (can be removed later)
-export interface Timesheet {
-  id: string
-  user_id: string
-  week_ending: string
-  site_id: string
-  po_id: string
-  system_id: string
-  activity_id: string
-  deliverable_id: string
-  hours: number
-  status: 'draft' | 'submitted' | 'approved' | 'rejected'
-  submitted_at?: string
-  approved_by_id?: string
-  approved_at?: string
-  rejected_by_id?: string
-  rejected_at?: string
-  rejection_reason?: string
-  created_at: string
-  updated_at: string
-}
-
 export interface Site {
   id: string
   name: string

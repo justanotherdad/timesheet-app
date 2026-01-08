@@ -1,8 +1,14 @@
 import { createClient } from './supabase/server'
-import { UserRole } from '@/types/database'
+import { UserRole, User } from '@/types/database'
 import { withTimeout, withQueryTimeout } from './timeout'
 
-export async function getCurrentUser() {
+export interface CurrentUser {
+  id: string
+  email?: string
+  profile: User
+}
+
+export async function getCurrentUser(): Promise<CurrentUser | null> {
   try {
     const supabase = await createClient()
     
