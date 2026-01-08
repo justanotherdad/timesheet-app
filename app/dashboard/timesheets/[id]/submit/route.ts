@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser()
@@ -13,7 +13,7 @@ export async function POST(
     }
 
     const supabase = await createClient()
-    const { id } = params
+    const { id } = await params
 
     // Verify the timesheet belongs to the user
     const { data: timesheet, error: fetchError } = await supabase

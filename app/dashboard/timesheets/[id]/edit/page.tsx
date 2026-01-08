@@ -7,8 +7,9 @@ import { formatDateForInput } from '@/lib/utils'
 export default async function EditTimesheetPage({
   params,
 }: {
-  params: { id: string }
-) {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params
   const user = await getCurrentUser()
   
   if (!user) {
@@ -21,7 +22,7 @@ export default async function EditTimesheetPage({
   const { data: timesheet } = await supabase
     .from('weekly_timesheets')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (!timesheet) {
@@ -47,14 +48,14 @@ export default async function EditTimesheetPage({
   const { data: entries } = await supabase
     .from('timesheet_entries')
     .select('*')
-    .eq('timesheet_id', params.id)
+    .eq('timesheet_id', id)
     .order('created_at')
 
   // Get existing unbillable entries
   const { data: unbillable } = await supabase
     .from('timesheet_unbillable')
     .select('*')
-    .eq('timesheet_id', params.id)
+    .eq('timesheet_id', id)
     .order('description')
 
   return (

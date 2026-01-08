@@ -7,8 +7,9 @@ import { formatWeekEnding } from '@/lib/utils'
 export default async function ExportTimesheetPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  const { id } = await params
   const user = await getCurrentUser()
   if (!user) redirect('/login')
 
@@ -25,7 +26,7 @@ export default async function ExportTimesheetPage({
         user_profiles(name)
       )
     `)
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (!timesheet) {
@@ -63,14 +64,14 @@ export default async function ExportTimesheetPage({
       sites(name, code),
       purchase_orders(po_number, description)
     `)
-    .eq('timesheet_id', params.id)
+    .eq('timesheet_id', id)
     .order('created_at')
 
   // Get unbillable entries
   const { data: unbillable } = await supabase
     .from('timesheet_unbillable')
     .select('*')
-    .eq('timesheet_id', params.id)
+    .eq('timesheet_id', id)
     .order('description')
 
   return (

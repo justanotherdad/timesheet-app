@@ -4,16 +4,16 @@ import { NextResponse } from 'next/server'
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
     const supabase = await createClient()
-    const { id } = params
+    const { id } = await params
 
     // Get the timesheet
     const { data: timesheet, error: fetchError } = await supabase
-      .from('timesheets')
+      .from('weekly_timesheets')
       .select('*, user_profiles!inner(reports_to_id)')
       .eq('id', id)
       .single()
@@ -42,7 +42,7 @@ export async function POST(
 
     // Update timesheet status
     const { error: updateError } = await supabase
-      .from('timesheets')
+      .from('weekly_timesheets')
       .update({
         status: 'rejected',
         rejected_by_id: user.id,
