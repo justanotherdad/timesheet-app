@@ -1,23 +1,43 @@
 import { createClient } from './supabase/server'
 import { UserRole } from '@/types/database'
+import { withTimeout, withQueryTimeout } from './timeout'
 
 export async function getCurrentUser() {
-  const supabase = await createClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  
-  if (error || !user) return null
+  try {
+    const supabase = await createClient()
+    
+    // Add timeout to auth check (5 seconds)
+    const authResult = await withTimeout(
+      supabase.auth.getUser(),
+      5000,
+      'Authentication check timed out'
+    )
+    
+    const { data: { user }, error } = authResult || { data: { user: null }, error: null }
+    
+    if (error || !user) return null
 
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+    // Add timeout to profile query (5 seconds)
+    const profileResult = await withQueryTimeout(
+      () => supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single(),
+      5000
+    )
 
-  if (!profile) return null
+    const profile = profileResult.data
 
-  return {
-    ...user,
-    profile
+    if (!profile) return null
+
+    return {
+      ...user,
+      profile
+    }
+  } catch (error) {
+    console.error('Error in getCurrentUser:', error)
+    return null
   }
 }
 

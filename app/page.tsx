@@ -1,17 +1,25 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { withTimeout } from '@/lib/timeout'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 10 // Maximum duration for this route in seconds
 
 export default async function Home() {
   let user = null
   try {
     const supabase = await createClient()
-    const { data } = await supabase.auth.getUser()
-    user = data.user
+    // Add timeout to prevent hanging
+    const { data } = await withTimeout(
+      supabase.auth.getUser(),
+      5000,
+      'Auth check timed out'
+    )
+    user = data?.user || null
   } catch (error) {
-    // Supabase not available during build - this is expected
+    // Supabase not available during build or timed out - this is expected
     // User will be null, showing the sign in/sign up options
+    console.error('Home page auth check error:', error)
   }
 
   return (

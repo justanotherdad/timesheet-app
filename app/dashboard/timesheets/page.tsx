@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { formatWeekEnding } from '@/lib/utils'
 import { FileText, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { withQueryTimeout } from '@/lib/timeout'
+
+export const maxDuration = 10 // Maximum duration for this route in seconds
 
 export default async function TimesheetsPage() {
   const user = await getCurrentUser()
@@ -15,12 +18,14 @@ export default async function TimesheetsPage() {
   const supabase = await createClient()
 
   // Get all weekly timesheets for the user, ordered by week ending (most recent first)
-  const { data: timesheets } = await supabase
-    .from('weekly_timesheets')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('week_ending', { ascending: false })
-    .order('created_at', { ascending: false })
+  const { data: timesheets } = await withQueryTimeout(() =>
+    supabase
+      .from('weekly_timesheets')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('week_ending', { ascending: false })
+      .order('created_at', { ascending: false })
+  )
 
   const getStatusIcon = (status: string) => {
     switch (status) {

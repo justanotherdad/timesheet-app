@@ -3,10 +3,12 @@
   "version": "0.1.2",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbo",
+    "dev:slow": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:build": "npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

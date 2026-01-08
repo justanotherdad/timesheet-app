@@ -4,8 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Calendar, FileText, Users, Settings, LogOut } from 'lucide-react'
 import { formatWeekEnding, getWeekEnding, formatDateForInput } from '@/lib/utils'
+import { withQueryTimeout } from '@/lib/timeout'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 10 // Maximum duration for this route in seconds
 
 export default async function DashboardPage() {
   const user = await getCurrentUser()
@@ -18,31 +20,37 @@ export default async function DashboardPage() {
   const weekEnding = getWeekEnding()
   const weekEndingStr = formatDateForInput(weekEnding)
 
-  // Get user's weekly timesheet for current week
-  const { data: timesheet } = await supabase
-    .from('weekly_timesheets')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('week_ending', weekEndingStr)
-    .single()
+  // Get user's weekly timesheet for current week with timeout
+  const { data: timesheet } = await withQueryTimeout(() =>
+    supabase
+      .from('weekly_timesheets')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('week_ending', weekEndingStr)
+      .single()
+  )
 
   // Get pending approvals if user is manager/supervisor
   let pendingApprovals = []
   if (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
-    const { data: reports } = await supabase
-      .from('user_profiles')
-      .select('id')
-      .eq('reports_to_id', user.id)
+    const { data: reports } = await withQueryTimeout(() =>
+      supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('reports_to_id', user.id)
+    )
 
     if (reports && reports.length > 0) {
       const reportIds = reports.map(r => r.id)
-      const { data: pending } = await supabase
-        .from('weekly_timesheets')
-        .select('*, user_profiles!inner(name)')
-        .in('user_id', reportIds)
-        .eq('status', 'submitted')
-        .order('submitted_at', { ascending: true })
-        .limit(10)
+      const { data: pending } = await withQueryTimeout(() =>
+        supabase
+          .from('weekly_timesheets')
+          .select('*, user_profiles!inner(name)')
+          .in('user_id', reportIds)
+          .eq('status', 'submitted')
+          .order('submitted_at', { ascending: true })
+          .limit(10)
+      )
 
       pendingApprovals = pending || []
     }

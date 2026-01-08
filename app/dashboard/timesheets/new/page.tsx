@@ -3,6 +3,9 @@ import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import WeeklyTimesheetForm from '@/components/WeeklyTimesheetForm'
 import { getWeekEnding, formatDateForInput } from '@/lib/utils'
+import { withQueryTimeout } from '@/lib/timeout'
+
+export const maxDuration = 10 // Maximum duration for this route in seconds
 
 export default async function NewTimesheetPage() {
   const user = await getCurrentUser()
@@ -13,11 +16,14 @@ export default async function NewTimesheetPage() {
 
   const supabase = await createClient()
 
-  // Fetch all dropdown options
-  const [sites, purchaseOrders] = await Promise.all([
-    supabase.from('sites').select('*').order('name'),
-    supabase.from('purchase_orders').select('*').order('po_number'),
+  // Fetch all dropdown options with timeout
+  const [sitesResult, purchaseOrdersResult] = await Promise.all([
+    withQueryTimeout(() => supabase.from('sites').select('*').order('name')),
+    withQueryTimeout(() => supabase.from('purchase_orders').select('*').order('po_number')),
   ])
+
+  const sites = sitesResult.data || []
+  const purchaseOrders = purchaseOrdersResult.data || []
 
   const weekEnding = getWeekEnding()
 
@@ -28,8 +34,8 @@ export default async function NewTimesheetPage() {
           <div className="bg-white rounded-lg shadow p-6">
             <h1 className="text-2xl font-bold text-gray-900 mb-6">New Weekly Timesheet</h1>
             <WeeklyTimesheetForm
-              sites={sites.data || []}
-              purchaseOrders={purchaseOrders.data || []}
+              sites={sites || []}
+              purchaseOrders={purchaseOrders || []}
               defaultWeekEnding={formatDateForInput(weekEnding)}
               userId={user.id}
             />

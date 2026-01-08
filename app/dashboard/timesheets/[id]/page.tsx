@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { formatWeekEnding, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
+import { withQueryTimeout } from '@/lib/timeout'
+
+export const maxDuration = 10 // Maximum duration for this route in seconds
 
 export default async function TimesheetDetailPage({
   params,
@@ -17,19 +20,22 @@ export default async function TimesheetDetailPage({
 
   const supabase = await createClient()
 
-  const { data: timesheet } = await supabase
-    .from('weekly_timesheets')
-    .select(`
-      *,
-      user_profiles(name, email),
-      timesheet_signatures(
-        signer_role,
-        signed_at,
-        user_profiles(name)
-      )
-    `)
-    .eq('id', id)
-    .single()
+  const timesheetResult = await withQueryTimeout(() =>
+    supabase
+      .from('weekly_timesheets')
+      .select(`
+        *,
+        user_profiles(name, email),
+        timesheet_signatures(
+          signer_role,
+          signed_at,
+          user_profiles(name)
+        )
+      `)
+      .eq('id', id)
+      .single()
+  )
+  const timesheet = timesheetResult.data as any
 
   if (!timesheet) {
     return (
@@ -47,11 +53,14 @@ export default async function TimesheetDetailPage({
   // Verify user can view this timesheet
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
     // Check if user is manager/supervisor of the timesheet owner
-    const { data: owner } = await supabase
-      .from('user_profiles')
-      .select('reports_to_id')
-      .eq('id', timesheet.user_id)
-      .single()
+    const ownerResult = await withQueryTimeout(() =>
+      supabase
+        .from('user_profiles')
+        .select('reports_to_id')
+        .eq('id', timesheet.user_id)
+        .single()
+    )
+    const owner = ownerResult.data as any
 
     if (owner?.reports_to_id !== user.id) {
       redirect('/dashboard')
@@ -59,22 +68,28 @@ export default async function TimesheetDetailPage({
   }
 
   // Get entries
-  const { data: entries } = await supabase
-    .from('timesheet_entries')
-    .select(`
-      *,
-      sites(name, code),
-      purchase_orders(po_number, description)
-    `)
-    .eq('timesheet_id', id)
-    .order('created_at')
+  const entriesResult = await withQueryTimeout(() =>
+    supabase
+      .from('timesheet_entries')
+      .select(`
+        *,
+        sites(name, code),
+        purchase_orders(po_number, description)
+      `)
+      .eq('timesheet_id', id)
+      .order('created_at')
+  )
+  const entries = (entriesResult.data || []) as any[]
 
   // Get unbillable entries
-  const { data: unbillable } = await supabase
-    .from('timesheet_unbillable')
-    .select('*')
-    .eq('timesheet_id', id)
-    .order('description')
+  const unbillableResult = await withQueryTimeout(() =>
+    supabase
+      .from('timesheet_unbillable')
+      .select('*')
+      .eq('timesheet_id', id)
+      .order('description')
+  )
+  const unbillable = (unbillableResult.data || []) as any[]
 
   const weekDates = getWeekDates(timesheet.week_ending)
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const

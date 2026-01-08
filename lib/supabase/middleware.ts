@@ -40,9 +40,15 @@ export async function updateSession(request: NextRequest) {
   // issues with users being randomly logged out.
 
   try {
+    // Add timeout to auth check to prevent hanging
+    const authPromise = supabase.auth.getUser()
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+    })
+
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await Promise.race([authPromise, timeoutPromise])
 
     // Allow public access to landing page, login, and signup
     const publicPaths = ['/', '/login', '/signup']
@@ -59,10 +65,22 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url)
     }
   } catch (error) {
-    // If Supabase connection fails, allow request through to prevent timeouts
-    // This prevents Error 522 when Supabase is unavailable
+    // If Supabase connection fails or times out, allow request through to prevent timeouts
+    // This prevents Error 522 when Supabase is unavailable or slow
     console.error('Supabase auth error in middleware:', error)
-    return supabaseResponse
+    
+    // For public paths, always allow through
+    const publicPaths = ['/', '/login', '/signup']
+    const isPublicPath = publicPaths.includes(request.nextUrl.pathname)
+    
+    if (isPublicPath || request.nextUrl.pathname.startsWith('/auth')) {
+      return supabaseResponse
+    }
+    
+    // For protected paths, redirect to login but don't hang
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're

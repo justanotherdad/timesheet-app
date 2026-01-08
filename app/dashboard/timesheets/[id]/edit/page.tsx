@@ -3,6 +3,9 @@ import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import WeeklyTimesheetForm from '@/components/WeeklyTimesheetForm'
 import { formatDateForInput } from '@/lib/utils'
+import { withQueryTimeout } from '@/lib/timeout'
+
+export const maxDuration = 10 // Maximum duration for this route in seconds
 
 export default async function EditTimesheetPage({
   params,
@@ -19,11 +22,13 @@ export default async function EditTimesheetPage({
   const supabase = await createClient()
 
   // Get the timesheet
-  const { data: timesheet } = await supabase
-    .from('weekly_timesheets')
-    .select('*')
-    .eq('id', id)
-    .single()
+  const { data: timesheet } = await withQueryTimeout(() =>
+    supabase
+      .from('weekly_timesheets')
+      .select('*')
+      .eq('id', id)
+      .single()
+  )
 
   if (!timesheet) {
     redirect('/dashboard/timesheets')
@@ -38,25 +43,32 @@ export default async function EditTimesheetPage({
     redirect('/dashboard/timesheets')
   }
 
-  // Fetch all dropdown options
-  const [sites, purchaseOrders] = await Promise.all([
-    supabase.from('sites').select('*').order('name'),
-    supabase.from('purchase_orders').select('*').order('po_number'),
+  // Fetch all dropdown options with timeout
+  const [sitesResult, purchaseOrdersResult] = await Promise.all([
+    withQueryTimeout(() => supabase.from('sites').select('*').order('name')),
+    withQueryTimeout(() => supabase.from('purchase_orders').select('*').order('po_number')),
   ])
 
+  const sites = sitesResult.data || []
+  const purchaseOrders = purchaseOrdersResult.data || []
+
   // Get existing entries
-  const { data: entries } = await supabase
-    .from('timesheet_entries')
-    .select('*')
-    .eq('timesheet_id', id)
-    .order('created_at')
+  const { data: entries } = await withQueryTimeout(() =>
+    supabase
+      .from('timesheet_entries')
+      .select('*')
+      .eq('timesheet_id', id)
+      .order('created_at')
+  )
 
   // Get existing unbillable entries
-  const { data: unbillable } = await supabase
-    .from('timesheet_unbillable')
-    .select('*')
-    .eq('timesheet_id', id)
-    .order('description')
+  const { data: unbillable } = await withQueryTimeout(() =>
+    supabase
+      .from('timesheet_unbillable')
+      .select('*')
+      .eq('timesheet_id', id)
+      .order('description')
+  )
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -65,8 +77,8 @@ export default async function EditTimesheetPage({
           <div className="bg-white rounded-lg shadow p-6">
             <h1 className="text-2xl font-bold text-gray-900 mb-6">Edit Weekly Timesheet</h1>
             <WeeklyTimesheetForm
-              sites={sites.data || []}
-              purchaseOrders={purchaseOrders.data || []}
+              sites={sites || []}
+              purchaseOrders={purchaseOrders || []}
               defaultWeekEnding={formatDateForInput(new Date(timesheet.week_ending))}
               userId={user.id}
               timesheetId={timesheet.id}

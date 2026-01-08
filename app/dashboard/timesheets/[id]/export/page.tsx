@@ -3,6 +3,9 @@ import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import WeeklyTimesheetExport from '@/components/WeeklyTimesheetExport'
 import { formatWeekEnding } from '@/lib/utils'
+import { withQueryTimeout } from '@/lib/timeout'
+
+export const maxDuration = 10 // Maximum duration for this route in seconds
 
 export default async function ExportTimesheetPage({
   params,
@@ -15,19 +18,21 @@ export default async function ExportTimesheetPage({
 
   const supabase = await createClient()
 
-  const { data: timesheet } = await supabase
-    .from('weekly_timesheets')
-    .select(`
-      *,
-      user_profiles(name, email),
-      timesheet_signatures(
-        signer_role,
-        signed_at,
-        user_profiles(name)
-      )
-    `)
-    .eq('id', id)
-    .single()
+  const { data: timesheet } = await withQueryTimeout(() =>
+    supabase
+      .from('weekly_timesheets')
+      .select(`
+        *,
+        user_profiles(name, email),
+        timesheet_signatures(
+          signer_role,
+          signed_at,
+          user_profiles(name)
+        )
+      `)
+      .eq('id', id)
+      .single()
+  )
 
   if (!timesheet) {
     return (
@@ -45,11 +50,13 @@ export default async function ExportTimesheetPage({
   // Verify user can view this timesheet
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
     // Check if user is manager/supervisor of the timesheet owner
-    const { data: owner } = await supabase
-      .from('user_profiles')
-      .select('reports_to_id')
-      .eq('id', timesheet.user_id)
-      .single()
+    const { data: owner } = await withQueryTimeout(() =>
+      supabase
+        .from('user_profiles')
+        .select('reports_to_id')
+        .eq('id', timesheet.user_id)
+        .single()
+    )
 
     if (owner?.reports_to_id !== user.id) {
       redirect('/dashboard')
@@ -57,22 +64,26 @@ export default async function ExportTimesheetPage({
   }
 
   // Get entries
-  const { data: entries } = await supabase
-    .from('timesheet_entries')
-    .select(`
-      *,
-      sites(name, code),
-      purchase_orders(po_number, description)
-    `)
-    .eq('timesheet_id', id)
-    .order('created_at')
+  const { data: entries } = await withQueryTimeout(() =>
+    supabase
+      .from('timesheet_entries')
+      .select(`
+        *,
+        sites(name, code),
+        purchase_orders(po_number, description)
+      `)
+      .eq('timesheet_id', id)
+      .order('created_at')
+  )
 
   // Get unbillable entries
-  const { data: unbillable } = await supabase
-    .from('timesheet_unbillable')
-    .select('*')
-    .eq('timesheet_id', id)
-    .order('description')
+  const { data: unbillable } = await withQueryTimeout(() =>
+    supabase
+      .from('timesheet_unbillable')
+      .select('*')
+      .eq('timesheet_id', id)
+      .order('description')
+  )
 
   return (
     <div className="min-h-screen bg-gray-50">

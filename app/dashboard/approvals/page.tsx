@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { formatWeekEnding } from '@/lib/utils'
 import { CheckCircle, XCircle, Clock } from 'lucide-react'
+import { withQueryTimeout } from '@/lib/timeout'
+
+export const maxDuration = 10 // Maximum duration for this route in seconds
 
 export default async function ApprovalsPage() {
   const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
@@ -11,10 +14,12 @@ export default async function ApprovalsPage() {
   const supabase = await createClient()
 
   // Get all users that report to this user
-  const { data: reports } = await supabase
-    .from('user_profiles')
-    .select('id')
-    .eq('reports_to_id', user.id)
+  const { data: reports } = await withQueryTimeout(() =>
+    supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('reports_to_id', user.id)
+  )
 
   if (!reports || reports.length === 0) {
     return (
@@ -31,15 +36,17 @@ export default async function ApprovalsPage() {
   const reportIds = reports.map(r => r.id)
 
   // Get all submitted weekly timesheets from direct reports
-  const { data: timesheets } = await supabase
-    .from('weekly_timesheets')
-    .select(`
-      *,
-      user_profiles!inner(name, email)
-    `)
-    .in('user_id', reportIds)
-    .eq('status', 'submitted')
-    .order('submitted_at', { ascending: true })
+  const { data: timesheets } = await withQueryTimeout(() =>
+    supabase
+      .from('weekly_timesheets')
+      .select(`
+        *,
+        user_profiles!inner(name, email)
+      `)
+      .in('user_id', reportIds)
+      .eq('status', 'submitted')
+      .order('submitted_at', { ascending: true })
+  )
 
   return (
     <div className="min-h-screen bg-gray-50">
