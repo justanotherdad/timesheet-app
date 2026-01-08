@@ -3,6 +3,7 @@
 import { useRef } from 'react'
 import { Download, Printer } from 'lucide-react'
 import { formatDate, formatDateShort, getWeekDates } from '@/lib/utils'
+import { format } from 'date-fns'
 
 interface WeeklyTimesheetExportProps {
   timesheet: any
@@ -240,7 +241,7 @@ export default function WeeklyTimesheetExport({
               <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Task Description</th>
               {weekDates.days.map((day, idx) => (
                 <th key={idx} className="day-header" style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>
-                  <div>{day.toUpperCase().slice(0, 2)}</div>
+                  <div>{format(day, 'EEE').toUpperCase().slice(0, 2)}</div>
                   <div className="day-date" style={{ fontSize: '8pt', fontWeight: 'normal' }}>
                     {formatDateShort(weekDates.days[idx])}
                   </div>
@@ -345,7 +346,7 @@ export default function WeeklyTimesheetExport({
                 <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Description</th>
                 {weekDates.days.map((day, idx) => (
                   <th key={idx} className="day-header" style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>
-                    <div>{day.toUpperCase().slice(0, 2)}</div>
+                    <div>{format(day, 'EEE').toUpperCase().slice(0, 2)}</div>
                     <div className="day-date" style={{ fontSize: '8pt', fontWeight: 'normal' }}>
                       {formatDateShort(weekDates.days[idx])}
                     </div>

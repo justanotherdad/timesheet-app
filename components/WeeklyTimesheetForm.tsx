@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import SearchableSelect from './SearchableSelect'
 import { getWeekDates, formatDate, formatDateShort, formatDateForInput } from '@/lib/utils'
+import { format } from 'date-fns'
 import { Plus, Trash2 } from 'lucide-react'
 
 interface WeeklyTimesheetFormProps {
@@ -274,7 +275,7 @@ export default function WeeklyTimesheetForm({
                 <th className="border border-gray-300 px-3 py-2 text-left text-sm font-medium">Task Description</th>
                 {weekDates.days.map((day, idx) => (
                   <th key={idx} className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">
-                    <div>{day.toUpperCase().slice(0, 2)}</div>
+                    <div>{format(day, 'EEE').toUpperCase().slice(0, 2)}</div>
                     <div className="text-xs font-normal">{formatDateShort(weekDates.days[idx])}</div>
                   </th>
                 ))}
@@ -376,7 +377,7 @@ export default function WeeklyTimesheetForm({
                 <th className="border border-gray-300 px-3 py-2 text-left text-sm font-medium">Description</th>
                 {weekDates.days.map((day, idx) => (
                   <th key={idx} className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">
-                    <div>{day.toUpperCase().slice(0, 2)}</div>
+                    <div>{format(day, 'EEE').toUpperCase().slice(0, 2)}</div>
                     <div className="text-xs font-normal">{formatDateShort(weekDates.days[idx])}</div>
                   </th>
                 ))}

@@ -9,12 +9,10 @@ export default async function AdminExportPage() {
   const supabase = await createClient()
 
   const { data: timesheets } = await supabase
-    .from('timesheets')
+    .from('weekly_timesheets')
     .select(`
       *,
-      user_profiles(name, email),
-      sites(name),
-      purchase_orders(po_number)
+      user_profiles(name, email)
     `)
     .order('week_ending', { ascending: false })
     .order('created_at', { ascending: false })

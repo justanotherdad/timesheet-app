@@ -3,13 +3,15 @@ import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { formatWeekEnding, getWeekDates } from '@/lib/utils'
+import { format } from 'date-fns'
 import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
 
 export default async function TimesheetDetailPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  const { id } = await params
   const user = await getCurrentUser()
   if (!user) redirect('/login')
 
@@ -26,7 +28,7 @@ export default async function TimesheetDetailPage({
         user_profiles(name)
       )
     `)
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (!timesheet) {
@@ -64,14 +66,14 @@ export default async function TimesheetDetailPage({
       sites(name, code),
       purchase_orders(po_number, description)
     `)
-    .eq('timesheet_id', params.id)
+    .eq('timesheet_id', id)
     .order('created_at')
 
   // Get unbillable entries
   const { data: unbillable } = await supabase
     .from('timesheet_unbillable')
     .select('*')
-    .eq('timesheet_id', params.id)
+    .eq('timesheet_id', id)
     .order('description')
 
   const weekDates = getWeekDates(timesheet.week_ending)
@@ -154,7 +156,7 @@ export default async function TimesheetDetailPage({
                         <th className="border border-gray-300 px-3 py-2 text-left text-sm">Task Description</th>
                         {weekDates.days.map((day, idx) => (
                           <th key={idx} className="border border-gray-300 px-2 py-2 text-center text-sm">
-                            {day.toUpperCase().slice(0, 2)}
+                            {format(day, 'EEE').toUpperCase().slice(0, 2)}
                           </th>
                         ))}
                         <th className="border border-gray-300 px-3 py-2 text-center text-sm">Total</th>
@@ -200,7 +202,7 @@ export default async function TimesheetDetailPage({
                         <th className="border border-gray-300 px-3 py-2 text-left text-sm">Description</th>
                         {weekDates.days.map((day, idx) => (
                           <th key={idx} className="border border-gray-300 px-2 py-2 text-center text-sm">
-                            {day.toUpperCase().slice(0, 2)}
+                            {format(day, 'EEE').toUpperCase().slice(0, 2)}
                           </th>
                         ))}
                         <th className="border border-gray-300 px-3 py-2 text-center text-sm">Total</th>
