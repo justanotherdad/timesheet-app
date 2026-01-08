@@ -56,8 +56,10 @@ export default function OptionsManager({ options: initialOptions, tableName, tit
       if (insertError) throw insertError
 
       setOptions([...options, newOption])
+      if (e.currentTarget) {
+        e.currentTarget.reset()
+      }
       setShowAddForm(false)
-      e.currentTarget.reset()
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {

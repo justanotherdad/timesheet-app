@@ -1,40 +1,32 @@
-import { redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import Link from 'next/link'
-import OptionsManager from '@/components/admin/OptionsManager'
+import Header from '@/components/Header'
+import { withQueryTimeout } from '@/lib/timeout'
+import HierarchicalItemManager from '@/components/admin/HierarchicalItemManager'
 
 export default async function DeliverablesAdminPage() {
-  await requireRole(['admin', 'super_admin'])
+  const user = await requireRole(['admin', 'super_admin'])
   const supabase = await createClient()
 
-  const deliverablesResult = await supabase
-    .from('deliverables')
-    .select('*')
-    .order('name')
+  const sitesResult = await withQueryTimeout(() =>
+    supabase
+      .from('sites')
+      .select('*')
+      .order('name')
+  )
 
-  const deliverables = (deliverablesResult.data || []) as Array<{ id: string; name: string; code?: string }>
+  const sites = (sitesResult.data || []) as Array<{ id: string; name: string; code?: string }>
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Header title="Manage Deliverables" showBack backUrl="/dashboard/admin" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          <div className="flex items-center gap-4 mb-6">
-            <Link
-              href="/dashboard/admin"
-              className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-            >
-              ← Back to Admin
-            </Link>
-          </div>
-          <OptionsManager
-            options={deliverables}
+          <HierarchicalItemManager 
+            sites={sites}
             tableName="deliverables"
             title="Deliverables"
-            fields={[
-              { name: 'name', label: 'Name', required: true },
-              { name: 'code', label: 'Code' },
-            ]}
+            itemName="Deliverable"
           />
         </div>
       </div>

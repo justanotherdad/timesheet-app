@@ -89,8 +89,10 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
       if (insertError) throw insertError
 
       setDepartments([...departments, data])
+      if (e.currentTarget) {
+        e.currentTarget.reset()
+      }
       setShowAddForm(false)
-      e.currentTarget.reset()
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {
