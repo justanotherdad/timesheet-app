@@ -67,13 +67,10 @@ export default async function Home() {
                 >
                   Sign In
                 </Link>
-                <Link
-                  href="/signup"
-                  className="bg-gray-200 text-gray-800 px-8 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
-                >
-                  Sign Up
-                </Link>
               </div>
+              <p className="text-sm text-gray-500 mt-4 text-center">
+                New accounts must be created by an administrator
+              </p>
             </div>
           )}
 
