@@ -1,7 +1,5 @@
-import { redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import Link from 'next/link'
 import OptionsManager from '@/components/admin/OptionsManager'
 import Header from '@/components/Header'
 import { withQueryTimeout } from '@/lib/timeout'
@@ -10,12 +8,14 @@ export default async function SitesAdminPage() {
   const user = await requireRole(['admin', 'super_admin'])
   const supabase = await createClient()
 
-  const { data: sites } = await withQueryTimeout(() =>
+  const sitesResult = await withQueryTimeout(() =>
     supabase
       .from('sites')
       .select('*')
       .order('name')
   )
+
+  const sites = (sitesResult.data || []) as Array<{ id: string; name: string; code?: string; week_starting_day?: number }>
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -28,7 +28,7 @@ export default async function SitesAdminPage() {
             </p>
           </div>
           <OptionsManager
-            options={sites || []}
+            options={sites}
             tableName="sites"
             title="Sites"
             fields={[

@@ -23,8 +23,8 @@ export default async function NewTimesheetPage() {
     withQueryTimeout(() => supabase.from('purchase_orders').select('*').order('po_number')),
   ])
 
-  const sites = sitesResult.data || []
-  const purchaseOrders = purchaseOrdersResult.data || []
+  const sites = (sitesResult.data || []) as any[]
+  const purchaseOrders = (purchaseOrdersResult.data || []) as any[]
 
   const weekEnding = getWeekEnding()
 
@@ -35,8 +35,8 @@ export default async function NewTimesheetPage() {
         <div className="max-w-7xl mx-auto">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <WeeklyTimesheetForm
-              sites={sites || []}
-              purchaseOrders={purchaseOrders || []}
+              sites={sites}
+              purchaseOrders={purchaseOrders}
               defaultWeekEnding={formatDateForInput(weekEnding)}
               userId={user.id}
             />

@@ -18,7 +18,7 @@ export default async function ExportTimesheetPage({
 
   const supabase = await createClient()
 
-  const { data: timesheet } = await withQueryTimeout(() =>
+  const timesheetResult = await withQueryTimeout(() =>
     supabase
       .from('weekly_timesheets')
       .select(`
@@ -33,6 +33,7 @@ export default async function ExportTimesheetPage({
       .eq('id', id)
       .single()
   )
+  const timesheet = timesheetResult.data as any
 
   if (!timesheet) {
       return (
@@ -50,13 +51,14 @@ export default async function ExportTimesheetPage({
   // Verify user can view this timesheet
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
     // Check if user is manager/supervisor of the timesheet owner
-    const { data: owner } = await withQueryTimeout(() =>
+    const ownerResult = await withQueryTimeout(() =>
       supabase
         .from('user_profiles')
         .select('reports_to_id')
         .eq('id', timesheet.user_id)
         .single()
     )
+    const owner = ownerResult.data as any
 
     if (owner?.reports_to_id !== user.id) {
       redirect('/dashboard')
@@ -64,7 +66,7 @@ export default async function ExportTimesheetPage({
   }
 
   // Get entries
-  const { data: entries } = await withQueryTimeout(() =>
+  const entriesResult = await withQueryTimeout(() =>
     supabase
       .from('timesheet_entries')
       .select(`
@@ -75,15 +77,17 @@ export default async function ExportTimesheetPage({
       .eq('timesheet_id', id)
       .order('created_at')
   )
+  const entries = (entriesResult.data || []) as any[]
 
   // Get unbillable entries
-  const { data: unbillable } = await withQueryTimeout(() =>
+  const unbillableResult = await withQueryTimeout(() =>
     supabase
       .from('timesheet_unbillable')
       .select('*')
       .eq('timesheet_id', id)
       .order('description')
   )
+  const unbillable = (unbillableResult.data || []) as any[]
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

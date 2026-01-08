@@ -19,7 +19,7 @@ export default async function TimesheetsPage() {
   const supabase = await createClient()
 
   // Get all weekly timesheets for the user, ordered by week ending (most recent first)
-  const { data: timesheets } = await withQueryTimeout(() =>
+  const timesheetsResult = await withQueryTimeout(() =>
     supabase
       .from('weekly_timesheets')
       .select('*')
@@ -27,6 +27,8 @@ export default async function TimesheetsPage() {
       .order('week_ending', { ascending: false })
       .order('created_at', { ascending: false })
   )
+
+  const timesheets = (timesheetsResult.data || []) as any[]
 
   const getStatusIcon = (status: string) => {
     switch (status) {

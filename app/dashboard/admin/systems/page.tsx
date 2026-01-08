@@ -8,10 +8,12 @@ export default async function SystemsAdminPage() {
   await requireRole(['admin', 'super_admin'])
   const supabase = await createClient()
 
-  const { data: systems } = await supabase
+  const systemsResult = await supabase
     .from('systems')
     .select('*')
     .order('name')
+
+  const systems = (systemsResult.data || []) as Array<{ id: string; name: string; code?: string }>
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -26,7 +28,7 @@ export default async function SystemsAdminPage() {
             </Link>
           </div>
           <OptionsManager
-            options={systems || []}
+            options={systems}
             tableName="systems"
             title="Systems"
             fields={[

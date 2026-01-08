@@ -22,7 +22,7 @@ export default async function DashboardPage() {
   const weekEndingStr = formatDateForInput(weekEnding)
 
   // Get user's weekly timesheet for current week with timeout
-  const { data: timesheet } = await withQueryTimeout(() =>
+  const timesheetResult = await withQueryTimeout(() =>
     supabase
       .from('weekly_timesheets')
       .select('*')
@@ -31,19 +31,23 @@ export default async function DashboardPage() {
       .single()
   )
 
+  const timesheet = timesheetResult.data as any
+
   // Get pending approvals if user is manager/supervisor
-  let pendingApprovals = []
+  let pendingApprovals: any[] = []
   if (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
-    const { data: reports } = await withQueryTimeout(() =>
+    const reportsResult = await withQueryTimeout(() =>
       supabase
         .from('user_profiles')
         .select('id')
         .eq('reports_to_id', user.id)
     )
 
+    const reports = (reportsResult.data || []) as Array<{ id: string }>
+
     if (reports && reports.length > 0) {
       const reportIds = reports.map(r => r.id)
-      const { data: pending } = await withQueryTimeout(() =>
+      const pendingResult = await withQueryTimeout(() =>
         supabase
           .from('weekly_timesheets')
           .select('*, user_profiles!inner(name)')
@@ -53,7 +57,7 @@ export default async function DashboardPage() {
           .limit(10)
       )
 
-      pendingApprovals = pending || []
+      pendingApprovals = (pendingResult.data || []) as any[]
     }
   }
 

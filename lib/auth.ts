@@ -33,14 +33,15 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       5000
     )
 
-    const profile = profileResult.data
+    const profile = profileResult.data as User | null
 
     if (!profile) return null
 
     return {
-      ...user,
+      id: user.id,
+      email: user.email,
       profile
-    }
+    } as CurrentUser
   } catch (error) {
     console.error('Error in getCurrentUser:', error)
     return null

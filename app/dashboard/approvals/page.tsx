@@ -15,12 +15,14 @@ export default async function ApprovalsPage() {
   const supabase = await createClient()
 
   // Get all users that report to this user
-  const { data: reports } = await withQueryTimeout(() =>
+  const reportsResult = await withQueryTimeout(() =>
     supabase
       .from('user_profiles')
       .select('id')
       .eq('reports_to_id', user.id)
   )
+
+  const reports = (reportsResult.data || []) as Array<{ id: string }>
 
   if (!reports || reports.length === 0) {
     return (
@@ -37,7 +39,7 @@ export default async function ApprovalsPage() {
   const reportIds = reports.map(r => r.id)
 
   // Get all submitted weekly timesheets from direct reports
-  const { data: timesheets } = await withQueryTimeout(() =>
+  const timesheetsResult = await withQueryTimeout(() =>
     supabase
       .from('weekly_timesheets')
       .select(`
@@ -48,6 +50,8 @@ export default async function ApprovalsPage() {
       .eq('status', 'submitted')
       .order('submitted_at', { ascending: true })
   )
+
+  const timesheets = (timesheetsResult.data || []) as any[]
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

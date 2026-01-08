@@ -8,10 +8,15 @@ export default async function PurchaseOrdersAdminPage() {
   await requireRole(['admin', 'super_admin'])
   const supabase = await createClient()
 
-  const { data: purchaseOrders } = await supabase
+  const purchaseOrdersResult = await supabase
     .from('purchase_orders')
     .select('*')
     .order('po_number')
+
+  const purchaseOrders = (purchaseOrdersResult.data || []).map((po: any) => ({
+    ...po,
+    name: po.po_number || po.description || 'Unnamed PO'
+  })) as Array<{ id: string; name: string; po_number: string; description?: string }>
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -26,7 +31,7 @@ export default async function PurchaseOrdersAdminPage() {
             </Link>
           </div>
           <OptionsManager
-            options={purchaseOrders || []}
+            options={purchaseOrders}
             tableName="purchase_orders"
             title="Purchase Orders"
             fields={[

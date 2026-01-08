@@ -8,10 +8,12 @@ export default async function ActivitiesAdminPage() {
   await requireRole(['admin', 'super_admin'])
   const supabase = await createClient()
 
-  const { data: activities } = await supabase
+  const activitiesResult = await supabase
     .from('activities')
     .select('*')
     .order('name')
+
+  const activities = (activitiesResult.data || []) as Array<{ id: string; name: string; code?: string }>
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -26,7 +28,7 @@ export default async function ActivitiesAdminPage() {
             </Link>
           </div>
           <OptionsManager
-            options={activities || []}
+            options={activities}
             tableName="activities"
             title="Activities"
             fields={[

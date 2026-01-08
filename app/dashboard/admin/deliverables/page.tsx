@@ -8,10 +8,12 @@ export default async function DeliverablesAdminPage() {
   await requireRole(['admin', 'super_admin'])
   const supabase = await createClient()
 
-  const { data: deliverables } = await supabase
+  const deliverablesResult = await supabase
     .from('deliverables')
     .select('*')
     .order('name')
+
+  const deliverables = (deliverablesResult.data || []) as Array<{ id: string; name: string; code?: string }>
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -26,7 +28,7 @@ export default async function DeliverablesAdminPage() {
             </Link>
           </div>
           <OptionsManager
-            options={deliverables || []}
+            options={deliverables}
             tableName="deliverables"
             title="Deliverables"
             fields={[
