@@ -84,7 +84,7 @@ export async function createUser(formData: FormData) {
         type: 'invite',
         email,
         options: {
-          redirectTo: `${redirectUrl}/login`
+          redirectTo: `${redirectUrl}/auth/setup-password`
         }
       })
 

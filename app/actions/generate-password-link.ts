@@ -45,7 +45,7 @@ export async function generatePasswordLink(email: string) {
       type: 'recovery',
       email,
       options: {
-        redirectTo: `${redirectUrl}/login`
+        redirectTo: `${redirectUrl}/auth/setup-password`
       }
     })
 

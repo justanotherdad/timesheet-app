@@ -50,8 +50,8 @@ export async function updateSession(request: NextRequest) {
       data: { user },
     } = await Promise.race([authPromise, timeoutPromise])
 
-    // Allow public access to landing page, login, and signup
-    const publicPaths = ['/', '/login', '/signup']
+    // Allow public access to landing page, login, signup, and password setup
+    const publicPaths = ['/', '/login', '/signup', '/auth/setup-password']
     const isPublicPath = publicPaths.includes(request.nextUrl.pathname)
 
     if (
@@ -70,7 +70,7 @@ export async function updateSession(request: NextRequest) {
     console.error('Supabase auth error in middleware:', error)
     
     // For public paths, always allow through
-    const publicPaths = ['/', '/login', '/signup']
+    const publicPaths = ['/', '/login', '/signup', '/auth/setup-password']
     const isPublicPath = publicPaths.includes(request.nextUrl.pathname)
     
     if (isPublicPath || request.nextUrl.pathname.startsWith('/auth')) {
