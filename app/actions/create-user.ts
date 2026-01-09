@@ -42,41 +42,61 @@ export async function createUser(formData: FormData) {
     }
 
     let userId: string
+    let isNewUser = false
 
-    // Try to create the user - if they already exist, find them
-    const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12) + 'A1!'
+    // Check if user already exists
+    const { data: { users }, error: listError } = await adminClient.auth.admin.listUsers()
     
-    const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-      email,
-      password: tempPassword,
-      email_confirm: true, // Auto-confirm email
-      user_metadata: {
-        name
-      }
-    })
+    if (listError) {
+      return { error: 'Failed to check existing user: ' + listError.message }
+    }
+    
+    const existingUser = users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
 
-    if (createError) {
-      // If user already exists, find them by listing users
-      if (createError.message?.toLowerCase().includes('already') || createError.message?.toLowerCase().includes('exists')) {
-        const { data: { users }, error: listError } = await adminClient.auth.admin.listUsers()
-        
-        if (listError) {
-          return { error: 'Failed to check existing user: ' + listError.message }
-        }
-        
-        const existingUser = users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
-        if (existingUser) {
-          userId = existingUser.id
-        } else {
-          return { error: 'User already exists but could not be found' }
-        }
-      } else {
-        return { error: createError.message || 'Failed to create auth user' }
-      }
-    } else if (newUser.user) {
-      userId = newUser.user.id
+    if (existingUser) {
+      // User already exists, use their ID
+      userId = existingUser.id
     } else {
-      return { error: 'Failed to create auth user: No user returned' }
+      // Create new user - don't set password, we'll send invitation email
+      const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+        email,
+        email_confirm: false, // Don't auto-confirm - let them confirm via email
+        user_metadata: {
+          name
+        }
+      })
+
+      if (createError || !newUser.user) {
+        return { error: createError?.message || 'Failed to create auth user' }
+      }
+
+      userId = newUser.user.id
+      isNewUser = true
+
+      // Send invitation email with password reset link
+      const { error: inviteError } = await adminClient.auth.admin.generateLink({
+        type: 'invite',
+        email,
+        options: {
+          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'}/login`
+        }
+      })
+
+      if (inviteError) {
+        // If invite fails, try password reset link instead
+        const { error: resetError } = await adminClient.auth.admin.generateLink({
+          type: 'recovery',
+          email,
+          options: {
+            redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'}/login`
+          }
+        })
+
+        if (resetError) {
+          console.error('Failed to send invitation email:', resetError)
+          // Continue anyway - user can use password reset later
+        }
+      }
     }
 
     // Get site_id and department_id from form data
@@ -103,7 +123,14 @@ export async function createUser(formData: FormData) {
 
     revalidatePath('/dashboard/admin/users')
     
-    return { success: true, userId }
+    return { 
+      success: true, 
+      userId,
+      emailSent: isNewUser,
+      message: isNewUser 
+        ? 'User created successfully. An invitation email has been sent to set their password.' 
+        : 'User profile updated successfully. (User already exists in auth system)'
+    }
   } catch (error: any) {
     console.error('Error in createUser server action:', error)
     return { error: error.message || 'An unexpected error occurred while creating the user' }

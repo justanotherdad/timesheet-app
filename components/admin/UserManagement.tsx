@@ -31,6 +31,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
   const supabase = createClient()
@@ -45,6 +46,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
   const handleAddUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
+    setSuccess(null)
     setLoading(true)
 
     const formData = new FormData(e.currentTarget)
@@ -60,8 +62,20 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
         throw new Error(result.error)
       }
 
-      // Refresh the page to show new user
-      window.location.reload()
+      // Show success message
+      if (result.message) {
+        setSuccess(result.message)
+        // Clear form
+        e.currentTarget.reset()
+        setSelectedSiteId('')
+        // Refresh the page after 2 seconds to show new user
+        setTimeout(() => {
+          window.location.reload()
+        }, 2000)
+      } else {
+        // Refresh immediately if no message
+        window.location.reload()
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {
@@ -122,6 +136,12 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
       {error && (
         <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-4">
           {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 px-4 py-3 rounded mb-4">
+          {success}
         </div>
       )}
 
