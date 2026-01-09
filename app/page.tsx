@@ -5,6 +5,9 @@ import { withTimeout } from '@/lib/timeout'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10 // Maximum duration for this route in seconds
 
+// Prevent form resubmission warnings
+export const revalidate = 0
+
 export default async function Home() {
   let user = null
   try {

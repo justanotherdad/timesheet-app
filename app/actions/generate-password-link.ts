@@ -37,11 +37,15 @@ export async function generatePasswordLink(email: string) {
     }
 
     // Generate password reset link
+    // Always use production URL, never localhost
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'
+    const redirectUrl = siteUrl.includes('localhost') ? 'https://ctgtimesheet.com' : siteUrl
+    
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
       type: 'recovery',
       email,
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'}/login`
+        redirectTo: `${redirectUrl}/login`
       }
     })
 

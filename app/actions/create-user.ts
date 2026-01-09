@@ -76,11 +76,15 @@ export async function createUser(formData: FormData) {
 
       // Generate invitation link (don't rely on email delivery)
       // Admin will copy and send this link manually
+      // Always use production URL, never localhost
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'
+      const redirectUrl = siteUrl.includes('localhost') ? 'https://ctgtimesheet.com' : siteUrl
+      
       const { data: linkData, error: inviteError } = await adminClient.auth.admin.generateLink({
         type: 'invite',
         email,
         options: {
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'}/login`
+          redirectTo: `${redirectUrl}/login`
         }
       })
 
@@ -92,7 +96,7 @@ export async function createUser(formData: FormData) {
           type: 'recovery',
           email,
           options: {
-            redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'}/login`
+            redirectTo: `${redirectUrl}/login`
           }
         })
 
