@@ -36,25 +36,39 @@ export default function SetupPasswordPage() {
 
   const handleTokenExchange = useCallback(async (accessToken: string, refreshToken: string) => {
     try {
+      console.log('Attempting token exchange...')
       // Exchange the tokens for a session
       const { data, error } = await supabase.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
       })
 
-      if (error) throw error
+      if (error) {
+        console.error('setSession error:', error)
+        throw error
+      }
 
       if (data.session) {
+        console.log('Session created successfully')
         setVerifying(false)
         // Clear the hash from URL
         window.history.replaceState(null, '', window.location.pathname)
       } else {
+        console.error('No session returned from setSession')
         throw new Error('Failed to create session')
       }
     } catch (err: any) {
       console.error('Token exchange error:', err)
-      setError(err.message || 'Invalid or expired invitation link. Please contact your administrator.')
-      setVerifying(false)
+      // Try checking session one more time in case it was set asynchronously
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        console.log('Session found after error, continuing...')
+        setVerifying(false)
+        window.history.replaceState(null, '', window.location.pathname)
+      } else {
+        setError(err.message || 'Invalid or expired invitation link. Please contact your administrator.')
+        setVerifying(false)
+      }
     }
   }, [supabase])
 
@@ -98,16 +112,53 @@ export default function SetupPasswordPage() {
   }, [supabase])
 
   useEffect(() => {
-    // Supabase invite links typically include tokens in the URL hash
-    // Check for tokens in hash first (most common for invite links)
+    // Check if this is a preview/bot request (don't process tokens for previews)
+    const userAgent = navigator.userAgent.toLowerCase()
+    const isPreview = userAgent.includes('microsoftteams') || 
+                      userAgent.includes('slackbot') || 
+                      userAgent.includes('discordbot') ||
+                      userAgent.includes('facebookexternalhit') ||
+                      userAgent.includes('twitterbot') ||
+                      userAgent.includes('linkedinbot') ||
+                      userAgent.includes('bot') ||
+                      userAgent.includes('crawler') ||
+                      userAgent.includes('spider') ||
+                      userAgent.includes('preview')
+    
+    if (isPreview) {
+      // This is a preview request, don't process tokens
+      console.log('Preview request detected, skipping token processing')
+      setVerifying(false)
+      setError('Please click the link directly to set your password. Link previews cannot process authentication tokens.')
+      return
+    }
+
+    // Listen for Supabase auth state changes (handles automatic session creation from invite links)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change:', event, session ? 'Session exists' : 'No session')
+      
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session) {
+          setVerifying(false)
+          // Clear any hash/query params from URL
+          window.history.replaceState(null, '', window.location.pathname)
+          return
+        }
+      }
+    })
+
+    // Also check URL for tokens (for immediate processing)
     const hash = window.location.hash
     if (hash) {
+      console.log('Found hash in URL:', hash.substring(0, 100) + '...')
       const hashParams = new URLSearchParams(hash.substring(1))
       const accessToken = hashParams.get('access_token')
       const refreshToken = hashParams.get('refresh_token')
       const type = hashParams.get('type')
       
-      if (accessToken && (type === 'invite' || type === 'recovery')) {
+      console.log('Hash params:', { hasAccessToken: !!accessToken, hasRefreshToken: !!refreshToken, type })
+      
+      if (accessToken) {
         // Token is in hash, exchange it for a session
         handleTokenExchange(accessToken, refreshToken || '')
         return
@@ -119,6 +170,8 @@ export default function SetupPasswordPage() {
     const tokenHash = searchParams.get('token_hash')
     const code = searchParams.get('code')
 
+    console.log('Query params:', { token: !!token, tokenHash: !!tokenHash, code: !!code })
+
     if (code) {
       // OAuth code flow
       handleCodeExchange(code)
@@ -127,9 +180,17 @@ export default function SetupPasswordPage() {
       handleTokenVerification(token || tokenHash || '')
     } else {
       // No token found, check if user is already logged in
-      checkSession()
+      // Also wait a bit for auth state change to fire
+      setTimeout(() => {
+        checkSession()
+      }, 1000)
     }
-  }, [searchParams, handleTokenExchange, handleCodeExchange, handleTokenVerification, checkSession])
+
+    // Cleanup subscription
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [searchParams, handleTokenExchange, handleCodeExchange, handleTokenVerification, checkSession, supabase])
 
 
   const handlePasswordSetup = async (e: React.FormEvent) => {

@@ -58,11 +58,11 @@ export async function createUser(formData: FormData) {
       // User already exists, use their ID
       userId = existingUser.id
     } else {
-      // Create new user - set email_confirm to true so invite link works immediately
-      // The invite link itself will handle the confirmation flow
+      // Create new user - set email_confirm to false for invite links
+      // The invite link will confirm the email and allow password setup
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
         email,
-        email_confirm: true, // Auto-confirm so invite link works immediately
+        email_confirm: false, // Don't auto-confirm - invite link will confirm it
         user_metadata: {
           name
         }
@@ -82,11 +82,12 @@ export async function createUser(formData: FormData) {
       const redirectUrl = siteUrl.includes('localhost') ? 'https://ctgtimesheet.com' : siteUrl
       
       // Generate invite link - this allows user to set their password
+      // Use auth/callback route which will handle the token exchange and redirect
       const { data: linkData, error: inviteError } = await adminClient.auth.admin.generateLink({
         type: 'invite',
         email,
         options: {
-          redirectTo: `${redirectUrl}/auth/setup-password`
+          redirectTo: `${redirectUrl}/auth/callback?next=/auth/setup-password`
         }
       })
 
@@ -98,7 +99,7 @@ export async function createUser(formData: FormData) {
           type: 'magiclink',
           email,
           options: {
-            redirectTo: `${redirectUrl}/auth/setup-password`
+            redirectTo: `${redirectUrl}/auth/callback?next=/auth/setup-password`
           }
         })
 
@@ -110,7 +111,7 @@ export async function createUser(formData: FormData) {
             type: 'recovery',
             email,
             options: {
-              redirectTo: `${redirectUrl}/auth/setup-password`
+              redirectTo: `${redirectUrl}/auth/callback?next=/auth/setup-password`
             }
           })
 
