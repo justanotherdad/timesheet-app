@@ -79,6 +79,10 @@ export async function createUser(formData: FormData) {
       return { error: 'Failed to create auth user: No user returned' }
     }
 
+    // Get site_id and department_id from form data
+    const siteId = formData.get('site_id') as string || null
+    const departmentId = formData.get('department_id') as string || null
+
     // Create or update profile using admin client (bypasses RLS)
     const { error: profileError } = await adminClient
       .from('user_profiles')
@@ -87,6 +91,8 @@ export async function createUser(formData: FormData) {
         email,
         name,
         role,
+        site_id: siteId || null,
+        department_id: departmentId || null,
       }, {
         onConflict: 'id'
       })

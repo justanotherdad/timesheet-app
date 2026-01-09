@@ -1,32 +1,39 @@
-import { redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import Link from 'next/link'
+import Header from '@/components/Header'
+import { withQueryTimeout } from '@/lib/timeout'
 import UserManagement from '@/components/admin/UserManagement'
 
 export default async function UsersAdminPage() {
   const user = await requireRole(['admin', 'super_admin'])
   const supabase = await createClient()
 
-  const { data: users } = await supabase
-    .from('user_profiles')
-    .select('*')
-    .order('name')
+  // Fetch users, sites, and departments
+  const [usersResult, sitesResult] = await Promise.all([
+    withQueryTimeout(() => supabase.from('user_profiles').select('*').order('name')),
+    withQueryTimeout(() => supabase.from('sites').select('*').order('name')),
+  ])
+
+  const users = (usersResult.data || []) as any[]
+  const sites = (sitesResult.data || []) as any[]
+
+  // Fetch departments for each site (we'll load them dynamically in the component)
+  const departmentsResult = await withQueryTimeout(() =>
+    supabase.from('departments').select('*').order('name')
+  )
+  const allDepartments = (departmentsResult.data || []) as any[]
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Header title="Manage Users" showBack backUrl="/dashboard/admin" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          <div className="flex items-center gap-4 mb-6">
-            <Link
-              href="/dashboard/admin"
-              className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-            >
-              ← Back to Admin
-            </Link>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-6">Manage Users</h1>
-          <UserManagement users={users || []} currentUserRole={user.profile.role} />
+          <UserManagement 
+            users={users} 
+            currentUserRole={user.profile.role}
+            sites={sites}
+            departments={allDepartments}
+          />
         </div>
       </div>
     </div>
