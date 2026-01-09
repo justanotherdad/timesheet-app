@@ -525,6 +525,7 @@ export default function WeeklyTimesheetForm({
           <DeleteTimesheetButton 
             timesheetId={timesheetId} 
             status={currentStatus}
+            variant="button"
             onDeleted={() => {
               window.location.href = '/dashboard/timesheets'
             }}

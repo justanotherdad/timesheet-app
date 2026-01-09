@@ -8,6 +8,7 @@ import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 import DeleteTimesheetButton from '@/components/DeleteTimesheetButton'
 
+export const dynamic = 'force-dynamic' // Ensure fresh data on every request
 export const maxDuration = 10 // Maximum duration for this route in seconds
 
 export default async function TimesheetsPage() {
@@ -73,19 +74,18 @@ export default async function TimesheetsPage() {
 
   const timesheets = (timesheetsResult.data || []) as any[]
   
-  // Log for debugging (only in development)
-  if (process.env.NODE_ENV === 'development') {
-    if (timesheetsResult.error) {
-      console.error('Error fetching timesheets:', timesheetsResult.error)
-    }
-    const dataArray = Array.isArray(timesheetsResult.data) ? timesheetsResult.data : []
-    console.log('Timesheets query result:', {
-      dataCount: dataArray.length,
-      error: timesheetsResult.error,
-      userRole: user.profile.role,
-      userId: user.id
-    })
+  // Log for debugging (works in both dev and production - check Vercel logs)
+  if (timesheetsResult.error) {
+    console.error('[Timesheets Page] Error fetching timesheets:', timesheetsResult.error)
   }
+  console.log('[Timesheets Page] Query result:', {
+    dataCount: Array.isArray(timesheetsResult.data) ? timesheetsResult.data.length : 0,
+    hasError: !!timesheetsResult.error,
+    errorMessage: timesheetsResult.error?.message,
+    userRole: user.profile.role,
+    userId: user.id,
+    timesheetIds: timesheets.slice(0, 5).map((ts: any) => ts.id) // First 5 IDs for debugging
+  })
 
   const getStatusIcon = (status: string) => {
     switch (status) {

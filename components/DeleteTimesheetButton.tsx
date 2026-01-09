@@ -9,9 +9,10 @@ interface DeleteTimesheetButtonProps {
   timesheetId: string
   status: string
   onDeleted?: () => void
+  variant?: 'button' | 'link' // 'button' for forms, 'link' for tables
 }
 
-export default function DeleteTimesheetButton({ timesheetId, status, onDeleted }: DeleteTimesheetButtonProps) {
+export default function DeleteTimesheetButton({ timesheetId, status, onDeleted, variant = 'link' }: DeleteTimesheetButtonProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -33,8 +34,7 @@ export default function DeleteTimesheetButton({ timesheetId, status, onDeleted }
         if (onDeleted) {
           onDeleted()
         } else {
-          router.push('/dashboard/timesheets')
-          router.refresh()
+          window.location.href = '/dashboard/timesheets'
         }
       }
     } catch (err: any) {
@@ -49,6 +49,27 @@ export default function DeleteTimesheetButton({ timesheetId, status, onDeleted }
     return null
   }
 
+  // Link variant for table rows
+  if (variant === 'link') {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={loading}
+          className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 disabled:opacity-50"
+          title="Delete timesheet"
+        >
+          {loading ? 'Deleting...' : 'Delete'}
+        </button>
+        {error && (
+          <span className="text-red-600 dark:text-red-400 text-xs ml-1">{error}</span>
+        )}
+      </>
+    )
+  }
+
+  // Button variant for forms
   return (
     <>
       <button
