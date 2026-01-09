@@ -175,6 +175,29 @@ export default function SetupPasswordPage() {
     if (hash) {
       console.log('Found hash in URL:', hash.substring(0, 100) + '...')
       const hashParams = new URLSearchParams(hash.substring(1))
+      
+      // Check for errors first
+      const error = hashParams.get('error')
+      const errorCode = hashParams.get('error_code')
+      const errorDescription = hashParams.get('error_description')
+      
+      if (error) {
+        console.error('Error in hash:', { error, errorCode, errorDescription })
+        let errorMessage = 'Invalid or expired invitation link.'
+        
+        if (errorCode === 'otp_expired' || errorDescription?.includes('expired')) {
+          errorMessage = 'This invitation link has expired. Please contact your administrator for a new link.'
+        } else if (errorDescription) {
+          errorMessage = decodeURIComponent(errorDescription)
+        }
+        
+        setError(errorMessage)
+        setVerifying(false)
+        // Clear the hash from URL
+        window.history.replaceState(null, '', window.location.pathname)
+        return
+      }
+      
       const accessToken = hashParams.get('access_token')
       const refreshToken = hashParams.get('refresh_token')
       const type = hashParams.get('type')

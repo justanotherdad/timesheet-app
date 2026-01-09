@@ -324,6 +324,9 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
                 The user can click this link to set their password and log in.
               </p>
+              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2 font-semibold">
+                ⚠️ Important: This link expires in about 1 hour. Send it to the user immediately and have them click it right away. If Teams/Slack previews the link, it may consume the token.
+              </p>
             </div>
           )}
         </div>

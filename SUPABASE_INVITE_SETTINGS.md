@@ -80,9 +80,12 @@
    - Fix: Ensure Site URL in Supabase matches your production domain
    - Check: `https://ctgtimesheet.com` (no trailing slash)
 
-3. **Link expired:**
-   - Supabase invite links expire after a certain time (usually 24 hours)
-   - Fix: Generate a new link
+3. **Link expired (OTP expired):**
+   - Supabase invite links expire after a short time (usually 1 hour, sometimes less)
+   - **This is the most common issue!**
+   - Fix: Generate a new link immediately before sending
+   - **Important:** Links expire quickly, so generate them right before sending to the user
+   - If the link is previewed by Teams/Slack, it may consume the token, making it invalid
 
 4. **Email not confirmed:**
    - If `email_confirm: false`, the invite link must be used to confirm

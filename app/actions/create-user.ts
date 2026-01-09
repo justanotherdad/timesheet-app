@@ -78,8 +78,13 @@ export async function createUser(formData: FormData) {
       // Generate invitation link (don't rely on email delivery)
       // Admin will copy and send this link manually
       // Always use production URL, never localhost
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'
-      const redirectUrl = siteUrl.includes('localhost') ? 'https://ctgtimesheet.com' : siteUrl
+      // Normalize to non-www version for consistency
+      let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'
+      if (siteUrl.includes('localhost')) {
+        siteUrl = 'https://ctgtimesheet.com'
+      }
+      // Remove www if present - use base domain for redirect URLs
+      const redirectUrl = siteUrl.replace('www.', '')
       
       // Generate invite link - this allows user to set their password
       // Redirect directly to setup-password page - it will handle tokens in hash or query params
