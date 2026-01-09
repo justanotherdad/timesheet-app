@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { User, UserRole } from '@/types/database'
-import { Plus, Edit, Trash2 } from 'lucide-react'
+import { Plus, Edit, Trash2, Key } from 'lucide-react'
 import { createUser } from '@/app/actions/create-user'
 import { deleteUser } from '@/app/actions/delete-user'
 import { updateUserAssignments } from '@/app/actions/update-user-assignments'
+import { generatePasswordLink } from '@/app/actions/generate-password-link'
 
 interface Site {
   id: string
@@ -43,6 +44,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [invitationLink, setInvitationLink] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
   
@@ -126,9 +128,12 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
         }
       }
 
-      // Show success message
+      // Show success message and invitation link if available
       if (result.message) {
         setSuccess(result.message)
+        if ((result as any).invitationLink) {
+          setInvitationLink((result as any).invitationLink)
+        }
         // Clear form
         if (e.currentTarget) {
           e.currentTarget.reset()
@@ -138,10 +143,12 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
         setSelectedDepartments([])
         setSelectedPOs([])
         setShowAddForm(false)
-        // Refresh the page after 2 seconds to show new user
-        setTimeout(() => {
-          window.location.reload()
-        }, 2000)
+        // Don't auto-refresh if there's an invitation link to show
+        if (!(result as any).invitationLink) {
+          setTimeout(() => {
+            window.location.reload()
+          }, 2000)
+        }
       } else {
         // Refresh immediately if no message
         setShowAddForm(false)
@@ -257,7 +264,54 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
 
       {success && (
         <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 px-4 py-3 rounded mb-4">
-          {success}
+          <p className="mb-2">{success}</p>
+          {invitationLink && (
+            <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded border border-green-300 dark:border-green-700">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Invitation Link (Copy and send this to the user):
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={invitationLink}
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-900 bg-white dark:bg-gray-700 font-mono"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (invitationLink) {
+                      navigator.clipboard.writeText(invitationLink)
+                      const originalMessage = success
+                      setSuccess('Link copied to clipboard!')
+                      setTimeout(() => {
+                        setSuccess(originalMessage)
+                        window.location.reload()
+                      }, 1500)
+                    }
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-blue-700"
+                >
+                  Copy Link
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInvitationLink(null)
+                    setSuccess(null)
+                    window.location.reload()
+                  }}
+                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded text-sm font-semibold hover:bg-gray-300 dark:hover:bg-gray-500"
+                >
+                  Close
+                </button>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                The user can click this link to set their password and log in.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -449,6 +503,31 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
                     title="Edit User"
                   >
                     <Edit className="h-4 w-4 inline" />
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setLoading(true)
+                      setError(null)
+                      try {
+                        const result = await generatePasswordLink(user.email)
+                        if (result.error) {
+                          throw new Error(result.error)
+                        }
+                        if (result.link) {
+                          setInvitationLink(result.link)
+                          setSuccess(`Password reset link generated for ${user.name}. Copy the link below.`)
+                        }
+                      } catch (err: any) {
+                        setError(err.message || 'Failed to generate password link')
+                      } finally {
+                        setLoading(false)
+                      }
+                    }}
+                    disabled={loading}
+                    className="text-purple-600 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300 mr-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Generate Password Reset Link"
+                  >
+                    <Key className="h-4 w-4 inline" />
                   </button>
                   <button
                     onClick={() => handleDeleteUser(user.id, user.name)}

@@ -74,50 +74,90 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
     setError(null)
 
     try {
-      let query = supabase
+      // First, get weekly_timesheets with filters
+      let timesheetQuery = supabase
+        .from('weekly_timesheets')
+        .select(`
+          id,
+          user_id,
+          week_ending,
+          status,
+          user_profiles (
+            name,
+            email
+          )
+        `)
+
+      // Apply filters on timesheets
+      if (selectedUser) {
+        timesheetQuery = timesheetQuery.eq('user_id', selectedUser)
+      }
+
+      if (status) {
+        timesheetQuery = timesheetQuery.eq('status', status)
+      }
+
+      if (startDate) {
+        timesheetQuery = timesheetQuery.gte('week_ending', startDate)
+      }
+
+      if (endDate) {
+        timesheetQuery = timesheetQuery.lte('week_ending', endDate)
+      }
+
+      const { data: timesheets, error: timesheetError } = await timesheetQuery
+
+      if (timesheetError) throw timesheetError
+
+      if (!timesheets || timesheets.length === 0) {
+        setEntries([])
+        setLoading(false)
+        return
+      }
+
+      // Get timesheet IDs
+      const timesheetIds = timesheets.map(t => t.id)
+
+      // Now get entries for these timesheets
+      let entriesQuery = supabase
         .from('timesheet_entries')
         .select(`
           *,
-          weekly_timesheets!inner (
-            user_id,
-            week_ending,
-            status,
-            user_profiles (
-              name,
-              email
-            )
-          ),
           systems (name),
           activities (name),
           deliverables (name),
           purchase_orders (po_number)
         `)
+        .in('timesheet_id', timesheetIds)
 
-      // Apply filters
-      if (selectedUser) {
-        query = query.eq('weekly_timesheets.user_id', selectedUser)
-      }
-
+      // Apply date filters on entries if needed
       if (startDate) {
-        query = query.gte('date', startDate)
+        entriesQuery = entriesQuery.gte('date', startDate)
       }
 
       if (endDate) {
-        query = query.lte('date', endDate)
+        entriesQuery = entriesQuery.lte('date', endDate)
       }
 
-      if (status) {
-        query = query.eq('weekly_timesheets.status', status)
-      }
+      const { data: entriesData, error: entriesError } = await entriesQuery.order('date', { ascending: false })
 
-      // Note: Site and department filtering would require joins through systems/activities/deliverables
-      // This is a simplified version - can be enhanced
+      if (entriesError) throw entriesError
 
-      const { data, error: fetchError } = await query.order('date', { ascending: false })
+      // Combine entries with timesheet data
+      const combinedEntries = (entriesData || []).map((entry: any) => {
+        const timesheet = timesheets.find((t: any) => t.id === entry.timesheet_id)
+        return {
+          ...entry,
+          weekly_timesheets: timesheet ? {
+            user_id: timesheet.user_id,
+            week_ending: timesheet.week_ending,
+            status: timesheet.status,
+            user_profiles: timesheet.user_profiles
+          } : null
+        }
+      })
 
-      if (fetchError) throw fetchError
-
-      setEntries((data || []) as TimesheetEntry[])
+      setEntries(combinedEntries as TimesheetEntry[])
     } catch (err: any) {
       setError(err.message || 'Failed to load timesheet data')
     } finally {

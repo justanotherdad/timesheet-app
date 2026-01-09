@@ -73,8 +73,11 @@ export async function createUser(formData: FormData) {
       userId = newUser.user.id
       isNewUser = true
 
-      // Send invitation email with password reset link
-      const { error: inviteError } = await adminClient.auth.admin.generateLink({
+      // Generate invitation link (don't rely on email delivery)
+      // Admin will copy and send this link manually
+      let invitationLink: string | null = null
+      
+      const { data: linkData, error: inviteError } = await adminClient.auth.admin.generateLink({
         type: 'invite',
         email,
         options: {
@@ -82,9 +85,11 @@ export async function createUser(formData: FormData) {
         }
       })
 
-      if (inviteError) {
+      if (!inviteError && linkData?.properties?.action_link) {
+        invitationLink = linkData.properties.action_link
+      } else {
         // If invite fails, try password reset link instead
-        const { error: resetError } = await adminClient.auth.admin.generateLink({
+        const { data: resetLinkData, error: resetError } = await adminClient.auth.admin.generateLink({
           type: 'recovery',
           email,
           options: {
@@ -92,9 +97,8 @@ export async function createUser(formData: FormData) {
           }
         })
 
-        if (resetError) {
-          console.error('Failed to send invitation email:', resetError)
-          // Continue anyway - user can use password reset later
+        if (!resetError && resetLinkData?.properties?.action_link) {
+          invitationLink = resetLinkData.properties.action_link
         }
       }
     }
@@ -126,9 +130,12 @@ export async function createUser(formData: FormData) {
     return { 
       success: true, 
       userId,
-      emailSent: isNewUser,
+      emailSent: isNewUser && !!invitationLink,
+      invitationLink: invitationLink || null,
       message: isNewUser 
-        ? 'User created successfully. An invitation email has been sent to set their password.' 
+        ? (invitationLink 
+          ? 'User created successfully. Copy the invitation link below to send to the user.' 
+          : 'User created successfully, but could not generate invitation link. You can generate a password reset link from Supabase dashboard.')
         : 'User profile updated successfully. (User already exists in auth system)'
     }
   } catch (error: any) {
