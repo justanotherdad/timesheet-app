@@ -185,7 +185,6 @@ export default function HierarchicalItemManager({
 
     const formData = new FormData(e.currentTarget)
     const name = formData.get('name') as string
-    const code = formData.get('code') as string || null
 
     try {
       const insertData: any = {
@@ -193,10 +192,6 @@ export default function HierarchicalItemManager({
         department_id: selectedDepartment || null,
         po_id: selectedPO || null,
         name,
-      }
-      
-      if (code) {
-        insertData.code = code
       }
 
       const { data, error: insertError } = await supabase
@@ -295,7 +290,7 @@ export default function HierarchicalItemManager({
         <select
           value={selectedSite}
           onChange={(e) => handleSiteChange(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
         >
           <option value="">-- Select Site --</option>
           {sites.map(site => (
@@ -313,7 +308,7 @@ export default function HierarchicalItemManager({
           <select
             value={selectedDepartment}
             onChange={(e) => handleDepartmentChange(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
           >
             <option value="">-- All Departments --</option>
             {departments.map(dept => (
@@ -332,7 +327,7 @@ export default function HierarchicalItemManager({
           <select
             value={selectedPO}
             onChange={(e) => handlePOChange(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
           >
             <option value="">-- All Purchase Orders --</option>
             {purchaseOrders.map(po => (
@@ -364,13 +359,7 @@ export default function HierarchicalItemManager({
                   name="name"
                   placeholder="Name *"
                   required
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                />
-                <input
-                  type="text"
-                  name="code"
-                  placeholder="Code"
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                 />
               </div>
               <div className="flex gap-2">
@@ -397,7 +386,6 @@ export default function HierarchicalItemManager({
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Code</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Department</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">PO</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
@@ -410,7 +398,6 @@ export default function HierarchicalItemManager({
                   return (
                     <tr key={item.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.code || 'N/A'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{dept?.name || 'N/A'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{po?.po_number || 'N/A'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -456,16 +443,7 @@ export default function HierarchicalItemManager({
                   name="name"
                   defaultValue={editingItem.name}
                   required
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Code</label>
-                <input
-                  type="text"
-                  name="code"
-                  defaultValue={editingItem.code || ''}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                 />
               </div>
               <div>
@@ -473,7 +451,7 @@ export default function HierarchicalItemManager({
                 <select
                   value={selectedDepartment}
                   onChange={(e) => setSelectedDepartment(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                 >
                   <option value="">-- None --</option>
                   {departments.map(dept => (
@@ -486,7 +464,7 @@ export default function HierarchicalItemManager({
                 <select
                   value={selectedPO}
                   onChange={(e) => setSelectedPO(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                 >
                   <option value="">-- None --</option>
                   {purchaseOrders.map(po => (

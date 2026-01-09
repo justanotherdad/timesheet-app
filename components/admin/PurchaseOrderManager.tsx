@@ -216,7 +216,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
         <select
           value={selectedSite}
           onChange={(e) => handleSiteChange(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
         >
           <option value="">-- Select Site --</option>
           {sites.map(site => (
@@ -234,7 +234,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
           <select
             value={selectedDepartment}
             onChange={(e) => handleDepartmentChange(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
           >
             <option value="">-- All Departments --</option>
             {departments.map(dept => (
@@ -266,13 +266,13 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
                   name="po_number"
                   placeholder="PO Number *"
                   required
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                 />
                 <input
                   type="text"
                   name="description"
                   placeholder="Description"
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                 />
               </div>
               <div className="flex gap-2">
@@ -347,7 +347,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
                   name="po_number"
                   defaultValue={editingPO.po_number}
                   required
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                 />
               </div>
               <div>
@@ -356,7 +356,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
                   type="text"
                   name="description"
                   defaultValue={editingPO.description || ''}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                 />
               </div>
               <div>
@@ -364,7 +364,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
                 <select
                   value={selectedDepartment}
                   onChange={(e) => setSelectedDepartment(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                 >
                   <option value="">-- None --</option>
                   {departments.map(dept => (

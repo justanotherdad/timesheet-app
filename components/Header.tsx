@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 
 interface HeaderProps {
   title?: string
@@ -20,6 +21,16 @@ export default function Header({ title, showBack = false, backUrl, user }: Heade
           <div className="flex items-center gap-4">
             {/* CTG Logo */}
             <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+              {/* If you have a logo image, uncomment this and comment out the text logo below */}
+              {/* <Image
+                src="/ctg-logo.png" // or /ctg-logo.svg - place your logo file in the public folder
+                alt="CTG Logo"
+                width={120}
+                height={40}
+                className="h-10 w-auto"
+              /> */}
+              
+              {/* Text-based logo (current) - comment this out if using image logo above */}
               <div className="flex items-center">
                 <span className="text-2xl font-bold text-blue-700 dark:text-blue-400">
                   CT

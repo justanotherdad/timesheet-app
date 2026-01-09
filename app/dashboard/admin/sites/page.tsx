@@ -33,7 +33,6 @@ export default async function SitesAdminPage() {
             title="Sites"
             fields={[
               { name: 'name', label: 'Site Name', type: 'text', required: true },
-              { name: 'code', label: 'Code', type: 'text', required: false },
               { name: 'week_starting_day', label: 'Week Starts On (0=Sun, 1=Mon, etc.)', type: 'number', required: true },
             ]}
           />

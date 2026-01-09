@@ -73,7 +73,6 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
 
     const formData = new FormData(e.currentTarget)
     const name = formData.get('name') as string
-    const code = formData.get('code') as string || null
 
     try {
       const { data, error: insertError } = await supabase
@@ -81,7 +80,6 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
         .insert({
           site_id: selectedSite,
           name,
-          code,
         })
         .select()
         .single()
@@ -109,17 +107,16 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
 
     const formData = new FormData(e.currentTarget)
     const name = formData.get('name') as string
-    const code = formData.get('code') as string || null
 
     try {
       const { error: updateError } = await supabase
         .from('departments')
-        .update({ name, code })
+        .update({ name })
         .eq('id', editingDept.id)
 
       if (updateError) throw updateError
 
-      setDepartments(departments.map(d => d.id === editingDept.id ? { ...d, name, code: code || undefined } : d))
+      setDepartments(departments.map(d => d.id === editingDept.id ? { ...d, name } : d))
       setEditingDept(null)
     } catch (err: any) {
       setError(err.message || 'An error occurred')
@@ -169,7 +166,6 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
         return {
           site_id: selectedSite,
           name: values[nameIdx] || '',
-          code: codeIdx >= 0 ? values[codeIdx] : null,
         }
       }).filter(d => d.name)
 
@@ -196,8 +192,8 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
     }
 
     const csv = [
-      ['Name', 'Code'].join(','),
-      ...departments.map(d => [d.name, d.code || ''].join(','))
+      ['Name'].join(','),
+      ...departments.map(d => [d.name].join(','))
     ].join('\n')
 
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -244,12 +240,12 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
         <select
           value={selectedSite}
           onChange={(e) => handleSiteChange(e.target.value)}
-          className="w-full md:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+          className="w-full md:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
         >
           <option value="">-- Select a site --</option>
           {sites.map(site => (
             <option key={site.id} value={site.id}>
-              {site.name} {site.code ? `(${site.code})` : ''}
+              {site.name}
             </option>
           ))}
         </select>
@@ -272,13 +268,7 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
                   name="name"
                   placeholder="Department Name"
                   required
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                />
-                <input
-                  type="text"
-                  name="code"
-                  placeholder="Code (optional)"
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                 />
               </div>
               <div className="flex gap-2">
@@ -320,7 +310,6 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
                 <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Code</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -328,7 +317,6 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
                   {departments.map((dept) => (
                     <tr key={dept.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{dept.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{dept.code || 'N/A'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button
                           onClick={() => setEditingDept(dept)}
@@ -362,17 +350,10 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
                       name="name"
                       defaultValue={editingDept.name}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Code</label>
-                    <input
-                      type="text"
-                      name="code"
-                      defaultValue={editingDept.code || ''}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-                    />
                   </div>
                   <div className="flex gap-2">
                     <button

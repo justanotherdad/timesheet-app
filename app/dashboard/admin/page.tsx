@@ -30,7 +30,7 @@ export default async function AdminPage() {
             </Link>
 
             <Link
-              href="/dashboard/admin/sites"
+              href="/dashboard/admin/organization"
               className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
             >
               <div className="flex items-center gap-4">
@@ -38,38 +38,8 @@ export default async function AdminPage() {
                   <Building className="h-6 w-6 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Sites</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Add and edit site options</p>
-                </div>
-              </div>
-            </Link>
-
-            <Link
-              href="/dashboard/admin/departments"
-              className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-center gap-4">
-                <div className="bg-yellow-100 dark:bg-yellow-900/30 p-3 rounded-lg">
-                  <Building className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Departments</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Add and edit departments by site</p>
-                </div>
-              </div>
-            </Link>
-
-            <Link
-              href="/dashboard/admin/purchase-orders"
-              className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-center gap-4">
-                <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-lg">
-                  <ShoppingCart className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage POs</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Add and edit purchase orders</p>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Organization</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Manage sites, departments, and purchase orders</p>
                 </div>
               </div>
             </Link>
