@@ -150,9 +150,10 @@ export async function createUser(formData: FormData) {
       }
     }
 
-    // Get site_id and department_id from form data
+    // Get site_id, department_id, and reports_to_id from form data
     const siteId = formData.get('site_id') as string || null
     const departmentId = formData.get('department_id') as string || null
+    const reportsToId = formData.get('reports_to_id') as string || null
 
     // Create or update profile using admin client (bypasses RLS)
     const { error: profileError } = await adminClient
@@ -164,6 +165,7 @@ export async function createUser(formData: FormData) {
         role,
         site_id: siteId || null,
         department_id: departmentId || null,
+        reports_to_id: reportsToId || null,
       }, {
         onConflict: 'id'
       })

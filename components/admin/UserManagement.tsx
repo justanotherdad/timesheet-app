@@ -362,6 +362,20 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
               {canChangeRole && <option value="super_admin">Super Admin</option>}
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reports To</label>
+            <select
+              name="reports_to_id"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+            >
+              <option value="">None</option>
+              {users
+                .filter(u => ['manager', 'supervisor', 'admin', 'super_admin'].includes(u.role))
+                .map(u => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                ))}
+            </select>
+          </div>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sites (Select Multiple)</label>
