@@ -3,9 +3,10 @@ import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { formatWeekEnding } from '@/lib/utils'
-import { FileText, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { FileText, CheckCircle, XCircle, Clock, Trash2 } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
+import DeleteTimesheetButton from '@/components/DeleteTimesheetButton'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
 
@@ -18,15 +19,57 @@ export default async function TimesheetsPage() {
 
   const supabase = await createClient()
 
-  // Get all weekly timesheets for the user, ordered by week ending (most recent first)
-  const timesheetsResult = await withQueryTimeout(() =>
-    supabase
-      .from('weekly_timesheets')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('week_ending', { ascending: false })
-      .order('created_at', { ascending: false })
-  )
+  // Get timesheets based on user role
+  let timesheetsResult
+  if (['admin', 'super_admin'].includes(user.profile.role)) {
+    // Admins see all timesheets
+    timesheetsResult = await withQueryTimeout(() =>
+      supabase
+        .from('weekly_timesheets')
+        .select(`
+          *,
+          user_profiles!inner(name, email)
+        `)
+        .order('week_ending', { ascending: false })
+        .order('created_at', { ascending: false })
+    )
+  } else if (['supervisor', 'manager'].includes(user.profile.role)) {
+    // Supervisors and managers see timesheets of their direct reports
+    // Get all users that report to this user
+    const reportsResult = await withQueryTimeout(() =>
+      supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('reports_to_id', user.id)
+    )
+    const reports = (reportsResult.data || []) as Array<{ id: string }>
+    const reportIds = reports.map(r => r.id)
+    
+    // Include own timesheets plus reports' timesheets
+    const allUserIds = [user.id, ...reportIds]
+    
+    timesheetsResult = await withQueryTimeout(() =>
+      supabase
+        .from('weekly_timesheets')
+        .select(`
+          *,
+          user_profiles!inner(name, email)
+        `)
+        .in('user_id', allUserIds)
+        .order('week_ending', { ascending: false })
+        .order('created_at', { ascending: false })
+    )
+  } else {
+    // Regular employees see only their own timesheets
+    timesheetsResult = await withQueryTimeout(() =>
+      supabase
+        .from('weekly_timesheets')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('week_ending', { ascending: false })
+        .order('created_at', { ascending: false })
+    )
+  }
 
   const timesheets = (timesheetsResult.data || []) as any[]
 
@@ -77,18 +120,21 @@ export default async function TimesheetsPage() {
                   <thead className="bg-gray-50 dark:bg-gray-700">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) ? 'Employee' : ''}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Week Ending
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Week Starting
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Status
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Created
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
@@ -96,6 +142,11 @@ export default async function TimesheetsPage() {
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {timesheets.map((ts) => (
                       <tr key={ts.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                            {ts.user_profiles?.name || 'Unknown'}
+                          </td>
+                        )}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                           {formatWeekEnding(ts.week_ending)}
                         </td>
@@ -143,6 +194,7 @@ export default async function TimesheetsPage() {
                             >
                               View
                             </Link>
+                            <DeleteTimesheetButton timesheetId={ts.id} status={ts.status} />
                           </div>
                         </td>
                       </tr>

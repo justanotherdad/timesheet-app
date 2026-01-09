@@ -150,10 +150,13 @@ export async function createUser(formData: FormData) {
       }
     }
 
-    // Get site_id, department_id, and reports_to_id from form data
+    // Get site_id, department_id, reports_to_id, supervisor_id, manager_id, and final_approver_id from form data
     const siteId = formData.get('site_id') as string || null
     const departmentId = formData.get('department_id') as string || null
     const reportsToId = formData.get('reports_to_id') as string || null
+    const supervisorId = formData.get('supervisor_id') as string || null
+    const managerId = formData.get('manager_id') as string || null
+    const finalApproverId = formData.get('final_approver_id') as string || null
 
     // Create or update profile using admin client (bypasses RLS)
     const { error: profileError } = await adminClient
@@ -166,6 +169,9 @@ export async function createUser(formData: FormData) {
         site_id: siteId || null,
         department_id: departmentId || null,
         reports_to_id: reportsToId || null,
+        supervisor_id: supervisorId || null,
+        manager_id: managerId || null,
+        final_approver_id: finalApproverId || null,
       }, {
         onConflict: 'id'
       })

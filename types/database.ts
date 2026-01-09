@@ -6,6 +6,9 @@ export interface User {
   name: string
   role: UserRole
   reports_to_id?: string
+  supervisor_id?: string
+  manager_id?: string
+  final_approver_id?: string
   created_at: string
   updated_at: string
 }

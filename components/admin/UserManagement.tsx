@@ -177,6 +177,9 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
     const name = formData.get('name') as string
     const role = formData.get('role') as UserRole
     const reportsToId = formData.get('reports_to_id') as string || null
+    const supervisorId = formData.get('supervisor_id') as string || null
+    const managerId = formData.get('manager_id') as string || null
+    const finalApproverId = formData.get('final_approver_id') as string || null
 
     try {
       // Update user profile
@@ -186,6 +189,9 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
           name,
           role: canChangeRole ? role : editingUser.role,
           reports_to_id: reportsToId || null,
+          supervisor_id: supervisorId || null,
+          manager_id: managerId || null,
+          final_approver_id: finalApproverId || null,
         })
         .eq('id', editingUser.id)
 
@@ -371,6 +377,48 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
               <option value="">None</option>
               {users
                 .filter(u => ['manager', 'supervisor', 'admin', 'super_admin'].includes(u.role))
+                .map(u => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Supervisor</label>
+            <select
+              name="supervisor_id"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+            >
+              <option value="">None</option>
+              {users
+                .filter(u => ['supervisor', 'manager', 'admin', 'super_admin'].includes(u.role))
+                .map(u => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Manager</label>
+            <select
+              name="manager_id"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+            >
+              <option value="">None</option>
+              {users
+                .filter(u => ['manager', 'admin', 'super_admin'].includes(u.role))
+                .map(u => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Final Approver</label>
+            <select
+              name="final_approver_id"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+            >
+              <option value="">None</option>
+              {users
+                .filter(u => ['manager', 'admin', 'super_admin'].includes(u.role))
                 .map(u => (
                   <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
                 ))}
@@ -699,6 +747,51 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
                     .filter(u => u.id !== editingUser.id && ['manager', 'supervisor', 'admin', 'super_admin'].includes(u.role))
                     .map(u => (
                       <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supervisor</label>
+                <select
+                  name="supervisor_id"
+                  defaultValue={editingUser.supervisor_id || ''}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">None</option>
+                  {users
+                    .filter(u => u.id !== editingUser.id && ['supervisor', 'manager', 'admin', 'super_admin'].includes(u.role))
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Manager</label>
+                <select
+                  name="manager_id"
+                  defaultValue={editingUser.manager_id || ''}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">None</option>
+                  {users
+                    .filter(u => u.id !== editingUser.id && ['manager', 'admin', 'super_admin'].includes(u.role))
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Final Approver</label>
+                <select
+                  name="final_approver_id"
+                  defaultValue={editingUser.final_approver_id || ''}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">None</option>
+                  {users
+                    .filter(u => u.id !== editingUser.id && ['manager', 'admin', 'super_admin'].includes(u.role))
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
                     ))}
                 </select>
               </div>

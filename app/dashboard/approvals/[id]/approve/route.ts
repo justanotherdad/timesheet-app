@@ -32,7 +32,8 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    if (timesheet.status !== 'submitted') {
+    // Allow approval of submitted timesheets, or allow admins to approve any status
+    if (timesheet.status !== 'submitted' && !['admin', 'super_admin'].includes(user.profile.role)) {
       return NextResponse.json({ error: 'Timesheet is not in submitted status' }, { status: 400 })
     }
 

@@ -283,10 +283,10 @@ export default function WeeklyTimesheetForm({
       </div>
 
       {/* Billable Time Section */}
-      <div>
+      <div className="relative">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
         
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-visible">
           <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
             <thead>
               <tr className="bg-gray-100 dark:bg-gray-700">
