@@ -43,6 +43,7 @@ export async function createUser(formData: FormData) {
 
     let userId: string
     let isNewUser = false
+    let invitationLink: string | null = null
 
     // Check if user already exists
     const { data: { users }, error: listError } = await adminClient.auth.admin.listUsers()
@@ -75,8 +76,6 @@ export async function createUser(formData: FormData) {
 
       // Generate invitation link (don't rely on email delivery)
       // Admin will copy and send this link manually
-      let invitationLink: string | null = null
-      
       const { data: linkData, error: inviteError } = await adminClient.auth.admin.generateLink({
         type: 'invite',
         email,
