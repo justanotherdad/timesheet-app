@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { deleteTimesheet } from '@/app/actions/delete-timesheet'
-import { useRouter } from 'next/navigation'
 
 interface DeleteTimesheetButtonProps {
   timesheetId: string
@@ -15,7 +14,6 @@ interface DeleteTimesheetButtonProps {
 export default function DeleteTimesheetButton({ timesheetId, status, onDeleted, variant = 'link' }: DeleteTimesheetButtonProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
 
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this timesheet? This action cannot be undone.')) {
