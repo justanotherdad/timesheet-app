@@ -41,6 +41,15 @@ export async function POST(
       ? 'manager'
       : 'supervisor'
 
+    // Check for existing signatures
+    const { data: existingSignatures } = await supabase
+      .from('timesheet_signatures')
+      .select('signer_role')
+      .eq('timesheet_id', id)
+
+    const hasManagerSignature = existingSignatures?.some(sig => sig.signer_role === 'manager') || false
+    const isManagerApproving = signerRole === 'manager'
+
     // Create signature
     const { error: signatureError } = await supabase
       .from('timesheet_signatures')
@@ -55,13 +64,22 @@ export async function POST(
     }
 
     // Update timesheet status
+    // Only set to 'approved' if a manager (or admin/super_admin) is approving
+    // Supervisor approvals keep status as 'submitted' until manager approves
+    const newStatus = isManagerApproving ? 'approved' : 'submitted'
+    const updateData: any = {
+      updated_at: new Date().toISOString(),
+    }
+
+    if (isManagerApproving) {
+      updateData.status = 'approved'
+      updateData.approved_by_id = user.id
+      updateData.approved_at = new Date().toISOString()
+    }
+
     const { error: updateError } = await supabase
       .from('weekly_timesheets')
-      .update({
-        status: 'approved',
-        approved_by_id: user.id,
-        approved_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', id)
 
     if (updateError) {

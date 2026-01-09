@@ -83,7 +83,7 @@ export default function SearchableSelect({
         </button>
 
         {isOpen && (
-          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto min-w-max">
             <div className="p-2 sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
               <input
                 type="text"
@@ -111,9 +111,9 @@ export default function SearchableSelect({
                       value === option.id ? 'bg-blue-100 dark:bg-blue-800' : ''
                     } text-gray-900 dark:text-gray-100`}
                   >
-                    <div className="font-medium">{option.name}</div>
+                    <div className="font-medium whitespace-normal break-words">{option.name}</div>
                     {option.code && (
-                      <div className="text-sm text-gray-500 dark:text-gray-400">{option.code}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400 whitespace-normal break-words">{option.code}</div>
                     )}
                   </button>
                 ))

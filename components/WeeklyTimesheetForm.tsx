@@ -80,8 +80,9 @@ export default function WeeklyTimesheetForm({
   const supabase = createClient()
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [weekEnding, setWeekEnding] = useState<string>(defaultWeekEnding)
 
-  const weekDates = getWeekDates(defaultWeekEnding)
+  const weekDates = getWeekDates(weekEnding)
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
 
   const [billableEntries, setBillableEntries] = useState<BillableEntry[]>(
@@ -134,6 +135,8 @@ export default function WeeklyTimesheetForm({
         const { error: updateError } = await supabase
           .from('weekly_timesheets')
           .update({
+            week_ending: weekEnding,
+            week_starting: formatDateForInput(weekDates.start),
             updated_at: new Date().toISOString(),
           })
           .eq('id', timesheetId)
@@ -149,7 +152,7 @@ export default function WeeklyTimesheetForm({
           .from('weekly_timesheets')
           .insert({
             user_id: userId,
-            week_ending: defaultWeekEnding,
+            week_ending: weekEnding,
             week_starting: formatDateForInput(weekDates.start),
             status: 'draft',
           })
@@ -254,6 +257,23 @@ export default function WeeklyTimesheetForm({
 
       {/* Week Information */}
       <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg">
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Week Ending Date
+          </label>
+          <input
+            type="date"
+            value={weekEnding}
+            onChange={(e) => {
+              const newWeekEnding = e.target.value
+              setWeekEnding(newWeekEnding)
+              // Recalculate week dates when week ending changes
+              const newWeekDates = getWeekDates(newWeekEnding)
+              // Update weekDates will happen automatically via state
+            }}
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+          />
+        </div>
         <p className="text-sm text-gray-600 dark:text-gray-300">
           <span className="font-semibold">Week Ending:</span> {formatDate(weekDates.end)}
         </p>
