@@ -180,10 +180,31 @@ export default function SetupPasswordPage() {
       handleTokenVerification(token || tokenHash || '')
     } else {
       // No token found, check if user is already logged in
-      // Also wait a bit for auth state change to fire
-      setTimeout(() => {
-        checkSession()
-      }, 1000)
+      // This happens when redirected from callback route
+      // Wait a bit for cookies to sync
+      setTimeout(async () => {
+        // Try to get session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (session) {
+          console.log('Session found after redirect')
+          setVerifying(false)
+        } else if (sessionError) {
+          console.error('Session error:', sessionError)
+          setError('Auth session missing! Please click the invitation link again or contact your administrator.')
+          setVerifying(false)
+        } else {
+          // No session, try refreshing
+          const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
+          if (refreshedSession) {
+            console.log('Session refreshed after redirect')
+            setVerifying(false)
+          } else {
+            setError('Invalid or expired invitation link. Please contact your administrator for a new link.')
+            setVerifying(false)
+          }
+        }
+      }, 500)
     }
 
     // Cleanup subscription
@@ -210,12 +231,45 @@ export default function SetupPasswordPage() {
     setLoading(true)
 
     try {
+      // First, check if we have a user (more reliable than getSession)
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      
+      if (userError) {
+        // If getUser fails, try refreshing the session
+        const { data: { session }, error: refreshError } = await supabase.auth.refreshSession()
+        
+        if (refreshError || !session) {
+          throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
+        }
+      }
+
+      if (!user) {
+        // No user, try to refresh session one more time
+        const { data: { session }, error: refreshError } = await supabase.auth.refreshSession()
+        
+        if (refreshError || !session) {
+          throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
+        }
+        
+        // Try getUser again after refresh
+        const { data: { user: refreshedUser }, error: retryError } = await supabase.auth.getUser()
+        if (retryError || !refreshedUser) {
+          throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
+        }
+      }
+
       // Update the user's password
       const { error } = await supabase.auth.updateUser({
         password: password,
       })
 
-      if (error) throw error
+      if (error) {
+        // If it's a session error, provide a helpful message
+        if (error.message.includes('session') || error.message.includes('JWT') || error.message.includes('Auth session missing')) {
+          throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
+        }
+        throw error
+      }
 
       // Password set successfully, redirect to dashboard
       router.push('/dashboard')

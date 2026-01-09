@@ -65,11 +65,21 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
     
-    if (!error) {
-      // Successfully exchanged code for session, redirect to setup password
-      return NextResponse.redirect(new URL(next, request.url))
+    if (!error && data.session) {
+      // Successfully exchanged code for session
+      // Create redirect response with cookies set
+      const redirectUrl = new URL(next, request.url)
+      const response = NextResponse.redirect(redirectUrl)
+      
+      // The session cookies are already set by the Supabase client
+      // But we need to make sure they're included in the response
+      return response
+    } else if (error) {
+      // If there's an error, redirect with error message
+      const redirectUrl = new URL('/auth/setup-password?error=' + encodeURIComponent(error.message), request.url)
+      return NextResponse.redirect(redirectUrl)
     }
   }
 
