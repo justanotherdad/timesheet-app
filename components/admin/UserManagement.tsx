@@ -131,7 +131,8 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
       // Show success message and invitation link if available
       if (result.message) {
         setSuccess(result.message)
-        if ((result as any).invitationLink) {
+        const hasInvitationLink = !!(result as any).invitationLink
+        if (hasInvitationLink) {
           setInvitationLink((result as any).invitationLink)
         }
         // Clear form
@@ -143,8 +144,11 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
         setSelectedDepartments([])
         setSelectedPOs([])
         setShowAddForm(false)
-        // Don't auto-refresh if there's an invitation link to show
-        if (!(result as any).invitationLink) {
+        
+        // If there's an invitation link, don't reload - keep the link visible
+        // User can manually refresh the page after copying/dismissing the link
+        if (!hasInvitationLink) {
+          // Only reload if there's no invitation link to show
           setTimeout(() => {
             window.location.reload()
           }, 2000)
@@ -280,15 +284,24 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
                 />
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     if (invitationLink) {
-                      navigator.clipboard.writeText(invitationLink)
-                      const originalMessage = success
-                      setSuccess('Link copied to clipboard!')
-                      setTimeout(() => {
-                        setSuccess(originalMessage)
-                        window.location.reload()
-                      }, 1500)
+                      try {
+                        await navigator.clipboard.writeText(invitationLink)
+                        const originalMessage = success
+                        setSuccess('Link copied to clipboard! You can copy it again if needed.')
+                        setTimeout(() => {
+                          setSuccess(originalMessage)
+                        }, 3000)
+                      } catch (err) {
+                        // Fallback: select the text
+                        const input = document.querySelector('input[readonly]') as HTMLInputElement
+                        if (input) {
+                          input.select()
+                          document.execCommand('copy')
+                          setSuccess('Link selected - press Ctrl+C (or Cmd+C) to copy')
+                        }
+                      }
                     }
                   }}
                   className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-blue-700"
@@ -300,11 +313,12 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
                   onClick={() => {
                     setInvitationLink(null)
                     setSuccess(null)
+                    // Reload to show the updated user list after dismissing the link
                     window.location.reload()
                   }}
                   className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded text-sm font-semibold hover:bg-gray-300 dark:hover:bg-gray-500"
                 >
-                  Close
+                  Dismiss & Refresh
                 </button>
               </div>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">

@@ -58,10 +58,11 @@ export async function createUser(formData: FormData) {
       // User already exists, use their ID
       userId = existingUser.id
     } else {
-      // Create new user - don't set password, we'll send invitation email
+      // Create new user - set email_confirm to true so invite link works immediately
+      // The invite link itself will handle the confirmation flow
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
         email,
-        email_confirm: false, // Don't auto-confirm - let them confirm via email
+        email_confirm: true, // Auto-confirm so invite link works immediately
         user_metadata: {
           name
         }
@@ -80,6 +81,7 @@ export async function createUser(formData: FormData) {
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'
       const redirectUrl = siteUrl.includes('localhost') ? 'https://ctgtimesheet.com' : siteUrl
       
+      // Generate invite link - this allows user to set their password
       const { data: linkData, error: inviteError } = await adminClient.auth.admin.generateLink({
         type: 'invite',
         email,
@@ -91,17 +93,33 @@ export async function createUser(formData: FormData) {
       if (!inviteError && linkData?.properties?.action_link) {
         invitationLink = linkData.properties.action_link
       } else {
-        // If invite fails, try password reset link instead
-        const { data: resetLinkData, error: resetError } = await adminClient.auth.admin.generateLink({
-          type: 'recovery',
+        // If invite fails, try magic link instead (alternative approach)
+        const { data: magicLinkData, error: magicError } = await adminClient.auth.admin.generateLink({
+          type: 'magiclink',
           email,
           options: {
-            redirectTo: `${redirectUrl}/login`
+            redirectTo: `${redirectUrl}/auth/setup-password`
           }
         })
 
-        if (!resetError && resetLinkData?.properties?.action_link) {
-          invitationLink = resetLinkData.properties.action_link
+        if (!magicError && magicLinkData?.properties?.action_link) {
+          invitationLink = magicLinkData.properties.action_link
+        } else {
+          // Last resort: use recovery link (password reset)
+          const { data: resetLinkData, error: resetError } = await adminClient.auth.admin.generateLink({
+            type: 'recovery',
+            email,
+            options: {
+              redirectTo: `${redirectUrl}/auth/setup-password`
+            }
+          })
+
+          if (!resetError && resetLinkData?.properties?.action_link) {
+            invitationLink = resetLinkData.properties.action_link
+          } else {
+            console.error('Failed to generate any invitation link:', { inviteError, magicError, resetError })
+            return { error: 'User created but failed to generate invitation link. Please use "Generate Password Link" button for this user.' }
+          }
         }
       }
     }
