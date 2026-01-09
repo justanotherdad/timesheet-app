@@ -31,8 +31,9 @@ export default async function NewTimesheetPage() {
   )
 
   // If timesheet exists, redirect to edit page
-  if (existingTimesheetResult.data) {
-    redirect(`/dashboard/timesheets/${existingTimesheetResult.data.id}/edit`)
+  const existingTimesheet = existingTimesheetResult.data as { id: string; status: string } | null
+  if (existingTimesheet?.id) {
+    redirect(`/dashboard/timesheets/${existingTimesheet.id}/edit`)
   }
 
   // Fetch all dropdown options with timeout
