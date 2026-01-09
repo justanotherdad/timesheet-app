@@ -70,7 +70,7 @@ export async function updateSession(request: NextRequest) {
     console.error('Supabase auth error in middleware:', error)
     
     // For public paths, always allow through
-    const publicPaths = ['/', '/login', '/signup', '/auth/setup-password']
+    const publicPaths = ['/', '/login', '/signup', '/auth/setup-password', '/auth/invite']
     const isPublicPath = publicPaths.includes(request.nextUrl.pathname)
     
     if (isPublicPath || request.nextUrl.pathname.startsWith('/auth')) {

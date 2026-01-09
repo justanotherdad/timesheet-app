@@ -87,8 +87,8 @@ export async function createUser(formData: FormData) {
       const redirectUrl = siteUrl.replace('www.', '')
       
       // Generate invite link - this allows user to set their password
-      // Redirect directly to setup-password page - it will handle tokens in hash or query params
-      // Note: redirectTo must match EXACTLY what's in Supabase Redirect URLs
+      // Use an intermediate landing page to prevent Teams/Slack previews from consuming the token
+      // The landing page requires user interaction before redirecting to the actual Supabase link
       const redirectToUrl = `${redirectUrl}/auth/setup-password`
       console.log('Generating invite link with redirectTo:', redirectToUrl)
       
@@ -100,15 +100,19 @@ export async function createUser(formData: FormData) {
         }
       })
       
-      if (inviteError) {
-        console.error('Invite link generation error:', inviteError)
-      } else {
-        console.log('Invite link generated successfully:', linkData?.properties?.action_link?.substring(0, 100) + '...')
-      }
-
       if (!inviteError && linkData?.properties?.action_link) {
-        invitationLink = linkData.properties.action_link
+        // Wrap the Supabase link in our intermediate landing page
+        // This prevents preview bots from consuming the token
+        const supabaseLink = linkData.properties.action_link
+        // Encode the Supabase link and wrap it in our landing page
+        const wrappedLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(supabaseLink)}`
+        invitationLink = wrappedLink
+        console.log('Wrapped invite link to prevent preview consumption')
       } else {
+        // If invite link generation failed, try alternatives
+        if (inviteError) {
+          console.error('Invite link generation error:', inviteError)
+        }
         // If invite fails, try magic link instead (alternative approach)
         const { data: magicLinkData, error: magicError } = await adminClient.auth.admin.generateLink({
           type: 'magiclink',
@@ -119,7 +123,10 @@ export async function createUser(formData: FormData) {
         })
 
         if (!magicError && magicLinkData?.properties?.action_link) {
-          invitationLink = magicLinkData.properties.action_link
+          // Wrap magic link too
+          const supabaseLink = magicLinkData.properties.action_link
+          const wrappedLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(supabaseLink)}`
+          invitationLink = wrappedLink
         } else {
           // Last resort: use recovery link (password reset)
           const { data: resetLinkData, error: resetError } = await adminClient.auth.admin.generateLink({
@@ -131,7 +138,10 @@ export async function createUser(formData: FormData) {
           })
 
           if (!resetError && resetLinkData?.properties?.action_link) {
-            invitationLink = resetLinkData.properties.action_link
+            // Wrap recovery link too
+            const supabaseLink = resetLinkData.properties.action_link
+            const wrappedLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(supabaseLink)}`
+            invitationLink = wrappedLink
           } else {
             console.error('Failed to generate any invitation link:', { inviteError, magicError, resetError })
             return { error: 'User created but failed to generate invitation link. Please use "Generate Password Link" button for this user.' }
