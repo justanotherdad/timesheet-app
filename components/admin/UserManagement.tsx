@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { User, UserRole } from '@/types/database'
 import { Plus, Edit, Trash2 } from 'lucide-react'
 import { createUser } from '@/app/actions/create-user'
+import { deleteUser } from '@/app/actions/delete-user'
 
 interface Site {
   id: string
@@ -66,14 +67,18 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
       if (result.message) {
         setSuccess(result.message)
         // Clear form
-        e.currentTarget.reset()
+        if (e.currentTarget) {
+          e.currentTarget.reset()
+        }
         setSelectedSiteId('')
+        setShowAddForm(false)
         // Refresh the page after 2 seconds to show new user
         setTimeout(() => {
           window.location.reload()
         }, 2000)
       } else {
         // Refresh immediately if no message
+        setShowAddForm(false)
         window.location.reload()
       }
     } catch (err: any) {
@@ -88,6 +93,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
     if (!editingUser) return
 
     setError(null)
+    setSuccess(null)
     setLoading(true)
 
     const formData = new FormData(e.currentTarget)
@@ -112,9 +118,38 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
       if (updateError) throw updateError
 
       setEditingUser(null)
+      setSelectedSiteId('')
       window.location.reload()
     } catch (err: any) {
       setError(err.message || 'An error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
+      return
+    }
+
+    setError(null)
+    setSuccess(null)
+    setLoading(true)
+
+    try {
+      const result = await deleteUser(userId)
+
+      if (result.error) {
+        throw new Error(result.error)
+      }
+
+      setSuccess(`User ${userName} has been deleted successfully.`)
+      // Refresh the page after 1 second to show updated list
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while deleting the user')
     } finally {
       setLoading(false)
     }
@@ -260,8 +295,17 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
                       setSelectedSiteId((user as any).site_id || '')
                     }}
                     className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 mr-4"
+                    title="Edit User"
                   >
                     <Edit className="h-4 w-4 inline" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteUser(user.id, user.name)}
+                    disabled={loading}
+                    className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete User"
+                  >
+                    <Trash2 className="h-4 w-4 inline" />
                   </button>
                 </td>
               </tr>
