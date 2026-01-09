@@ -17,6 +17,24 @@ export default async function NewTimesheetPage() {
 
   const supabase = await createClient()
 
+  const weekEnding = getWeekEnding()
+  const weekEndingStr = formatDateForInput(weekEnding)
+
+  // Check if a timesheet already exists for this week
+  const existingTimesheetResult = await withQueryTimeout(() =>
+    supabase
+      .from('weekly_timesheets')
+      .select('id, status')
+      .eq('user_id', user.id)
+      .eq('week_ending', weekEndingStr)
+      .single()
+  )
+
+  // If timesheet exists, redirect to edit page
+  if (existingTimesheetResult.data) {
+    redirect(`/dashboard/timesheets/${existingTimesheetResult.data.id}/edit`)
+  }
+
   // Fetch all dropdown options with timeout
   const [sitesResult, purchaseOrdersResult] = await Promise.all([
     withQueryTimeout(() => supabase.from('sites').select('*').order('name')),
@@ -25,8 +43,6 @@ export default async function NewTimesheetPage() {
 
   const sites = (sitesResult.data || []) as any[]
   const purchaseOrders = (purchaseOrdersResult.data || []) as any[]
-
-  const weekEnding = getWeekEnding()
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -37,7 +53,7 @@ export default async function NewTimesheetPage() {
             <WeeklyTimesheetForm
               sites={sites}
               purchaseOrders={purchaseOrders}
-              defaultWeekEnding={formatDateForInput(weekEnding)}
+              defaultWeekEnding={weekEndingStr}
               userId={user.id}
             />
           </div>

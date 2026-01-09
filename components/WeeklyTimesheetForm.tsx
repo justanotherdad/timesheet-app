@@ -147,22 +147,71 @@ export default function WeeklyTimesheetForm({
         await supabase.from('timesheet_entries').delete().eq('timesheet_id', timesheetId)
         await supabase.from('timesheet_unbillable').delete().eq('timesheet_id', timesheetId)
       } else {
-        // Create new timesheet
-        const { data: newTimesheet, error: createError } = await supabase
+        // Check if timesheet already exists for this week
+        const { data: existingTimesheet } = await supabase
           .from('weekly_timesheets')
-          .insert({
-            user_id: userId,
-            week_ending: weekEnding,
-            week_starting: formatDateForInput(weekDates.start),
-            status: 'draft',
-          })
-          .select()
+          .select('id')
+          .eq('user_id', userId)
+          .eq('week_ending', weekEnding)
           .single()
 
-        if (createError) throw createError
-        if (!newTimesheet) throw new Error('Failed to create timesheet')
+        if (existingTimesheet) {
+          // Timesheet exists, update it instead
+          timesheetId = existingTimesheet.id
+          const { error: updateError } = await supabase
+            .from('weekly_timesheets')
+            .update({
+              week_ending: weekEnding,
+              week_starting: formatDateForInput(weekDates.start),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', timesheetId)
 
-        timesheetId = newTimesheet.id
+          if (updateError) throw updateError
+
+          // Delete existing entries
+          await supabase.from('timesheet_entries').delete().eq('timesheet_id', timesheetId)
+          await supabase.from('timesheet_unbillable').delete().eq('timesheet_id', timesheetId)
+        } else {
+          // Create new timesheet
+          const { data: newTimesheet, error: createError } = await supabase
+            .from('weekly_timesheets')
+            .insert({
+              user_id: userId,
+              week_ending: weekEnding,
+              week_starting: formatDateForInput(weekDates.start),
+              status: 'draft',
+            })
+            .select()
+            .single()
+
+          if (createError) {
+            // If duplicate key error, try to find and use existing timesheet
+            if (createError.code === '23505' || createError.message.includes('duplicate key')) {
+              const { data: existing } = await supabase
+                .from('weekly_timesheets')
+                .select('id')
+                .eq('user_id', userId)
+                .eq('week_ending', weekEnding)
+                .single()
+              
+              if (existing) {
+                timesheetId = existing.id
+                // Delete existing entries
+                await supabase.from('timesheet_entries').delete().eq('timesheet_id', timesheetId)
+                await supabase.from('timesheet_unbillable').delete().eq('timesheet_id', timesheetId)
+              } else {
+                throw createError
+              }
+            } else {
+              throw createError
+            }
+          } else if (!newTimesheet) {
+            throw new Error('Failed to create timesheet')
+          } else {
+            timesheetId = newTimesheet.id
+          }
+        }
       }
 
       // Insert billable entries
