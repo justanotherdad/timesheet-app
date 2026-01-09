@@ -90,12 +90,27 @@ export default async function AdminPage() {
             </Link>
 
             <Link
-              href="/dashboard/admin/export"
+              href="/dashboard/admin/data-view"
               className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
             >
               <div className="flex items-center gap-4">
                 <div className="bg-teal-100 dark:bg-teal-900/30 p-3 rounded-lg">
                   <FileText className="h-6 w-6 text-teal-600 dark:text-teal-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">View Timesheet Data</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">View and filter all timesheet entries</p>
+                </div>
+              </div>
+            </Link>
+
+            <Link
+              href="/dashboard/admin/export"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-cyan-100 dark:bg-cyan-900/30 p-3 rounded-lg">
+                  <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Export Timesheets</h3>

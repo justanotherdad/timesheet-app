@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { User, UserRole } from '@/types/database'
 import { Plus, Edit, Trash2 } from 'lucide-react'
 import { createUser } from '@/app/actions/create-user'
 import { deleteUser } from '@/app/actions/delete-user'
+import { updateUserAssignments } from '@/app/actions/update-user-assignments'
 
 interface Site {
   id: string
@@ -20,14 +21,23 @@ interface Department {
   code?: string
 }
 
+interface PurchaseOrder {
+  id: string
+  site_id: string
+  department_id?: string
+  po_number: string
+  description?: string
+}
+
 interface UserManagementProps {
   users: User[]
   currentUserRole: UserRole
   sites: Site[]
   departments: Department[]
+  purchaseOrders: PurchaseOrder[]
 }
 
-export default function UserManagement({ users: initialUsers, currentUserRole, sites, departments }: UserManagementProps) {
+export default function UserManagement({ users: initialUsers, currentUserRole, sites, departments, purchaseOrders }: UserManagementProps) {
   const [users, setUsers] = useState(initialUsers)
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
@@ -35,14 +45,54 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
+  
+  // Multiple assignment states
+  const [selectedSites, setSelectedSites] = useState<string[]>([])
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([])
+  const [selectedPOs, setSelectedPOs] = useState<string[]>([])
+  
+  // User assignments (loaded from junction tables)
+  const [userAssignments, setUserAssignments] = useState<Record<string, {
+    sites: string[]
+    departments: string[]
+    purchaseOrders: string[]
+  }>>({})
+  
   const supabase = createClient()
 
   const canChangeRole = currentUserRole === 'super_admin'
 
-  // Filter departments by selected site
-  const filteredDepartments = selectedSiteId 
-    ? departments.filter(d => d.site_id === selectedSiteId)
-    : []
+  // Filter departments by selected sites
+  const filteredDepartments = selectedSites.length > 0
+    ? departments.filter(d => selectedSites.includes(d.site_id))
+    : departments
+
+  // Filter POs by selected sites and departments
+  const filteredPOs = purchaseOrders.filter(po => {
+    if (selectedSites.length > 0 && !selectedSites.includes(po.site_id)) return false
+    if (selectedDepartments.length > 0 && po.department_id && !selectedDepartments.includes(po.department_id)) return false
+    return true
+  })
+
+  // Load user assignments from junction tables
+  const loadUserAssignments = async (userId: string) => {
+    try {
+      const [sitesResult, deptsResult, posResult] = await Promise.all([
+        supabase.from('user_sites').select('site_id').eq('user_id', userId),
+        supabase.from('user_departments').select('department_id').eq('user_id', userId),
+        supabase.from('user_purchase_orders').select('purchase_order_id').eq('user_id', userId),
+      ])
+
+      return {
+        sites: (sitesResult.data || []).map((r: any) => r.site_id),
+        departments: (deptsResult.data || []).map((r: any) => r.department_id),
+        purchaseOrders: (posResult.data || []).map((r: any) => r.purchase_order_id),
+      }
+    } catch (err) {
+      console.error('Error loading user assignments:', err)
+      return { sites: [], departments: [], purchaseOrders: [] }
+    }
+  }
 
   const handleAddUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -63,6 +113,19 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
         throw new Error(result.error)
       }
 
+      // If user was created, save multiple assignments
+      if (result.userId && (selectedSites.length > 0 || selectedDepartments.length > 0 || selectedPOs.length > 0)) {
+        const assignResult = await updateUserAssignments(
+          result.userId,
+          selectedSites,
+          selectedDepartments,
+          selectedPOs
+        )
+        if (assignResult.error) {
+          console.error('Failed to save assignments:', assignResult.error)
+        }
+      }
+
       // Show success message
       if (result.message) {
         setSuccess(result.message)
@@ -71,6 +134,9 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
           e.currentTarget.reset()
         }
         setSelectedSiteId('')
+        setSelectedSites([])
+        setSelectedDepartments([])
+        setSelectedPOs([])
         setShowAddForm(false)
         // Refresh the page after 2 seconds to show new user
         setTimeout(() => {
@@ -100,26 +166,41 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
     const name = formData.get('name') as string
     const role = formData.get('role') as UserRole
     const reportsToId = formData.get('reports_to_id') as string || null
-    const siteId = formData.get('site_id') as string || null
-    const departmentId = formData.get('department_id') as string || null
 
     try {
+      // Update user profile
       const { error: updateError } = await supabase
         .from('user_profiles')
         .update({
           name,
           role: canChangeRole ? role : editingUser.role,
           reports_to_id: reportsToId || null,
-          site_id: siteId || null,
-          department_id: departmentId || null,
         })
         .eq('id', editingUser.id)
 
       if (updateError) throw updateError
 
+      // Update multiple assignments
+      const assignResult = await updateUserAssignments(
+        editingUser.id,
+        selectedSites,
+        selectedDepartments,
+        selectedPOs
+      )
+
+      if (assignResult.error) {
+        throw new Error(assignResult.error)
+      }
+
       setEditingUser(null)
       setSelectedSiteId('')
-      window.location.reload()
+      setSelectedSites([])
+      setSelectedDepartments([])
+      setSelectedPOs([])
+      setSuccess('User updated successfully')
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {
@@ -210,33 +291,89 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
               {canChangeRole && <option value="super_admin">Super Admin</option>}
             </select>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Site</label>
-              <select
-                name="site_id"
-                value={selectedSiteId}
-                onChange={(e) => setSelectedSiteId(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-              >
-                <option value="">-- Select Site --</option>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sites (Select Multiple)</label>
+              <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
                 {sites.map(site => (
-                  <option key={site.id} value={site.id}>{site.name}</option>
+                  <label key={site.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedSites.includes(site.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedSites([...selectedSites, site.id])
+                        } else {
+                          setSelectedSites(selectedSites.filter(id => id !== site.id))
+                          // Remove departments from unselected sites
+                          setSelectedDepartments(selectedDepartments.filter(deptId => {
+                            const dept = departments.find(d => d.id === deptId)
+                            return dept && selectedSites.includes(dept.site_id)
+                          }))
+                        }
+                      }}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-900 dark:text-gray-100">{site.name}</span>
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department (Optional)</label>
-              <select
-                name="department_id"
-                disabled={!selectedSiteId}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:text-gray-500"
-              >
-                <option value="">-- Select Department --</option>
-                {filteredDepartments.map(dept => (
-                  <option key={dept.id} value={dept.id}>{dept.name}</option>
-                ))}
-              </select>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Departments (Select Multiple)</label>
+              <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                {filteredDepartments.length > 0 ? (
+                  filteredDepartments.map(dept => (
+                    <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedDepartments.includes(dept.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDepartments([...selectedDepartments, dept.id])
+                          } else {
+                            setSelectedDepartments(selectedDepartments.filter(id => id !== dept.id))
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-900 dark:text-gray-100">
+                        {dept.name} ({sites.find(s => s.id === dept.site_id)?.name})
+                      </span>
+                    </label>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">Select sites first to see departments</p>
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Purchase Orders (Select Multiple)</label>
+              <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                {filteredPOs.length > 0 ? (
+                  filteredPOs.map(po => (
+                    <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedPOs.includes(po.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedPOs([...selectedPOs, po.id])
+                          } else {
+                            setSelectedPOs(selectedPOs.filter(id => id !== po.id))
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-900 dark:text-gray-100">
+                        {po.po_number} {po.description ? `- ${po.description}` : ''}
+                      </span>
+                    </label>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">Select sites/departments first to see purchase orders</p>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex gap-2">
@@ -252,6 +389,9 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
               onClick={() => {
                 setShowAddForm(false)
                 setSelectedSiteId('')
+                setSelectedSites([])
+                setSelectedDepartments([])
+                setSelectedPOs([])
               }}
               className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600"
             >
@@ -268,31 +408,42 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Email</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Role</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Site</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Department</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sites</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Departments</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Purchase Orders</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Reports To</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {users.map((user: any) => {
-              const userSite = sites.find(s => s.id === user.site_id)
-              const userDept = departments.find(d => d.id === user.department_id)
+              // Get assignments from state (will be loaded on edit click or via useEffect)
+              const assignments = userAssignments[user.id] || { sites: [], departments: [], purchaseOrders: [] }
+              
+              const userSites = assignments.sites.map((siteId: string) => sites.find(s => s.id === siteId)?.name).filter(Boolean)
+              const userDepts = assignments.departments.map((deptId: string) => departments.find(d => d.id === deptId)?.name).filter(Boolean)
+              const userPOs = assignments.purchaseOrders.map((poId: string) => purchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean)
+              
               return (
               <tr key={user.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{user.name}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{user.email}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">{user.role}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{userSite?.name || 'N/A'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{userDept?.name || 'N/A'}</td>
+                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userSites.length > 0 ? userSites.join(', ') : 'N/A'}</td>
+                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userDepts.length > 0 ? userDepts.join(', ') : 'N/A'}</td>
+                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userPOs.length > 0 ? userPOs.join(', ') : 'N/A'}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {users.find(u => u.id === user.reports_to_id)?.name || 'N/A'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setEditingUser(user)
-                      setSelectedSiteId((user as any).site_id || '')
+                      const assignments = await loadUserAssignments(user.id)
+                      setSelectedSites(assignments.sites)
+                      setSelectedDepartments(assignments.departments)
+                      setSelectedPOs(assignments.purchaseOrders)
+                      setUserAssignments(prev => ({ ...prev, [user.id]: assignments }))
                     }}
                     className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 mr-4"
                     title="Edit User"
@@ -345,43 +496,86 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Site</label>
-                <select
-                  name="site_id"
-                  value={selectedSiteId || (editingUser as any).site_id || ''}
-                  onChange={(e) => {
-                    setSelectedSiteId(e.target.value)
-                    // Reset department when site changes
-                    const form = e.currentTarget.closest('form')
-                    if (form) {
-                      const deptSelect = form.querySelector('[name="department_id"]') as HTMLSelectElement
-                      if (deptSelect) deptSelect.value = ''
-                    }
-                  }}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-                >
-                  <option value="">-- Select Site --</option>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sites (Select Multiple)</label>
+                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
                   {sites.map(site => (
-                    <option key={site.id} value={site.id}>{site.name}</option>
+                    <label key={site.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedSites.includes(site.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedSites([...selectedSites, site.id])
+                          } else {
+                            setSelectedSites(selectedSites.filter(id => id !== site.id))
+                            setSelectedDepartments(selectedDepartments.filter(deptId => {
+                              const dept = departments.find(d => d.id === deptId)
+                              return dept && selectedSites.includes(dept.site_id)
+                            }))
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-900 dark:text-gray-100">{site.name}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department (Optional)</label>
-                <select
-                  name="department_id"
-                  defaultValue={(editingUser as any).department_id || ''}
-                  disabled={!selectedSiteId && !(editingUser as any).site_id}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:text-gray-500"
-                >
-                  <option value="">-- Select Department --</option>
-                  {(selectedSiteId || (editingUser as any).site_id ? 
-                    departments.filter(d => d.site_id === (selectedSiteId || (editingUser as any).site_id)) : 
-                    []
-                  ).map(dept => (
-                    <option key={dept.id} value={dept.id}>{dept.name}</option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Departments (Select Multiple)</label>
+                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                  {filteredDepartments.length > 0 ? (
+                    filteredDepartments.map(dept => (
+                      <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedDepartments.includes(dept.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedDepartments([...selectedDepartments, dept.id])
+                            } else {
+                              setSelectedDepartments(selectedDepartments.filter(id => id !== dept.id))
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-gray-100">
+                          {dept.name} ({sites.find(s => s.id === dept.site_id)?.name})
+                        </span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">Select sites first to see departments</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Purchase Orders (Select Multiple)</label>
+                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                  {filteredPOs.length > 0 ? (
+                    filteredPOs.map(po => (
+                      <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedPOs.includes(po.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPOs([...selectedPOs, po.id])
+                            } else {
+                              setSelectedPOs(selectedPOs.filter(id => id !== po.id))
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-gray-100">
+                          {po.po_number} {po.description ? `- ${po.description}` : ''}
+                        </span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">Select sites/departments first to see purchase orders</p>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reports To</label>
@@ -411,6 +605,9 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
                   onClick={() => {
                     setEditingUser(null)
                     setSelectedSiteId('')
+                    setSelectedSites([])
+                    setSelectedDepartments([])
+                    setSelectedPOs([])
                   }}
                   className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600"
                 >

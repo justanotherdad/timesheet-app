@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Edit, Trash2 } from 'lucide-react'
+import { Plus, Edit, Trash2, Upload } from 'lucide-react'
 
 interface Site {
   id: string
@@ -57,6 +57,7 @@ export default function HierarchicalItemManager({
   const [items, setItems] = useState<HierarchicalItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingItem, setEditingItem] = useState<HierarchicalItem | null>(null)
   const supabase = createClient()
@@ -271,6 +272,70 @@ export default function HierarchicalItemManager({
     }
   }
 
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !selectedSite) {
+      setError('Please select a site first')
+      return
+    }
+
+    // Simple CSV parsing (can be enhanced for Excel)
+    const text = await file.text()
+    const lines = text.split('\n').filter(line => line.trim())
+    if (lines.length < 2) {
+      setError('CSV file must have at least a header row and one data row')
+      return
+    }
+    
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const itemsToAdd = lines.slice(1).map(line => {
+        const values = line.split(',').map(v => v.trim())
+        const nameIdx = headers.findIndex(h => h.includes('name'))
+        const descriptionIdx = tableName === 'systems' 
+          ? headers.findIndex(h => h.includes('description') || h.includes('desc'))
+          : -1
+        
+        const insertData: any = {
+          site_id: selectedSite,
+          department_id: selectedDepartment || null,
+          po_id: selectedPO || null,
+          name: values[nameIdx] || '',
+        }
+        
+        if (tableName === 'systems' && descriptionIdx >= 0) {
+          insertData.description = values[descriptionIdx] || null
+        }
+
+        return insertData
+      }).filter(item => item.name)
+
+      if (itemsToAdd.length === 0) {
+        setError('No valid items found in CSV file')
+        return
+      }
+
+      const { error: insertError } = await supabase
+        .from(tableName)
+        .insert(itemsToAdd)
+
+      if (insertError) throw insertError
+
+      await loadItems(selectedSite, selectedDepartment, selectedPO)
+      setSuccess(`Successfully imported ${itemsToAdd.length} ${itemName.toLowerCase()}s`)
+      setTimeout(() => setSuccess(null), 5000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to import items')
+    } finally {
+      setLoading(false)
+      e.target.value = ''
+    }
+  }
+
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -279,6 +344,12 @@ export default function HierarchicalItemManager({
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-4">
           {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 px-4 py-3 rounded mb-4">
+          {success}
         </div>
       )}
 
@@ -340,7 +411,18 @@ export default function HierarchicalItemManager({
       {selectedSite && (
         <>
           <div className="flex justify-between items-center mb-6">
-            <div></div>
+            <div>
+              <label className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2 cursor-pointer inline-block">
+                <Upload className="h-4 w-4" />
+                Import CSV
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleExcelImport}
+                  className="hidden"
+                />
+              </label>
+            </div>
             <button
               onClick={() => setShowAddForm(!showAddForm)}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"

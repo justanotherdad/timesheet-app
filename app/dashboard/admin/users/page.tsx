@@ -17,11 +17,13 @@ export default async function UsersAdminPage() {
   const users = (usersResult.data || []) as any[]
   const sites = (sitesResult.data || []) as any[]
 
-  // Fetch departments for each site (we'll load them dynamically in the component)
-  const departmentsResult = await withQueryTimeout(() =>
-    supabase.from('departments').select('*').order('name')
-  )
+  // Fetch departments and purchase orders
+  const [departmentsResult, purchaseOrdersResult] = await Promise.all([
+    withQueryTimeout(() => supabase.from('departments').select('*').order('name')),
+    withQueryTimeout(() => supabase.from('purchase_orders').select('*').order('po_number')),
+  ])
   const allDepartments = (departmentsResult.data || []) as any[]
+  const purchaseOrders = (purchaseOrdersResult.data || []) as any[]
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -33,6 +35,7 @@ export default async function UsersAdminPage() {
             currentUserRole={user.profile.role}
             sites={sites}
             departments={allDepartments}
+            purchaseOrders={purchaseOrders}
           />
         </div>
       </div>
