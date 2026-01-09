@@ -35,40 +35,42 @@ export async function createUser(formData: FormData) {
   // Use admin client to create user
   const adminClient = createAdminClient()
 
-  // Check if user already exists in auth
   let userId: string
-  let userExists = false
 
-  try {
-    const { data: existingUser } = await adminClient.auth.admin.getUserByEmail(email)
-    if (existingUser?.user) {
-      userId = existingUser.user.id
-      userExists = true
+  // Try to create the user - if they already exist, find them
+  const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12) + 'A1!'
+  
+  const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+    email,
+    password: tempPassword,
+    email_confirm: true, // Auto-confirm email
+    user_metadata: {
+      name
     }
-  } catch {
-    // User doesn't exist, we'll create them
-    userExists = false
-  }
+  })
 
-  if (!userExists) {
-    // Create new auth user with temporary password
-    // Generate a random password that meets requirements
-    const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12) + 'A1!'
-    
-    const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-      email,
-      password: tempPassword,
-      email_confirm: true, // Auto-confirm email
-      user_metadata: {
-        name
+  if (createError) {
+    // If user already exists, find them by listing users
+    if (createError.message?.toLowerCase().includes('already') || createError.message?.toLowerCase().includes('exists')) {
+      const { data: { users }, error: listError } = await adminClient.auth.admin.listUsers()
+      
+      if (listError) {
+        return { error: 'Failed to check existing user: ' + listError.message }
       }
-    })
-
-    if (createError || !newUser.user) {
-      return { error: createError?.message || 'Failed to create auth user' }
+      
+      const existingUser = users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
+      if (existingUser) {
+        userId = existingUser.id
+      } else {
+        return { error: 'User already exists but could not be found' }
+      }
+    } else {
+      return { error: createError.message || 'Failed to create auth user' }
     }
-
+  } else if (newUser.user) {
     userId = newUser.user.id
+  } else {
+    return { error: 'Failed to create auth user: No user returned' }
   }
 
   // Create or update profile using admin client (bypasses RLS)
