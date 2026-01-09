@@ -49,7 +49,14 @@ export default function SetupPasswordPage() {
       }
 
       if (data.session) {
-        console.log('Session created successfully')
+        console.log('Session created successfully, user:', data.session.user?.email)
+        // Verify the session is actually set by getting it again
+        const { data: { session: verifySession }, error: verifyError } = await supabase.auth.getSession()
+        if (verifyError || !verifySession) {
+          console.error('Session verification failed:', verifyError)
+          throw new Error('Session was created but could not be verified. Please try again.')
+        }
+        console.log('Session verified successfully')
         setVerifying(false)
         // Clear the hash from URL
         window.history.replaceState(null, '', window.location.pathname)
@@ -60,12 +67,14 @@ export default function SetupPasswordPage() {
     } catch (err: any) {
       console.error('Token exchange error:', err)
       // Try checking session one more time in case it was set asynchronously
-      const { data: { session } } = await supabase.auth.getSession()
+      await new Promise(resolve => setTimeout(resolve, 500)) // Wait a bit for cookies to sync
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       if (session) {
         console.log('Session found after error, continuing...')
         setVerifying(false)
         window.history.replaceState(null, '', window.location.pathname)
       } else {
+        console.error('No session found after error:', sessionError)
         setError(err.message || 'Invalid or expired invitation link. Please contact your administrator.')
         setVerifying(false)
       }
@@ -112,6 +121,11 @@ export default function SetupPasswordPage() {
   }, [supabase])
 
   useEffect(() => {
+    // Log current URL for debugging
+    console.log('Setup password page loaded. Full URL:', window.location.href)
+    console.log('Hash:', window.location.hash)
+    console.log('Search:', window.location.search)
+    
     // Check if this is a preview/bot request (don't process tokens for previews)
     const userAgent = navigator.userAgent.toLowerCase()
     const isPreview = userAgent.includes('microsoftteams') || 
@@ -130,6 +144,15 @@ export default function SetupPasswordPage() {
       console.log('Preview request detected, skipping token processing')
       setVerifying(false)
       setError('Please click the link directly to set your password. Link previews cannot process authentication tokens.')
+      return
+    }
+    
+    // Check for error in query params (from callback route)
+    const errorParam = searchParams.get('error')
+    if (errorParam) {
+      console.error('Error from callback route:', errorParam)
+      setError(decodeURIComponent(errorParam))
+      setVerifying(false)
       return
     }
 
@@ -232,49 +255,61 @@ export default function SetupPasswordPage() {
 
     try {
       // First, check if we have a user (more reliable than getSession)
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      console.log('Checking for user session before password update...')
+      let { data: { user }, error: userError } = await supabase.auth.getUser()
       
-      if (userError) {
+      if (userError || !user) {
+        console.log('No user found, attempting to refresh session...')
         // If getUser fails, try refreshing the session
         const { data: { session }, error: refreshError } = await supabase.auth.refreshSession()
         
         if (refreshError || !session) {
-          throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
-        }
-      }
-
-      if (!user) {
-        // No user, try to refresh session one more time
-        const { data: { session }, error: refreshError } = await supabase.auth.refreshSession()
-        
-        if (refreshError || !session) {
+          console.error('Session refresh failed:', refreshError)
           throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
         }
         
         // Try getUser again after refresh
-        const { data: { user: refreshedUser }, error: retryError } = await supabase.auth.getUser()
-        if (retryError || !refreshedUser) {
+        const retryResult = await supabase.auth.getUser()
+        user = retryResult.data.user
+        userError = retryResult.error
+        
+        if (userError || !user) {
+          console.error('Still no user after refresh:', userError)
           throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
         }
+        console.log('User found after session refresh:', user.email)
+      } else {
+        console.log('User found:', user.email)
       }
 
+      // Double-check we have a valid session before updating password
+      const { data: { session: finalSession } } = await supabase.auth.getSession()
+      if (!finalSession) {
+        console.error('No session found before password update')
+        throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
+      }
+
+      console.log('Updating password for user:', user.email)
       // Update the user's password
       const { error } = await supabase.auth.updateUser({
         password: password,
       })
 
       if (error) {
+        console.error('Password update error:', error)
         // If it's a session error, provide a helpful message
-        if (error.message.includes('session') || error.message.includes('JWT') || error.message.includes('Auth session missing')) {
+        if (error.message.includes('session') || error.message.includes('JWT') || error.message.includes('Auth session missing') || error.message.includes('Invalid JWT')) {
           throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
         }
         throw error
       }
 
+      console.log('Password updated successfully, redirecting to dashboard')
       // Password set successfully, redirect to dashboard
       router.push('/dashboard')
       router.refresh()
     } catch (error: any) {
+      console.error('Password setup error:', error)
       setError(error.message || 'Failed to set password. Please try again.')
       setLoading(false)
     }

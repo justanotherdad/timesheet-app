@@ -83,13 +83,23 @@ export async function createUser(formData: FormData) {
       
       // Generate invite link - this allows user to set their password
       // Redirect directly to setup-password page - it will handle tokens in hash or query params
+      // Note: redirectTo must match EXACTLY what's in Supabase Redirect URLs
+      const redirectToUrl = `${redirectUrl}/auth/setup-password`
+      console.log('Generating invite link with redirectTo:', redirectToUrl)
+      
       const { data: linkData, error: inviteError } = await adminClient.auth.admin.generateLink({
         type: 'invite',
         email,
         options: {
-          redirectTo: `${redirectUrl}/auth/setup-password`
+          redirectTo: redirectToUrl
         }
       })
+      
+      if (inviteError) {
+        console.error('Invite link generation error:', inviteError)
+      } else {
+        console.log('Invite link generated successfully:', linkData?.properties?.action_link?.substring(0, 100) + '...')
+      }
 
       if (!inviteError && linkData?.properties?.action_link) {
         invitationLink = linkData.properties.action_link
