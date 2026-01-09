@@ -21,7 +21,7 @@ export default async function NewTimesheetPage() {
   const weekEndingStr = formatDateForInput(weekEnding)
 
   // Check if a timesheet already exists for this week
-  const existingTimesheetResult = await withQueryTimeout(() =>
+  const existingTimesheetResult = await withQueryTimeout<{ id: string; status: string }>(() =>
     supabase
       .from('weekly_timesheets')
       .select('id, status')
@@ -31,9 +31,8 @@ export default async function NewTimesheetPage() {
   )
 
   // If timesheet exists, redirect to edit page
-  const existingTimesheet = existingTimesheetResult.data as { id: string; status: string } | null
-  if (existingTimesheet?.id) {
-    redirect(`/dashboard/timesheets/${existingTimesheet.id}/edit`)
+  if (existingTimesheetResult.data?.id) {
+    redirect(`/dashboard/timesheets/${existingTimesheetResult.data.id}/edit`)
   }
 
   // Fetch all dropdown options with timeout
