@@ -8,9 +8,10 @@ import { useRouter } from 'next/navigation'
 interface DeleteTimesheetButtonProps {
   timesheetId: string
   status: string
+  onDeleted?: () => void
 }
 
-export default function DeleteTimesheetButton({ timesheetId, status }: DeleteTimesheetButtonProps) {
+export default function DeleteTimesheetButton({ timesheetId, status, onDeleted }: DeleteTimesheetButtonProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -29,7 +30,12 @@ export default function DeleteTimesheetButton({ timesheetId, status }: DeleteTim
       if (result.error) {
         setError(result.error)
       } else {
-        router.refresh()
+        if (onDeleted) {
+          onDeleted()
+        } else {
+          router.push('/dashboard/timesheets')
+          router.refresh()
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to delete timesheet')
@@ -46,12 +52,14 @@ export default function DeleteTimesheetButton({ timesheetId, status }: DeleteTim
   return (
     <>
       <button
+        type="button"
         onClick={handleDelete}
         disabled={loading}
-        className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 disabled:opacity-50"
+        className="bg-red-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         title="Delete timesheet"
       >
         <Trash2 className="h-4 w-4" />
+        {loading ? 'Deleting...' : 'Delete'}
       </button>
       {error && (
         <span className="text-red-600 dark:text-red-400 text-xs">{error}</span>

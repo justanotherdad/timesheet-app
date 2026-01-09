@@ -84,6 +84,7 @@ export default function WeeklyTimesheetForm({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [weekEnding, setWeekEnding] = useState<string>(defaultWeekEnding)
+  const [currentStatus, setCurrentStatus] = useState<string>(timesheetStatus)
 
   const weekDates = getWeekDates(weekEnding)
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
@@ -520,8 +521,14 @@ export default function WeeklyTimesheetForm({
         >
           Cancel
         </button>
-        {timesheetId && (
-          <DeleteTimesheetButton timesheetId={timesheetId} status={timesheetStatus} />
+        {timesheetId && currentStatus === 'draft' && (
+          <DeleteTimesheetButton 
+            timesheetId={timesheetId} 
+            status={currentStatus}
+            onDeleted={() => {
+              window.location.href = '/dashboard/timesheets'
+            }}
+          />
         )}
       </div>
     </form>

@@ -73,9 +73,17 @@ export default async function TimesheetsPage() {
 
   const timesheets = (timesheetsResult.data || []) as any[]
   
-  // Log for debugging if no timesheets found
-  if (timesheetsResult.error) {
-    console.error('Error fetching timesheets:', timesheetsResult.error)
+  // Log for debugging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    if (timesheetsResult.error) {
+      console.error('Error fetching timesheets:', timesheetsResult.error)
+    }
+    console.log('Timesheets query result:', {
+      dataCount: timesheetsResult.data?.length || 0,
+      error: timesheetsResult.error,
+      userRole: user.profile.role,
+      userId: user.id
+    })
   }
 
   const getStatusIcon = (status: string) => {
