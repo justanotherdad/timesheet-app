@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import SearchableSelect from './SearchableSelect'
+import DeleteTimesheetButton from './DeleteTimesheetButton'
 import { getWeekDates, formatDate, formatDateShort, formatDateForInput } from '@/lib/utils'
 import { format } from 'date-fns'
 import { Plus, Trash2 } from 'lucide-react'
@@ -14,6 +15,7 @@ interface WeeklyTimesheetFormProps {
   defaultWeekEnding: string
   userId: string
   timesheetId?: string
+  timesheetStatus?: string
   initialData?: {
     entries?: Array<{
       id?: string
@@ -74,6 +76,7 @@ export default function WeeklyTimesheetForm({
   defaultWeekEnding,
   userId,
   timesheetId,
+  timesheetStatus = 'draft',
   initialData,
 }: WeeklyTimesheetFormProps) {
   const router = useRouter()
@@ -258,8 +261,8 @@ export default function WeeklyTimesheetForm({
 
       if (unbillableError) throw unbillableError
 
-      router.push('/dashboard/timesheets')
-      router.refresh()
+      // Redirect to timesheets list after successful save
+      window.location.href = '/dashboard/timesheets'
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {
@@ -517,6 +520,9 @@ export default function WeeklyTimesheetForm({
         >
           Cancel
         </button>
+        {timesheetId && (
+          <DeleteTimesheetButton timesheetId={timesheetId} status={timesheetStatus} />
+        )}
       </div>
     </form>
   )

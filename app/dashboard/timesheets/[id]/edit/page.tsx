@@ -86,6 +86,7 @@ export default async function EditTimesheetPage({
               defaultWeekEnding={formatDateForInput(new Date(timesheet.week_ending))}
               userId={user.id}
               timesheetId={timesheet.id}
+              timesheetStatus={timesheet.status}
               initialData={{
                 entries: entries || [],
                 unbillable: unbillable || [],

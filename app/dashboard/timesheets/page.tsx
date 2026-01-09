@@ -72,6 +72,11 @@ export default async function TimesheetsPage() {
   }
 
   const timesheets = (timesheetsResult.data || []) as any[]
+  
+  // Log for debugging if no timesheets found
+  if (timesheetsResult.error) {
+    console.error('Error fetching timesheets:', timesheetsResult.error)
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
