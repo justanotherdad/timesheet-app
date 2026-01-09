@@ -78,8 +78,9 @@ export default async function TimesheetsPage() {
     if (timesheetsResult.error) {
       console.error('Error fetching timesheets:', timesheetsResult.error)
     }
+    const dataArray = Array.isArray(timesheetsResult.data) ? timesheetsResult.data : []
     console.log('Timesheets query result:', {
-      dataCount: timesheetsResult.data?.length || 0,
+      dataCount: dataArray.length,
       error: timesheetsResult.error,
       userRole: user.profile.role,
       userId: user.id
