@@ -82,12 +82,12 @@ export async function createUser(formData: FormData) {
       const redirectUrl = siteUrl.includes('localhost') ? 'https://ctgtimesheet.com' : siteUrl
       
       // Generate invite link - this allows user to set their password
-      // Use auth/callback route which will handle the token exchange and redirect
+      // Redirect directly to setup-password page - it will handle tokens in hash or query params
       const { data: linkData, error: inviteError } = await adminClient.auth.admin.generateLink({
         type: 'invite',
         email,
         options: {
-          redirectTo: `${redirectUrl}/auth/callback?next=/auth/setup-password`
+          redirectTo: `${redirectUrl}/auth/setup-password`
         }
       })
 
@@ -99,7 +99,7 @@ export async function createUser(formData: FormData) {
           type: 'magiclink',
           email,
           options: {
-            redirectTo: `${redirectUrl}/auth/callback?next=/auth/setup-password`
+            redirectTo: `${redirectUrl}/auth/setup-password`
           }
         })
 
@@ -111,7 +111,7 @@ export async function createUser(formData: FormData) {
             type: 'recovery',
             email,
             options: {
-              redirectTo: `${redirectUrl}/auth/callback?next=/auth/setup-password`
+              redirectTo: `${redirectUrl}/auth/setup-password`
             }
           })
 

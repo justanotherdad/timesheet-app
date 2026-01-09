@@ -61,11 +61,19 @@ export async function GET(request: Request) {
   // This is a real user request, process the token
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
+  const token = requestUrl.searchParams.get('token')
+  const tokenHash = requestUrl.searchParams.get('token_hash')
+  const type = requestUrl.searchParams.get('type')
   const next = requestUrl.searchParams.get('next') || '/auth/setup-password'
 
+  console.log('Callback route - code:', !!code, 'token:', !!token, 'tokenHash:', !!tokenHash, 'type:', type)
+
   if (code) {
+    // OAuth code flow - exchange code for session
     const supabase = await createClient()
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+    
+    console.log('Code exchange result:', { hasSession: !!data?.session, error: error?.message })
     
     if (!error && data.session) {
       // Successfully exchanged code for session
@@ -78,11 +86,21 @@ export async function GET(request: Request) {
       return response
     } else if (error) {
       // If there's an error, redirect with error message
+      console.error('Code exchange error:', error)
       const redirectUrl = new URL('/auth/setup-password?error=' + encodeURIComponent(error.message), request.url)
       return NextResponse.redirect(redirectUrl)
     }
+  } else if (token || tokenHash) {
+    // Token-based flow - redirect to setup-password with token
+    // The client-side will handle token verification
+    const redirectUrl = new URL('/auth/setup-password', request.url)
+    if (token) redirectUrl.searchParams.set('token', token)
+    if (tokenHash) redirectUrl.searchParams.set('token_hash', tokenHash)
+    if (type) redirectUrl.searchParams.set('type', type)
+    return NextResponse.redirect(redirectUrl)
   }
 
-  // If no code or error, redirect to setup password page (it will handle the error)
-  return NextResponse.redirect(new URL('/auth/setup-password', request.url))
+  // If no code or token, redirect to setup password page (it will handle the error)
+  console.log('No code or token found in callback URL')
+  return NextResponse.redirect(new URL('/auth/setup-password?error=No authentication token found', request.url))
 }
