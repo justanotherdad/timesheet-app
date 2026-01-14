@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { User, UserRole } from '@/types/database'
-import { Plus, Edit, Trash2, Key } from 'lucide-react'
+import { Plus, Edit, Trash2, Key, X } from 'lucide-react'
 import { createUser } from '@/app/actions/create-user'
 import { deleteUser } from '@/app/actions/delete-user'
 import { updateUserAssignments } from '@/app/actions/update-user-assignments'
@@ -620,7 +620,6 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Departments</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Purchase Orders</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Reports To</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -634,16 +633,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
               
               return (
               <tr key={user.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{user.name}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{user.email}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">{user.role}</td>
-                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userSites.length > 0 ? userSites.join(', ') : 'N/A'}</td>
-                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userDepts.length > 0 ? userDepts.join(', ') : 'N/A'}</td>
-                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userPOs.length > 0 ? userPOs.join(', ') : 'N/A'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                  {users.find(u => u.id === user.reports_to_id)?.name || 'N/A'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <td className="px-6 py-4 whitespace-nowrap text-sm">
                   <button
                     onClick={async () => {
                       setEditingUser(user)
@@ -653,44 +643,18 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
                       setSelectedPOs(assignments.purchaseOrders)
                       setUserAssignments(prev => ({ ...prev, [user.id]: assignments }))
                     }}
-                    className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 mr-4"
-                    title="Edit User"
+                    className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:underline font-medium"
                   >
-                    <Edit className="h-4 w-4 inline" />
+                    {user.name}
                   </button>
-                  <button
-                    onClick={async () => {
-                      setLoading(true)
-                      setError(null)
-                      try {
-                        const result = await generatePasswordLink(user.email)
-                        if (result.error) {
-                          throw new Error(result.error)
-                        }
-                        if (result.link) {
-                          setInvitationLink(result.link)
-                          setSuccess(`Password reset link generated for ${user.name}. Copy the link below.`)
-                        }
-                      } catch (err: any) {
-                        setError(err.message || 'Failed to generate password link')
-                      } finally {
-                        setLoading(false)
-                      }
-                    }}
-                    disabled={loading}
-                    className="text-purple-600 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300 mr-4 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Generate Password Reset Link"
-                  >
-                    <Key className="h-4 w-4 inline" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteUser(user.id, user.name)}
-                    disabled={loading}
-                    className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Delete User"
-                  >
-                    <Trash2 className="h-4 w-4 inline" />
-                  </button>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{user.email}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">{user.role}</td>
+                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userSites.length > 0 ? userSites.join(', ') : 'N/A'}</td>
+                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userDepts.length > 0 ? userDepts.join(', ') : 'N/A'}</td>
+                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userPOs.length > 0 ? userPOs.join(', ') : 'N/A'}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                  {users.find(u => u.id === user.reports_to_id)?.name || 'N/A'}
                 </td>
               </tr>
             )})}

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useState, useEffect } from 'react'
+import { createClient, SupabaseClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, Upload } from 'lucide-react'
 
 interface Site {
@@ -51,9 +51,11 @@ export default function HierarchicalItemManager({
   const [sites] = useState(initialSites)
   const [selectedSite, setSelectedSite] = useState<string>('')
   const [departments, setDepartments] = useState<Department[]>([])
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('')
+  const [allDepartments, setAllDepartments] = useState<Department[]>([]) // All departments for the selected site
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]) // Multiple departments
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
-  const [selectedPO, setSelectedPO] = useState<string>('')
+  const [allPurchaseOrders, setAllPurchaseOrders] = useState<PurchaseOrder[]>([]) // All POs for the selected site
+  const [selectedPOs, setSelectedPOs] = useState<string[]>([]) // Multiple POs
   const [items, setItems] = useState<HierarchicalItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -62,10 +64,35 @@ export default function HierarchicalItemManager({
   const [editingItem, setEditingItem] = useState<HierarchicalItem | null>(null)
   const supabase = createClient()
 
+  // Get junction table names based on tableName
+  const getJunctionTableNames = () => {
+    if (tableName === 'systems') {
+      return {
+        departments: 'system_departments',
+        purchaseOrders: 'system_purchase_orders',
+        itemIdColumn: 'system_id'
+      }
+    } else if (tableName === 'activities') {
+      return {
+        departments: 'activity_departments',
+        purchaseOrders: 'activity_purchase_orders',
+        itemIdColumn: 'activity_id'
+      }
+    } else if (tableName === 'deliverables') {
+      return {
+        departments: 'deliverable_departments',
+        purchaseOrders: 'deliverable_purchase_orders',
+        itemIdColumn: 'deliverable_id'
+      }
+    }
+    return { departments: '', purchaseOrders: '', itemIdColumn: '' }
+  }
+
   const loadDepartments = async (siteId: string) => {
     if (!siteId) {
       setDepartments([])
-      setSelectedDepartment('')
+      setAllDepartments([])
+      setSelectedDepartments([])
       return
     }
     setLoading(true)
@@ -78,7 +105,9 @@ export default function HierarchicalItemManager({
         .order('name')
       
       if (fetchError) throw fetchError
-      setDepartments(data || [])
+      const depts = data || []
+      setDepartments(depts)
+      setAllDepartments(depts)
     } catch (err: any) {
       setError(err.message || 'Failed to load departments')
     } finally {
@@ -86,10 +115,11 @@ export default function HierarchicalItemManager({
     }
   }
 
-  const loadPurchaseOrders = async (siteId: string, departmentId?: string) => {
+  const loadPurchaseOrders = async (siteId: string, departmentIds?: string[]) => {
     if (!siteId) {
       setPurchaseOrders([])
-      setSelectedPO('')
+      setAllPurchaseOrders([])
+      setSelectedPOs([])
       return
     }
     setLoading(true)
@@ -100,14 +130,17 @@ export default function HierarchicalItemManager({
         .select('*')
         .eq('site_id', siteId)
       
-      if (departmentId) {
-        query = query.eq('department_id', departmentId)
+      // Filter by selected departments if any
+      if (departmentIds && departmentIds.length > 0) {
+        query = query.in('department_id', departmentIds)
       }
       
       const { data, error: fetchError } = await query.order('po_number')
       
       if (fetchError) throw fetchError
-      setPurchaseOrders(data || [])
+      const pos = data || []
+      setPurchaseOrders(pos)
+      setAllPurchaseOrders(pos)
     } catch (err: any) {
       setError(err.message || 'Failed to load purchase orders')
     } finally {
@@ -115,7 +148,26 @@ export default function HierarchicalItemManager({
     }
   }
 
-  const loadItems = async (siteId: string, departmentId?: string, poId?: string) => {
+  // Load assignments from junction tables
+  const loadItemAssignments = async (itemId: string) => {
+    const junctionTables = getJunctionTableNames()
+    try {
+      const [deptsResult, posResult] = await Promise.all([
+        supabase.from(junctionTables.departments).select('department_id').eq(junctionTables.itemIdColumn, itemId),
+        supabase.from(junctionTables.purchaseOrders).select('purchase_order_id').eq(junctionTables.itemIdColumn, itemId),
+      ])
+      
+      return {
+        departments: Array.isArray(deptsResult.data) ? deptsResult.data.map((r: any) => r.department_id) : [],
+        purchaseOrders: Array.isArray(posResult.data) ? posResult.data.map((r: any) => r.purchase_order_id) : [],
+      }
+    } catch (err) {
+      console.error('Error loading item assignments:', err)
+      return { departments: [], purchaseOrders: [] }
+    }
+  }
+
+  const loadItems = async (siteId: string) => {
     if (!siteId) {
       setItems([])
       return
@@ -123,20 +175,11 @@ export default function HierarchicalItemManager({
     setLoading(true)
     setError(null)
     try {
-      let query = supabase
+      const { data, error: fetchError } = await supabase
         .from(tableName)
         .select('*')
         .eq('site_id', siteId)
-      
-      if (departmentId) {
-        query = query.eq('department_id', departmentId)
-      }
-      
-      if (poId) {
-        query = query.eq('po_id', poId)
-      }
-      
-      const { data, error: fetchError } = await query.order('name')
+        .order('name')
       
       if (fetchError) throw fetchError
       setItems(data || [])
@@ -147,32 +190,23 @@ export default function HierarchicalItemManager({
     }
   }
 
-  const handleSiteChange = (siteId: string) => {
+  const handleSiteChange = async (siteId: string) => {
     setSelectedSite(siteId)
-    loadDepartments(siteId)
-    setSelectedDepartment('')
-    setSelectedPO('')
+    await loadDepartments(siteId)
+    setSelectedDepartments([])
+    setSelectedPOs([])
     setShowAddForm(false)
     setEditingItem(null)
-    loadPurchaseOrders(siteId)
-    loadItems(siteId)
+    await loadPurchaseOrders(siteId)
+    await loadItems(siteId)
   }
 
-  const handleDepartmentChange = (departmentId: string) => {
-    setSelectedDepartment(departmentId)
-    setSelectedPO('')
-    setShowAddForm(false)
-    setEditingItem(null)
-    loadPurchaseOrders(selectedSite, departmentId || undefined)
-    loadItems(selectedSite, departmentId || undefined)
-  }
-
-  const handlePOChange = (poId: string) => {
-    setSelectedPO(poId)
-    setShowAddForm(false)
-    setEditingItem(null)
-    loadItems(selectedSite, selectedDepartment || undefined, poId || undefined)
-  }
+  // Filter purchase orders by selected departments
+  const filteredPurchaseOrders = allPurchaseOrders.filter(po => {
+    if (selectedDepartments.length === 0) return true
+    if (!po.department_id) return false
+    return selectedDepartments.includes(po.department_id)
+  })
 
   const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -188,14 +222,13 @@ export default function HierarchicalItemManager({
     const name = formData.get('name') as string
 
     try {
+      // Insert the main item (without department_id/po_id - those go in junction tables)
       const insertData: any = {
         site_id: selectedSite,
-        department_id: selectedDepartment || null,
-        po_id: selectedPO || null,
         name,
       }
 
-      const { data, error: insertError } = await supabase
+      const { data: newItem, error: insertError } = await supabase
         .from(tableName)
         .insert(insertData)
         .select()
@@ -203,11 +236,40 @@ export default function HierarchicalItemManager({
 
       if (insertError) throw insertError
 
-      setItems([...items, data])
+      // Insert into junction tables for departments and POs
+      const junctionTables = getJunctionTableNames()
+      
+      if (selectedDepartments.length > 0) {
+        const deptInserts = selectedDepartments.map(deptId => ({
+          [junctionTables.itemIdColumn]: newItem.id,
+          department_id: deptId
+        }))
+        const { error: deptError } = await supabase
+          .from(junctionTables.departments)
+          .insert(deptInserts)
+        if (deptError) throw deptError
+      }
+
+      if (selectedPOs.length > 0) {
+        const poInserts = selectedPOs.map(poId => ({
+          [junctionTables.itemIdColumn]: newItem.id,
+          purchase_order_id: poId
+        }))
+        const { error: poError } = await supabase
+          .from(junctionTables.purchaseOrders)
+          .insert(poInserts)
+        if (poError) throw poError
+      }
+
+      await loadItems(selectedSite)
       if (e.currentTarget) {
         e.currentTarget.reset()
       }
+      setSelectedDepartments([])
+      setSelectedPOs([])
       setShowAddForm(false)
+      setSuccess(`${itemName} added successfully`)
+      setTimeout(() => setSuccess(null), 3000)
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {
@@ -227,11 +289,8 @@ export default function HierarchicalItemManager({
     const code = formData.get('code') as string || null
 
     try {
-      const updateData: any = {
-        department_id: selectedDepartment || null,
-        po_id: selectedPO || null,
-        name,
-      }
+      // Update the main item
+      const updateData: any = { name }
       
       if (code) {
         updateData.code = code
@@ -246,8 +305,51 @@ export default function HierarchicalItemManager({
 
       if (updateError) throw updateError
 
-      setItems(items.map(item => item.id === editingItem.id ? { ...item, department_id: selectedDepartment || undefined, po_id: selectedPO || undefined, name, code: code || undefined } : item))
+      // Update junction tables
+      const junctionTables = getJunctionTableNames()
+      
+      // Delete existing department assignments
+      await supabase
+        .from(junctionTables.departments)
+        .delete()
+        .eq(junctionTables.itemIdColumn, editingItem.id)
+      
+      // Insert new department assignments
+      if (selectedDepartments.length > 0) {
+        const deptInserts = selectedDepartments.map(deptId => ({
+          [junctionTables.itemIdColumn]: editingItem.id,
+          department_id: deptId
+        }))
+        const { error: deptError } = await supabase
+          .from(junctionTables.departments)
+          .insert(deptInserts)
+        if (deptError) throw deptError
+      }
+
+      // Delete existing PO assignments
+      await supabase
+        .from(junctionTables.purchaseOrders)
+        .delete()
+        .eq(junctionTables.itemIdColumn, editingItem.id)
+      
+      // Insert new PO assignments
+      if (selectedPOs.length > 0) {
+        const poInserts = selectedPOs.map(poId => ({
+          [junctionTables.itemIdColumn]: editingItem.id,
+          purchase_order_id: poId
+        }))
+        const { error: poError } = await supabase
+          .from(junctionTables.purchaseOrders)
+          .insert(poInserts)
+        if (poError) throw poError
+      }
+
+      await loadItems(selectedSite)
       setEditingItem(null)
+      setSelectedDepartments([])
+      setSelectedPOs([])
+      setSuccess(`${itemName} updated successfully`)
+      setTimeout(() => setSuccess(null), 3000)
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {
@@ -271,6 +373,46 @@ export default function HierarchicalItemManager({
       setError(err.message || 'An error occurred')
     }
   }
+
+  // State to store item assignments for display
+  const [itemAssignments, setItemAssignments] = useState<Record<string, { departments: string[]; purchaseOrders: string[] }>>({})
+
+  // Load assignments for all items when items or site changes
+  useEffect(() => {
+    const loadAllAssignments = async () => {
+      if (items.length === 0 || !selectedSite) {
+        setItemAssignments({})
+        return
+      }
+      
+      const junctionTables = getJunctionTableNames()
+      const assignmentsMap: Record<string, { departments: string[]; purchaseOrders: string[] }> = {}
+
+      await Promise.all(
+        items.map(async (item) => {
+          try {
+            const [deptsResult, posResult] = await Promise.all([
+              supabase.from(junctionTables.departments).select('department_id').eq(junctionTables.itemIdColumn, item.id),
+              supabase.from(junctionTables.purchaseOrders).select('purchase_order_id').eq(junctionTables.itemIdColumn, item.id),
+            ])
+            
+            assignmentsMap[item.id] = {
+              departments: Array.isArray(deptsResult.data) ? deptsResult.data.map((r: any) => r.department_id) : [],
+              purchaseOrders: Array.isArray(posResult.data) ? posResult.data.map((r: any) => r.purchase_order_id) : [],
+            }
+          } catch (err) {
+            console.error(`Error loading assignments for item ${item.id}:`, err)
+            assignmentsMap[item.id] = { departments: [], purchaseOrders: [] }
+          }
+        })
+      )
+
+      setItemAssignments(assignmentsMap)
+    }
+
+    loadAllAssignments()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.map(i => i.id).join(','), selectedSite])
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -302,8 +444,6 @@ export default function HierarchicalItemManager({
         
         const insertData: any = {
           site_id: selectedSite,
-          department_id: selectedDepartment || null,
-          po_id: selectedPO || null,
           name: values[nameIdx] || '',
         }
         
@@ -319,13 +459,49 @@ export default function HierarchicalItemManager({
         return
       }
 
-      const { error: insertError } = await supabase
+      // Insert items first
+      const { data: insertedItems, error: insertError } = await supabase
         .from(tableName)
         .insert(itemsToAdd)
+        .select()
 
       if (insertError) throw insertError
 
-      await loadItems(selectedSite, selectedDepartment, selectedPO)
+      // Then insert into junction tables if departments/POs are selected
+      const junctionTables = getJunctionTableNames()
+      if (selectedDepartments.length > 0 || selectedPOs.length > 0) {
+        const junctionInserts: any[] = []
+        
+        insertedItems?.forEach((item: any) => {
+          selectedDepartments.forEach(deptId => {
+            junctionInserts.push({
+              [junctionTables.itemIdColumn]: item.id,
+              department_id: deptId
+            })
+          })
+          selectedPOs.forEach(poId => {
+            junctionInserts.push({
+              [junctionTables.itemIdColumn]: item.id,
+              purchase_order_id: poId
+            })
+          })
+        })
+
+        if (junctionInserts.length > 0) {
+          // Split into department and PO inserts
+          const deptInserts = junctionInserts.filter(j => j.department_id)
+          const poInserts = junctionInserts.filter(j => j.purchase_order_id)
+          
+          if (deptInserts.length > 0) {
+            await supabase.from(junctionTables.departments).insert(deptInserts)
+          }
+          if (poInserts.length > 0) {
+            await supabase.from(junctionTables.purchaseOrders).insert(poInserts)
+          }
+        }
+      }
+
+      await loadItems(selectedSite)
       setSuccess(`Successfully imported ${itemsToAdd.length} ${itemName.toLowerCase()}s`)
       setTimeout(() => setSuccess(null), 5000)
     } catch (err: any) {
@@ -370,43 +546,6 @@ export default function HierarchicalItemManager({
         </select>
       </div>
 
-      {/* Department Selection */}
-      {selectedSite && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Select Department (Optional)
-          </label>
-          <select
-            value={selectedDepartment}
-            onChange={(e) => handleDepartmentChange(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-          >
-            <option value="">-- All Departments --</option>
-            {departments.map(dept => (
-              <option key={dept.id} value={dept.id}>{dept.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Purchase Order Selection */}
-      {selectedSite && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Select Purchase Order (Optional)
-          </label>
-          <select
-            value={selectedPO}
-            onChange={(e) => handlePOChange(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-          >
-            <option value="">-- All Purchase Orders --</option>
-            {purchaseOrders.map(po => (
-              <option key={po.id} value={po.id}>{po.po_number} {po.description ? `- ${po.description}` : ''}</option>
-            ))}
-          </select>
-        </div>
-      )}
 
       {selectedSite && (
         <>
@@ -435,15 +574,78 @@ export default function HierarchicalItemManager({
           {showAddForm && (
             <form onSubmit={handleAdd} className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-4">
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">Add New {itemName}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
                 <input
                   type="text"
                   name="name"
                   placeholder="Name *"
                   required
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                 />
               </div>
+              
+              {/* Multiple Departments Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Departments (Select Multiple)
+                </label>
+                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                  {allDepartments.length > 0 ? (
+                    allDepartments.map(dept => (
+                      <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedDepartments.includes(dept.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedDepartments([...selectedDepartments, dept.id])
+                            } else {
+                              setSelectedDepartments(selectedDepartments.filter(id => id !== dept.id))
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-gray-100">{dept.name}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No departments available for this site</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Multiple Purchase Orders Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Purchase Orders (Select Multiple)
+                </label>
+                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                  {allPurchaseOrders.length > 0 ? (
+                    allPurchaseOrders.map(po => (
+                      <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedPOs.includes(po.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPOs([...selectedPOs, po.id])
+                            } else {
+                              setSelectedPOs(selectedPOs.filter(id => id !== po.id))
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-gray-100">
+                          {po.po_number} {po.description ? `- ${po.description}` : ''}
+                        </span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No purchase orders available for this site</p>
+                  )}
+                </div>
+              </div>
+
               <div className="flex gap-2">
                 <button
                   type="submit"
@@ -454,7 +656,11 @@ export default function HierarchicalItemManager({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowAddForm(false)}
+                  onClick={() => {
+                    setShowAddForm(false)
+                    setSelectedDepartments([])
+                    setSelectedPOs([])
+                  }}
                   className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-500"
                 >
                   Cancel
@@ -475,23 +681,30 @@ export default function HierarchicalItemManager({
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {items.map((item) => {
-                  const dept = departments.find(d => d.id === item.department_id)
-                  const po = purchaseOrders.find(p => p.id === item.po_id)
+                  const assignments = itemAssignments[item.id] || { departments: [], purchaseOrders: [] }
+                  const deptNames = assignments.departments.map(deptId => allDepartments.find(d => d.id === deptId)?.name).filter(Boolean)
+                  const poNumbers = assignments.purchaseOrders.map(poId => allPurchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean)
+                  
                   return (
                     <tr key={item.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{dept?.name || 'N/A'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{po?.po_number || 'N/A'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        {deptNames.length > 0 ? deptNames.join(', ') : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        {poNumbers.length > 0 ? poNumbers.join(', ') : 'N/A'}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button
                           onClick={async () => {
                             setEditingItem(item)
-                            // Set the site first, then load related data
                             if (item.site_id !== selectedSite) {
                               await handleSiteChange(item.site_id)
                             }
-                            setSelectedDepartment(item.department_id || '')
-                            setSelectedPO(item.po_id || '')
+                            // Load assignments from junction tables
+                            const itemAssignments = await loadItemAssignments(item.id)
+                            setSelectedDepartments(itemAssignments.departments)
+                            setSelectedPOs(itemAssignments.purchaseOrders)
                           }}
                           className="text-blue-600 hover:text-blue-900 mr-4"
                         >
@@ -514,8 +727,20 @@ export default function HierarchicalItemManager({
       )}
 
       {editingItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setEditingItem(null)
+              setSelectedDepartments([])
+              setSelectedPOs([])
+            }
+          }}
+        >
+          <div 
+            className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit {itemName}</h3>
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
@@ -528,32 +753,69 @@ export default function HierarchicalItemManager({
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                 />
               </div>
+              
+              {/* Multiple Departments Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
-                <select
-                  value={selectedDepartment}
-                  onChange={(e) => setSelectedDepartment(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                >
-                  <option value="">-- None --</option>
-                  {departments.map(dept => (
-                    <option key={dept.id} value={dept.id}>{dept.name}</option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Departments (Select Multiple)
+                </label>
+                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                  {allDepartments.length > 0 ? (
+                    allDepartments.map(dept => (
+                      <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedDepartments.includes(dept.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedDepartments([...selectedDepartments, dept.id])
+                            } else {
+                              setSelectedDepartments(selectedDepartments.filter(id => id !== dept.id))
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-gray-100">{dept.name}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No departments available for this site</p>
+                  )}
+                </div>
               </div>
+
+              {/* Multiple Purchase Orders Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Purchase Order</label>
-                <select
-                  value={selectedPO}
-                  onChange={(e) => setSelectedPO(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                >
-                  <option value="">-- None --</option>
-                  {purchaseOrders.map(po => (
-                    <option key={po.id} value={po.id}>{po.po_number} {po.description ? `- ${po.description}` : ''}</option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Purchase Orders (Select Multiple)
+                </label>
+                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                  {allPurchaseOrders.length > 0 ? (
+                    allPurchaseOrders.map(po => (
+                      <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedPOs.includes(po.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPOs([...selectedPOs, po.id])
+                            } else {
+                              setSelectedPOs(selectedPOs.filter(id => id !== po.id))
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-gray-100">
+                          {po.po_number} {po.description ? `- ${po.description}` : ''}
+                        </span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No purchase orders available for this site</p>
+                  )}
+                </div>
               </div>
+
               <div className="flex gap-2">
                 <button
                   type="submit"
@@ -564,7 +826,11 @@ export default function HierarchicalItemManager({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditingItem(null)}
+                  onClick={() => {
+                    setEditingItem(null)
+                    setSelectedDepartments([])
+                    setSelectedPOs([])
+                  }}
                   className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-500"
                 >
                   Cancel
