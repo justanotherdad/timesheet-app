@@ -87,35 +87,20 @@ export default function WeeklyTimesheetExport({
               font-size: 10pt;
               margin: 0;
               padding: 0;
+              color: #000;
             }
-            .header {
-              display: flex;
-              justify-content: space-between;
+            .header-logo {
+              width: 100%;
               margin-bottom: 20px;
             }
-            .company-info {
-              flex: 1;
-            }
-            .company-name {
-              font-size: 14pt;
-              font-weight: bold;
-              margin-bottom: 5px;
-            }
-            .services {
-              text-align: right;
-              font-size: 9pt;
-            }
-            .banner {
-              background-color: #0066CC;
-              color: white;
-              text-align: center;
-              padding: 10px;
-              font-size: 18pt;
-              font-weight: bold;
-              margin: 20px 0;
+            .header-logo img {
+              width: 100%;
+              height: auto;
+              display: block;
             }
             .timesheet-info {
               margin-bottom: 15px;
+              color: #000;
             }
             table {
               width: 100%;
@@ -126,11 +111,13 @@ export default function WeeklyTimesheetExport({
               border: 1px solid #000;
               padding: 5px;
               text-align: left;
+              color: #000;
             }
             th {
               background-color: #f0f0f0;
               font-weight: bold;
               text-align: center;
+              color: #000;
             }
             .day-header {
               text-align: center;
@@ -138,14 +125,20 @@ export default function WeeklyTimesheetExport({
             .day-date {
               font-size: 8pt;
               font-weight: normal;
+              color: #000;
             }
             .subtotal-row {
               background-color: #FFFF99;
               font-weight: bold;
+              color: #000 !important;
+            }
+            .subtotal-row td {
+              color: #000 !important;
             }
             .grand-total-row {
               background-color: #90EE90;
               font-weight: bold;
+              color: #000;
             }
             .signature-section {
               margin-top: 30px;
@@ -192,43 +185,53 @@ export default function WeeklyTimesheetExport({
         </button>
       </div>
 
-      <div ref={exportRef} className="bg-white p-8 print:p-0" style={{ fontFamily: 'Arial, sans-serif', fontSize: '10pt' }}>
-        {/* Header */}
-        <div className="header mb-5">
-          <div className="company-info">
-            <div className="company-name">
+      <div ref={exportRef} className="bg-white p-8 print:p-0" style={{ fontFamily: 'Arial, sans-serif', fontSize: '10pt', color: '#000' }}>
+        {/* Header Logo */}
+        <div className="header-logo mb-5">
+          <img 
+            src="/ctg-header-logo.png" 
+            alt="Compliance Technology Group, Inc." 
+            style={{ width: '100%', height: 'auto', display: 'block' }}
+            onError={(e) => {
+              // Fallback if image doesn't exist - show text header
+              const target = e.target as HTMLImageElement
+              target.style.display = 'none'
+              const fallback = target.nextElementSibling as HTMLElement
+              if (fallback) fallback.style.display = 'block'
+            }}
+          />
+          <div style={{ display: 'none', color: '#000' }}>
+            <div style={{ fontSize: '14pt', fontWeight: 'bold', marginBottom: '5px', color: '#000' }}>
               {companyInfo.name || 'COMPLIANCE TECHNOLOGY GROUP, INC.'}
             </div>
-            <div style={{ fontSize: '9pt' }}>
+            <div style={{ fontSize: '9pt', color: '#000' }}>
               {companyInfo.address || '505 South Franklin Street, West Chester, PA 19382'}
             </div>
-            <div style={{ fontSize: '9pt' }}>
+            <div style={{ fontSize: '9pt', color: '#000' }}>
               {companyInfo.phone && `Phone ${companyInfo.phone}`}
               {companyInfo.fax && ` | Fax ${companyInfo.fax}`}
               {companyInfo.website && ` | ${companyInfo.website}`}
             </div>
+            <div style={{ textAlign: 'right', fontSize: '9pt', color: '#000' }}>
+              {(companyInfo.services || [
+                'Commissioning & Validation',
+                'Steam Quality Testing',
+                'Controlled Environment Services'
+              ]).map((service, idx) => (
+                <div key={idx}>{service}</div>
+              ))}
+            </div>
+            <div style={{ backgroundColor: '#0066CC', color: 'white', textAlign: 'center', padding: '10px', fontSize: '18pt', fontWeight: 'bold', margin: '20px 0' }}>
+              Weekly Time Sheet
+            </div>
           </div>
-          <div className="services">
-            {(companyInfo.services || [
-              'Commissioning & Validation',
-              'Steam Quality Testing',
-              'Controlled Environment Services'
-            ]).map((service, idx) => (
-              <div key={idx} style={{ fontSize: '9pt' }}>{service}</div>
-            ))}
-          </div>
-        </div>
-
-        {/* Banner */}
-        <div className="banner" style={{ backgroundColor: '#0066CC', color: 'white', textAlign: 'center', padding: '10px', fontSize: '18pt', fontWeight: 'bold', margin: '20px 0' }}>
-          Weekly Time Sheet
         </div>
 
         {/* Timesheet Info */}
-        <div className="timesheet-info mb-4">
-          <div><strong>Time Sheet For:</strong> {user.name}</div>
-          <div>
-            <strong>From:</strong> {formatDate(weekDates.start)} <strong>To:</strong> {formatDate(weekDates.end)}
+        <div className="timesheet-info mb-4" style={{ color: '#000' }}>
+          <div style={{ color: '#000' }}><strong style={{ color: '#000' }}>Time Sheet For:</strong> {user.name}</div>
+          <div style={{ color: '#000' }}>
+            <strong style={{ color: '#000' }}>From:</strong> {formatDate(weekDates.start)} <strong style={{ color: '#000' }}>To:</strong> {formatDate(weekDates.end)}
           </div>
         </div>
 
@@ -253,21 +256,21 @@ export default function WeeklyTimesheetExport({
           <tbody>
             {entries.map((entry, idx) => (
               <tr key={idx}>
-                <td style={{ border: '1px solid #000', padding: '5px' }}>
+                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
                   {entry.sites?.name || entry.client_project_id || ''}
                 </td>
-                <td style={{ border: '1px solid #000', padding: '5px' }}>
+                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
                   {entry.purchase_orders?.po_number || entry.po_id || ''}
                 </td>
-                <td style={{ border: '1px solid #000', padding: '5px' }}>
+                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
                   {entry.task_description || ''}
                 </td>
                 {days.map((day) => (
-                  <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right' }}>
+                  <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
                     {(entry[`${day}_hours`] || 0).toFixed(2)}
                   </td>
                 ))}
-                <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', fontWeight: 'bold' }}>
+                <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', fontWeight: 'bold', color: '#000' }}>
                   {calculateTotal(entry).toFixed(2)}
                 </td>
               </tr>
@@ -287,14 +290,14 @@ export default function WeeklyTimesheetExport({
             ))}
 
             {/* Sub Totals */}
-            <tr className="subtotal-row" style={{ backgroundColor: '#FFFF99', fontWeight: 'bold' }}>
-              <td colSpan={3} style={{ border: '1px solid #000', padding: '5px' }}>Sub Totals</td>
+            <tr className="subtotal-row" style={{ backgroundColor: '#FFFF99', fontWeight: 'bold', color: '#000' }}>
+              <td colSpan={3} style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>Sub Totals</td>
               {days.map((day) => (
-                <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right' }}>
+                <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
                   {getBillableSubtotal(day).toFixed(2)}
                 </td>
               ))}
-              <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right' }}>
+              <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
                 {getBillableGrandTotal().toFixed(2)}
               </td>
             </tr>
@@ -302,21 +305,21 @@ export default function WeeklyTimesheetExport({
         </table>
 
         {/* Signature Section */}
-        <div className="signature-section" style={{ marginTop: '30px' }}>
-          <div style={{ marginBottom: '15px' }}>
-            <strong>Employee Signature / Date:</strong>
+        <div className="signature-section" style={{ marginTop: '30px', color: '#000' }}>
+          <div style={{ marginBottom: '15px', color: '#000' }}>
+            <strong style={{ color: '#000' }}>Employee Signature / Date:</strong>
             {timesheet.employee_signed_at ? (
-              <span style={{ marginLeft: '10px' }}>
+              <span style={{ marginLeft: '10px', color: '#000' }}>
                 {user.name} {new Date(timesheet.employee_signed_at).toLocaleDateString()}
               </span>
             ) : (
               <div className="signature-line" style={{ borderTop: '1px solid #000', width: '250px', marginTop: '10px' }}></div>
             )}
           </div>
-          <div style={{ marginBottom: '15px' }}>
-            <strong>Supervisor Approval by / Date:</strong>
+          <div style={{ marginBottom: '15px', color: '#000' }}>
+            <strong style={{ color: '#000' }}>Supervisor Approval by / Date:</strong>
             {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor') ? (
-              <span style={{ marginLeft: '10px' }}>
+              <span style={{ marginLeft: '10px', color: '#000' }}>
                 {timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').user_profiles?.name}{' '}
                 {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').signed_at).toLocaleDateString()}
               </span>
@@ -324,10 +327,10 @@ export default function WeeklyTimesheetExport({
               <div className="signature-line" style={{ borderTop: '1px solid #000', width: '250px', marginTop: '10px' }}></div>
             )}
           </div>
-          <div>
-            <strong>Manager Approval by / Date:</strong>
+          <div style={{ color: '#000' }}>
+            <strong style={{ color: '#000' }}>Manager Approval by / Date:</strong>
             {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager') ? (
-              <span style={{ marginLeft: '10px' }}>
+              <span style={{ marginLeft: '10px', color: '#000' }}>
                 {timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').user_profiles?.name}{' '}
                 {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').signed_at).toLocaleDateString()}
               </span>
@@ -338,8 +341,8 @@ export default function WeeklyTimesheetExport({
         </div>
 
         {/* Unbillable Time Section */}
-        <div style={{ marginTop: '30px' }}>
-          <h3 style={{ fontSize: '12pt', fontWeight: 'bold', marginBottom: '10px' }}>UNBILLABLE TIME</h3>
+        <div style={{ marginTop: '30px', color: '#000' }}>
+          <h3 style={{ fontSize: '12pt', fontWeight: 'bold', marginBottom: '10px', color: '#000' }}>UNBILLABLE TIME</h3>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#f0f0f0' }}>
@@ -358,29 +361,29 @@ export default function WeeklyTimesheetExport({
             <tbody>
               {unbillable.map((entry) => (
                 <tr key={entry.id || entry.description}>
-                  <td style={{ border: '1px solid #000', padding: '5px', fontWeight: 'bold' }}>
+                  <td style={{ border: '1px solid #000', padding: '5px', fontWeight: 'bold', color: '#000' }}>
                     {entry.description}
                   </td>
                   {days.map((day) => (
-                    <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right' }}>
+                    <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
                       {(entry[`${day}_hours`] || 0).toFixed(2)}
                     </td>
                   ))}
-                  <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', fontWeight: 'bold' }}>
+                  <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', fontWeight: 'bold', color: '#000' }}>
                     {calculateTotal(entry).toFixed(2)}
                   </td>
                 </tr>
               ))}
               
               {/* Sub Totals */}
-              <tr className="subtotal-row" style={{ backgroundColor: '#FFFF99', fontWeight: 'bold' }}>
-                <td style={{ border: '1px solid #000', padding: '5px' }}>Sub Totals</td>
+              <tr className="subtotal-row" style={{ backgroundColor: '#FFFF99', fontWeight: 'bold', color: '#000' }}>
+                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>Sub Totals</td>
                 {days.map((day) => (
-                  <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right' }}>
+                  <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
                     {getUnbillableSubtotal(day).toFixed(2)}
                   </td>
                 ))}
-                <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right' }}>
+                <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
                   {getUnbillableGrandTotal().toFixed(2)}
                 </td>
               </tr>
@@ -389,9 +392,9 @@ export default function WeeklyTimesheetExport({
         </div>
 
         {/* Grand Total */}
-        <div className="grand-total-row" style={{ backgroundColor: '#90EE90', fontWeight: 'bold', padding: '10px', marginTop: '20px', textAlign: 'right', fontSize: '12pt' }}>
-          <span style={{ marginRight: '20px' }}>GRAND TOTAL</span>
-          <span>{getGrandTotal().toFixed(2)}</span>
+        <div className="grand-total-row" style={{ backgroundColor: '#90EE90', fontWeight: 'bold', padding: '10px', marginTop: '20px', textAlign: 'right', fontSize: '12pt', color: '#000' }}>
+          <span style={{ marginRight: '20px', color: '#000' }}>GRAND TOTAL</span>
+          <span style={{ color: '#000' }}>{getGrandTotal().toFixed(2)}</span>
         </div>
       </div>
     </div>
