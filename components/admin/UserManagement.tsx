@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { User, UserRole } from '@/types/database'
 import { Plus, Edit, Trash2, Key } from 'lucide-react'
@@ -40,6 +40,11 @@ interface UserManagementProps {
 
 export default function UserManagement({ users: initialUsers, currentUserRole, sites, departments, purchaseOrders }: UserManagementProps) {
   const [users, setUsers] = useState(initialUsers)
+
+  // Sync users state when initialUsers prop changes (e.g., after page reload)
+  useEffect(() => {
+    setUsers(initialUsers)
+  }, [initialUsers])
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -60,6 +65,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
     purchaseOrders: string[]
   }>>({})
   
+  const assignmentsLoadedRef = useRef(false)
   const supabase = createClient()
 
   const canChangeRole = currentUserRole === 'super_admin'
@@ -76,6 +82,51 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
     return true
   })
 
+  // Load all user assignments on component mount and when users change
+  useEffect(() => {
+    const loadAllUserAssignments = async () => {
+      if (users.length === 0) return
+
+      const assignmentsMap: Record<string, {
+        sites: string[]
+        departments: string[]
+        purchaseOrders: string[]
+      }> = {}
+
+      // Load assignments for all users in parallel
+      await Promise.all(
+        users.map(async (user) => {
+          try {
+            const [sitesResult, deptsResult, posResult] = await Promise.all([
+              supabase.from('user_sites').select('site_id').eq('user_id', user.id),
+              supabase.from('user_departments').select('department_id').eq('user_id', user.id),
+              supabase.from('user_purchase_orders').select('purchase_order_id').eq('user_id', user.id),
+            ])
+
+            assignmentsMap[user.id] = {
+              sites: Array.isArray(sitesResult.data) ? sitesResult.data.map((r: any) => r.site_id) : [],
+              departments: Array.isArray(deptsResult.data) ? deptsResult.data.map((r: any) => r.department_id) : [],
+              purchaseOrders: Array.isArray(posResult.data) ? posResult.data.map((r: any) => r.purchase_order_id) : [],
+            }
+          } catch (err) {
+            console.error(`Error loading assignments for user ${user.id}:`, err)
+            assignmentsMap[user.id] = { sites: [], departments: [], purchaseOrders: [] }
+          }
+        })
+      )
+
+      setUserAssignments(assignmentsMap)
+      assignmentsLoadedRef.current = true
+    }
+
+    // Load assignments on mount or when users list changes (e.g., after reload)
+    const currentAssignmentsCount = Object.keys(userAssignments).length
+    if (!assignmentsLoadedRef.current || users.length !== currentAssignmentsCount) {
+      loadAllUserAssignments()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users]) // Reload when users change
+
   // Load user assignments from junction tables
   const loadUserAssignments = async (userId: string) => {
     try {
@@ -86,15 +137,39 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
       ])
 
       return {
-        sites: (sitesResult.data || []).map((r: any) => r.site_id),
-        departments: (deptsResult.data || []).map((r: any) => r.department_id),
-        purchaseOrders: (posResult.data || []).map((r: any) => r.purchase_order_id),
+        sites: Array.isArray(sitesResult.data) ? sitesResult.data.map((r: any) => r.site_id) : [],
+        departments: Array.isArray(deptsResult.data) ? deptsResult.data.map((r: any) => r.department_id) : [],
+        purchaseOrders: Array.isArray(posResult.data) ? posResult.data.map((r: any) => r.purchase_order_id) : [],
       }
     } catch (err) {
       console.error('Error loading user assignments:', err)
       return { sites: [], departments: [], purchaseOrders: [] }
     }
   }
+
+  // Load all user assignments on component mount
+  useEffect(() => {
+    const loadAllAssignments = async () => {
+      const assignmentsMap: Record<string, {
+        sites: string[]
+        departments: string[]
+        purchaseOrders: string[]
+      }> = {}
+
+      // Load assignments for all users in parallel
+      const assignmentPromises = users.map(async (user) => {
+        const assignments = await loadUserAssignments(user.id)
+        assignmentsMap[user.id] = assignments
+      })
+
+      await Promise.all(assignmentPromises)
+      setUserAssignments(assignmentsMap)
+    }
+
+    if (users.length > 0) {
+      loadAllAssignments()
+    }
+  }, [users.length]) // Only run when users array length changes
 
   const handleAddUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
