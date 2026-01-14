@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Edit, Trash2 } from 'lucide-react'
+import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 interface Site {
   id: string
@@ -47,6 +47,15 @@ export default function ConsolidatedManager({
   const [error, setError] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingItem, setEditingItem] = useState<any>(null)
+  
+  // Sorting state for each table
+  const [sitesSortColumn, setSitesSortColumn] = useState<string>('name')
+  const [sitesSortDirection, setSitesSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [deptsSortColumn, setDeptsSortColumn] = useState<string>('name')
+  const [deptsSortDirection, setDeptsSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [posSortColumn, setPosSortColumn] = useState<string>('po_number')
+  const [posSortDirection, setPosSortDirection] = useState<'asc' | 'desc'>('asc')
+  
   const supabase = createClient()
 
   const filteredDepartments = selectedSite 
@@ -58,6 +67,106 @@ export default function ConsolidatedManager({
     if (selectedDepartment && po.department_id !== selectedDepartment) return false
     return true
   })
+
+  // Sorting functions
+  const handleSort = (table: 'sites' | 'departments' | 'pos', column: string) => {
+    if (table === 'sites') {
+      if (sitesSortColumn === column) {
+        setSitesSortDirection(sitesSortDirection === 'asc' ? 'desc' : 'asc')
+      } else {
+        setSitesSortColumn(column)
+        setSitesSortDirection('asc')
+      }
+    } else if (table === 'departments') {
+      if (deptsSortColumn === column) {
+        setDeptsSortDirection(deptsSortDirection === 'asc' ? 'desc' : 'asc')
+      } else {
+        setDeptsSortColumn(column)
+        setDeptsSortDirection('asc')
+      }
+    } else if (table === 'pos') {
+      if (posSortColumn === column) {
+        setPosSortDirection(posSortDirection === 'asc' ? 'desc' : 'asc')
+      } else {
+        setPosSortColumn(column)
+        setPosSortDirection('asc')
+      }
+    }
+  }
+
+  // Sort sites
+  const sortedSites = [...sites].sort((a, b) => {
+    let aVal: any, bVal: any
+    if (sitesSortColumn === 'name') {
+      aVal = a.name.toLowerCase()
+      bVal = b.name.toLowerCase()
+    } else if (sitesSortColumn === 'week_starting_day') {
+      aVal = a.week_starting_day || 1
+      bVal = b.week_starting_day || 1
+    } else {
+      return 0
+    }
+    
+    if (aVal < bVal) return sitesSortDirection === 'asc' ? -1 : 1
+    if (aVal > bVal) return sitesSortDirection === 'asc' ? 1 : -1
+    return 0
+  })
+
+  // Sort departments
+  const sortedDepartments = [...filteredDepartments].sort((a, b) => {
+    const aVal = a.name.toLowerCase()
+    const bVal = b.name.toLowerCase()
+    if (aVal < bVal) return deptsSortDirection === 'asc' ? -1 : 1
+    if (aVal > bVal) return deptsSortDirection === 'asc' ? 1 : -1
+    return 0
+  })
+
+  // Sort purchase orders
+  const sortedPOs = [...filteredPOs].sort((a, b) => {
+    let aVal: any, bVal: any
+    if (posSortColumn === 'po_number') {
+      aVal = a.po_number.toLowerCase()
+      bVal = b.po_number.toLowerCase()
+    } else if (posSortColumn === 'description') {
+      aVal = (a.description || '').toLowerCase()
+      bVal = (b.description || '').toLowerCase()
+    } else if (posSortColumn === 'department') {
+      const aDept = departments.find(d => d.id === a.department_id)?.name || ''
+      const bDept = departments.find(d => d.id === b.department_id)?.name || ''
+      aVal = aDept.toLowerCase()
+      bVal = bDept.toLowerCase()
+    } else {
+      return 0
+    }
+    
+    if (aVal < bVal) return posSortDirection === 'asc' ? -1 : 1
+    if (aVal > bVal) return posSortDirection === 'asc' ? 1 : -1
+    return 0
+  })
+
+  // Helper to render sort icon
+  const getSortIcon = (table: 'sites' | 'departments' | 'pos', column: string) => {
+    let isActive = false
+    let direction: 'asc' | 'desc' = 'asc'
+    
+    if (table === 'sites' && sitesSortColumn === column) {
+      isActive = true
+      direction = sitesSortDirection
+    } else if (table === 'departments' && deptsSortColumn === column) {
+      isActive = true
+      direction = deptsSortDirection
+    } else if (table === 'pos' && posSortColumn === column) {
+      isActive = true
+      direction = posSortDirection
+    }
+    
+    if (!isActive) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-50" />
+    }
+    return direction === 'asc' 
+      ? <ArrowUp className="h-3 w-3 ml-1 inline" />
+      : <ArrowDown className="h-3 w-3 ml-1 inline" />
+  }
 
   const handleAddSite = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -279,13 +388,23 @@ export default function ConsolidatedManager({
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Week Starts</th>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    onClick={() => handleSort('sites', 'name')}
+                  >
+                    Name {getSortIcon('sites', 'name')}
+                  </th>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    onClick={() => handleSort('sites', 'week_starting_day')}
+                  >
+                    Week Starts {getSortIcon('sites', 'week_starting_day')}
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {sites.map((site) => (
+                {sortedSites.map((site) => (
                   <tr key={site.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{site.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
@@ -368,12 +487,17 @@ export default function ConsolidatedManager({
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="bg-gray-50 dark:bg-gray-700">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
+                      <th 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                        onClick={() => handleSort('departments', 'name')}
+                      >
+                        Name {getSortIcon('departments', 'name')}
+                      </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {filteredDepartments.map((dept) => (
+                    {sortedDepartments.map((dept) => (
                       <tr key={dept.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{dept.name}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -501,14 +625,29 @@ export default function ConsolidatedManager({
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="bg-gray-50 dark:bg-gray-700">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">PO Number</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Description</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Department</th>
+                      <th 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                        onClick={() => handleSort('pos', 'po_number')}
+                      >
+                        PO Number {getSortIcon('pos', 'po_number')}
+                      </th>
+                      <th 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                        onClick={() => handleSort('pos', 'description')}
+                      >
+                        Description {getSortIcon('pos', 'description')}
+                      </th>
+                      <th 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                        onClick={() => handleSort('pos', 'department')}
+                      >
+                        Department {getSortIcon('pos', 'department')}
+                      </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {filteredPOs.map((po) => {
+                    {sortedPOs.map((po) => {
                       const dept = departments.find(d => d.id === po.department_id)
                       return (
                         <tr key={po.id}>
