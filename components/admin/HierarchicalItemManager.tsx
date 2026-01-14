@@ -550,11 +550,80 @@ export default function HierarchicalItemManager({
 
       {selectedSite && (
         <>
-          <div className="flex justify-between items-center mb-6">
+          {/* CSV Import Section with Department/PO Selection */}
+          <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Import CSV</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Select departments and/or purchase orders below to assign them to all imported items. This is optional - you can import without assignments and edit items later.
+            </p>
+            
+            {/* Multiple Departments Selection for Import */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Departments (Select Multiple - Optional)
+              </label>
+              <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-800">
+                {allDepartments.length > 0 ? (
+                  allDepartments.map(dept => (
+                    <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedDepartments.includes(dept.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDepartments([...selectedDepartments, dept.id])
+                          } else {
+                            setSelectedDepartments(selectedDepartments.filter(id => id !== dept.id))
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-900 dark:text-gray-100">{dept.name}</span>
+                    </label>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No departments available for this site</p>
+                )}
+              </div>
+            </div>
+
+            {/* Multiple Purchase Orders Selection for Import */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Purchase Orders (Select Multiple - Optional)
+              </label>
+              <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-800">
+                {allPurchaseOrders.length > 0 ? (
+                  allPurchaseOrders.map(po => (
+                    <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedPOs.includes(po.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedPOs([...selectedPOs, po.id])
+                          } else {
+                            setSelectedPOs(selectedPOs.filter(id => id !== po.id))
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-900 dark:text-gray-100">
+                        {po.po_number} {po.description ? `- ${po.description}` : ''}
+                      </span>
+                    </label>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No purchase orders available for this site</p>
+                )}
+              </div>
+            </div>
+
+            {/* Import Button */}
             <div>
               <label className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2 cursor-pointer inline-block">
                 <Upload className="h-4 w-4" />
-                Import CSV
+                Import CSV File
                 <input
                   type="file"
                   accept=".csv,.xlsx,.xls"
@@ -563,6 +632,9 @@ export default function HierarchicalItemManager({
                 />
               </label>
             </div>
+          </div>
+
+          <div className="flex justify-end items-center mb-6">
             <button
               onClick={() => setShowAddForm(!showAddForm)}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"

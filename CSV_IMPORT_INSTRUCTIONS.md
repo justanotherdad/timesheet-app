@@ -91,13 +91,14 @@ API Documentation
 2. This is **required** - you cannot import without selecting a site
 
 ### Step 3: (Optional) Select Departments and Purchase Orders
-1. Click the **"Add [System/Activity/Deliverable]"** button to open the add form
+1. In the **"Import CSV"** section (gray box), you'll see two checkbox lists:
+   - **Departments (Select Multiple - Optional)**
+   - **Purchase Orders (Select Multiple - Optional)**
 2. Check the boxes for any **Departments** you want to assign to all imported items
 3. Check the boxes for any **Purchase Orders** you want to assign to all imported items
-4. Close the add form (you don't need to save anything)
-5. The selected departments/POs will be remembered for the import
+4. These selections will apply to all items in your CSV import
 
-**Note**: If you don't select any departments or POs, the items will be imported without department/PO assignments. You can edit them later to add assignments.
+**Note**: If you don't select any departments or POs, the items will be imported without department/PO assignments. You can edit them later to add assignments individually.
 
 ### Step 4: Prepare Your CSV File
 1. Create a CSV file using Excel, Google Sheets, or any text editor
