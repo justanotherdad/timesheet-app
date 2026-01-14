@@ -18,17 +18,13 @@ export default async function ExportTimesheetPage({
 
   const supabase = await createClient()
 
+  // Query timesheet with user profile (avoid nested relationships that might fail)
   const timesheetResult = await withQueryTimeout(() =>
     supabase
       .from('weekly_timesheets')
       .select(`
         *,
-        user_profiles!user_id(name, email),
-        timesheet_signatures(
-          signer_role,
-          signed_at,
-          user_profiles(name)
-        )
+        user_profiles!user_id(name, email)
       `)
       .eq('id', id)
       .single()
@@ -46,6 +42,24 @@ export default async function ExportTimesheetPage({
         </div>
       </div>
     )
+  }
+
+  // Query signatures separately to avoid relationship issues
+  const signaturesResult = await withQueryTimeout(() =>
+    supabase
+    .from('timesheet_signatures')
+    .select(`
+      *,
+      user_profiles!signer_id(name)
+    `)
+    .eq('timesheet_id', id)
+  )
+  
+  const signatures = (signaturesResult.data || []) as any[]
+  
+  // Attach signatures to timesheet object for compatibility
+  if (timesheet) {
+    timesheet.timesheet_signatures = signatures
   }
 
   // Verify user can view this timesheet
