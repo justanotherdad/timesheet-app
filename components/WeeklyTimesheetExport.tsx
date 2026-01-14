@@ -73,6 +73,9 @@ export default function WeeklyTimesheetExport({
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
+    // Get the origin for absolute image URLs
+    const origin = window.location.origin
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -97,6 +100,8 @@ export default function WeeklyTimesheetExport({
               width: 100%;
               height: auto;
               display: block;
+              max-height: 150px;
+              object-fit: contain;
             }
             .timesheet-info {
               margin-bottom: 15px;
@@ -158,7 +163,7 @@ export default function WeeklyTimesheetExport({
           </style>
         </head>
         <body>
-          ${exportRef.current.innerHTML}
+          ${exportRef.current.innerHTML.replace(/src="\/ctg-header-logo\.png"/g, `src="${origin}/ctg-header-logo.png"`)}
         </body>
       </html>
     `)
@@ -189,9 +194,9 @@ export default function WeeklyTimesheetExport({
         {/* Header Logo */}
         <div className="header-logo mb-5">
           <img 
-            src="/ctg-header-logo.png" 
+            src={`${typeof window !== 'undefined' ? window.location.origin : ''}/ctg-header-logo.png`}
             alt="Compliance Technology Group, Inc." 
-            style={{ width: '100%', height: 'auto', display: 'block' }}
+            style={{ width: '100%', height: 'auto', display: 'block', maxHeight: '150px', objectFit: 'contain' }}
             onError={(e) => {
               // Fallback if image doesn't exist - show text header
               const target = e.target as HTMLImageElement

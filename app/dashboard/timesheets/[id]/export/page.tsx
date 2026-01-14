@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import WeeklyTimesheetExport from '@/components/WeeklyTimesheetExport'
 import { formatWeekEnding } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
+import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
 
@@ -33,15 +34,23 @@ export default async function ExportTimesheetPage({
 
   if (!timesheet) {
       return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Timesheet not found</h1>
-            <a href="/dashboard/timesheets" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
-            ← Back to Timesheets
-          </a>
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+          <Header 
+            title="Export Timesheet"
+            showBack={true}
+            backUrl="/dashboard/timesheets"
+            user={user}
+          />
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="text-center">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Timesheet not found</h1>
+              <a href="/dashboard/timesheets" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
+                ← Back to Timesheets
+              </a>
+            </div>
+          </div>
         </div>
-      </div>
-    )
+      )
   }
 
   // Query signatures separately to avoid relationship issues
@@ -105,12 +114,15 @@ export default async function ExportTimesheetPage({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Header 
+        title={`Export Timesheet - Week Ending ${formatWeekEnding(timesheet.week_ending)}`}
+        showBack={true}
+        backUrl={`/dashboard/timesheets/${id}`}
+        user={user}
+      />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
-              Export Timesheet - Week Ending {formatWeekEnding(timesheet.week_ending)}
-            </h1>
             <WeeklyTimesheetExport 
               timesheet={timesheet}
               entries={entries || []}
