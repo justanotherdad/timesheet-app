@@ -46,13 +46,19 @@ export default async function EditTimesheetPage({
   }
 
   // Fetch all dropdown options with timeout
-  const [sitesResult, purchaseOrdersResult] = await Promise.all([
+  const [sitesResult, purchaseOrdersResult, systemsResult, deliverablesResult, activitiesResult] = await Promise.all([
     withQueryTimeout(() => supabase.from('sites').select('*').order('name')),
     withQueryTimeout(() => supabase.from('purchase_orders').select('*').order('po_number')),
+    withQueryTimeout(() => supabase.from('systems').select('*').order('name')),
+    withQueryTimeout(() => supabase.from('deliverables').select('*').order('name')),
+    withQueryTimeout(() => supabase.from('activities').select('*').order('name')),
   ])
 
   const sites = (sitesResult.data || []) as any[]
   const purchaseOrders = (purchaseOrdersResult.data || []) as any[]
+  const systems = (systemsResult.data || []) as any[]
+  const deliverables = (deliverablesResult.data || []) as any[]
+  const activities = (activitiesResult.data || []) as any[]
 
   // Get existing entries
   const entriesResult = await withQueryTimeout(() =>
@@ -83,6 +89,9 @@ export default async function EditTimesheetPage({
             <WeeklyTimesheetForm
               sites={sites}
               purchaseOrders={purchaseOrders}
+              systems={systems}
+              deliverables={deliverables}
+              activities={activities}
               defaultWeekEnding={formatDateForInput(new Date(timesheet.week_ending))}
               userId={user.id}
               timesheetId={timesheet.id}

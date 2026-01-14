@@ -1,5 +1,9 @@
+'use client'
+
+import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { Menu, X } from 'lucide-react'
 
 interface HeaderProps {
   title?: string
@@ -14,6 +18,26 @@ interface HeaderProps {
 }
 
 export default function Header({ title, showBack = false, backUrl, user }: HeaderProps) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [menuOpen])
+
+  const userRole = user?.profile.role || ''
+  const isAdmin = ['admin', 'super_admin'].includes(userRole)
+  const canApprove = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
+
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
       <div className="container mx-auto px-4 py-4">
@@ -64,20 +88,76 @@ export default function Header({ title, showBack = false, backUrl, user }: Heade
             )}
           </div>
 
-          {/* User Info */}
+          {/* User Info and Hamburger Menu */}
           {user && (
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600 dark:text-gray-300">
+              <span className="hidden md:block text-sm text-gray-600 dark:text-gray-300">
                 {user.profile.name} ({user.profile.role})
               </span>
-              <form action="/auth/logout" method="post">
+              <div ref={menuRef} className="relative">
                 <button
-                  type="submit"
-                  className="flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 text-sm"
+                  onClick={() => setMenuOpen(!menuOpen)}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+                  aria-label="Menu"
                 >
-                  Sign Out
+                  <Menu className="h-6 w-6" />
                 </button>
-              </form>
+
+                {menuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
+                    <div className="py-1">
+                      <Link
+                        href="/dashboard"
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        Dashboard
+                      </Link>
+                      <Link
+                        href="/dashboard/timesheets"
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        My Timesheets
+                      </Link>
+                      {canApprove && (
+                        <Link
+                          href="/dashboard/approvals"
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          onClick={() => setMenuOpen(false)}
+                        >
+                          Pending Approvals
+                        </Link>
+                      )}
+                      {isAdmin && (
+                        <Link
+                          href="/dashboard/admin"
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          onClick={() => setMenuOpen(false)}
+                        >
+                          Admin Panel
+                        </Link>
+                      )}
+                      <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                      <Link
+                        href="/dashboard/change-password"
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        Change Password
+                      </Link>
+                      <form action="/auth/logout" method="post" className="block">
+                        <button
+                          type="submit"
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        >
+                          Sign Out
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

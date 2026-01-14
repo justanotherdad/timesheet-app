@@ -36,13 +36,19 @@ export default async function NewTimesheetPage() {
   }
 
   // Fetch all dropdown options with timeout
-  const [sitesResult, purchaseOrdersResult] = await Promise.all([
+  const [sitesResult, purchaseOrdersResult, systemsResult, deliverablesResult, activitiesResult] = await Promise.all([
     withQueryTimeout(() => supabase.from('sites').select('*').order('name')),
     withQueryTimeout(() => supabase.from('purchase_orders').select('*').order('po_number')),
+    withQueryTimeout(() => supabase.from('systems').select('*').order('name')),
+    withQueryTimeout(() => supabase.from('deliverables').select('*').order('name')),
+    withQueryTimeout(() => supabase.from('activities').select('*').order('name')),
   ])
 
   const sites = (sitesResult.data || []) as any[]
   const purchaseOrders = (purchaseOrdersResult.data || []) as any[]
+  const systems = (systemsResult.data || []) as any[]
+  const deliverables = (deliverablesResult.data || []) as any[]
+  const activities = (activitiesResult.data || []) as any[]
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -53,6 +59,9 @@ export default async function NewTimesheetPage() {
             <WeeklyTimesheetForm
               sites={sites}
               purchaseOrders={purchaseOrders}
+              systems={systems}
+              deliverables={deliverables}
+              activities={activities}
               defaultWeekEnding={weekEndingStr}
               userId={user.id}
             />
