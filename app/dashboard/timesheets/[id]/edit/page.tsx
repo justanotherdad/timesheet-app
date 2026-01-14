@@ -92,27 +92,29 @@ export default async function EditTimesheetPage({
   const activities = (activitiesResult.data || []) as any[]
 
   // Get existing entries (including system_name for custom systems)
-  const entriesResult = await withQueryTimeout(() =>
+  const entriesResult = await withQueryTimeout<Array<any>>(() =>
     supabase
       .from('timesheet_entries')
       .select('*')
       .eq('timesheet_id', id)
       .order('created_at')
   )
-  const entries = (entriesResult.data || []).map((entry: any) => ({
-    ...entry,
-    system_name: entry.system_name || undefined, // Ensure system_name is included
-  })) as any[]
+  const entries = Array.isArray(entriesResult.data) 
+    ? entriesResult.data.map((entry: any) => ({
+        ...entry,
+        system_name: entry.system_name || undefined, // Ensure system_name is included
+      }))
+    : []
 
   // Get existing unbillable entries
-  const unbillableResult = await withQueryTimeout(() =>
+  const unbillableResult = await withQueryTimeout<Array<any>>(() =>
     supabase
       .from('timesheet_unbillable')
       .select('*')
       .eq('timesheet_id', id)
       .order('description')
   )
-  const unbillable = (unbillableResult.data || []) as any[]
+  const unbillable = Array.isArray(unbillableResult.data) ? unbillableResult.data : []
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
