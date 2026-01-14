@@ -26,7 +26,7 @@ export default async function TimesheetDetailPage({
     .from('weekly_timesheets')
     .select(`
       *,
-      user_profiles(name, email),
+      user_profiles!user_id(name, email),
       timesheet_signatures(
         signer_role,
         signed_at,

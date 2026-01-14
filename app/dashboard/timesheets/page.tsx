@@ -29,7 +29,7 @@ export default async function TimesheetsPage() {
         .from('weekly_timesheets')
         .select(`
           *,
-          user_profiles(name, email)
+          user_profiles!user_id(name, email)
         `)
         .order('week_ending', { ascending: false })
         .order('created_at', { ascending: false })
@@ -54,7 +54,7 @@ export default async function TimesheetsPage() {
         .from('weekly_timesheets')
         .select(`
           *,
-          user_profiles(name, email)
+          user_profiles!user_id(name, email)
         `)
         .in('user_id', allUserIds)
         .order('week_ending', { ascending: false })

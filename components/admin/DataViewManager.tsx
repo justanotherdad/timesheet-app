@@ -82,7 +82,7 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
           user_id,
           week_ending,
           status,
-          user_profiles (
+          user_profiles!user_id (
             name,
             email
           )

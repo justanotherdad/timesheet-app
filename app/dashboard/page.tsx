@@ -50,7 +50,7 @@ export default async function DashboardPage() {
       const pendingResult = await withQueryTimeout(() =>
         supabase
           .from('weekly_timesheets')
-          .select('*, user_profiles!inner(name)')
+          .select('*, user_profiles!user_id!inner(name)')
           .in('user_id', reportIds)
           .eq('status', 'submitted')
           .order('submitted_at', { ascending: true })

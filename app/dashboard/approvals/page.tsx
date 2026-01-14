@@ -44,7 +44,7 @@ export default async function ApprovalsPage() {
       .from('weekly_timesheets')
       .select(`
         *,
-        user_profiles!inner(name, email)
+        user_profiles!user_id!inner(name, email)
       `)
       .in('user_id', reportIds)
       .eq('status', 'submitted')
