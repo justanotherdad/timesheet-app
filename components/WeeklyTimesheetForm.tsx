@@ -218,23 +218,33 @@ export default function WeeklyTimesheetForm({
     setBillableEntries(billableEntries.filter((_, i) => i !== index))
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const saveTimesheet = async (shouldSubmit: boolean = false) => {
     setError(null)
     setLoading(true)
 
     try {
       let currentTimesheetId = timesheetId
+      const newStatus = shouldSubmit ? 'submitted' : 'draft'
 
       if (currentTimesheetId) {
         // Update existing timesheet
+        const updateData: any = {
+          week_ending: weekEnding,
+          week_starting: formatDateForInput(weekDates.start),
+          updated_at: new Date().toISOString(),
+        }
+
+        if (shouldSubmit && currentStatus === 'draft') {
+          updateData.status = 'submitted'
+          updateData.submitted_at = new Date().toISOString()
+          updateData.employee_signed_at = new Date().toISOString()
+        } else if (!shouldSubmit) {
+          updateData.status = 'draft'
+        }
+
         const { error: updateError } = await supabase
           .from('weekly_timesheets')
-          .update({
-            week_ending: weekEnding,
-            week_starting: formatDateForInput(weekDates.start),
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq('id', currentTimesheetId)
 
         if (updateError) throw updateError
@@ -253,13 +263,21 @@ export default function WeeklyTimesheetForm({
 
         if (existingTimesheet) {
           currentTimesheetId = existingTimesheet.id
+          const updateData: any = {
+            week_ending: weekEnding,
+            week_starting: formatDateForInput(weekDates.start),
+            updated_at: new Date().toISOString(),
+            status: newStatus,
+          }
+
+          if (shouldSubmit) {
+            updateData.submitted_at = new Date().toISOString()
+            updateData.employee_signed_at = new Date().toISOString()
+          }
+
           const { error: updateError } = await supabase
             .from('weekly_timesheets')
-            .update({
-              week_ending: weekEnding,
-              week_starting: formatDateForInput(weekDates.start),
-              updated_at: new Date().toISOString(),
-            })
+            .update(updateData)
             .eq('id', currentTimesheetId)
 
           if (updateError) throw updateError
@@ -267,14 +285,21 @@ export default function WeeklyTimesheetForm({
           await supabase.from('timesheet_entries').delete().eq('timesheet_id', currentTimesheetId)
           await supabase.from('timesheet_unbillable').delete().eq('timesheet_id', currentTimesheetId)
         } else {
+          const insertData: any = {
+            user_id: userId,
+            week_ending: weekEnding,
+            week_starting: formatDateForInput(weekDates.start),
+            status: newStatus,
+          }
+
+          if (shouldSubmit) {
+            insertData.submitted_at = new Date().toISOString()
+            insertData.employee_signed_at = new Date().toISOString()
+          }
+
           const { data: newTimesheet, error: createError } = await supabase
             .from('weekly_timesheets')
-            .insert({
-              user_id: userId,
-              week_ending: weekEnding,
-              week_starting: formatDateForInput(weekDates.start),
-              status: 'draft',
-            })
+            .insert(insertData)
             .select()
             .single()
 
@@ -360,6 +385,16 @@ export default function WeeklyTimesheetForm({
     }
   }
 
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await saveTimesheet(false)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await saveTimesheet(true)
+  }
+
   const updateUnbillableEntry = (index: number, day: typeof days[number], value: number) => {
     const updated = [...unbillableEntries]
     updated[index] = { ...updated[index], [`${day}_hours`]: value }
@@ -392,7 +427,7 @@ export default function WeeklyTimesheetForm({
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSave} className="space-y-6">
         {error && (
           <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded">
             {error}
@@ -595,21 +630,32 @@ export default function WeeklyTimesheetForm({
         <div className="flex gap-4">
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || currentStatus !== 'draft'}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Saving...' : timesheetId ? 'Update Timesheet' : 'Save Timesheet'}
+            {loading ? 'Saving...' : timesheetId ? 'Save Draft' : 'Save Timesheet'}
           </button>
+          {currentStatus === 'draft' && (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={loading}
+              className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Submitting...' : 'Submit for Approval'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => router.back()}
             className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-6 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+            disabled={loading}
           >
             Cancel
           </button>
           {timesheetId && currentStatus === 'draft' && (
-            <DeleteTimesheetButton 
-              timesheetId={timesheetId} 
+            <DeleteTimesheetButton
+              timesheetId={timesheetId}
               status={currentStatus}
               variant="button"
               onDeleted={() => {
