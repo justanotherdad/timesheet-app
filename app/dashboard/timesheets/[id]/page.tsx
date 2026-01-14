@@ -93,29 +93,50 @@ export default async function TimesheetDetailPage({
     }
   }
 
-  // Get entries
-  const entriesResult = await withQueryTimeout(() =>
-    supabase
-    .from('timesheet_entries')
-    .select(`
-      *,
-      sites(name, code),
-      purchase_orders(po_number, description)
-    `)
-    .eq('timesheet_id', id)
-    .order('created_at')
-  )
-  const entries = (entriesResult.data || []) as any[]
+  // Get entries (with error handling)
+  let entries: any[] = []
+  let unbillable: any[] = []
+  
+  try {
+    const entriesResult = await withQueryTimeout(() =>
+      supabase
+        .from('timesheet_entries')
+        .select(`
+          *,
+          sites(name, code),
+          purchase_orders(po_number, description)
+        `)
+        .eq('timesheet_id', id)
+        .order('created_at')
+    )
+    entries = (entriesResult.data || []) as any[]
+    
+    if (entriesResult.error) {
+      console.error('Error loading entries:', entriesResult.error)
+    }
+  } catch (error) {
+    console.error('Error fetching entries:', error)
+    entries = []
+  }
 
-  // Get unbillable entries
-  const unbillableResult = await withQueryTimeout(() =>
-    supabase
-    .from('timesheet_unbillable')
-    .select('*')
-    .eq('timesheet_id', id)
-    .order('description')
-  )
-  const unbillable = (unbillableResult.data || []) as any[]
+  // Get unbillable entries (with error handling)
+  try {
+    const unbillableResult = await withQueryTimeout(() =>
+      supabase
+        .from('timesheet_unbillable')
+        .select('*')
+        .eq('timesheet_id', id)
+        .order('description')
+    )
+    unbillable = (unbillableResult.data || []) as any[]
+    
+    if (unbillableResult.error) {
+      console.error('Error loading unbillable entries:', unbillableResult.error)
+    }
+  } catch (error) {
+    console.error('Error fetching unbillable entries:', error)
+    unbillable = []
+  }
 
   const weekDates = getWeekDates(timesheet.week_ending)
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
@@ -151,8 +172,15 @@ export default async function TimesheetDetailPage({
     }
   }
 
-  const billableTotal = entries?.reduce((sum, e) => sum + calculateTotal(e), 0) || 0
-  const unbillableTotal = unbillable?.reduce((sum, e) => sum + calculateTotal(e), 0) || 0
+  // Calculate totals with error handling
+  let billableTotal = 0
+  let unbillableTotal = 0
+  try {
+    billableTotal = entries?.reduce((sum, e) => sum + calculateTotal(e), 0) || 0
+    unbillableTotal = unbillable?.reduce((sum, e) => sum + calculateTotal(e), 0) || 0
+  } catch (error) {
+    console.error('Error calculating totals:', error)
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

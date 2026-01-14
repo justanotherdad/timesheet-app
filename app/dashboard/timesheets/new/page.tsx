@@ -35,10 +35,41 @@ export default async function NewTimesheetPage() {
     redirect(`/dashboard/timesheets/${existingTimesheetResult.data.id}/edit`)
   }
 
-  // Fetch all dropdown options with timeout
+  // Get user's assigned sites and POs (unless admin)
+  let userSiteIds: string[] = []
+  let userPOIds: string[] = []
+  
+  if (!['admin', 'super_admin'].includes(user.profile.role)) {
+    const [userSitesResult, userPOsResult] = await Promise.all([
+      withQueryTimeout(() => supabase.from('user_sites').select('site_id').eq('user_id', user.id)),
+      withQueryTimeout(() => supabase.from('user_purchase_orders').select('purchase_order_id').eq('user_id', user.id)),
+    ])
+    userSiteIds = (userSitesResult.data || []).map((r: any) => r.site_id)
+    userPOIds = (userPOsResult.data || []).map((r: any) => r.purchase_order_id)
+  }
+
+  // Fetch dropdown options - filter by user assignments unless admin
+  const sitesQuery = supabase.from('sites').select('*').order('name')
+  const posQuery = supabase.from('purchase_orders').select('*').order('po_number')
+  
+  if (!['admin', 'super_admin'].includes(user.profile.role)) {
+    if (userSiteIds.length > 0) {
+      sitesQuery.in('id', userSiteIds)
+    } else {
+      // If user has no sites assigned, return empty array
+      sitesQuery.eq('id', '00000000-0000-0000-0000-000000000000') // Will return empty
+    }
+    if (userPOIds.length > 0) {
+      posQuery.in('id', userPOIds)
+    } else {
+      // If user has no POs assigned, return empty array
+      posQuery.eq('id', '00000000-0000-0000-0000-000000000000') // Will return empty
+    }
+  }
+
   const [sitesResult, purchaseOrdersResult, systemsResult, deliverablesResult, activitiesResult] = await Promise.all([
-    withQueryTimeout(() => supabase.from('sites').select('*').order('name')),
-    withQueryTimeout(() => supabase.from('purchase_orders').select('*').order('po_number')),
+    withQueryTimeout(() => sitesQuery),
+    withQueryTimeout(() => posQuery),
     withQueryTimeout(() => supabase.from('systems').select('*').order('name')),
     withQueryTimeout(() => supabase.from('deliverables').select('*').order('name')),
     withQueryTimeout(() => supabase.from('activities').select('*').order('name')),

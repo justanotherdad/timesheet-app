@@ -209,7 +209,7 @@ export default async function TimesheetsPage() {
                             >
                               View
                             </Link>
-                            <DeleteTimesheetButton timesheetId={ts.id} status={ts.status} />
+                            <DeleteTimesheetButton timesheetId={ts.id} status={ts.status} userRole={user.profile.role} />
                           </div>
                         </td>
                       </tr>

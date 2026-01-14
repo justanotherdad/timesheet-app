@@ -128,13 +128,14 @@ export default function ConsolidatedManager({
     const formData = new FormData(e.currentTarget)
     const poNumber = formData.get('po_number') as string
     const description = formData.get('description') as string || null
+    const departmentId = formData.get('department_id') as string || null
 
     try {
       const { data, error: insertError } = await supabase
         .from('purchase_orders')
         .insert({
           site_id: selectedSite,
-          department_id: selectedDepartment || null,
+          department_id: departmentId || null,
           po_number: poNumber,
           description,
         })
@@ -144,6 +145,7 @@ export default function ConsolidatedManager({
       if (insertError) throw insertError
       setPurchaseOrders([...purchaseOrders, data])
       if (e.currentTarget) e.currentTarget.reset()
+      setSelectedDepartment('')
       setShowAddForm(false)
     } catch (err: any) {
       setError(err.message || 'An error occurred')
@@ -468,6 +470,22 @@ export default function ConsolidatedManager({
                       className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Department (Optional)
+                    </label>
+                    <select
+                      name="department_id"
+                      value={selectedDepartment}
+                      onChange={(e) => setSelectedDepartment(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+                    >
+                      <option value="">-- Select Department --</option>
+                      {filteredDepartments.map(dept => (
+                        <option key={dept.id} value={dept.id}>{dept.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="flex gap-2">
                     <button type="submit" disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
                       {loading ? 'Adding...' : 'Add'}
@@ -514,6 +532,166 @@ export default function ConsolidatedManager({
             </>
           )}
         </>
+      )}
+
+      {/* Edit Modal for Sites, Departments, and POs */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onMouseDown={(e) => {
+          if (e.target === e.currentTarget) {
+            setEditingItem(null)
+          }
+        }}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4" onMouseDown={(e) => e.stopPropagation()}>
+            {editingItem.type === 'site' && (
+              <>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit Site</h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault()
+                  setError(null)
+                  setLoading(true)
+                  const formData = new FormData(e.currentTarget)
+                  const name = formData.get('name') as string
+                  const weekStartingDay = parseInt(formData.get('week_starting_day') as string) || 1
+                  try {
+                    const { error: updateError } = await supabase
+                      .from('sites')
+                      .update({ name, week_starting_day: weekStartingDay })
+                      .eq('id', editingItem.id)
+                    if (updateError) throw updateError
+                    setSites(sites.map(s => s.id === editingItem.id ? { ...s, name, week_starting_day: weekStartingDay } : s))
+                    setEditingItem(null)
+                  } catch (err: any) {
+                    setError(err.message || 'An error occurred')
+                  } finally {
+                    setLoading(false)
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
+                    <input type="text" name="name" defaultValue={editingItem.name} required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Week Starts On *</label>
+                    <select name="week_starting_day" defaultValue={editingItem.week_starting_day || 1} required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white">
+                      <option value="0">Sunday</option>
+                      <option value="1">Monday</option>
+                      <option value="2">Tuesday</option>
+                      <option value="3">Wednesday</option>
+                      <option value="4">Thursday</option>
+                      <option value="5">Friday</option>
+                      <option value="6">Saturday</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
+                      {loading ? 'Saving...' : 'Save'}
+                    </button>
+                    <button type="button" onClick={() => setEditingItem(null)} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-500">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+
+            {editingItem.type === 'department' && (
+              <>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit Department</h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault()
+                  setError(null)
+                  setLoading(true)
+                  const formData = new FormData(e.currentTarget)
+                  const name = formData.get('name') as string
+                  try {
+                    const { error: updateError } = await supabase
+                      .from('departments')
+                      .update({ name })
+                      .eq('id', editingItem.id)
+                    if (updateError) throw updateError
+                    setDepartments(departments.map(d => d.id === editingItem.id ? { ...d, name } : d))
+                    setEditingItem(null)
+                  } catch (err: any) {
+                    setError(err.message || 'An error occurred')
+                  } finally {
+                    setLoading(false)
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
+                    <input type="text" name="name" defaultValue={editingItem.name} required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
+                      {loading ? 'Saving...' : 'Save'}
+                    </button>
+                    <button type="button" onClick={() => setEditingItem(null)} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-500">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+
+            {editingItem.type === 'po' && (
+              <>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit Purchase Order</h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault()
+                  setError(null)
+                  setLoading(true)
+                  const formData = new FormData(e.currentTarget)
+                  const poNumber = formData.get('po_number') as string
+                  const description = formData.get('description') as string || null
+                  const deptId = formData.get('department_id') as string || null
+                  try {
+                    const { error: updateError } = await supabase
+                      .from('purchase_orders')
+                      .update({ 
+                        po_number: poNumber,
+                        description,
+                        department_id: deptId || null
+                      })
+                      .eq('id', editingItem.id)
+                    if (updateError) throw updateError
+                    setPurchaseOrders(purchaseOrders.map(po => po.id === editingItem.id ? { ...po, po_number: poNumber, description: description || undefined, department_id: deptId || undefined } : po))
+                    setEditingItem(null)
+                  } catch (err: any) {
+                    setError(err.message || 'An error occurred')
+                  } finally {
+                    setLoading(false)
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">PO Number *</label>
+                    <input type="text" name="po_number" defaultValue={editingItem.po_number} required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                    <input type="text" name="description" defaultValue={editingItem.description || ''} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
+                    <select name="department_id" defaultValue={editingItem.department_id || ''} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white">
+                      <option value="">-- None --</option>
+                      {filteredDepartments.map(dept => (
+                        <option key={dept.id} value={dept.id}>{dept.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
+                      {loading ? 'Saving...' : 'Save'}
+                    </button>
+                    <button type="button" onClick={() => setEditingItem(null)} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-500">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

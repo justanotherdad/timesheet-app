@@ -7,11 +7,12 @@ import { deleteTimesheet } from '@/app/actions/delete-timesheet'
 interface DeleteTimesheetButtonProps {
   timesheetId: string
   status: string
+  userRole?: string
   onDeleted?: () => void
   variant?: 'button' | 'link' // 'button' for forms, 'link' for tables
 }
 
-export default function DeleteTimesheetButton({ timesheetId, status, onDeleted, variant = 'link' }: DeleteTimesheetButtonProps) {
+export default function DeleteTimesheetButton({ timesheetId, status, userRole, onDeleted, variant = 'link' }: DeleteTimesheetButtonProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -42,8 +43,9 @@ export default function DeleteTimesheetButton({ timesheetId, status, onDeleted, 
     }
   }
 
-  // Only show delete button for draft timesheets or if user is admin (handled server-side)
-  if (status !== 'draft') {
+  // Show delete button for draft timesheets or if user is admin/super_admin
+  const isAdmin = userRole && ['admin', 'super_admin'].includes(userRole)
+  if (status !== 'draft' && !isAdmin) {
     return null
   }
 

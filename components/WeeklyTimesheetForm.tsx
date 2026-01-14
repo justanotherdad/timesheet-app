@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import SearchableSelect from './SearchableSelect'
+import SystemInput from './SystemInput'
 import DeleteTimesheetButton from './DeleteTimesheetButton'
 import { getWeekDates, formatDate, formatDateShort, formatDateForInput } from '@/lib/utils'
 import { format } from 'date-fns'
@@ -26,6 +27,7 @@ interface WeeklyTimesheetFormProps {
       po_id?: string
       task_description: string
       system_id?: string
+      system_name?: string
       deliverable_id?: string
       activity_id?: string
       mon_hours: number
@@ -56,6 +58,7 @@ interface BillableEntry {
   po_id?: string
   task_description: string
   system_id?: string
+  system_name?: string // Custom system name (not saved to DB, stored in entry)
   deliverable_id?: string
   activity_id?: string
   mon_hours: number
@@ -116,19 +119,8 @@ export default function WeeklyTimesheetForm({
     ]
   )
 
-  // Close modal when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-        handleCloseModal()
-      }
-    }
-
-    if (editingIndex !== null) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [editingIndex])
+  // Modal closing is now handled by onMouseDown on the backdrop
+  // This prevents closing when selecting text inside the modal
 
   const calculateTotal = (entry: BillableEntry | UnbillableEntry): number => {
     return entry.mon_hours + entry.tue_hours + entry.wed_hours + entry.thu_hours + 
@@ -161,10 +153,15 @@ export default function WeeklyTimesheetForm({
     return po ? `${po.po_number}${po.description ? ` - ${po.description}` : ''}` : ''
   }
 
-  const getSystemName = (systemId?: string): string => {
-    if (!systemId) return ''
-    const system = systems.find(s => s.id === systemId)
-    return system ? system.name : ''
+  const getSystemName = (entry: BillableEntry): string => {
+    // Check for custom system name first
+    if (entry.system_name) return entry.system_name
+    // Then check for system_id
+    if (entry.system_id) {
+      const system = systems.find(s => s.id === entry.system_id)
+      return system ? system.name : ''
+    }
+    return ''
   }
 
   const getDeliverableName = (deliverableId?: string): string => {
@@ -201,6 +198,7 @@ export default function WeeklyTimesheetForm({
   const handleAddEntry = () => {
     const newEntry: BillableEntry = {
       task_description: '',
+      system_name: undefined,
       mon_hours: 0,
       tue_hours: 0,
       wed_hours: 0,
@@ -338,7 +336,8 @@ export default function WeeklyTimesheetForm({
           client_project_id: e.client_project_id || null,
           po_id: e.po_id || null,
           task_description: e.task_description,
-          system_id: e.system_id || null,
+          system_id: e.system_id || null, // Only set if from dropdown, null if custom
+          system_name: e.system_name || null, // Custom system name (not in systems table)
           deliverable_id: e.deliverable_id || null,
           activity_id: e.activity_id || null,
           mon_hours: e.mon_hours || 0,
@@ -505,7 +504,7 @@ export default function WeeklyTimesheetForm({
                       {entry.task_description || '-'}
                     </td>
                     <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
-                      {getSystemName(entry.system_id) || '-'}
+                      {getSystemName(entry) || '-'}
                     </td>
                     <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
                       {getDeliverableName(entry.deliverable_id) || '-'}
@@ -668,8 +667,16 @@ export default function WeeklyTimesheetForm({
 
       {/* Edit Modal */}
       {editingIndex !== null && editingEntry && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCloseModal}>
-          <div ref={modalRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
+          onMouseDown={(e) => {
+            // Only close if clicking directly on the backdrop, not on selected text
+            if (e.target === e.currentTarget) {
+              handleCloseModal()
+            }
+          }}
+        >
+          <div ref={modalRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
                 {editingIndex === billableEntries.length ? 'Add Billable Entry' : 'Edit Billable Entry'}
@@ -730,11 +737,20 @@ export default function WeeklyTimesheetForm({
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     System
                   </label>
-                  <SearchableSelect
+                  <SystemInput
                     options={systemOptions}
                     value={editingEntry.system_id || null}
-                    onChange={(value) => setEditingEntry({ ...editingEntry, system_id: value || undefined })}
-                    placeholder="Select System..."
+                    customValue={editingEntry.system_name}
+                    onChange={(value, customValue) => {
+                      if (customValue) {
+                        // Custom value - store in system_name, clear system_id
+                        setEditingEntry({ ...editingEntry, system_id: undefined, system_name: customValue })
+                      } else {
+                        // Selected from dropdown - store in system_id, clear system_name
+                        setEditingEntry({ ...editingEntry, system_id: value || undefined, system_name: undefined })
+                      }
+                    }}
+                    placeholder="Select or type System..."
                   />
                 </div>
                 <div>
