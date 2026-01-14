@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient, SupabaseClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { Plus, Edit, Trash2, Upload } from 'lucide-react'
 
 interface Site {
