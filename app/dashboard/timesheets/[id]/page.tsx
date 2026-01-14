@@ -36,6 +36,12 @@ export default async function TimesheetDetailPage({
     .eq('id', id)
     .single()
   )
+  
+  // Check for query errors (RLS issues, etc.)
+  if (timesheetResult.error) {
+    console.error('Timesheet query error:', timesheetResult.error)
+  }
+  
   const timesheet = timesheetResult.data as any
 
   if (!timesheet) {
@@ -43,6 +49,11 @@ export default async function TimesheetDetailPage({
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Timesheet not found</h1>
+          {timesheetResult.error && (
+            <p className="text-sm text-red-600 dark:text-red-400 mb-4">
+              Error: {timesheetResult.error.message || 'Access denied or timesheet does not exist'}
+            </p>
+          )}
           <Link href="/dashboard/timesheets" className="text-blue-600 hover:text-blue-700">
             ← Back to Timesheets
           </Link>

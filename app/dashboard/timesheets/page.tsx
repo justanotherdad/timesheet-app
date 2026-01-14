@@ -82,6 +82,7 @@ export default async function TimesheetsPage() {
     dataCount: Array.isArray(timesheetsResult.data) ? timesheetsResult.data.length : 0,
     hasError: !!timesheetsResult.error,
     errorMessage: timesheetsResult.error?.message,
+    errorCode: timesheetsResult.error?.code,
     userRole: user.profile.role,
     userId: user.id,
     timesheetIds: timesheets.slice(0, 5).map((ts: any) => ts.id) // First 5 IDs for debugging
