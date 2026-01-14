@@ -51,11 +51,11 @@ export default async function EditTimesheetPage({
   
   if (!['admin', 'super_admin'].includes(user.profile.role)) {
     const [userSitesResult, userPOsResult] = await Promise.all([
-      withQueryTimeout(() => supabase.from('user_sites').select('site_id').eq('user_id', user.id)),
-      withQueryTimeout(() => supabase.from('user_purchase_orders').select('purchase_order_id').eq('user_id', user.id)),
+      withQueryTimeout<Array<{ site_id: string }>>(() => supabase.from('user_sites').select('site_id').eq('user_id', user.id)),
+      withQueryTimeout<Array<{ purchase_order_id: string }>>(() => supabase.from('user_purchase_orders').select('purchase_order_id').eq('user_id', user.id)),
     ])
-    userSiteIds = (userSitesResult.data || []).map((r: any) => r.site_id)
-    userPOIds = (userPOsResult.data || []).map((r: any) => r.purchase_order_id)
+    userSiteIds = Array.isArray(userSitesResult.data) ? userSitesResult.data.map((r) => r.site_id) : []
+    userPOIds = Array.isArray(userPOsResult.data) ? userPOsResult.data.map((r) => r.purchase_order_id) : []
   }
 
   // Fetch dropdown options - filter by user assignments unless admin
