@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { Plus, Edit, Trash2, Upload, X, CheckSquare } from 'lucide-react'
+import { Plus, Edit, Trash2, Upload, X, CheckSquare, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 interface Site {
   id: string
@@ -65,8 +65,13 @@ export default function HierarchicalItemManager({
   const [editingItem, setEditingItem] = useState<HierarchicalItem | null>(null)
   const [selectedItems, setSelectedItems] = useState<string[]>([]) // For bulk operations
   const [showBulkActions, setShowBulkActions] = useState(false) // Bulk actions modal
-  const [bulkActionDepartments, setBulkActionDepartments] = useState<string[]>([])
-  const [bulkActionPOs, setBulkActionPOs] = useState<string[]>([])
+  // Separate state for assign vs remove operations
+  const [bulkAssignDepartments, setBulkAssignDepartments] = useState<string[]>([])
+  const [bulkRemoveDepartments, setBulkRemoveDepartments] = useState<string[]>([])
+  const [bulkAssignPOs, setBulkAssignPOs] = useState<string[]>([])
+  const [bulkRemovePOs, setBulkRemovePOs] = useState<string[]>([])
+  const [sortColumn, setSortColumn] = useState<string>('name')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const supabase = createClient()
 
   // Get junction table names based on tableName
@@ -395,8 +400,11 @@ export default function HierarchicalItemManager({
 
       if (deleteError) throw deleteError
 
+      // Clear assignments cache and reload
+      setItemAssignments({})
       await loadItems(selectedSite)
       setSelectedItems([])
+      setShowBulkActions(false)
       setSuccess(`Successfully deleted ${selectedItems.length} ${itemName.toLowerCase()}${selectedItems.length > 1 ? 's' : ''}`)
       setTimeout(() => setSuccess(null), 5000)
     } catch (err: any) {
@@ -406,158 +414,149 @@ export default function HierarchicalItemManager({
     }
   }
 
-  const handleBulkAssignDepartments = async () => {
-    if (selectedItems.length === 0 || bulkActionDepartments.length === 0) return
+  // Separate state for assign vs remove operations
+  const [bulkAssignDepartments, setBulkAssignDepartments] = useState<string[]>([])
+  const [bulkRemoveDepartments, setBulkRemoveDepartments] = useState<string[]>([])
+  const [bulkAssignPOs, setBulkAssignPOs] = useState<string[]>([])
+  const [bulkRemovePOs, setBulkRemovePOs] = useState<string[]>([])
+
+  const handleBulkApplyChanges = async () => {
+    if (selectedItems.length === 0) return
+    
+    // Check if there are any changes to apply
+    const hasDeptChanges = bulkAssignDepartments.length > 0 || bulkRemoveDepartments.length > 0
+    const hasPOChanges = bulkAssignPOs.length > 0 || bulkRemovePOs.length > 0
+    
+    if (!hasDeptChanges && !hasPOChanges) {
+      setError('Please select at least one department or purchase order to assign or remove')
+      return
+    }
 
     setLoading(true)
     setError(null)
     try {
       const junctionTables = getJunctionTableNames()
-      const inserts: any[] = []
+      const operations: Promise<any>[] = []
 
-      selectedItems.forEach(itemId => {
-        bulkActionDepartments.forEach(deptId => {
-          inserts.push({
-            [junctionTables.itemIdColumn]: itemId,
-            department_id: deptId
+      // Handle department assignments
+      if (bulkAssignDepartments.length > 0) {
+        const deptInserts: any[] = []
+        selectedItems.forEach(itemId => {
+          bulkAssignDepartments.forEach(deptId => {
+            deptInserts.push({
+              [junctionTables.itemIdColumn]: itemId,
+              department_id: deptId
+            })
           })
         })
-      })
 
-      // Remove existing assignments first to avoid duplicates
-      await Promise.all(
-        selectedItems.map(itemId =>
-          supabase
-            .from(junctionTables.departments)
-            .delete()
-            .eq(junctionTables.itemIdColumn, itemId)
-            .in('department_id', bulkActionDepartments)
+        // Remove existing assignments first to avoid duplicates
+        operations.push(
+          ...selectedItems.map(itemId =>
+            supabase
+              .from(junctionTables.departments)
+              .delete()
+              .eq(junctionTables.itemIdColumn, itemId)
+              .in('department_id', bulkAssignDepartments)
+          )
         )
-      )
 
-      if (inserts.length > 0) {
-        const { error: insertError } = await supabase
-          .from(junctionTables.departments)
-          .insert(inserts)
-        if (insertError) throw insertError
+        if (deptInserts.length > 0) {
+          operations.push(
+            supabase.from(junctionTables.departments).insert(deptInserts)
+          )
+        }
       }
 
-      await loadItems(selectedSite)
-      setSelectedItems([])
-      setBulkActionDepartments([])
-      setShowBulkActions(false)
-      setSuccess(`Successfully assigned ${bulkActionDepartments.length} department${bulkActionDepartments.length > 1 ? 's' : ''} to ${selectedItems.length} ${itemName.toLowerCase()}${selectedItems.length > 1 ? 's' : ''}`)
-      setTimeout(() => setSuccess(null), 5000)
-    } catch (err: any) {
-      setError(err.message || 'An error occurred')
-    } finally {
-      setLoading(false)
-    }
-  }
+      // Handle department removals
+      if (bulkRemoveDepartments.length > 0) {
+        operations.push(
+          ...selectedItems.map(itemId =>
+            supabase
+              .from(junctionTables.departments)
+              .delete()
+              .eq(junctionTables.itemIdColumn, itemId)
+              .in('department_id', bulkRemoveDepartments)
+          )
+        )
+      }
 
-  const handleBulkAssignPOs = async () => {
-    if (selectedItems.length === 0 || bulkActionPOs.length === 0) return
-
-    setLoading(true)
-    setError(null)
-    try {
-      const junctionTables = getJunctionTableNames()
-      const inserts: any[] = []
-
-      selectedItems.forEach(itemId => {
-        bulkActionPOs.forEach(poId => {
-          inserts.push({
-            [junctionTables.itemIdColumn]: itemId,
-            purchase_order_id: poId
+      // Handle PO assignments
+      if (bulkAssignPOs.length > 0) {
+        const poInserts: any[] = []
+        selectedItems.forEach(itemId => {
+          bulkAssignPOs.forEach(poId => {
+            poInserts.push({
+              [junctionTables.itemIdColumn]: itemId,
+              purchase_order_id: poId
+            })
           })
         })
-      })
 
-      // Remove existing assignments first to avoid duplicates
-      await Promise.all(
-        selectedItems.map(itemId =>
-          supabase
-            .from(junctionTables.purchaseOrders)
-            .delete()
-            .eq(junctionTables.itemIdColumn, itemId)
-            .in('purchase_order_id', bulkActionPOs)
+        // Remove existing assignments first to avoid duplicates
+        operations.push(
+          ...selectedItems.map(itemId =>
+            supabase
+              .from(junctionTables.purchaseOrders)
+              .delete()
+              .eq(junctionTables.itemIdColumn, itemId)
+              .in('purchase_order_id', bulkAssignPOs)
+          )
         )
-      )
 
-      if (inserts.length > 0) {
-        const { error: insertError } = await supabase
-          .from(junctionTables.purchaseOrders)
-          .insert(inserts)
-        if (insertError) throw insertError
+        if (poInserts.length > 0) {
+          operations.push(
+            supabase.from(junctionTables.purchaseOrders).insert(poInserts)
+          )
+        }
       }
 
-      await loadItems(selectedSite)
-      setSelectedItems([])
-      setBulkActionPOs([])
-      setShowBulkActions(false)
-      setSuccess(`Successfully assigned ${bulkActionPOs.length} purchase order${bulkActionPOs.length > 1 ? 's' : ''} to ${selectedItems.length} ${itemName.toLowerCase()}${selectedItems.length > 1 ? 's' : ''}`)
-      setTimeout(() => setSuccess(null), 5000)
-    } catch (err: any) {
-      setError(err.message || 'An error occurred')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleBulkRemoveDepartments = async () => {
-    if (selectedItems.length === 0 || bulkActionDepartments.length === 0) return
-
-    setLoading(true)
-    setError(null)
-    try {
-      const junctionTables = getJunctionTableNames()
-
-      await Promise.all(
-        selectedItems.map(itemId =>
-          supabase
-            .from(junctionTables.departments)
-            .delete()
-            .eq(junctionTables.itemIdColumn, itemId)
-            .in('department_id', bulkActionDepartments)
+      // Handle PO removals
+      if (bulkRemovePOs.length > 0) {
+        operations.push(
+          ...selectedItems.map(itemId =>
+            supabase
+              .from(junctionTables.purchaseOrders)
+              .delete()
+              .eq(junctionTables.itemIdColumn, itemId)
+              .in('purchase_order_id', bulkRemovePOs)
+          )
         )
-      )
+      }
 
+      // Execute all operations
+      const results = await Promise.all(operations)
+      
+      // Check for errors
+      for (const result of results) {
+        if (result.error) throw result.error
+      }
+
+      // Build success message
+      const messages: string[] = []
+      if (bulkAssignDepartments.length > 0) {
+        messages.push(`assigned ${bulkAssignDepartments.length} department${bulkAssignDepartments.length > 1 ? 's' : ''}`)
+      }
+      if (bulkRemoveDepartments.length > 0) {
+        messages.push(`removed ${bulkRemoveDepartments.length} department${bulkRemoveDepartments.length > 1 ? 's' : ''}`)
+      }
+      if (bulkAssignPOs.length > 0) {
+        messages.push(`assigned ${bulkAssignPOs.length} purchase order${bulkAssignPOs.length > 1 ? 's' : ''}`)
+      }
+      if (bulkRemovePOs.length > 0) {
+        messages.push(`removed ${bulkRemovePOs.length} purchase order${bulkRemovePOs.length > 1 ? 's' : ''}`)
+      }
+
+      // Clear assignments cache and reload
+      setItemAssignments({})
       await loadItems(selectedSite)
       setSelectedItems([])
-      setBulkActionDepartments([])
+      setBulkAssignDepartments([])
+      setBulkRemoveDepartments([])
+      setBulkAssignPOs([])
+      setBulkRemovePOs([])
       setShowBulkActions(false)
-      setSuccess(`Successfully removed ${bulkActionDepartments.length} department${bulkActionDepartments.length > 1 ? 's' : ''} from ${selectedItems.length} ${itemName.toLowerCase()}${selectedItems.length > 1 ? 's' : ''}`)
-      setTimeout(() => setSuccess(null), 5000)
-    } catch (err: any) {
-      setError(err.message || 'An error occurred')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleBulkRemovePOs = async () => {
-    if (selectedItems.length === 0 || bulkActionPOs.length === 0) return
-
-    setLoading(true)
-    setError(null)
-    try {
-      const junctionTables = getJunctionTableNames()
-
-      await Promise.all(
-        selectedItems.map(itemId =>
-          supabase
-            .from(junctionTables.purchaseOrders)
-            .delete()
-            .eq(junctionTables.itemIdColumn, itemId)
-            .in('purchase_order_id', bulkActionPOs)
-        )
-      )
-
-      await loadItems(selectedSite)
-      setSelectedItems([])
-      setBulkActionPOs([])
-      setShowBulkActions(false)
-      setSuccess(`Successfully removed ${bulkActionPOs.length} purchase order${bulkActionPOs.length > 1 ? 's' : ''} from ${selectedItems.length} ${itemName.toLowerCase()}${selectedItems.length > 1 ? 's' : ''}`)
+      setSuccess(`Successfully ${messages.join(', ')} for ${selectedItems.length} ${itemName.toLowerCase()}${selectedItems.length > 1 ? 's' : ''}`)
       setTimeout(() => setSuccess(null), 5000)
     } catch (err: any) {
       setError(err.message || 'An error occurred')
@@ -581,6 +580,57 @@ export default function HierarchicalItemManager({
       setSelectedItems(selectedItems.filter(id => id !== itemId))
     }
   }
+
+  // Sorting functions
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  // Helper to render sort icon
+  const getSortIcon = (column: string) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-50" />
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="h-3 w-3 ml-1 inline" />
+      : <ArrowDown className="h-3 w-3 ml-1 inline" />
+  }
+
+  // Sort items based on current sort column and direction
+  const sortedItems = [...items].sort((a, b) => {
+    let aVal: any
+    let bVal: any
+
+    if (sortColumn === 'name') {
+      aVal = a.name.toLowerCase()
+      bVal = b.name.toLowerCase()
+    } else if (sortColumn === 'department') {
+      const aAssignments = itemAssignments[a.id] || { departments: [], purchaseOrders: [] }
+      const bAssignments = itemAssignments[b.id] || { departments: [], purchaseOrders: [] }
+      const aDeptNames = aAssignments.departments.map(deptId => allDepartments.find(d => d.id === deptId)?.name).filter(Boolean)
+      const bDeptNames = bAssignments.departments.map(deptId => allDepartments.find(d => d.id === deptId)?.name).filter(Boolean)
+      aVal = aDeptNames.length > 0 ? aDeptNames[0].toLowerCase() : 'zzz' // 'zzz' to sort N/A to bottom
+      bVal = bDeptNames.length > 0 ? bDeptNames[0].toLowerCase() : 'zzz'
+    } else if (sortColumn === 'po') {
+      const aAssignments = itemAssignments[a.id] || { departments: [], purchaseOrders: [] }
+      const bAssignments = itemAssignments[b.id] || { departments: [], purchaseOrders: [] }
+      const aPONumbers = aAssignments.purchaseOrders.map(poId => allPurchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean)
+      const bPONumbers = bAssignments.purchaseOrders.map(poId => allPurchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean)
+      aVal = aPONumbers.length > 0 ? aPONumbers[0].toLowerCase() : 'zzz' // 'zzz' to sort N/A to bottom
+      bVal = bPONumbers.length > 0 ? bPONumbers[0].toLowerCase() : 'zzz'
+    } else {
+      return 0
+    }
+
+    if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
+    if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
+    return 0
+  })
 
   // State to store item assignments for display
   const [itemAssignments, setItemAssignments] = useState<Record<string, { departments: string[]; purchaseOrders: string[] }>>({})
@@ -961,8 +1011,10 @@ export default function HierarchicalItemManager({
                 <button
                   onClick={() => {
                     setShowBulkActions(true)
-                    setBulkActionDepartments([])
-                    setBulkActionPOs([])
+                    setBulkAssignDepartments([])
+                    setBulkRemoveDepartments([])
+                    setBulkAssignPOs([])
+                    setBulkRemovePOs([])
                   }}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
                 >
@@ -991,14 +1043,29 @@ export default function HierarchicalItemManager({
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Department</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">PO</th>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    onClick={() => handleSort('name')}
+                  >
+                    Name {getSortIcon('name')}
+                  </th>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    onClick={() => handleSort('department')}
+                  >
+                    Department {getSortIcon('department')}
+                  </th>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    onClick={() => handleSort('po')}
+                  >
+                    PO {getSortIcon('po')}
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {items.map((item) => {
+                {sortedItems.map((item) => {
                   const assignments = itemAssignments[item.id] || { departments: [], purchaseOrders: [] }
                   const deptNames = assignments.departments.map(deptId => allDepartments.find(d => d.id === deptId)?.name).filter(Boolean)
                   const poNumbers = assignments.purchaseOrders.map(poId => allPurchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean)
@@ -1059,8 +1126,10 @@ export default function HierarchicalItemManager({
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               setShowBulkActions(false)
-              setBulkActionDepartments([])
-              setBulkActionPOs([])
+              setBulkAssignDepartments([])
+              setBulkRemoveDepartments([])
+              setBulkAssignPOs([])
+              setBulkRemovePOs([])
             }
           }}
         >
@@ -1075,8 +1144,10 @@ export default function HierarchicalItemManager({
               <button
                 onClick={() => {
                   setShowBulkActions(false)
-                  setBulkActionDepartments([])
-                  setBulkActionPOs([])
+                  setBulkAssignDepartments([])
+                  setBulkRemoveDepartments([])
+                  setBulkAssignPOs([])
+                  setBulkRemovePOs([])
                 }}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
               >
@@ -1085,148 +1156,154 @@ export default function HierarchicalItemManager({
             </div>
 
             <div className="space-y-6">
-              {/* Assign to Departments */}
+              {/* Departments Section */}
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Assign to Departments</h4>
-                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
-                  {allDepartments.length > 0 ? (
-                    allDepartments.map(dept => (
-                      <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={bulkActionDepartments.includes(dept.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setBulkActionDepartments([...bulkActionDepartments, dept.id])
-                            } else {
-                              setBulkActionDepartments(bulkActionDepartments.filter(id => id !== dept.id))
-                            }
-                          }}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-sm text-gray-900 dark:text-gray-100">{dept.name}</span>
-                      </label>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No departments available</p>
-                  )}
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Departments</h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Select departments to assign (add) or remove from selected items</p>
+                
+                {/* Assign Departments */}
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Assign (Add) Departments:</label>
+                  <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                    {allDepartments.length > 0 ? (
+                      allDepartments.map(dept => (
+                        <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={bulkAssignDepartments.includes(dept.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setBulkAssignDepartments([...bulkAssignDepartments, dept.id])
+                                // Remove from remove list if it's there
+                                setBulkRemoveDepartments(bulkRemoveDepartments.filter(id => id !== dept.id))
+                              } else {
+                                setBulkAssignDepartments(bulkAssignDepartments.filter(id => id !== dept.id))
+                              }
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-900 dark:text-gray-100">{dept.name}</span>
+                        </label>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No departments available</p>
+                    )}
+                  </div>
                 </div>
-                <button
-                  onClick={handleBulkAssignDepartments}
-                  disabled={loading || bulkActionDepartments.length === 0}
-                  className="mt-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Assign Selected Departments
-                </button>
+
+                {/* Remove Departments */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Remove Departments:</label>
+                  <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                    {allDepartments.length > 0 ? (
+                      allDepartments.map(dept => (
+                        <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={bulkRemoveDepartments.includes(dept.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setBulkRemoveDepartments([...bulkRemoveDepartments, dept.id])
+                                // Remove from assign list if it's there
+                                setBulkAssignDepartments(bulkAssignDepartments.filter(id => id !== dept.id))
+                              } else {
+                                setBulkRemoveDepartments(bulkRemoveDepartments.filter(id => id !== dept.id))
+                              }
+                            }}
+                            className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+                          />
+                          <span className="text-sm text-gray-900 dark:text-gray-100">{dept.name}</span>
+                        </label>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No departments available</p>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* Remove from Departments */}
+              {/* Purchase Orders Section */}
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Remove from Departments</h4>
-                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
-                  {allDepartments.length > 0 ? (
-                    allDepartments.map(dept => (
-                      <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={bulkActionDepartments.includes(dept.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setBulkActionDepartments([...bulkActionDepartments, dept.id])
-                            } else {
-                              setBulkActionDepartments(bulkActionDepartments.filter(id => id !== dept.id))
-                            }
-                          }}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-sm text-gray-900 dark:text-gray-100">{dept.name}</span>
-                      </label>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No departments available</p>
-                  )}
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Purchase Orders</h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Select purchase orders to assign (add) or remove from selected items</p>
+                
+                {/* Assign Purchase Orders */}
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Assign (Add) Purchase Orders:</label>
+                  <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                    {allPurchaseOrders.length > 0 ? (
+                      allPurchaseOrders.map(po => (
+                        <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={bulkAssignPOs.includes(po.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setBulkAssignPOs([...bulkAssignPOs, po.id])
+                                // Remove from remove list if it's there
+                                setBulkRemovePOs(bulkRemovePOs.filter(id => id !== po.id))
+                              } else {
+                                setBulkAssignPOs(bulkAssignPOs.filter(id => id !== po.id))
+                              }
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-900 dark:text-gray-100">
+                            {po.po_number} {po.description ? `- ${po.description}` : ''}
+                          </span>
+                        </label>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No purchase orders available</p>
+                    )}
+                  </div>
                 </div>
-                <button
-                  onClick={handleBulkRemoveDepartments}
-                  disabled={loading || bulkActionDepartments.length === 0}
-                  className="mt-2 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Remove from Selected Departments
-                </button>
+
+                {/* Remove Purchase Orders */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Remove Purchase Orders:</label>
+                  <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                    {allPurchaseOrders.length > 0 ? (
+                      allPurchaseOrders.map(po => (
+                        <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={bulkRemovePOs.includes(po.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setBulkRemovePOs([...bulkRemovePOs, po.id])
+                                // Remove from assign list if it's there
+                                setBulkAssignPOs(bulkAssignPOs.filter(id => id !== po.id))
+                              } else {
+                                setBulkRemovePOs(bulkRemovePOs.filter(id => id !== po.id))
+                              }
+                            }}
+                            className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+                          />
+                          <span className="text-sm text-gray-900 dark:text-gray-100">
+                            {po.po_number} {po.description ? `- ${po.description}` : ''}
+                          </span>
+                        </label>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No purchase orders available</p>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* Assign to Purchase Orders */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Assign to Purchase Orders</h4>
-                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
-                  {allPurchaseOrders.length > 0 ? (
-                    allPurchaseOrders.map(po => (
-                      <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={bulkActionPOs.includes(po.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setBulkActionPOs([...bulkActionPOs, po.id])
-                            } else {
-                              setBulkActionPOs(bulkActionPOs.filter(id => id !== po.id))
-                            }
-                          }}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-sm text-gray-900 dark:text-gray-100">
-                          {po.po_number} {po.description ? `- ${po.description}` : ''}
-                        </span>
-                      </label>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No purchase orders available</p>
-                  )}
-                </div>
+              {/* Apply Changes Button */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                 <button
-                  onClick={handleBulkAssignPOs}
-                  disabled={loading || bulkActionPOs.length === 0}
-                  className="mt-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleBulkApplyChanges}
+                  disabled={loading || (bulkAssignDepartments.length === 0 && bulkRemoveDepartments.length === 0 && bulkAssignPOs.length === 0 && bulkRemovePOs.length === 0)}
+                  className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Assign Selected Purchase Orders
+                  {loading ? 'Applying Changes...' : 'Apply All Changes'}
                 </button>
-              </div>
-
-              {/* Remove from Purchase Orders */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Remove from Purchase Orders</h4>
-                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
-                  {allPurchaseOrders.length > 0 ? (
-                    allPurchaseOrders.map(po => (
-                      <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={bulkActionPOs.includes(po.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setBulkActionPOs([...bulkActionPOs, po.id])
-                            } else {
-                              setBulkActionPOs(bulkActionPOs.filter(id => id !== po.id))
-                            }
-                          }}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-sm text-gray-900 dark:text-gray-100">
-                          {po.po_number} {po.description ? `- ${po.description}` : ''}
-                        </span>
-                      </label>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No purchase orders available</p>
-                  )}
-                </div>
-                <button
-                  onClick={handleBulkRemovePOs}
-                  disabled={loading || bulkActionPOs.length === 0}
-                  className="mt-2 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Remove from Selected Purchase Orders
-                </button>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                  This will apply all selected assignments and removals at once
+                </p>
               </div>
 
               {/* Delete Selected Items */}
