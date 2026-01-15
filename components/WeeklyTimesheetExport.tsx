@@ -91,12 +91,11 @@ export default function WeeklyTimesheetExport({
                 size: landscape;
                 margin: 0.25in;
               }
-              /* Hide browser print headers and footers */
-              @page {
-                margin-top: 0.25in;
-                margin-bottom: 0.25in;
-                margin-left: 0.25in;
-                margin-right: 0.25in;
+            }
+            @media print {
+              html, body {
+                width: 100%;
+                height: 100%;
               }
             }
             body { 
@@ -109,7 +108,7 @@ export default function WeeklyTimesheetExport({
             }
             .header-logo {
               width: 100%;
-              margin-bottom: 20px;
+              margin-bottom: 10px;
             }
             .header-logo img {
               width: 100%;
@@ -125,7 +124,7 @@ export default function WeeklyTimesheetExport({
             table {
               width: 100%;
               border-collapse: collapse;
-              margin-bottom: 20px;
+              margin-bottom: 10px;
             }
             th, td {
               border: 1px solid #000;
@@ -252,7 +251,7 @@ export default function WeeklyTimesheetExport({
         </div>
 
         {/* Timesheet Info */}
-        <div className="timesheet-info mb-4" style={{ color: '#000' }}>
+        <div className="timesheet-info mb-2" style={{ color: '#000' }}>
           <div style={{ color: '#000' }}><strong style={{ color: '#000' }}>Time Sheet For:</strong> {user.name}</div>
           <div style={{ color: '#000' }}>
             <strong style={{ color: '#000' }}>From:</strong> {formatDate(weekDates.start)} <strong style={{ color: '#000' }}>To:</strong> {formatDate(weekDates.end)}
@@ -329,18 +328,18 @@ export default function WeeklyTimesheetExport({
         </table>
 
         {/* Signature Section */}
-        <div className="signature-section" style={{ marginTop: '30px', color: '#000' }}>
-          <div style={{ marginBottom: '15px', color: '#000' }}>
+        <div className="signature-section" style={{ marginTop: '15px', color: '#000' }}>
+          <div style={{ marginBottom: '8px', color: '#000' }}>
             <strong style={{ color: '#000' }}>Employee Signature / Date:</strong>
             {timesheet.employee_signed_at ? (
               <span style={{ marginLeft: '10px', color: '#000' }}>
                 {user.name} {new Date(timesheet.employee_signed_at).toLocaleDateString()}
               </span>
             ) : (
-              <div className="signature-line" style={{ borderTop: '1px solid #000', width: '250px', marginTop: '10px' }}></div>
+              <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
             )}
           </div>
-          <div style={{ marginBottom: '15px', color: '#000' }}>
+          <div style={{ marginBottom: '8px', color: '#000', textAlign: 'right' }}>
             <strong style={{ color: '#000' }}>Supervisor Approval by / Date:</strong>
             {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor') ? (
               <span style={{ marginLeft: '10px', color: '#000' }}>
@@ -348,10 +347,10 @@ export default function WeeklyTimesheetExport({
                 {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').signed_at).toLocaleDateString()}
               </span>
             ) : (
-              <div className="signature-line" style={{ borderTop: '1px solid #000', width: '250px', marginTop: '10px' }}></div>
+              <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
             )}
           </div>
-          <div style={{ color: '#000' }}>
+          <div style={{ color: '#000', textAlign: 'right' }}>
             <strong style={{ color: '#000' }}>Manager Approval by / Date:</strong>
             {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager') ? (
               <span style={{ marginLeft: '10px', color: '#000' }}>
@@ -359,13 +358,13 @@ export default function WeeklyTimesheetExport({
                 {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').signed_at).toLocaleDateString()}
               </span>
             ) : (
-              <div className="signature-line" style={{ borderTop: '1px solid #000', width: '250px', marginTop: '10px' }}></div>
+              <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
             )}
           </div>
         </div>
 
         {/* Unbillable Time Section */}
-        <div style={{ marginTop: '30px', color: '#000' }}>
+        <div style={{ marginTop: '15px', color: '#000' }}>
           <h3 style={{ fontSize: '12pt', fontWeight: 'bold', marginBottom: '10px', color: '#000' }}>UNBILLABLE TIME</h3>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>

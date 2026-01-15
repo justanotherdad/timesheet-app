@@ -193,7 +193,7 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
         htmlContent += `
           <div style="font-family: Arial, sans-serif; font-size: 10pt; color: #000; margin-bottom: 40px;">
             <!-- Header Logo -->
-            <div style="width: 100%; margin-bottom: 20px;">
+            <div style="width: 100%; margin-bottom: 10px;">
               <img 
                 src="${origin}/ctg-header-logo.png"
                 alt="Compliance Technology Group, Inc." 
@@ -202,7 +202,7 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
             </div>
 
             <!-- Timesheet Info -->
-            <div style="margin-bottom: 20px; color: #000;">
+            <div style="margin-bottom: 10px; color: #000;">
               <div style="color: #000;"><strong style="color: #000;">Time Sheet For:</strong> ${escapeHtml(user.name)}</div>
               <div style="color: #000;">
                 <strong style="color: #000;">From:</strong> ${formatDate(weekDates.start)} <strong style="color: #000;">To:</strong> ${formatDate(weekDates.end)}
@@ -210,7 +210,7 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
             </div>
 
             <!-- Billable Time Table -->
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
               <thead>
                 <tr style="background-color: #f0f0f0;">
                   <th style="border: 1px solid #000; padding: 5px; text-align: left;">Client / Project #</th>
@@ -257,33 +257,33 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
             </table>
 
             <!-- Signature Section -->
-            <div style="margin-top: 30px; color: #000;">
-              <div style="margin-bottom: 15px; color: #000;">
+            <div style="margin-top: 15px; color: #000;">
+              <div style="margin-bottom: 8px; color: #000;">
                 <strong style="color: #000;">Employee Signature / Date:</strong>
                 ${timesheet.employee_signed_at ? `
                   <span style="margin-left: 10px; color: #000;">${escapeHtml(user.name)} ${new Date(timesheet.employee_signed_at).toLocaleDateString()}</span>
                 ` : `
-                  <div style="border-top: 1px solid #000; width: 250px; margin-top: 10px;"></div>
+                  <span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>
                 `}
               </div>
-              <div style="margin-bottom: 15px; color: #000;">
+              <div style="margin-bottom: 8px; color: #000; text-align: right;">
                 <strong style="color: #000;">Supervisor Approval by / Date:</strong>
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor')
-                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<div style="border-top: 1px solid #000; width: 250px; margin-top: 10px;"></div>`
+                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
-              <div style="color: #000;">
+              <div style="color: #000; text-align: right;">
                 <strong style="color: #000;">Manager Approval by / Date:</strong>
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager')
-                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<div style="border-top: 1px solid #000; width: 250px; margin-top: 10px;"></div>`
+                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
             </div>
 
             <!-- Unbillable Time Section -->
-            <div style="margin-top: 30px; color: #000;">
+            <div style="margin-top: 15px; color: #000;">
               <h3 style="font-size: 12pt; font-weight: bold; margin-bottom: 10px; color: #000;">UNBILLABLE TIME</h3>
               <table style="width: 100%; border-collapse: collapse;">
                 <thead>
@@ -334,23 +334,22 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
           <head>
             <title>Timesheets Export - ${new Date().toLocaleDateString()}</title>
             <style>
+            @page {
+              size: landscape;
+              margin: 0.25in;
+            }
+            @media print {
               @page {
                 size: landscape;
                 margin: 0.25in;
               }
-              @media print {
-                @page {
-                  size: landscape;
-                  margin: 0.25in;
-                }
-                /* Hide browser print headers and footers */
-                @page {
-                  margin-top: 0.25in;
-                  margin-bottom: 0.25in;
-                  margin-left: 0.25in;
-                  margin-right: 0.25in;
-                }
+            }
+            @media print {
+              html, body {
+                width: 100%;
+                height: 100%;
               }
+            }
               body { 
                 font-family: Arial, sans-serif; 
                 font-size: 10pt;
