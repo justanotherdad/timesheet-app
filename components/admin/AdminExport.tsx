@@ -334,15 +334,30 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
           <head>
             <title>Timesheets Export - ${new Date().toLocaleDateString()}</title>
             <style>
+              @page {
+                size: landscape;
+                margin: 0.25in;
+              }
               @media print {
-                @page { margin: 0.5in; }
+                @page {
+                  size: landscape;
+                  margin: 0.25in;
+                }
+                /* Hide browser print headers and footers */
+                @page {
+                  margin-top: 0.25in;
+                  margin-bottom: 0.25in;
+                  margin-left: 0.25in;
+                  margin-right: 0.25in;
+                }
               }
               body { 
                 font-family: Arial, sans-serif; 
                 font-size: 10pt;
                 margin: 0;
-                padding: 20px;
+                padding: 0;
                 color: #000;
+                width: 100%;
               }
             </style>
           </head>

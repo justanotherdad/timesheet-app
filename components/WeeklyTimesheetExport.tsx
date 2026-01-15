@@ -82,8 +82,22 @@ export default function WeeklyTimesheetExport({
         <head>
           <title>Weekly Time Sheet - ${formatDate(weekDates.end)}</title>
           <style>
+            @page {
+              size: landscape;
+              margin: 0.25in;
+            }
             @media print {
-              @page { margin: 0.5in; }
+              @page {
+                size: landscape;
+                margin: 0.25in;
+              }
+              /* Hide browser print headers and footers */
+              @page {
+                margin-top: 0.25in;
+                margin-bottom: 0.25in;
+                margin-left: 0.25in;
+                margin-right: 0.25in;
+              }
             }
             body { 
               font-family: Arial, sans-serif; 
@@ -91,6 +105,7 @@ export default function WeeklyTimesheetExport({
               margin: 0;
               padding: 0;
               color: #000;
+              width: 100%;
             }
             .header-logo {
               width: 100%;
@@ -168,7 +183,11 @@ export default function WeeklyTimesheetExport({
       </html>
     `)
     printWindow.document.close()
-    printWindow.print()
+    
+    // Wait for content to load, then print
+    setTimeout(() => {
+      printWindow.print()
+    }, 500)
   }
 
   return (
