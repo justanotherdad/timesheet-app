@@ -74,6 +74,9 @@ export default function HierarchicalItemManager({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const supabase = createClient()
 
+  // State to store item assignments for display
+  const [itemAssignments, setItemAssignments] = useState<Record<string, { departments: string[]; purchaseOrders: string[] }>>({})
+
   // Get junction table names based on tableName
   const getJunctionTableNames = () => {
     if (tableName === 'systems') {
@@ -414,12 +417,6 @@ export default function HierarchicalItemManager({
     }
   }
 
-  // Separate state for assign vs remove operations
-  const [bulkAssignDepartments, setBulkAssignDepartments] = useState<string[]>([])
-  const [bulkRemoveDepartments, setBulkRemoveDepartments] = useState<string[]>([])
-  const [bulkAssignPOs, setBulkAssignPOs] = useState<string[]>([])
-  const [bulkRemovePOs, setBulkRemovePOs] = useState<string[]>([])
-
   const handleBulkApplyChanges = async () => {
     if (selectedItems.length === 0) return
     
@@ -631,9 +628,6 @@ export default function HierarchicalItemManager({
     if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
     return 0
   })
-
-  // State to store item assignments for display
-  const [itemAssignments, setItemAssignments] = useState<Record<string, { departments: string[]; purchaseOrders: string[] }>>({})
 
   // Load assignments for all items when items or site changes
   useEffect(() => {
