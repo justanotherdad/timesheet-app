@@ -127,12 +127,37 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
         timesheetQuery = timesheetQuery.eq('status', status)
       }
 
-      if (startDate) {
-        timesheetQuery = timesheetQuery.gte('week_ending', startDate)
-      }
-
-      if (endDate) {
-        timesheetQuery = timesheetQuery.lte('week_ending', endDate)
+      // For date filtering, we need to get timesheets that could potentially have days in the range
+      // A week ending on date X contains days from (X-6) to X (assuming week starts Monday)
+      // We'll do the actual date filtering after expanding entries by day
+      // But for efficiency, pre-filter timesheets that could contain dates in the range
+      if (startDate && endDate) {
+        // If both dates are specified, get timesheets where the week could contain any date in the range
+        // Week ending on X contains days (X-6) to X
+        // To contain startDate, we need week_ending >= startDate
+        // To contain endDate, we need week_ending >= endDate (or week could start before endDate)
+        // So get timesheets where week_ending >= startDate - 6 (to include weeks that could contain startDate)
+        // AND week_ending <= endDate + 6 (to include weeks that could contain endDate)
+        const startDateObj = parseISO(startDate)
+        const weekStartForStart = new Date(startDateObj)
+        weekStartForStart.setDate(weekStartForStart.getDate() - 6)
+        const endDateObj = parseISO(endDate)
+        const weekEndForEnd = new Date(endDateObj)
+        weekEndForEnd.setDate(weekEndForEnd.getDate() + 6)
+        timesheetQuery = timesheetQuery.gte('week_ending', formatInput(weekStartForStart))
+        timesheetQuery = timesheetQuery.lte('week_ending', formatInput(weekEndForEnd))
+      } else if (startDate) {
+        // Get timesheets where week_ending >= startDate - 6 (to include weeks that could contain startDate)
+        const startDateObj = parseISO(startDate)
+        const weekStart = new Date(startDateObj)
+        weekStart.setDate(weekStart.getDate() - 6)
+        timesheetQuery = timesheetQuery.gte('week_ending', formatInput(weekStart))
+      } else if (endDate) {
+        // Get timesheets where week_ending <= endDate + 6 (to include weeks that could contain endDate)
+        const endDateObj = parseISO(endDate)
+        const weekEnd = new Date(endDateObj)
+        weekEnd.setDate(weekEnd.getDate() + 6)
+        timesheetQuery = timesheetQuery.lte('week_ending', formatInput(weekEnd))
       }
 
       const { data: timesheets, error: timesheetError } = await timesheetQuery
