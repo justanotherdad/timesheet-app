@@ -433,10 +433,19 @@ export default function HierarchicalItemManager({
     setError(null)
     try {
       const junctionTables = getJunctionTableNames()
-      const operations: Promise<any>[] = []
 
       // Handle department assignments
       if (bulkAssignDepartments.length > 0) {
+        // Remove existing assignments first to avoid duplicates
+        for (const itemId of selectedItems) {
+          const { error } = await supabase
+            .from(junctionTables.departments)
+            .delete()
+            .eq(junctionTables.itemIdColumn, itemId)
+            .in('department_id', bulkAssignDepartments)
+          if (error) throw error
+        }
+
         const deptInserts: any[] = []
         selectedItems.forEach(itemId => {
           bulkAssignDepartments.forEach(deptId => {
@@ -447,39 +456,38 @@ export default function HierarchicalItemManager({
           })
         })
 
-        // Remove existing assignments first to avoid duplicates
-        for (const itemId of selectedItems) {
-          operations.push(
-            supabase
-              .from(junctionTables.departments)
-              .delete()
-              .eq(junctionTables.itemIdColumn, itemId)
-              .in('department_id', bulkAssignDepartments)
-          )
-        }
-
         if (deptInserts.length > 0) {
-          operations.push(
-            supabase.from(junctionTables.departments).insert(deptInserts)
-          )
+          const { error } = await supabase
+            .from(junctionTables.departments)
+            .insert(deptInserts)
+          if (error) throw error
         }
       }
 
       // Handle department removals
       if (bulkRemoveDepartments.length > 0) {
         for (const itemId of selectedItems) {
-          operations.push(
-            supabase
-              .from(junctionTables.departments)
-              .delete()
-              .eq(junctionTables.itemIdColumn, itemId)
-              .in('department_id', bulkRemoveDepartments)
-          )
+          const { error } = await supabase
+            .from(junctionTables.departments)
+            .delete()
+            .eq(junctionTables.itemIdColumn, itemId)
+            .in('department_id', bulkRemoveDepartments)
+          if (error) throw error
         }
       }
 
       // Handle PO assignments
       if (bulkAssignPOs.length > 0) {
+        // Remove existing assignments first to avoid duplicates
+        for (const itemId of selectedItems) {
+          const { error } = await supabase
+            .from(junctionTables.purchaseOrders)
+            .delete()
+            .eq(junctionTables.itemIdColumn, itemId)
+            .in('purchase_order_id', bulkAssignPOs)
+          if (error) throw error
+        }
+
         const poInserts: any[] = []
         selectedItems.forEach(itemId => {
           bulkAssignPOs.forEach(poId => {
@@ -490,43 +498,24 @@ export default function HierarchicalItemManager({
           })
         })
 
-        // Remove existing assignments first to avoid duplicates
-        for (const itemId of selectedItems) {
-          operations.push(
-            supabase
-              .from(junctionTables.purchaseOrders)
-              .delete()
-              .eq(junctionTables.itemIdColumn, itemId)
-              .in('purchase_order_id', bulkAssignPOs)
-          )
-        }
-
         if (poInserts.length > 0) {
-          operations.push(
-            supabase.from(junctionTables.purchaseOrders).insert(poInserts)
-          )
+          const { error } = await supabase
+            .from(junctionTables.purchaseOrders)
+            .insert(poInserts)
+          if (error) throw error
         }
       }
 
       // Handle PO removals
       if (bulkRemovePOs.length > 0) {
         for (const itemId of selectedItems) {
-          operations.push(
-            supabase
-              .from(junctionTables.purchaseOrders)
-              .delete()
-              .eq(junctionTables.itemIdColumn, itemId)
-              .in('purchase_order_id', bulkRemovePOs)
-          )
+          const { error } = await supabase
+            .from(junctionTables.purchaseOrders)
+            .delete()
+            .eq(junctionTables.itemIdColumn, itemId)
+            .in('purchase_order_id', bulkRemovePOs)
+          if (error) throw error
         }
-      }
-
-      // Execute all operations
-      const results = await Promise.all(operations)
-      
-      // Check for errors
-      for (const result of results) {
-        if (result.error) throw result.error
       }
 
       // Build success message
