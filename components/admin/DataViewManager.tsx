@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Download, Filter } from 'lucide-react'
-import { formatDateForInput } from '@/lib/utils'
+import { formatDateForInput, getWeekDates, formatDateForInput as formatInput } from '@/lib/utils'
+import { parseISO, format, addDays } from 'date-fns'
 
 interface User {
   id: string
@@ -25,13 +26,20 @@ interface Department {
 interface TimesheetEntry {
   id: string
   timesheet_id: string
-  date: string
-  hours: number
+  client_project_id?: string
+  po_id?: string
+  task_description: string
   system_id?: string
-  activity_id?: string
+  system_name?: string
   deliverable_id?: string
-  purchase_order_id?: string
-  description?: string
+  activity_id?: string
+  mon_hours: number
+  tue_hours: number
+  wed_hours: number
+  thu_hours: number
+  fri_hours: number
+  sat_hours: number
+  sun_hours: number
   weekly_timesheets?: {
     user_id: string
     week_ending: string
@@ -45,6 +53,27 @@ interface TimesheetEntry {
   activities?: { name: string }
   deliverables?: { name: string }
   purchase_orders?: { po_number: string }
+  sites?: { name: string }
+}
+
+// Expanded entry for display (one row per day with hours)
+interface ExpandedEntry {
+  id: string
+  entry_id: string
+  timesheet_id: string
+  date: string
+  day: string
+  hours: number
+  user_name: string
+  user_email: string
+  site_name: string
+  po_number: string
+  task_description: string
+  system_name: string
+  activity_name: string
+  deliverable_name: string
+  status: string
+  week_ending: string
 }
 
 interface DataViewManagerProps {
@@ -61,6 +90,7 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
   const [endDate, setEndDate] = useState<string>('')
   const [status, setStatus] = useState<string>('')
   const [entries, setEntries] = useState<TimesheetEntry[]>([])
+  const [expandedEntries, setExpandedEntries] = useState<ExpandedEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
@@ -130,16 +160,7 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
         `)
         .in('timesheet_id', timesheetIds)
 
-      // Apply date filters on entries if needed
-      if (startDate) {
-        entriesQuery = entriesQuery.gte('date', startDate)
-      }
-
-      if (endDate) {
-        entriesQuery = entriesQuery.lte('date', endDate)
-      }
-
-      const { data: entriesData, error: entriesError } = await entriesQuery.order('date', { ascending: false })
+      const { data: entriesData, error: entriesError } = await entriesQuery
 
       if (entriesError) throw entriesError
 
@@ -155,9 +176,80 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
             user_profiles: timesheet.user_profiles
           } : null
         }
+      }) as TimesheetEntry[]
+
+      // Expand entries into daily rows (one row per day with hours > 0)
+      const expanded: ExpandedEntry[] = []
+      const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+      const dayFields = ['mon_hours', 'tue_hours', 'wed_hours', 'thu_hours', 'fri_hours', 'sat_hours', 'sun_hours'] as const
+
+      combinedEntries.forEach((entry) => {
+        if (!entry.weekly_timesheets) return
+
+        const weekEnding = parseISO(entry.weekly_timesheets.week_ending)
+        const weekDates = getWeekDates(weekEnding, 1) // Assuming week starts on Monday
+
+        dayFields.forEach((dayField, dayIndex) => {
+          const hours = entry[dayField] || 0
+          if (hours > 0) {
+            const dayDate = weekDates.days[dayIndex]
+            const systemName = entry.system_name || entry.systems?.name || 'N/A'
+            const activityName = entry.activities?.name || 'N/A'
+            const deliverableName = entry.deliverables?.name || 'N/A'
+            // Find site name from sites array
+            const siteName = entry.client_project_id 
+              ? sites.find(s => s.id === entry.client_project_id)?.name || 'N/A'
+              : 'N/A'
+            const poNumber = entry.purchase_orders?.po_number || 'N/A'
+
+            expanded.push({
+              id: `${entry.id}-${dayIndex}`,
+              entry_id: entry.id,
+              timesheet_id: entry.timesheet_id,
+              date: formatInput(dayDate),
+              day: dayNames[dayIndex],
+              hours: hours,
+              user_name: entry.weekly_timesheets?.user_profiles?.name || 'N/A',
+              user_email: entry.weekly_timesheets?.user_profiles?.email || 'N/A',
+              site_name: siteName,
+              po_number: poNumber,
+              task_description: entry.task_description || 'N/A',
+              system_name: systemName,
+              activity_name: activityName,
+              deliverable_name: deliverableName,
+              status: entry.weekly_timesheets?.status || 'N/A',
+              week_ending: entry.weekly_timesheets?.week_ending || ''
+            })
+          }
+        })
       })
 
-      setEntries(combinedEntries as TimesheetEntry[])
+      // Filter expanded entries by date range if specified
+      let filteredExpanded = expanded
+      if (startDate) {
+        filteredExpanded = filteredExpanded.filter(e => e.date >= startDate)
+      }
+      if (endDate) {
+        filteredExpanded = filteredExpanded.filter(e => e.date <= endDate)
+      }
+
+      // Filter by site if specified
+      if (selectedSite) {
+        filteredExpanded = filteredExpanded.filter(e => {
+          const entry = combinedEntries.find(ent => ent.id === e.entry_id)
+          return entry?.client_project_id === selectedSite
+        })
+      }
+
+      // Sort by date descending
+      filteredExpanded.sort((a, b) => {
+        const dateA = parseISO(a.date)
+        const dateB = parseISO(b.date)
+        return dateB.getTime() - dateA.getTime()
+      })
+
+      setEntries(combinedEntries)
+      setExpandedEntries(filteredExpanded)
     } catch (err: any) {
       setError(err.message || 'Failed to load timesheet data')
     } finally {
@@ -167,21 +259,30 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
 
   useEffect(() => {
     loadData()
-  }, [selectedUser, startDate, endDate, status])
+  }, [selectedUser, startDate, endDate, status, selectedSite])
 
   const handleExport = () => {
+    if (expandedEntries.length === 0) {
+      setError('No data to export')
+      return
+    }
+
     const csv = [
-      ['Date', 'User', 'Hours', 'System', 'Activity', 'Deliverable', 'PO', 'Description', 'Status'].join(','),
-      ...entries.map(entry => [
+      ['Week Ending', 'Date', 'Day', 'User', 'Email', 'Site', 'PO', 'Task Description', 'System', 'Activity', 'Deliverable', 'Hours', 'Status'].join(','),
+      ...expandedEntries.map(entry => [
+        entry.week_ending,
         entry.date,
-        entry.weekly_timesheets?.user_profiles?.name || 'N/A',
+        entry.day,
+        entry.user_name,
+        entry.user_email,
+        entry.site_name,
+        entry.po_number,
+        `"${entry.task_description.replace(/"/g, '""')}"`, // Escape quotes in CSV
+        entry.system_name,
+        entry.activity_name,
+        entry.deliverable_name,
         entry.hours,
-        entry.systems?.name || 'N/A',
-        entry.activities?.name || 'N/A',
-        entry.deliverables?.name || 'N/A',
-        entry.purchase_orders?.po_number || 'N/A',
-        entry.description || 'N/A',
-        entry.weekly_timesheets?.status || 'N/A',
+        entry.status,
       ].join(','))
     ].join('\n')
 
@@ -200,7 +301,7 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Timesheet Data View</h2>
         <button
           onClick={handleExport}
-          disabled={entries.length === 0}
+          disabled={expandedEntries.length === 0}
           className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
         >
           <Download className="h-4 w-4" />
@@ -302,48 +403,58 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
       <div className="overflow-x-auto">
         {loading ? (
           <div className="text-center py-8 text-gray-600 dark:text-gray-300">Loading...</div>
-        ) : entries.length === 0 ? (
+        ) : expandedEntries.length === 0 ? (
           <div className="text-center py-8 text-gray-600 dark:text-gray-300">No timesheet entries found</div>
         ) : (
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Week Ending</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Day</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">User</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Hours</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Site</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">PO</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Task Description</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">System</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Activity</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Deliverable</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">PO</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Description</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Hours</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {entries.map((entry) => (
+              {expandedEntries.map((entry) => (
                 <tr key={entry.id}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {new Date(entry.date).toLocaleDateString()}
+                    {format(parseISO(entry.week_ending), 'MMM d, yyyy')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {entry.weekly_timesheets?.user_profiles?.name || 'N/A'}
+                    {format(parseISO(entry.date), 'MMM d, yyyy')}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{entry.day}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {entry.user_name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {entry.site_name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {entry.po_number}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{entry.task_description}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {entry.system_name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {entry.activity_name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {entry.deliverable_name}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{entry.hours}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {entry.systems?.name || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {entry.activities?.name || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {entry.deliverables?.name || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {entry.purchase_orders?.po_number || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{entry.description || 'N/A'}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">
-                    {entry.weekly_timesheets?.status || 'N/A'}
+                    {entry.status}
                   </td>
                 </tr>
               ))}
@@ -352,9 +463,9 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
         )}
       </div>
 
-      {entries.length > 0 && (
+      {expandedEntries.length > 0 && (
         <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">
-          Showing {entries.length} entries
+          Showing {expandedEntries.length} entries
         </div>
       )}
     </div>
