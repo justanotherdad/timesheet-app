@@ -598,17 +598,21 @@ export default function HierarchicalItemManager({
     } else if (sortColumn === 'department') {
       const aAssignments = itemAssignments[a.id] || { departments: [], purchaseOrders: [] }
       const bAssignments = itemAssignments[b.id] || { departments: [], purchaseOrders: [] }
-      const aDeptNames = aAssignments.departments.map(deptId => allDepartments.find(d => d.id === deptId)?.name).filter(Boolean)
-      const bDeptNames = bAssignments.departments.map(deptId => allDepartments.find(d => d.id === deptId)?.name).filter(Boolean)
-      aVal = aDeptNames.length > 0 ? aDeptNames[0].toLowerCase() : 'zzz' // 'zzz' to sort N/A to bottom
-      bVal = bDeptNames.length > 0 ? bDeptNames[0].toLowerCase() : 'zzz'
+      const aDeptNames = aAssignments.departments.map(deptId => allDepartments.find(d => d.id === deptId)?.name).filter((name): name is string => Boolean(name))
+      const bDeptNames = bAssignments.departments.map(deptId => allDepartments.find(d => d.id === deptId)?.name).filter((name): name is string => Boolean(name))
+      const aFirstDept = aDeptNames[0]
+      const bFirstDept = bDeptNames[0]
+      aVal = aFirstDept ? aFirstDept.toLowerCase() : 'zzz' // 'zzz' to sort N/A to bottom
+      bVal = bFirstDept ? bFirstDept.toLowerCase() : 'zzz'
     } else if (sortColumn === 'po') {
       const aAssignments = itemAssignments[a.id] || { departments: [], purchaseOrders: [] }
       const bAssignments = itemAssignments[b.id] || { departments: [], purchaseOrders: [] }
-      const aPONumbers = aAssignments.purchaseOrders.map(poId => allPurchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean)
-      const bPONumbers = bAssignments.purchaseOrders.map(poId => allPurchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean)
-      aVal = aPONumbers.length > 0 ? aPONumbers[0].toLowerCase() : 'zzz' // 'zzz' to sort N/A to bottom
-      bVal = bPONumbers.length > 0 ? bPONumbers[0].toLowerCase() : 'zzz'
+      const aPONumbers = aAssignments.purchaseOrders.map(poId => allPurchaseOrders.find(p => p.id === poId)?.po_number).filter((po): po is string => Boolean(po))
+      const bPONumbers = bAssignments.purchaseOrders.map(poId => allPurchaseOrders.find(p => p.id === poId)?.po_number).filter((po): po is string => Boolean(po))
+      const aFirstPO = aPONumbers[0]
+      const bFirstPO = bPONumbers[0]
+      aVal = aFirstPO ? aFirstPO.toLowerCase() : 'zzz' // 'zzz' to sort N/A to bottom
+      bVal = bFirstPO ? bFirstPO.toLowerCase() : 'zzz'
     } else {
       return 0
     }
