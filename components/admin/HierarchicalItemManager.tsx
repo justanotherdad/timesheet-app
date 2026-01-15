@@ -448,15 +448,15 @@ export default function HierarchicalItemManager({
         })
 
         // Remove existing assignments first to avoid duplicates
-        operations.push(
-          ...selectedItems.map(itemId =>
+        for (const itemId of selectedItems) {
+          operations.push(
             supabase
               .from(junctionTables.departments)
               .delete()
               .eq(junctionTables.itemIdColumn, itemId)
               .in('department_id', bulkAssignDepartments)
           )
-        )
+        }
 
         if (deptInserts.length > 0) {
           operations.push(
@@ -467,15 +467,15 @@ export default function HierarchicalItemManager({
 
       // Handle department removals
       if (bulkRemoveDepartments.length > 0) {
-        operations.push(
-          ...selectedItems.map(itemId =>
+        for (const itemId of selectedItems) {
+          operations.push(
             supabase
               .from(junctionTables.departments)
               .delete()
               .eq(junctionTables.itemIdColumn, itemId)
               .in('department_id', bulkRemoveDepartments)
           )
-        )
+        }
       }
 
       // Handle PO assignments
@@ -491,15 +491,15 @@ export default function HierarchicalItemManager({
         })
 
         // Remove existing assignments first to avoid duplicates
-        operations.push(
-          ...selectedItems.map(itemId =>
+        for (const itemId of selectedItems) {
+          operations.push(
             supabase
               .from(junctionTables.purchaseOrders)
               .delete()
               .eq(junctionTables.itemIdColumn, itemId)
               .in('purchase_order_id', bulkAssignPOs)
           )
-        )
+        }
 
         if (poInserts.length > 0) {
           operations.push(
@@ -510,15 +510,15 @@ export default function HierarchicalItemManager({
 
       // Handle PO removals
       if (bulkRemovePOs.length > 0) {
-        operations.push(
-          ...selectedItems.map(itemId =>
+        for (const itemId of selectedItems) {
+          operations.push(
             supabase
               .from(junctionTables.purchaseOrders)
               .delete()
               .eq(junctionTables.itemIdColumn, itemId)
               .in('purchase_order_id', bulkRemovePOs)
           )
-        )
+        }
       }
 
       // Execute all operations
