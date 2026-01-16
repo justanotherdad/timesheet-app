@@ -206,20 +206,10 @@ git push
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Your Supabase anonymous key
 - `NEXT_PUBLIC_SITE_URL` - Your site URL (e.g., https://ctgtimesheet.com)
 
-**Optional Variables (for reCAPTCHA):**
-- `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` - Google reCAPTCHA site key
-- `RECAPTCHA_SECRET_KEY` - Google reCAPTCHA secret key
-
 **Where to Set:**
 - Local testing: Create `.env.local` file in project root
 - Production: Vercel Dashboard → Settings → Environment Variables
 - **Important:** After adding/changing env vars in Vercel, you may need to redeploy
-
-**Setting up reCAPTCHA (optional):**
-1. Get keys from https://www.google.com/recaptcha/admin
-2. Add both keys to Vercel environment variables
-3. Redeploy the application
-4. The reCAPTCHA widget will appear on the login page
 
 ### Database Connection
 - Local dev connects to your Supabase project

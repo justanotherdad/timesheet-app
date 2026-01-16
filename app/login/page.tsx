@@ -1,14 +1,10 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Eye, EyeOff } from 'lucide-react'
-import dynamic from 'next/dynamic'
-
-// Dynamically import ReCAPTCHA to avoid SSR issues
-const ReCAPTCHA = dynamic(() => import('react-google-recaptcha'), { ssr: false })
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -16,52 +12,15 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
-  const recaptchaRef = useRef<{ reset: () => void } | null>(null)
   const router = useRouter()
   const supabase = createClient()
-  
-  // Check if reCAPTCHA is configured (convert to boolean to satisfy TypeScript)
-  const hasRecaptcha = Boolean(process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY)
-
-  const handleRecaptchaChange = (token: string | null) => {
-    setRecaptchaToken(token)
-  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-
-    // Check reCAPTCHA if site key is configured
-    const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
-    if (hasRecaptcha && !recaptchaToken) {
-      setError('Please complete the reCAPTCHA verification')
-      return
-    }
-
     setLoading(true)
 
     try {
-      // If reCAPTCHA is configured, verify token on server
-      if (siteKey && recaptchaToken) {
-        const verifyResponse = await fetch('/api/verify-recaptcha', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: recaptchaToken })
-        })
-
-        const verifyResult = await verifyResponse.json()
-        if (!verifyResult.success) {
-          setError('reCAPTCHA verification failed. Please try again.')
-          if (recaptchaRef.current) {
-            recaptchaRef.current.reset()
-          }
-          setRecaptchaToken(null)
-          setLoading(false)
-          return
-        }
-      }
-
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -73,10 +32,6 @@ export default function LoginPage() {
       router.refresh()
     } catch (error: any) {
       setError(error.message || 'An error occurred')
-      if (recaptchaRef.current) {
-        recaptchaRef.current.reset()
-      }
-      setRecaptchaToken(null)
     } finally {
       setLoading(false)
     }
@@ -139,20 +94,9 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {hasRecaptcha && ReCAPTCHA && process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && (
-            <div className="flex justify-center">
-              <ReCAPTCHA
-                ref={recaptchaRef as any}
-                sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
-                onChange={handleRecaptchaChange}
-                theme="light"
-              />
-            </div>
-          )}
-
           <button
             type="submit"
-            disabled={loading || (hasRecaptcha && !recaptchaToken)}
+            disabled={loading}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-4"
           >
             {loading ? 'Signing in...' : 'Sign In'}
