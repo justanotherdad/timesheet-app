@@ -87,7 +87,34 @@ export default async function NewTimesheetPage() {
   const previousWeekEndingStr = formatDateForInput(previousWeekEnding)
 
   // Check if previous week timesheet exists
-  let previousWeekData = null
+  let previousWeekData: {
+    entries?: Array<{
+      client_project_id?: string
+      po_id?: string
+      task_description: string
+      system_id?: string
+      system_name?: string
+      deliverable_id?: string
+      activity_id?: string
+      mon_hours: number
+      tue_hours: number
+      wed_hours: number
+      thu_hours: number
+      fri_hours: number
+      sat_hours: number
+      sun_hours: number
+    }>
+    unbillable?: Array<{
+      description: 'HOLIDAY' | 'INTERNAL' | 'PTO'
+      mon_hours: number
+      tue_hours: number
+      wed_hours: number
+      thu_hours: number
+      fri_hours: number
+      sat_hours: number
+      sun_hours: number
+    }>
+  } | undefined = undefined
   try {
     const previousTimesheetResult = await withQueryTimeout<{ id: string }>(() =>
       supabase
