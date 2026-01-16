@@ -103,14 +103,14 @@ export default async function NewTimesheetPage() {
       const previousTimesheetId = previousTimesheet.id
       // Fetch previous week's entries and unbillable
       const [prevEntriesResult, prevUnbillableResult] = await Promise.all([
-        withQueryTimeout(() =>
+        withQueryTimeout<Array<any>>(() =>
           supabase
             .from('timesheet_entries')
             .select('*')
             .eq('timesheet_id', previousTimesheetId)
             .order('created_at')
         ),
-        withQueryTimeout(() =>
+        withQueryTimeout<Array<any>>(() =>
           supabase
             .from('timesheet_unbillable')
             .select('*')
@@ -119,9 +119,12 @@ export default async function NewTimesheetPage() {
         )
       ])
 
-      if (Array.isArray(prevEntriesResult.data) || Array.isArray(prevUnbillableResult.data)) {
+      const prevEntries = Array.isArray(prevEntriesResult.data) ? prevEntriesResult.data : []
+      const prevUnbillable = Array.isArray(prevUnbillableResult.data) ? prevUnbillableResult.data : []
+
+      if (prevEntries.length > 0 || prevUnbillable.length > 0) {
         previousWeekData = {
-          entries: (prevEntriesResult.data || []).map((entry: any) => ({
+          entries: prevEntries.map((entry: any) => ({
             client_project_id: entry.client_project_id,
             po_id: entry.po_id,
             task_description: entry.task_description,
@@ -137,7 +140,7 @@ export default async function NewTimesheetPage() {
             sat_hours: entry.sat_hours,
             sun_hours: entry.sun_hours,
           })),
-          unbillable: (prevUnbillableResult.data || []).map((entry: any) => ({
+          unbillable: prevUnbillable.map((entry: any) => ({
             description: entry.description,
             mon_hours: entry.mon_hours,
             tue_hours: entry.tue_hours,
