@@ -20,6 +20,9 @@ export default function LoginPage() {
   const recaptchaRef = useRef<{ reset: () => void } | null>(null)
   const router = useRouter()
   const supabase = createClient()
+  
+  // Check if reCAPTCHA is configured (convert to boolean to satisfy TypeScript)
+  const hasRecaptcha = Boolean(process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY)
 
   const handleRecaptchaChange = (token: string | null) => {
     setRecaptchaToken(token)
@@ -31,7 +34,7 @@ export default function LoginPage() {
 
     // Check reCAPTCHA if site key is configured
     const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
-    if (siteKey && !recaptchaToken) {
+    if (hasRecaptcha && !recaptchaToken) {
       setError('Please complete the reCAPTCHA verification')
       return
     }
@@ -136,7 +139,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && ReCAPTCHA && (
+          {hasRecaptcha && ReCAPTCHA && process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && (
             <div className="flex justify-center">
               <ReCAPTCHA
                 ref={recaptchaRef as any}
@@ -149,7 +152,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading || (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && !recaptchaToken)}
+            disabled={loading || (hasRecaptcha && !recaptchaToken)}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-4"
           >
             {loading ? 'Signing in...' : 'Sign In'}
