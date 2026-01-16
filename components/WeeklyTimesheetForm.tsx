@@ -20,6 +20,34 @@ interface WeeklyTimesheetFormProps {
   userId: string
   timesheetId?: string
   timesheetStatus?: string
+  previousWeekData?: {
+    entries?: Array<{
+      client_project_id?: string
+      po_id?: string
+      task_description: string
+      system_id?: string
+      system_name?: string
+      deliverable_id?: string
+      activity_id?: string
+      mon_hours: number
+      tue_hours: number
+      wed_hours: number
+      thu_hours: number
+      fri_hours: number
+      sat_hours: number
+      sun_hours: number
+    }>
+    unbillable?: Array<{
+      description: 'HOLIDAY' | 'INTERNAL' | 'PTO'
+      mon_hours: number
+      tue_hours: number
+      wed_hours: number
+      thu_hours: number
+      fri_hours: number
+      sat_hours: number
+      sun_hours: number
+    }>
+  }
   initialData?: {
     entries?: Array<{
       id?: string
@@ -102,6 +130,7 @@ export default function WeeklyTimesheetForm({
   const [currentStatus, setCurrentStatus] = useState<string>(timesheetStatus)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingEntry, setEditingEntry] = useState<BillableEntry | null>(null)
+  const [showCopyModal, setShowCopyModal] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
 
   const weekDates = getWeekDates(weekEnding)
@@ -435,19 +464,32 @@ export default function WeeklyTimesheetForm({
 
         {/* Week Information */}
         <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg">
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Week Ending Date
-            </label>
-            <input
-              type="date"
-              value={weekEnding}
-              onChange={(e) => {
-                const newWeekEnding = e.target.value
-                setWeekEnding(newWeekEnding)
-              }}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-            />
+          <div className="mb-3 flex justify-between items-center">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Week Ending Date
+              </label>
+              <input
+                type="date"
+                value={weekEnding}
+                onChange={(e) => {
+                  const newWeekEnding = e.target.value
+                  setWeekEnding(newWeekEnding)
+                }}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+              />
+            </div>
+            {previousWeekData && previousWeekData.entries && previousWeekData.entries.length > 0 && !timesheetId && (
+              <div className="ml-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCopyModal(true)}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2"
+                >
+                  Copy Previous Week
+                </button>
+              </div>
+            )}
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-300">
             <span className="font-semibold">Week Ending:</span> {formatDate(weekDates.end)}
@@ -456,6 +498,63 @@ export default function WeeklyTimesheetForm({
             <span className="font-semibold">Week Starting:</span> {formatDate(weekDates.start)}
           </p>
         </div>
+
+        {/* Copy Previous Week Modal */}
+        {showCopyModal && previousWeekData && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowCopyModal(false)
+              }
+            }}
+          >
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Copy Previous Week Data</h3>
+                <button
+                  onClick={() => setShowCopyModal(false)}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                This will copy all billable and unbillable entries from the previous week. You can edit them after copying.
+              </p>
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowCopyModal(false)}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (previousWeekData.entries) {
+                      setBillableEntries(previousWeekData.entries.map((e: any) => ({
+                        ...e,
+                        id: undefined, // Remove ID so it's treated as new entry
+                      })))
+                    }
+                    if (previousWeekData.unbillable) {
+                      setUnbillableEntries(previousWeekData.unbillable.map((e: any) => ({
+                        ...e,
+                        id: undefined, // Remove ID so it's treated as new entry
+                      })))
+                    }
+                    setShowCopyModal(false)
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  Copy Data
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Billable Time Section */}
         <div className="relative">

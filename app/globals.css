@@ -22,3 +22,10 @@ body {
   background: #111827;
   color: #f3f4f6;
 }
+
+/* Hide header in print */
+@media print {
+  header {
+    display: none !important;
+  }
+}

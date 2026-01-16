@@ -81,6 +81,78 @@ export default async function NewTimesheetPage() {
   const deliverables = (deliverablesResult.data || []) as any[]
   const activities = (activitiesResult.data || []) as any[]
 
+  // Calculate previous week ending date
+  const previousWeekEnding = new Date(weekEnding)
+  previousWeekEnding.setDate(previousWeekEnding.getDate() - 7)
+  const previousWeekEndingStr = formatDateForInput(previousWeekEnding)
+
+  // Check if previous week timesheet exists
+  let previousWeekData = null
+  try {
+    const previousTimesheetResult = await withQueryTimeout(() =>
+      supabase
+        .from('weekly_timesheets')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('week_ending', previousWeekEndingStr)
+        .single()
+    )
+
+    if (previousTimesheetResult.data?.id) {
+      // Fetch previous week's entries and unbillable
+      const [prevEntriesResult, prevUnbillableResult] = await Promise.all([
+        withQueryTimeout(() =>
+          supabase
+            .from('timesheet_entries')
+            .select('*')
+            .eq('timesheet_id', previousTimesheetResult.data.id)
+            .order('created_at')
+        ),
+        withQueryTimeout(() =>
+          supabase
+            .from('timesheet_unbillable')
+            .select('*')
+            .eq('timesheet_id', previousTimesheetResult.data.id)
+            .order('description')
+        )
+      ])
+
+      if (Array.isArray(prevEntriesResult.data) || Array.isArray(prevUnbillableResult.data)) {
+        previousWeekData = {
+          entries: (prevEntriesResult.data || []).map((entry: any) => ({
+            client_project_id: entry.client_project_id,
+            po_id: entry.po_id,
+            task_description: entry.task_description,
+            system_id: entry.system_id,
+            system_name: entry.system_name,
+            deliverable_id: entry.deliverable_id,
+            activity_id: entry.activity_id,
+            mon_hours: entry.mon_hours,
+            tue_hours: entry.tue_hours,
+            wed_hours: entry.wed_hours,
+            thu_hours: entry.thu_hours,
+            fri_hours: entry.fri_hours,
+            sat_hours: entry.sat_hours,
+            sun_hours: entry.sun_hours,
+          })),
+          unbillable: (prevUnbillableResult.data || []).map((entry: any) => ({
+            description: entry.description,
+            mon_hours: entry.mon_hours,
+            tue_hours: entry.tue_hours,
+            wed_hours: entry.wed_hours,
+            thu_hours: entry.thu_hours,
+            fri_hours: entry.fri_hours,
+            sat_hours: entry.sat_hours,
+            sun_hours: entry.sun_hours,
+          }))
+        }
+      }
+    }
+  } catch (error) {
+    // If previous week doesn't exist or error, just continue without it
+    console.log('No previous week data available or error fetching:', error)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="New Weekly Timesheet" showBack backUrl="/dashboard/timesheets" user={user} />
@@ -95,6 +167,7 @@ export default async function NewTimesheetPage() {
               activities={activities}
               defaultWeekEnding={weekEndingStr}
               userId={user.id}
+              previousWeekData={previousWeekData}
             />
           </div>
         </div>

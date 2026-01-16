@@ -183,10 +183,12 @@ export default function WeeklyTimesheetExport({
     `)
     printWindow.document.close()
     
-    // Wait for content to load, then print
+    // Wait for content to load, then trigger print (which will open save dialog if Print to PDF is selected)
     setTimeout(() => {
+      // For better PDF generation, users should select "Save as PDF" in the print dialog
+      // This is the standard browser behavior - cannot force a direct save dialog
       printWindow.print()
-    }, 500)
+    }, 1000)
   }
 
   return (
@@ -195,6 +197,7 @@ export default function WeeklyTimesheetExport({
         <button
           onClick={handleDownload}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
+          title="Click to download PDF. In the print dialog, select 'Save as PDF' as the destination."
         >
           <Download className="h-4 w-4" />
           Download PDF
@@ -207,6 +210,9 @@ export default function WeeklyTimesheetExport({
           Print
         </button>
       </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 print:hidden">
+        Note: The PDF download will open a print dialog. Select "Save as PDF" as the destination to save the file.
+      </p>
 
       <div ref={exportRef} className="bg-white p-8 print:p-0" style={{ fontFamily: 'Arial, sans-serif', fontSize: '10pt', color: '#000' }}>
         {/* Header Logo */}

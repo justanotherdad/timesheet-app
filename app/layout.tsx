@@ -13,8 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Timesheet Management System",
-  description: "Streamline your time tracking and approval workflow",
+  title: "CTG Timesheet Management",
+  description: "CTG Timesheet Management System",
+  icons: {
+    icon: '/favicon.png',
+    apple: '/favicon.png',
+  },
 };
 
 export const dynamic = 'force-dynamic'

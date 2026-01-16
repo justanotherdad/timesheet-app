@@ -76,7 +76,8 @@ export default async function TimesheetDetailPage({
     timesheet.timesheet_signatures = signatures
   }
 
-  // Verify user can view this timesheet
+  // Check if user can approve this timesheet
+  let canApprove = false
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
     // Check if user is manager/supervisor of the timesheet owner
     const ownerResult = await withQueryTimeout(() =>
@@ -90,7 +91,11 @@ export default async function TimesheetDetailPage({
 
     if (owner?.reports_to_id !== user.id) {
       redirect('/dashboard')
+    } else {
+      canApprove = true
     }
+  } else if (['admin', 'super_admin'].includes(user.profile.role)) {
+    canApprove = true
   }
 
   // Get entries (with error handling)
@@ -329,7 +334,7 @@ export default async function TimesheetDetailPage({
               </div>
             )}
 
-            <div className="border-t pt-6 mt-6 flex gap-4">
+            <div className="border-t pt-6 mt-6 flex gap-4 flex-wrap">
               <Link
                 href={`/dashboard/timesheets/${timesheet.id}/export`}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -343,6 +348,28 @@ export default async function TimesheetDetailPage({
                 >
                   Edit
                 </Link>
+              )}
+              {timesheet.status === 'submitted' && canApprove && ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+                <>
+                  <form action={`/dashboard/approvals/${timesheet.id}/approve`} method="post" className="inline">
+                    <button
+                      type="submit"
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      Approve
+                    </button>
+                  </form>
+                  <form action={`/dashboard/approvals/${timesheet.id}/reject`} method="post" className="inline">
+                    <button
+                      type="submit"
+                      className="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors flex items-center gap-2"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Reject
+                    </button>
+                  </form>
+                </>
               )}
             </div>
           </div>

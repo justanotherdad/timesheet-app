@@ -39,7 +39,7 @@ export default function Header({ title, showBack = false, backUrl, user }: Heade
   const canApprove = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
 
   return (
-    <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+    <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm print:hidden">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">

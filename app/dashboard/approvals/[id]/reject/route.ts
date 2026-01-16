@@ -11,10 +11,13 @@ export async function POST(
     const supabase = await createClient()
     const { id } = await params
 
-    // Get the timesheet
+    // Get the timesheet with owner email for notification
     const { data: timesheet, error: fetchError } = await supabase
       .from('weekly_timesheets')
-      .select('*, user_profiles!inner(reports_to_id)')
+      .select(`
+        *,
+        user_profiles!user_id(reports_to_id, email, name)
+      `)
       .eq('id', id)
       .single()
 
@@ -23,8 +26,9 @@ export async function POST(
     }
 
     // Verify the user can reject this timesheet
+    const ownerProfile = timesheet.user_profiles as any
     const canReject = 
-      timesheet.user_profiles.reports_to_id === user.id ||
+      ownerProfile?.reports_to_id === user.id ||
       timesheet.user_id === user.id ||
       ['admin', 'super_admin'].includes(user.profile.role)
 
@@ -54,6 +58,13 @@ export async function POST(
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
+
+    // TODO: Send email notification to employee
+    // For now, the employee will see the rejection status in their timesheet list
+    // To implement email notifications, configure Supabase email templates or use a third-party service
+    // Example: await supabase.functions.invoke('send-rejection-email', {
+    //   body: { email: ownerProfile?.email, timesheetId: id, reason: rejectionReason }
+    // })
 
     return NextResponse.redirect(new URL('/dashboard/approvals', request.url))
   } catch (error: any) {
