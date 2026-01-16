@@ -121,6 +121,7 @@ export default function WeeklyTimesheetForm({
   timesheetId,
   timesheetStatus = 'draft',
   initialData,
+  previousWeekData,
 }: WeeklyTimesheetFormProps) {
   const router = useRouter()
   const supabase = createClient()
