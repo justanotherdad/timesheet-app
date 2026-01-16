@@ -89,7 +89,7 @@ export default async function NewTimesheetPage() {
   // Check if previous week timesheet exists
   let previousWeekData = null
   try {
-    const previousTimesheetResult = await withQueryTimeout(() =>
+    const previousTimesheetResult = await withQueryTimeout<{ id: string }>(() =>
       supabase
         .from('weekly_timesheets')
         .select('id')
@@ -98,21 +98,23 @@ export default async function NewTimesheetPage() {
         .single()
     )
 
-    if (previousTimesheetResult.data?.id) {
+    const previousTimesheet = previousTimesheetResult.data as { id: string } | null
+    if (previousTimesheet?.id) {
+      const previousTimesheetId = previousTimesheet.id
       // Fetch previous week's entries and unbillable
       const [prevEntriesResult, prevUnbillableResult] = await Promise.all([
         withQueryTimeout(() =>
           supabase
             .from('timesheet_entries')
             .select('*')
-            .eq('timesheet_id', previousTimesheetResult.data.id)
+            .eq('timesheet_id', previousTimesheetId)
             .order('created_at')
         ),
         withQueryTimeout(() =>
           supabase
             .from('timesheet_unbillable')
             .select('*')
-            .eq('timesheet_id', previousTimesheetResult.data.id)
+            .eq('timesheet_id', previousTimesheetId)
             .order('description')
         )
       ])
