@@ -1,5 +1,5 @@
 declare module 'react-google-recaptcha' {
-  import { Component } from 'react'
+  import { Component, RefObject } from 'react'
 
   export interface ReCAPTCHAProps {
     sitekey: string
@@ -16,10 +16,13 @@ declare module 'react-google-recaptcha' {
     grecaptcha?: any
   }
 
-  export default class ReCAPTCHA extends Component<ReCAPTCHAProps> {
+  export interface ReCAPTCHAInstance {
     execute: () => void
     executeAsync: () => Promise<string>
     reset: () => void
     getValue: () => string | null
   }
+
+  const ReCAPTCHA: React.ForwardRefExoticComponent<ReCAPTCHAProps & React.RefAttributes<ReCAPTCHAInstance>>
+  export default ReCAPTCHA
 }

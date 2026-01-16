@@ -17,7 +17,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
-  const recaptchaRef = useRef<any>(null)
+  const recaptchaRef = useRef<{ reset: () => void } | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -139,7 +139,7 @@ export default function LoginPage() {
           {process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && ReCAPTCHA && (
             <div className="flex justify-center">
               <ReCAPTCHA
-                ref={recaptchaRef}
+                ref={recaptchaRef as any}
                 sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
                 onChange={handleRecaptchaChange}
                 theme="light"
