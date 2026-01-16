@@ -136,7 +136,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && (
+          {process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && ReCAPTCHA && (
             <div className="flex justify-center">
               <ReCAPTCHA
                 ref={recaptchaRef}
