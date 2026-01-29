@@ -73,20 +73,38 @@ export default async function TimesheetsPage() {
   }
 
   const timesheets = (timesheetsResult.data || []) as any[]
-  
-  // Log for debugging (works in both dev and production - check Vercel logs)
-  if (timesheetsResult.error) {
-    console.error('[Timesheets Page] Error fetching timesheets:', timesheetsResult.error)
+
+  // For admin/super_admin: fetch signatures to show "With" in approval workflow
+  let signaturesByTimesheetId: Record<string, { signer_role: string }[]> = {}
+  if (['admin', 'super_admin'].includes(user.profile.role) && timesheets.length > 0) {
+    const ids = timesheets.map((ts: any) => ts.id)
+    const sigResult = await withQueryTimeout(() =>
+      supabase
+        .from('timesheet_signatures')
+        .select('timesheet_id, signer_role')
+        .in('timesheet_id', ids)
+    )
+    const sigs = (sigResult.data || []) as { timesheet_id: string; signer_role: string }[]
+    sigs.forEach((s) => {
+      if (!signaturesByTimesheetId[s.timesheet_id]) signaturesByTimesheetId[s.timesheet_id] = []
+      signaturesByTimesheetId[s.timesheet_id].push({ signer_role: s.signer_role })
+    })
   }
-  console.log('[Timesheets Page] Query result:', {
-    dataCount: Array.isArray(timesheetsResult.data) ? timesheetsResult.data.length : 0,
-    hasError: !!timesheetsResult.error,
-    errorMessage: timesheetsResult.error?.message,
-    errorCode: timesheetsResult.error?.code,
-    userRole: user.profile.role,
-    userId: user.id,
-    timesheetIds: timesheets.slice(0, 5).map((ts: any) => ts.id) // First 5 IDs for debugging
-  })
+
+  const getWithLabel = (ts: any) => {
+    if (ts.status === 'draft') return '—'
+    if (ts.status === 'rejected') return 'Rejected'
+    if (ts.status === 'approved') return 'Approved'
+    if (ts.status === 'submitted') {
+      const sigs = signaturesByTimesheetId[ts.id] || []
+      const hasSupervisor = sigs.some((s) => s.signer_role === 'supervisor')
+      const hasManager = sigs.some((s) => s.signer_role === 'manager')
+      if (hasManager) return 'Approved'
+      if (hasSupervisor) return 'With Manager'
+      return 'With Supervisor'
+    }
+    return '—'
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -120,12 +138,12 @@ export default async function TimesheetsPage() {
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
           <div className="flex justify-end mb-6">
-            <Link
+            <a
               href="/dashboard/timesheets/new"
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors inline-block"
             >
               New Timesheet
-            </Link>
+            </a>
           </div>
 
           {timesheets && timesheets.length > 0 ? (
@@ -148,6 +166,11 @@ export default async function TimesheetsPage() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Status
                       </th>
+                      {(['admin', 'super_admin'].includes(user.profile.role)) && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          With
+                        </th>
+                      )}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Created
                       </th>
@@ -176,6 +199,11 @@ export default async function TimesheetsPage() {
                             {ts.status}
                           </span>
                         </td>
+                        {(['admin', 'super_admin'].includes(user.profile.role)) && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                            {getWithLabel(ts)}
+                          </td>
+                        )}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                           {new Date(ts.created_at).toLocaleDateString()}
                         </td>
@@ -196,6 +224,16 @@ export default async function TimesheetsPage() {
                                   className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
                                 >
                                   Submit
+                                </button>
+                              </form>
+                            )}
+                            {ts.status === 'submitted' && ts.user_id === user.id && (
+                              <form action={`/dashboard/timesheets/${ts.id}/recall`} method="post" className="inline">
+                                <button
+                                  type="submit"
+                                  className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
+                                >
+                                  Edit
                                 </button>
                               </form>
                             )}
@@ -224,12 +262,12 @@ export default async function TimesheetsPage() {
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
               <FileText className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
               <p className="text-gray-600 dark:text-gray-300 mb-4">No timesheets found.</p>
-              <Link
+              <a
                 href="/dashboard/timesheets/new"
                 className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
               >
                 Create your first timesheet →
-              </Link>
+              </a>
             </div>
           )}
         </div>

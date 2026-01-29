@@ -30,9 +30,13 @@ export default async function NewTimesheetPage() {
       .single()
   )
 
-  // If timesheet exists, redirect to edit page
-  if (existingTimesheetResult.data?.id) {
-    redirect(`/dashboard/timesheets/${existingTimesheetResult.data.id}/edit`)
+  // If timesheet exists for current week: redirect to edit if draft, else to view (so employee isn't sent to list)
+  const existing = existingTimesheetResult.data
+  if (existing?.id) {
+    if (existing.status === 'draft') {
+      redirect(`/dashboard/timesheets/${existing.id}/edit`)
+    }
+    redirect(`/dashboard/timesheets/${existing.id}`)
   }
 
   // Get user's assigned sites and POs (unless admin)
