@@ -211,7 +211,10 @@ export default function WeeklyTimesheetExport({
         </button>
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 print:hidden">
-        Note: The PDF download will open a print dialog. Select "Save as PDF" as the destination to save the file.
+        Note: The PDF download will open a print dialog. Select &quot;Save as PDF&quot; as the destination to save the file.
+      </p>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 print:hidden">
+        To remove the URL and page number from the printed/PDF output, turn off <strong>Headers and footers</strong> in your browser&apos;s print dialog (e.g. in Chrome: click &quot;More settings&quot; and uncheck &quot;Headers and footers&quot;).
       </p>
 
       <div ref={exportRef} className="timesheet-print-content bg-white p-8 print:p-0" style={{ fontFamily: 'Arial, sans-serif', fontSize: '10pt', color: '#000' }}>
