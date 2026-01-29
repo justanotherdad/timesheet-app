@@ -214,7 +214,7 @@ export default function WeeklyTimesheetExport({
         Note: The PDF download will open a print dialog. Select "Save as PDF" as the destination to save the file.
       </p>
 
-      <div ref={exportRef} className="bg-white p-8 print:p-0" style={{ fontFamily: 'Arial, sans-serif', fontSize: '10pt', color: '#000' }}>
+      <div ref={exportRef} className="timesheet-print-content bg-white p-8 print:p-0" style={{ fontFamily: 'Arial, sans-serif', fontSize: '10pt', color: '#000' }}>
         {/* Header Logo */}
         <div className="header-logo mb-5">
           <img 
@@ -370,7 +370,7 @@ export default function WeeklyTimesheetExport({
         </div>
 
         {/* Unbillable Time Section */}
-        <div style={{ marginTop: '15px', color: '#000' }}>
+        <div className="unbillable-section" style={{ marginTop: '15px', color: '#000' }}>
           <h3 style={{ fontSize: '12pt', fontWeight: 'bold', marginBottom: '10px', color: '#000' }}>UNBILLABLE TIME</h3>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>

@@ -114,13 +114,49 @@ export default async function ExportTimesheetPage({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Force landscape and clean print layout when printing from this page */}
+      {/* Match Download PDF layout: landscape, tight spacing so grand total fits on one page */}
       <style
         dangerouslySetInnerHTML={{
           __html: `
             @media print {
               @page { size: landscape; margin: 0.25in; }
-              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                margin: 0;
+                padding: 0;
+              }
+              /* Compact layout to match Download PDF window - avoid grand total overflowing to page 2 */
+              .timesheet-print-content {
+                margin: 0 !important;
+                padding: 0 !important;
+                max-width: 100% !important;
+              }
+              .timesheet-print-content .header-logo {
+                margin-bottom: 10px !important;
+              }
+              .timesheet-print-content .header-logo img {
+                max-height: 120px !important;
+              }
+              .timesheet-print-content .timesheet-info {
+                margin-bottom: 8px !important;
+              }
+              .timesheet-print-content table {
+                margin-bottom: 8px !important;
+              }
+              .timesheet-print-content .signature-section {
+                margin-top: 12px !important;
+              }
+              .timesheet-print-content .grand-total-row {
+                margin-top: 8px !important;
+                padding: 6px 0 !important;
+              }
+              .timesheet-print-content .unbillable-section {
+                margin-top: 8px !important;
+              }
+              .timesheet-print-content h3 {
+                margin-bottom: 6px !important;
+              }
             }
           `,
         }}
