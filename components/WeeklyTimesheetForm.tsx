@@ -406,7 +406,12 @@ export default function WeeklyTimesheetForm({
 
       if (unbillableError) throw unbillableError
 
-      window.location.href = '/dashboard/timesheets'
+      // After Submit for Approval, go to list. After Save Draft, stay on edit page so user can submit without going back.
+      if (shouldSubmit) {
+        window.location.href = '/dashboard/timesheets'
+      } else {
+        window.location.href = `/dashboard/timesheets/${currentTimesheetId}/edit`
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {

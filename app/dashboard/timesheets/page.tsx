@@ -134,9 +134,11 @@ export default async function TimesheetsPage() {
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="bg-gray-50 dark:bg-gray-700">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) ? 'Employee' : ''}
-                      </th>
+                      {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Employee
+                        </th>
+                      )}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Week Ending
                       </th>
