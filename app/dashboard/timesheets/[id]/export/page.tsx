@@ -114,15 +114,27 @@ export default async function ExportTimesheetPage({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Force landscape and clean print layout when printing from this page */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page { size: landscape; margin: 0.25in; }
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+          `,
+        }}
+      />
       <Header 
         title={`Export Timesheet - Week Ending ${formatWeekEnding(timesheet.week_ending)}`}
         showBack={true}
         backUrl={`/dashboard/timesheets/${id}`}
         user={user}
       />
-      <div className="container mx-auto px-4 py-8 print:hidden">
-        <div className="max-w-7xl mx-auto">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      {/* Don't hide content when printing - only header/buttons are hidden via their own print:hidden */}
+      <div className="container mx-auto px-4 py-8 print:p-0 print:max-w-none">
+        <div className="max-w-7xl mx-auto print:max-w-none">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 print:shadow-none print:p-0 print:bg-white">
             <WeeklyTimesheetExport 
               timesheet={timesheet}
               entries={entries || []}
