@@ -71,19 +71,21 @@ export default async function ExportTimesheetPage({
     timesheet.timesheet_signatures = signatures
   }
 
-  // Verify user can view this timesheet
+  // Verify user can view this timesheet (owner's reports_to, supervisor, or manager)
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
-    // Check if user is manager/supervisor of the timesheet owner
     const ownerResult = await withQueryTimeout(() =>
       supabase
         .from('user_profiles')
-        .select('reports_to_id')
+        .select('reports_to_id, supervisor_id, manager_id')
         .eq('id', timesheet.user_id)
         .single()
     )
-    const owner = ownerResult.data as any
-
-    if (owner?.reports_to_id !== user.id) {
+    const owner = ownerResult.data as { reports_to_id?: string; supervisor_id?: string; manager_id?: string } | null
+    const canView =
+      owner?.reports_to_id === user.id ||
+      owner?.supervisor_id === user.id ||
+      owner?.manager_id === user.id
+    if (!canView) {
       redirect('/dashboard')
     }
   }

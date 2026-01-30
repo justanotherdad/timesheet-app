@@ -11,12 +11,12 @@ export async function POST(
     const supabase = await createClient()
     const { id } = await params
 
-    // Get the timesheet with owner email for notification
+    // Get the timesheet with owner email and approval chain for permission check
     const { data: timesheet, error: fetchError } = await supabase
       .from('weekly_timesheets')
       .select(`
         *,
-        user_profiles!user_id(reports_to_id, email, name)
+        user_profiles!user_id(reports_to_id, supervisor_id, manager_id, email, name)
       `)
       .eq('id', id)
       .single()
@@ -25,10 +25,11 @@ export async function POST(
       return NextResponse.json({ error: 'Timesheet not found' }, { status: 404 })
     }
 
-    // Verify the user can reject this timesheet
-    const ownerProfile = timesheet.user_profiles as any
-    const canReject = 
+    const ownerProfile = timesheet.user_profiles as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; email?: string; name?: string }
+    const canReject =
       ownerProfile?.reports_to_id === user.id ||
+      ownerProfile?.supervisor_id === user.id ||
+      ownerProfile?.manager_id === user.id ||
       timesheet.user_id === user.id ||
       ['admin', 'super_admin'].includes(user.profile.role)
 

@@ -76,24 +76,25 @@ export default async function TimesheetDetailPage({
     timesheet.timesheet_signatures = signatures
   }
 
-  // Check if user can approve this timesheet
+  // Check if user can approve this timesheet (owner's reports_to, supervisor, or manager)
   let canApprove = false
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
-    // Check if user is manager/supervisor of the timesheet owner
     const ownerResult = await withQueryTimeout(() =>
       supabase
-      .from('user_profiles')
-      .select('reports_to_id')
-      .eq('id', timesheet.user_id)
-      .single()
+        .from('user_profiles')
+        .select('reports_to_id, supervisor_id, manager_id')
+        .eq('id', timesheet.user_id)
+        .single()
     )
-    const owner = ownerResult.data as any
-
-    if (owner?.reports_to_id !== user.id) {
+    const owner = ownerResult.data as { reports_to_id?: string; supervisor_id?: string; manager_id?: string } | null
+    const isApprover =
+      owner?.reports_to_id === user.id ||
+      owner?.supervisor_id === user.id ||
+      owner?.manager_id === user.id
+    if (!isApprover) {
       redirect('/dashboard')
-    } else {
-      canApprove = true
     }
+    canApprove = true
   } else if (['admin', 'super_admin'].includes(user.profile.role)) {
     canApprove = true
   }

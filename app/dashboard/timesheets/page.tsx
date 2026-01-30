@@ -35,13 +35,12 @@ export default async function TimesheetsPage() {
         .order('created_at', { ascending: false })
     )
   } else if (['supervisor', 'manager'].includes(user.profile.role)) {
-    // Supervisors and managers see timesheets of their direct reports
-    // Get all users that report to this user
+    // Supervisors and managers see timesheets of users who have them as reports_to, supervisor, or manager
     const reportsResult = await withQueryTimeout(() =>
       supabase
         .from('user_profiles')
         .select('id')
-        .eq('reports_to_id', user.id)
+        .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id}`)
     )
     const reports = (reportsResult.data || []) as Array<{ id: string }>
     const reportIds = reports.map(r => r.id)

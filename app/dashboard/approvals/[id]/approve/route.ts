@@ -11,10 +11,10 @@ export async function POST(
     const supabase = await createClient()
     const { id } = await params
 
-    // Get the timesheet
+    // Get the timesheet with owner's approval chain (reports_to, supervisor, manager)
     const { data: timesheet, error: fetchError } = await supabase
       .from('weekly_timesheets')
-      .select('*, user_profiles!inner(reports_to_id)')
+      .select('*, user_profiles!inner(reports_to_id, supervisor_id, manager_id)')
       .eq('id', id)
       .single()
 
@@ -22,9 +22,12 @@ export async function POST(
       return NextResponse.json({ error: 'Timesheet not found' }, { status: 404 })
     }
 
-    // Verify the user can approve this timesheet
-    const canApprove = 
-      timesheet.user_profiles.reports_to_id === user.id ||
+    const profile = timesheet.user_profiles as { reports_to_id?: string; supervisor_id?: string; manager_id?: string }
+    // User can approve if they are the employee's reports_to, supervisor, or manager (or admin)
+    const canApprove =
+      profile?.reports_to_id === user.id ||
+      profile?.supervisor_id === user.id ||
+      profile?.manager_id === user.id ||
       timesheet.user_id === user.id ||
       ['admin', 'super_admin'].includes(user.profile.role)
 

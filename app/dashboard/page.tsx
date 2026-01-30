@@ -33,14 +33,14 @@ export default async function DashboardPage() {
 
   const timesheet = timesheetResult.data as any
 
-  // Get pending approvals if user is manager/supervisor
+  // Get pending approvals: include employees who have this user as reports_to, supervisor, or manager
   let pendingApprovals: any[] = []
   if (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
     const reportsResult = await withQueryTimeout(() =>
       supabase
         .from('user_profiles')
         .select('id')
-        .eq('reports_to_id', user.id)
+        .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id}`)
     )
 
     const reports = (reportsResult.data || []) as Array<{ id: string }>

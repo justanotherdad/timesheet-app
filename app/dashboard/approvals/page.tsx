@@ -14,12 +14,12 @@ export default async function ApprovalsPage() {
 
   const supabase = await createClient()
 
-  // Get all users that report to this user
+  // Get all users who have this user as reports_to, supervisor, or manager (so pending list shows correctly even if Reports To is unset)
   const reportsResult = await withQueryTimeout(() =>
     supabase
       .from('user_profiles')
       .select('id')
-      .eq('reports_to_id', user.id)
+      .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id}`)
   )
 
   const reports = (reportsResult.data || []) as Array<{ id: string }>
