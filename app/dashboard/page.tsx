@@ -40,7 +40,7 @@ export default async function DashboardPage() {
       supabase
         .from('user_profiles')
         .select('id')
-        .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id}`)
+        .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`)
     )
 
     const reports = (reportsResult.data || []) as Array<{ id: string }>

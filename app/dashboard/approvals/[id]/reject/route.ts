@@ -16,7 +16,7 @@ export async function POST(
       .from('weekly_timesheets')
       .select(`
         *,
-        user_profiles!user_id(reports_to_id, supervisor_id, manager_id, email, name)
+        user_profiles!user_id(reports_to_id, supervisor_id, manager_id, final_approver_id, email, name)
       `)
       .eq('id', id)
       .single()
@@ -25,11 +25,12 @@ export async function POST(
       return NextResponse.json({ error: 'Timesheet not found' }, { status: 404 })
     }
 
-    const ownerProfile = timesheet.user_profiles as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; email?: string; name?: string }
+    const ownerProfile = timesheet.user_profiles as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string; email?: string; name?: string }
     const canReject =
       ownerProfile?.reports_to_id === user.id ||
       ownerProfile?.supervisor_id === user.id ||
       ownerProfile?.manager_id === user.id ||
+      ownerProfile?.final_approver_id === user.id ||
       timesheet.user_id === user.id ||
       ['admin', 'super_admin'].includes(user.profile.role)
 

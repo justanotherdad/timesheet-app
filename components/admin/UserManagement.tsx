@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { User, UserRole } from '@/types/database'
-import { Plus, Edit, Trash2, Key, X } from 'lucide-react'
+import { Plus, Edit, Trash2, Key, X, ArrowUpDown, ArrowUp, ArrowDown, Search } from 'lucide-react'
 import { createUser } from '@/app/actions/create-user'
 import { deleteUser } from '@/app/actions/delete-user'
 import { updateUserAssignments } from '@/app/actions/update-user-assignments'
@@ -33,12 +33,13 @@ interface PurchaseOrder {
 interface UserManagementProps {
   users: User[]
   currentUserRole: UserRole
+  currentUserId?: string
   sites: Site[]
   departments: Department[]
   purchaseOrders: PurchaseOrder[]
 }
 
-export default function UserManagement({ users: initialUsers, currentUserRole, sites, departments, purchaseOrders }: UserManagementProps) {
+export default function UserManagement({ users: initialUsers, currentUserRole, currentUserId, sites, departments, purchaseOrders }: UserManagementProps) {
   const [users, setUsers] = useState(initialUsers)
 
   // Sync users state when initialUsers prop changes (e.g., after page reload)
@@ -64,6 +65,15 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
     departments: string[]
     purchaseOrders: string[]
   }>>({})
+
+  // Sort: column key and direction
+  type SortKey = 'name' | 'email' | 'role' | 'sites' | 'departments' | 'purchase_orders' | 'reports_to'
+  const [sortColumn, setSortColumn] = useState<SortKey>('name')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Filter / search
+  const [searchText, setSearchText] = useState('')
+  const [filterRole, setFilterRole] = useState<string>('')
   
   const assignmentsLoadedRef = useRef(false)
   const supabase = createClient()
@@ -81,6 +91,64 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
     if (selectedDepartments.length > 0 && po.department_id && !selectedDepartments.includes(po.department_id)) return false
     return true
   })
+
+  // Filter and sort users for table
+  const filteredAndSortedUsers = (() => {
+    const search = searchText.trim().toLowerCase()
+    const roleFilter = filterRole.trim()
+    let list = users.filter((u: any) => {
+      if (search) {
+        const name = (u.name || '').toLowerCase()
+        const email = (u.email || '').toLowerCase()
+        if (!name.includes(search) && !email.includes(search)) return false
+      }
+      if (roleFilter && u.role !== roleFilter) return false
+      return true
+    })
+    const dir = sortDirection === 'asc' ? 1 : -1
+    list = [...list].sort((a: any, b: any) => {
+      const assignmentsA = userAssignments[a.id] || { sites: [], departments: [], purchaseOrders: [] }
+      const assignmentsB = userAssignments[b.id] || { sites: [], departments: [], purchaseOrders: [] }
+      const sitesA = assignmentsA.sites.map((id: string) => sites.find(s => s.id === id)?.name).filter(Boolean).join(', ')
+      const sitesB = assignmentsB.sites.map((id: string) => sites.find(s => s.id === id)?.name).filter(Boolean).join(', ')
+      const deptsA = assignmentsA.departments.map((id: string) => departments.find(d => d.id === id)?.name).filter(Boolean).join(', ')
+      const deptsB = assignmentsB.departments.map((id: string) => departments.find(d => d.id === id)?.name).filter(Boolean).join(', ')
+      const posA = assignmentsA.purchaseOrders.map((id: string) => purchaseOrders.find(p => p.id === id)?.po_number).filter(Boolean).join(', ')
+      const posB = assignmentsB.purchaseOrders.map((id: string) => purchaseOrders.find(p => p.id === id)?.po_number).filter(Boolean).join(', ')
+      const reportsToA = users.find(u => u.id === a.reports_to_id)?.name || ''
+      const reportsToB = users.find(u => u.id === b.reports_to_id)?.name || ''
+      let va: string | number = ''
+      let vb: string | number = ''
+      switch (sortColumn) {
+        case 'name': va = (a.name || '').toLowerCase(); vb = (b.name || '').toLowerCase(); break
+        case 'email': va = (a.email || '').toLowerCase(); vb = (b.email || '').toLowerCase(); break
+        case 'role': va = (a.role || '').toLowerCase(); vb = (b.role || '').toLowerCase(); break
+        case 'sites': va = sitesA.toLowerCase(); vb = sitesB.toLowerCase(); break
+        case 'departments': va = deptsA.toLowerCase(); vb = deptsB.toLowerCase(); break
+        case 'purchase_orders': va = posA.toLowerCase(); vb = posB.toLowerCase(); break
+        case 'reports_to': va = reportsToA.toLowerCase(); vb = reportsToB.toLowerCase(); break
+        default: return 0
+      }
+      if (va < vb) return -1 * dir
+      if (va > vb) return 1 * dir
+      return 0
+    })
+    return list
+  })()
+
+  const handleSort = (column: SortKey) => {
+    if (sortColumn === column) {
+      setSortDirection(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const SortIcon = ({ column }: { column: SortKey }) => {
+    if (sortColumn !== column) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 opacity-50" />
+    return sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 ml-1" /> : <ArrowDown className="h-3.5 w-3.5 ml-1" />
+  }
 
   // Load all user assignments on component mount and when users change
   useEffect(() => {
@@ -316,8 +384,8 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
         throw new Error(result.error)
       }
 
+      setEditingUser(null)
       setSuccess(`User ${userName} has been deleted successfully.`)
-      // Refresh the page after 1 second to show updated list
       setTimeout(() => {
         window.location.reload()
       }, 1000)
@@ -328,8 +396,29 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
     }
   }
 
+  const handleGeneratePasswordLink = async (email: string) => {
+    setError(null)
+    setSuccess(null)
+    setLoading(true)
+    try {
+      const result = await generatePasswordLink(email)
+      if (result.error) {
+        throw new Error(result.error)
+      }
+      if (result.link) {
+        setInvitationLink(result.link)
+        setSuccess('Password / invite link generated. Copy and send it to the user.')
+        setEditingUser(null)
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate link')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 w-full">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Users</h2>
         <button
@@ -609,21 +698,91 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
         </form>
       )}
 
-      <div className="overflow-x-auto">
+      <div className="flex flex-col md:flex-row gap-4">
+        {/* Left: Filter / Search */}
+        <div className="md:w-56 shrink-0 space-y-4">
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              Filter & Search
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Search</label>
+                <input
+                  type="text"
+                  placeholder="Name or email..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Role</label>
+                <select
+                  value={filterRole}
+                  onChange={(e) => setFilterRole(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">All roles</option>
+                  <option value="employee">Employee</option>
+                  <option value="supervisor">Supervisor</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                  <option value="super_admin">Super Admin</option>
+                </select>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Showing {filteredAndSortedUsers.length} of {users.length} users
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Table */}
+        <div className="flex-1 min-w-0 overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Email</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Role</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sites</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Departments</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Purchase Orders</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Reports To</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button type="button" onClick={() => handleSort('name')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Name <SortIcon column="name" />
+                </button>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button type="button" onClick={() => handleSort('email')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Email <SortIcon column="email" />
+                </button>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button type="button" onClick={() => handleSort('role')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Role <SortIcon column="role" />
+                </button>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button type="button" onClick={() => handleSort('sites')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Sites <SortIcon column="sites" />
+                </button>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button type="button" onClick={() => handleSort('departments')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Departments <SortIcon column="departments" />
+                </button>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button type="button" onClick={() => handleSort('purchase_orders')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Purchase Orders <SortIcon column="purchase_orders" />
+                </button>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button type="button" onClick={() => handleSort('reports_to')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Reports To <SortIcon column="reports_to" />
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {users.map((user: any) => {
+            {filteredAndSortedUsers.map((user: any) => {
               // Get assignments from state (will be loaded on edit click or via useEffect)
               const assignments = userAssignments[user.id] || { sites: [], departments: [], purchaseOrders: [] }
               
@@ -660,11 +819,12 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
             )})}
           </tbody>
         </table>
+        </div>
       </div>
 
       {editingUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit User</h3>
             <form onSubmit={handleUpdateUser} className="space-y-4">
               <div>
@@ -834,7 +994,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
                     ))}
                 </select>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 items-center">
                 <button
                   type="submit"
                   disabled={loading}
@@ -855,6 +1015,26 @@ export default function UserManagement({ users: initialUsers, currentUserRole, s
                 >
                   Cancel
                 </button>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => editingUser && handleGeneratePasswordLink(editingUser.email)}
+                  className="inline-flex items-center gap-1 bg-amber-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-amber-700 disabled:opacity-50"
+                >
+                  <Key className="h-4 w-4" />
+                  Generate Password Link
+                </button>
+                {currentUserId && editingUser.id !== currentUserId && (
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => editingUser && handleDeleteUser(editingUser.id, editingUser.name)}
+                    className="inline-flex items-center gap-1 bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete User
+                  </button>
+                )}
               </div>
             </form>
           </div>

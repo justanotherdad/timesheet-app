@@ -28,11 +28,12 @@ export default async function UsersAdminPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Manage Users" showBack backUrl="/dashboard/admin" user={user} />
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
+      <div className="w-full px-4 py-8 md:px-6 lg:px-8">
+        <div className="w-full max-w-[1920px] mx-auto">
           <UserManagement 
             users={users} 
             currentUserRole={user.profile.role}
+            currentUserId={user.id}
             sites={sites}
             departments={allDepartments}
             purchaseOrders={purchaseOrders}

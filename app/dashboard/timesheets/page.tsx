@@ -23,13 +23,13 @@ export default async function TimesheetsPage() {
   // Get timesheets based on user role
   let timesheetsResult
   if (['admin', 'super_admin'].includes(user.profile.role)) {
-    // Admins see all timesheets
+    // Admins see all timesheets (include approval chain for "With" column)
     timesheetsResult = await withQueryTimeout(() =>
       supabase
         .from('weekly_timesheets')
         .select(`
           *,
-          user_profiles!user_id(name, email)
+          user_profiles!user_id(name, email, manager_id, supervisor_id, final_approver_id)
         `)
         .order('week_ending', { ascending: false })
         .order('created_at', { ascending: false })
@@ -40,7 +40,7 @@ export default async function TimesheetsPage() {
       supabase
         .from('user_profiles')
         .select('id')
-        .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id}`)
+        .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`)
     )
     const reports = (reportsResult.data || []) as Array<{ id: string }>
     const reportIds = reports.map(r => r.id)
@@ -73,20 +73,20 @@ export default async function TimesheetsPage() {
 
   const timesheets = (timesheetsResult.data || []) as any[]
 
-  // For admin/super_admin: fetch signatures to show "With" in approval workflow
-  let signaturesByTimesheetId: Record<string, { signer_role: string }[]> = {}
+  // For admin/super_admin: fetch signatures (signer_id) to show "With" in approval workflow
+  let signaturesByTimesheetId: Record<string, { signer_id: string }[]> = {}
   if (['admin', 'super_admin'].includes(user.profile.role) && timesheets.length > 0) {
     const ids = timesheets.map((ts: any) => ts.id)
     const sigResult = await withQueryTimeout(() =>
       supabase
         .from('timesheet_signatures')
-        .select('timesheet_id, signer_role')
+        .select('timesheet_id, signer_id')
         .in('timesheet_id', ids)
     )
-    const sigs = (sigResult.data || []) as { timesheet_id: string; signer_role: string }[]
+    const sigs = (sigResult.data || []) as { timesheet_id: string; signer_id: string }[]
     sigs.forEach((s) => {
       if (!signaturesByTimesheetId[s.timesheet_id]) signaturesByTimesheetId[s.timesheet_id] = []
-      signaturesByTimesheetId[s.timesheet_id].push({ signer_role: s.signer_role })
+      signaturesByTimesheetId[s.timesheet_id].push({ signer_id: s.signer_id })
     })
   }
 
@@ -95,12 +95,18 @@ export default async function TimesheetsPage() {
     if (ts.status === 'rejected') return 'Rejected'
     if (ts.status === 'approved') return 'Approved'
     if (ts.status === 'submitted') {
-      const sigs = signaturesByTimesheetId[ts.id] || []
-      const hasSupervisor = sigs.some((s) => s.signer_role === 'supervisor')
-      const hasManager = sigs.some((s) => s.signer_role === 'manager')
-      if (hasManager) return 'Approved'
-      if (hasSupervisor) return 'With Manager'
-      return 'With Supervisor'
+      const profile = ts.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
+      const chain: string[] = []
+      if (profile?.manager_id) chain.push(profile.manager_id)
+      if (profile?.supervisor_id && !chain.includes(profile.supervisor_id)) chain.push(profile.supervisor_id)
+      if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
+      const signedIds = (signaturesByTimesheetId[ts.id] || []).map((s) => s.signer_id)
+      const nextId = chain.find((uid) => !signedIds.includes(uid))
+      if (nextId === undefined) return 'Approved'
+      if (nextId === profile?.manager_id) return 'With Manager'
+      if (nextId === profile?.supervisor_id) return 'With Supervisor'
+      if (nextId === profile?.final_approver_id) return 'With Final Approver'
+      return '—'
     }
     return '—'
   }
@@ -190,7 +196,7 @@ export default async function TimesheetsPage() {
                           {formatWeekEnding(ts.week_ending)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                          {new Date(ts.week_starting).toLocaleDateString()}
+                          {formatWeekEnding(ts.week_starting)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ts.status)}`}>
@@ -204,7 +210,7 @@ export default async function TimesheetsPage() {
                           </td>
                         )}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                          {new Date(ts.created_at).toLocaleDateString()}
+                          {formatWeekEnding(ts.created_at)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex gap-2">

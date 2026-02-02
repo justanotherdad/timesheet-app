@@ -273,10 +273,17 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
                   return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
-              <div style="color: #000; text-align: right;">
+              <div style="margin-bottom: 8px; color: #000; text-align: right;">
                 <strong style="color: #000;">Manager Approval by / Date:</strong>
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager')
+                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
+                })()}
+              </div>
+              <div style="color: #000; text-align: right;">
+                <strong style="color: #000;">Final Approver by / Date:</strong>
+                ${(() => {
+                  const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'final_approver')
                   return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>

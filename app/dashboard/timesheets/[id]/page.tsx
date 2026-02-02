@@ -82,15 +82,16 @@ export default async function TimesheetDetailPage({
     const ownerResult = await withQueryTimeout(() =>
       supabase
         .from('user_profiles')
-        .select('reports_to_id, supervisor_id, manager_id')
+        .select('reports_to_id, supervisor_id, manager_id, final_approver_id')
         .eq('id', timesheet.user_id)
         .single()
     )
-    const owner = ownerResult.data as { reports_to_id?: string; supervisor_id?: string; manager_id?: string } | null
+    const owner = ownerResult.data as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string } | null
     const isApprover =
       owner?.reports_to_id === user.id ||
       owner?.supervisor_id === user.id ||
-      owner?.manager_id === user.id
+      owner?.manager_id === user.id ||
+      owner?.final_approver_id === user.id
     if (!isApprover) {
       redirect('/dashboard')
     }

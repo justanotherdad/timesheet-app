@@ -112,7 +112,7 @@ export interface TimesheetSignature {
   id: string
   timesheet_id: string
   signer_id: string
-  signer_role: 'supervisor' | 'manager'
+  signer_role: 'supervisor' | 'manager' | 'final_approver'
   signed_at: string
   signature_data?: string // For storing signature image/data
 }

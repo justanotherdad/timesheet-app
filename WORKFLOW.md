@@ -110,11 +110,16 @@ npm run dev
 
 ### Deploy Changes
 ```bash
+# 1. Stage all changed files
 git add .
-git commit -m "Your change description"
+
+# 2. Commit with a short message describing the change
+git commit -m "Describe your changes here"
+
+# 3. Push to GitHub (triggers Vercel deployment)
 git push
-# Cloudflare auto-deploys in 2-5 minutes
 ```
+After pushing, Vercel will build and deploy; usually 2–3 minutes.
 
 ---
 
