@@ -32,9 +32,11 @@ export default async function RejectTimesheetPage({
     redirect('/dashboard/approvals')
   }
 
-  const profile = timesheet.user_profiles as { name?: string; email?: string }
+  type Row = { user_profiles?: { name?: string; email?: string }; user_id?: string; week_ending?: string; status?: string }
+  const ts = timesheet as Row
+  const profile = ts.user_profiles as { name?: string; email?: string }
   const canReject =
-    (timesheet as any).user_id === user.id ||
+    ts.user_id === user.id ||
     ['admin', 'super_admin'].includes(user.profile.role)
 
   if (!canReject) {
@@ -42,7 +44,7 @@ export default async function RejectTimesheetPage({
       supabase
         .from('user_profiles')
         .select('reports_to_id, supervisor_id, manager_id, final_approver_id')
-        .eq('id', (timesheet as any).user_id)
+        .eq('id', ts.user_id)
         .single()
     )
     const owner = ownerResult.data as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string } | null
@@ -56,7 +58,7 @@ export default async function RejectTimesheetPage({
     }
   }
 
-  if ((timesheet as any).status !== 'submitted') {
+  if (ts.status !== 'submitted') {
     redirect('/dashboard/approvals')
   }
 
@@ -67,7 +69,7 @@ export default async function RejectTimesheetPage({
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Reject timesheet</h2>
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-            {profile?.name} – Week Ending {formatWeekEnding((timesheet as any).week_ending)}
+            {profile?.name} – Week Ending {formatWeekEnding(ts.week_ending ?? '')}
           </p>
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
             Add a note for the employee describing the necessary change. They will see this when they open the timesheet.
