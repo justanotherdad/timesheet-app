@@ -390,7 +390,7 @@ export default async function TimesheetDetailPage({
                     </button>
                   </form>
                   <Link
-                    href={`/dashboard/approvals/${timesheet.id}/reject`}
+                    href={`/dashboard/approvals/${timesheet.id}/reject-form`}
                     className="inline-flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors"
                   >
                     <XCircle className="h-4 w-4" />
