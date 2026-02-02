@@ -330,8 +330,27 @@ export default async function TimesheetDetailPage({
             {timesheet.status === 'rejected' && timesheet.rejection_reason && (
               <div className="border-t pt-6 mt-6">
                 <div className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded">
-                  <p className="font-semibold text-red-900 dark:text-red-300 mb-1">Rejection Reason:</p>
+                  <p className="font-semibold text-red-900 dark:text-red-300 mb-1">Rejection note (required change):</p>
                   <p className="text-red-700 dark:text-red-300">{timesheet.rejection_reason}</p>
+                </div>
+              </div>
+            )}
+
+            {timesheet.status === 'submitted' && timesheet.rejection_reason && canApprove && (
+              <div className="border-t pt-6 mt-6">
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-amber-900 dark:text-amber-300 mb-1">Rejection note (from previous rejection):</p>
+                    <p className="text-amber-800 dark:text-amber-200">{timesheet.rejection_reason}</p>
+                  </div>
+                  <form action={`/dashboard/timesheets/${timesheet.id}/clear-rejection-note`} method="post" className="inline">
+                    <button
+                      type="submit"
+                      className="bg-amber-600 text-white px-3 py-1.5 rounded text-sm font-semibold hover:bg-amber-700"
+                    >
+                      Clear note
+                    </button>
+                  </form>
                 </div>
               </div>
             )}
@@ -351,6 +370,14 @@ export default async function TimesheetDetailPage({
                   Edit
                 </Link>
               )}
+              {timesheet.status === 'rejected' && timesheet.user_id === user.id && (
+                <Link
+                  href={`/dashboard/timesheets/${timesheet.id}/edit`}
+                  className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                >
+                  Edit & resubmit
+                </Link>
+              )}
               {timesheet.status === 'submitted' && canApprove && ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
                 <>
                   <form action={`/dashboard/approvals/${timesheet.id}/approve`} method="post" className="inline">
@@ -362,15 +389,13 @@ export default async function TimesheetDetailPage({
                       Approve
                     </button>
                   </form>
-                  <form action={`/dashboard/approvals/${timesheet.id}/reject`} method="post" className="inline">
-                    <button
-                      type="submit"
-                      className="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors flex items-center gap-2"
-                    >
-                      <XCircle className="h-4 w-4" />
-                      Reject
-                    </button>
-                  </form>
+                  <Link
+                    href={`/dashboard/approvals/${timesheet.id}/reject`}
+                    className="inline-flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    Reject
+                  </Link>
                 </>
               )}
             </div>

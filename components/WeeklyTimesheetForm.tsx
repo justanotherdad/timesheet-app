@@ -266,6 +266,12 @@ export default function WeeklyTimesheetForm({
           updateData.status = 'submitted'
           updateData.submitted_at = new Date().toISOString()
           updateData.employee_signed_at = new Date().toISOString()
+        } else if (shouldSubmit && currentStatus === 'rejected') {
+          // Resubmitting after rejection: clear approval signatures so workflow restarts
+          await supabase.from('timesheet_signatures').delete().eq('timesheet_id', currentTimesheetId)
+          updateData.status = 'submitted'
+          updateData.submitted_at = new Date().toISOString()
+          updateData.employee_signed_at = new Date().toISOString()
         } else if (!shouldSubmit) {
           updateData.status = 'draft'
         }
@@ -734,7 +740,7 @@ export default function WeeklyTimesheetForm({
         <div className="flex gap-4">
           <button
             type="submit"
-            disabled={loading || currentStatus !== 'draft'}
+            disabled={loading || (currentStatus !== 'draft' && currentStatus !== 'rejected')}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Saving...' : timesheetId ? 'Save Draft' : 'Save Timesheet'}

@@ -242,6 +242,14 @@ export default async function TimesheetsPage() {
                                 </button>
                               </form>
                             )}
+                            {ts.status === 'rejected' && ts.user_id === user.id && (
+                              <Link
+                                href={`/dashboard/timesheets/${ts.id}/edit`}
+                                className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
+                              >
+                                Edit
+                              </Link>
+                            )}
                             <Link
                               href={`/dashboard/timesheets/${ts.id}/export`}
                               className="text-purple-600 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300"

@@ -41,7 +41,12 @@ export default async function EditTimesheetPage({
     redirect('/dashboard/timesheets')
   }
 
-  if (timesheet.status !== 'draft' && !['admin', 'super_admin'].includes(user.profile.role)) {
+  // Allow edit when draft, or when rejected (owner can edit and resubmit), or admin
+  const canEdit =
+    timesheet.status === 'draft' ||
+    (timesheet.status === 'rejected' && timesheet.user_id === user.id) ||
+    ['admin', 'super_admin'].includes(user.profile.role)
+  if (!canEdit) {
     redirect('/dashboard/timesheets')
   }
 
