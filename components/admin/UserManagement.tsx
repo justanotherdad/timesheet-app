@@ -78,7 +78,21 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
   const assignmentsLoadedRef = useRef(false)
   const supabase = createClient()
 
-  const canChangeRole = currentUserRole === 'super_admin'
+  // Super_admin can change any role; admin can change any except super_admin
+  const canChangeRole = (target: User) =>
+    currentUserRole === 'super_admin' || (currentUserRole === 'admin' && target.role !== 'super_admin')
+  // Supervisors/managers may only edit users that report to them (and only site, PO, departments)
+  const canEditUser = (target: User) => {
+    if (['admin', 'super_admin'].includes(currentUserRole)) return true
+    return (
+      target.reports_to_id === currentUserId ||
+      target.supervisor_id === currentUserId ||
+      target.manager_id === currentUserId
+    )
+  }
+  const assignmentsOnlyEdit = ['supervisor', 'manager'].includes(currentUserRole)
+  const canAddUser = ['supervisor', 'manager', 'admin', 'super_admin'].includes(currentUserRole)
+  const canDeleteUser = ['admin', 'super_admin'].includes(currentUserRole)
 
   // Filter departments by selected sites
   const filteredDepartments = selectedSites.length > 0
@@ -316,40 +330,45 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
     setSuccess(null)
     setLoading(true)
 
-    const formData = new FormData(e.currentTarget)
-    const name = formData.get('name') as string
-    const role = formData.get('role') as UserRole
-    const reportsToId = formData.get('reports_to_id') as string || null
-    const supervisorId = formData.get('supervisor_id') as string || null
-    const managerId = formData.get('manager_id') as string || null
-    const finalApproverId = formData.get('final_approver_id') as string || null
-
     try {
-      // Update user profile
-      const { error: updateError } = await supabase
-        .from('user_profiles')
-        .update({
-          name,
-          role: canChangeRole ? role : editingUser.role,
-          reports_to_id: reportsToId || null,
-          supervisor_id: supervisorId || null,
-          manager_id: managerId || null,
-          final_approver_id: finalApproverId || null,
-        })
-        .eq('id', editingUser.id)
+      if (assignmentsOnlyEdit) {
+        const assignResult = await updateUserAssignments(
+          editingUser.id,
+          selectedSites,
+          selectedDepartments,
+          selectedPOs
+        )
+        if (assignResult.error) throw new Error(assignResult.error)
+      } else {
+        const formData = new FormData(e.currentTarget)
+        const name = formData.get('name') as string
+        const role = formData.get('role') as UserRole
+        const reportsToId = formData.get('reports_to_id') as string || null
+        const supervisorId = formData.get('supervisor_id') as string || null
+        const managerId = formData.get('manager_id') as string || null
+        const finalApproverId = formData.get('final_approver_id') as string || null
 
-      if (updateError) throw updateError
+        const { error: updateError } = await supabase
+          .from('user_profiles')
+          .update({
+            name,
+            role: canChangeRole(editingUser) ? role : editingUser.role,
+            reports_to_id: reportsToId || null,
+            supervisor_id: supervisorId || null,
+            manager_id: managerId || null,
+            final_approver_id: finalApproverId || null,
+          })
+          .eq('id', editingUser.id)
 
-      // Update multiple assignments
-      const assignResult = await updateUserAssignments(
-        editingUser.id,
-        selectedSites,
-        selectedDepartments,
-        selectedPOs
-      )
+        if (updateError) throw updateError
 
-      if (assignResult.error) {
-        throw new Error(assignResult.error)
+        const assignResult = await updateUserAssignments(
+          editingUser.id,
+          selectedSites,
+          selectedDepartments,
+          selectedPOs
+        )
+        if (assignResult.error) throw new Error(assignResult.error)
       }
 
       setEditingUser(null)
@@ -396,12 +415,12 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
     }
   }
 
-  const handleGeneratePasswordLink = async (email: string) => {
+  const handleGeneratePasswordLink = async (email: string, targetUserId?: string) => {
     setError(null)
     setSuccess(null)
     setLoading(true)
     try {
-      const result = await generatePasswordLink(email)
+      const result = await generatePasswordLink(email, targetUserId)
       if (result.error) {
         throw new Error(result.error)
       }
@@ -421,13 +440,15 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 w-full">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Users</h2>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          Add User
-        </button>
+        {canAddUser && (
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Add User
+          </button>
+        )}
       </div>
 
       {error && (
@@ -520,74 +541,88 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
               required
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
-            <select
-              name="role"
-              required
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-            >
-              <option value="employee">Employee</option>
-              <option value="supervisor">Supervisor</option>
-              <option value="manager">Manager</option>
-              <option value="admin">Admin</option>
-              {canChangeRole && <option value="super_admin">Super Admin</option>}
-            </select>
+            {assignmentsOnlyEdit ? (
+              <input type="hidden" name="role" value="employee" />
+            ) : (
+              <select
+                name="role"
+                required
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+              >
+                <option value="employee">Employee</option>
+                <option value="supervisor">Supervisor</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+                {currentUserRole === 'super_admin' && <option value="super_admin">Super Admin</option>}
+              </select>
+            )}
+            {assignmentsOnlyEdit && (
+              <p className="text-sm text-gray-600 dark:text-gray-400 col-span-full">New user will be added as Employee reporting to you.</p>
+            )}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reports To</label>
-            <select
-              name="reports_to_id"
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-            >
-              <option value="">None</option>
-              {users
-                .filter(u => ['manager', 'supervisor', 'admin', 'super_admin'].includes(u.role))
-                .map(u => (
-                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Supervisor</label>
-            <select
-              name="supervisor_id"
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-            >
-              <option value="">None</option>
-              {users
-                .filter(u => ['supervisor', 'manager', 'admin', 'super_admin'].includes(u.role))
-                .map(u => (
-                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Manager</label>
-            <select
-              name="manager_id"
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-            >
-              <option value="">None</option>
-              {users
-                .filter(u => ['manager', 'admin', 'super_admin'].includes(u.role))
-                .map(u => (
-                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Final Approver</label>
-            <select
-              name="final_approver_id"
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-            >
-              <option value="">None</option>
-              {users
-                .filter(u => ['manager', 'admin', 'super_admin'].includes(u.role))
-                .map(u => (
-                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                ))}
-            </select>
-          </div>
+          {!assignmentsOnlyEdit && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reports To</label>
+                <select
+                  name="reports_to_id"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">None</option>
+                  {users
+                    .filter(u => ['manager', 'supervisor', 'admin', 'super_admin'].includes(u.role))
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Supervisor</label>
+                <select
+                  name="supervisor_id"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">None</option>
+                  {users
+                    .filter(u => ['supervisor', 'manager', 'admin', 'super_admin'].includes(u.role))
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Manager</label>
+                <select
+                  name="manager_id"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">None</option>
+                  {users
+                    .filter(u => ['manager', 'admin', 'super_admin'].includes(u.role))
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Final Approver</label>
+                <select
+                  name="final_approver_id"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">None</option>
+                  {users
+                    .filter(u => ['manager', 'admin', 'super_admin'].includes(u.role))
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                    ))}
+                </select>
+              </div>
+            </>
+          )}
+          {assignmentsOnlyEdit && currentUserId && (
+            <input type="hidden" name="reports_to_id" value={currentUserId} />
+          )}
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sites (Select Multiple)</label>
@@ -790,22 +825,28 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
               const userDepts = assignments.departments.map((deptId: string) => departments.find(d => d.id === deptId)?.name).filter(Boolean)
               const userPOs = assignments.purchaseOrders.map((poId: string) => purchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean)
               
+              const editable = canEditUser(user)
               return (
               <tr key={user.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <button
-                    onClick={async () => {
-                      setEditingUser(user)
-                      const assignments = await loadUserAssignments(user.id)
-                      setSelectedSites(assignments.sites)
-                      setSelectedDepartments(assignments.departments)
-                      setSelectedPOs(assignments.purchaseOrders)
-                      setUserAssignments(prev => ({ ...prev, [user.id]: assignments }))
-                    }}
-                    className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:underline font-medium"
-                  >
-                    {user.name}
-                  </button>
+                  {editable ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setEditingUser(user)
+                        const assignments = await loadUserAssignments(user.id)
+                        setSelectedSites(assignments.sites)
+                        setSelectedDepartments(assignments.departments)
+                        setSelectedPOs(assignments.purchaseOrders)
+                        setUserAssignments(prev => ({ ...prev, [user.id]: assignments }))
+                      }}
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:underline font-medium"
+                    >
+                      {user.name}
+                    </button>
+                  ) : (
+                    <span className="text-gray-900 dark:text-gray-100">{user.name}</span>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{user.email}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">{user.role}</td>
@@ -825,33 +866,39 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
       {editingUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit User</h3>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              {assignmentsOnlyEdit ? `Edit assignments: ${editingUser.name}` : 'Edit User'}
+            </h3>
             <form onSubmit={handleUpdateUser} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
-                <input
-                  type="text"
-                  name="name"
-                  defaultValue={editingUser.name}
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
-                <select
-                  name="role"
-                  defaultValue={editingUser.role}
-                  disabled={!canChangeRole}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-200 text-gray-900 bg-white dark:bg-white"
-                >
-                  <option value="employee">Employee</option>
-                  <option value="supervisor">Supervisor</option>
-                  <option value="manager">Manager</option>
-                  <option value="admin">Admin</option>
-                  {canChangeRole && <option value="super_admin">Super Admin</option>}
-                </select>
-              </div>
+              {!assignmentsOnlyEdit && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+                    <input
+                      type="text"
+                      name="name"
+                      defaultValue={editingUser.name}
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
+                    <select
+                      name="role"
+                      defaultValue={editingUser.role}
+                      disabled={!canChangeRole(editingUser)}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-200 text-gray-900 bg-white dark:bg-white"
+                    >
+                      <option value="employee">Employee</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="manager">Manager</option>
+                      <option value="admin">Admin</option>
+                      {canChangeRole(editingUser) && <option value="super_admin">Super Admin</option>}
+                    </select>
+                  </div>
+                </>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sites (Select Multiple)</label>
                 <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
@@ -934,66 +981,70 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                   )}
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reports To</label>
-                <select
-                  name="reports_to_id"
-                  defaultValue={editingUser.reports_to_id || ''}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-                >
-                  <option value="">None</option>
-                  {users
-                    .filter(u => u.id !== editingUser.id && ['manager', 'supervisor', 'admin', 'super_admin'].includes(u.role))
-                    .map(u => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supervisor</label>
-                <select
-                  name="supervisor_id"
-                  defaultValue={editingUser.supervisor_id || ''}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-                >
-                  <option value="">None</option>
-                  {users
-                    .filter(u => u.id !== editingUser.id && ['supervisor', 'manager', 'admin', 'super_admin'].includes(u.role))
-                    .map(u => (
-                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                    ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Manager</label>
-                <select
-                  name="manager_id"
-                  defaultValue={editingUser.manager_id || ''}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-                >
-                  <option value="">None</option>
-                  {users
-                    .filter(u => u.id !== editingUser.id && ['manager', 'admin', 'super_admin'].includes(u.role))
-                    .map(u => (
-                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                    ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Final Approver</label>
-                <select
-                  name="final_approver_id"
-                  defaultValue={editingUser.final_approver_id || ''}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-                >
-                  <option value="">None</option>
-                  {users
-                    .filter(u => u.id !== editingUser.id && ['manager', 'admin', 'super_admin'].includes(u.role))
-                    .map(u => (
-                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                    ))}
-                </select>
-              </div>
+              {!assignmentsOnlyEdit && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reports To</label>
+                    <select
+                      name="reports_to_id"
+                      defaultValue={editingUser.reports_to_id || ''}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                    >
+                      <option value="">None</option>
+                      {users
+                        .filter(u => u.id !== editingUser.id && ['manager', 'supervisor', 'admin', 'super_admin'].includes(u.role))
+                        .map(u => (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supervisor</label>
+                    <select
+                      name="supervisor_id"
+                      defaultValue={editingUser.supervisor_id || ''}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                    >
+                      <option value="">None</option>
+                      {users
+                        .filter(u => u.id !== editingUser.id && ['supervisor', 'manager', 'admin', 'super_admin'].includes(u.role))
+                        .map(u => (
+                          <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Manager</label>
+                    <select
+                      name="manager_id"
+                      defaultValue={editingUser.manager_id || ''}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                    >
+                      <option value="">None</option>
+                      {users
+                        .filter(u => u.id !== editingUser.id && ['manager', 'admin', 'super_admin'].includes(u.role))
+                        .map(u => (
+                          <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Final Approver</label>
+                    <select
+                      name="final_approver_id"
+                      defaultValue={editingUser.final_approver_id || ''}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                    >
+                      <option value="">None</option>
+                      {users
+                        .filter(u => u.id !== editingUser.id && ['manager', 'admin', 'super_admin'].includes(u.role))
+                        .map(u => (
+                          <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                        ))}
+                    </select>
+                  </div>
+                </>
+              )}
               <div className="flex flex-wrap gap-2 items-center">
                 <button
                   type="submit"
@@ -1018,13 +1069,13 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                 <button
                   type="button"
                   disabled={loading}
-                  onClick={() => editingUser && handleGeneratePasswordLink(editingUser.email)}
+                  onClick={() => editingUser && handleGeneratePasswordLink(editingUser.email, editingUser.id)}
                   className="inline-flex items-center gap-1 bg-amber-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-amber-700 disabled:opacity-50"
                 >
                   <Key className="h-4 w-4" />
                   Generate Password Link
                 </button>
-                {currentUserId && editingUser.id !== currentUserId && (
+                {canDeleteUser && currentUserId && editingUser.id !== currentUserId && (
                   <button
                     type="button"
                     disabled={loading}

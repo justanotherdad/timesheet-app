@@ -22,15 +22,28 @@ export async function createUser(formData: FormData) {
       return { error: 'Unauthorized' }
     }
 
-    // Check if current user is admin
     const { data: currentUserProfile } = await supabase
       .from('user_profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    if (!currentUserProfile || !['admin', 'super_admin'].includes(currentUserProfile.role)) {
-      return { error: 'Unauthorized: Admin access required' }
+    if (!currentUserProfile || !['supervisor', 'manager', 'admin', 'super_admin'].includes(currentUserProfile.role)) {
+      return { error: 'Unauthorized' }
+    }
+
+    // Supervisors and managers may only create employees; role must be employee
+    const effectiveRole = ['supervisor', 'manager'].includes(currentUserProfile.role) ? 'employee' : role
+    const reportsToId = formData.get('reports_to_id') as string || null
+    const supervisorId = formData.get('supervisor_id') as string || null
+    const managerId = formData.get('manager_id') as string || null
+    const finalApproverId = formData.get('final_approver_id') as string || null
+
+    if (['supervisor', 'manager'].includes(currentUserProfile.role)) {
+      // Require reports_to to be current user (they are adding someone who reports to them)
+      if (reportsToId !== user.id) {
+        return { error: 'When adding a user, they must report to you. Set Reports To to yourself.' }
+      }
     }
 
     // Use admin client to create user
@@ -150,13 +163,12 @@ export async function createUser(formData: FormData) {
       }
     }
 
-    // Get site_id, department_id, reports_to_id, supervisor_id, manager_id, and final_approver_id from form data
     const siteId = formData.get('site_id') as string || null
     const departmentId = formData.get('department_id') as string || null
-    const reportsToId = formData.get('reports_to_id') as string || null
-    const supervisorId = formData.get('supervisor_id') as string || null
-    const managerId = formData.get('manager_id') as string || null
-    const finalApproverId = formData.get('final_approver_id') as string || null
+    const resolvedReportsToId = ['supervisor', 'manager'].includes(currentUserProfile.role) ? user.id : reportsToId
+    const resolvedSupervisorId = currentUserProfile.role === 'supervisor' ? user.id : supervisorId
+    const resolvedManagerId = currentUserProfile.role === 'manager' ? user.id : managerId
+    const resolvedFinalApproverId = ['supervisor', 'manager'].includes(currentUserProfile.role) ? null : finalApproverId
 
     // Create or update profile using admin client (bypasses RLS)
     const { error: profileError } = await adminClient
@@ -165,13 +177,13 @@ export async function createUser(formData: FormData) {
         id: userId,
         email,
         name,
-        role,
+        role: effectiveRole,
         site_id: siteId || null,
         department_id: departmentId || null,
-        reports_to_id: reportsToId || null,
-        supervisor_id: supervisorId || null,
-        manager_id: managerId || null,
-        final_approver_id: finalApproverId || null,
+        reports_to_id: resolvedReportsToId || null,
+        supervisor_id: resolvedSupervisorId || null,
+        manager_id: resolvedManagerId || null,
+        final_approver_id: resolvedFinalApproverId || null,
       }, {
         onConflict: 'id'
       })

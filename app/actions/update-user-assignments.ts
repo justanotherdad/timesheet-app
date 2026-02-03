@@ -19,15 +19,30 @@ export async function updateUserAssignments(
       return { error: 'Unauthorized' }
     }
 
-    // Check if current user is admin
     const { data: currentUserProfile } = await supabase
       .from('user_profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    if (!currentUserProfile || !['admin', 'super_admin'].includes(currentUserProfile.role)) {
-      return { error: 'Unauthorized: Admin access required' }
+    if (!currentUserProfile || !['supervisor', 'manager', 'admin', 'super_admin'].includes(currentUserProfile.role)) {
+      return { error: 'Unauthorized' }
+    }
+
+    // Supervisors and managers may only update assignments for users that report to them
+    if (['supervisor', 'manager'].includes(currentUserProfile.role)) {
+      const { data: targetProfile } = await supabase
+        .from('user_profiles')
+        .select('reports_to_id, supervisor_id, manager_id')
+        .eq('id', userId)
+        .single()
+      const reportsToCurrentUser =
+        targetProfile?.reports_to_id === user.id ||
+        targetProfile?.supervisor_id === user.id ||
+        targetProfile?.manager_id === user.id
+      if (!reportsToCurrentUser) {
+        return { error: 'You can only edit site, PO, and department assignments for users who report to you' }
+      }
     }
 
     // Use admin client to update assignments

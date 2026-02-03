@@ -5,7 +5,7 @@ import { withQueryTimeout } from '@/lib/timeout'
 import UserManagement from '@/components/admin/UserManagement'
 
 export default async function UsersAdminPage() {
-  const user = await requireRole(['admin', 'super_admin'])
+  const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
   const supabase = await createClient()
 
   // Fetch users, sites, and departments

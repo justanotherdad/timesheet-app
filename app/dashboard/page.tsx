@@ -116,6 +116,23 @@ export default async function DashboardPage() {
 
           {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
             <Link
+              href="/dashboard/admin/users"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-slate-100 dark:bg-slate-700 p-3 rounded-lg">
+                  <Users className="h-6 w-6 text-slate-600 dark:text-slate-300" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Users</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Add users and edit site, PO, department assignments</p>
+                </div>
+              </div>
+            </Link>
+          )}
+
+          {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+            <Link
               href="/dashboard/approvals"
               className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
             >

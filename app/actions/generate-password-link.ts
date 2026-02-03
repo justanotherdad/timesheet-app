@@ -3,29 +3,45 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export async function generatePasswordLink(email: string) {
+export async function generatePasswordLink(email: string, targetUserId?: string) {
   try {
     if (!email) {
       return { error: 'Email is required' }
     }
 
-    // Get the current user to verify they're an admin
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
     if (authError || !user) {
       return { error: 'Unauthorized' }
     }
 
-    // Check if current user is admin
     const { data: currentUserProfile } = await supabase
       .from('user_profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    if (!currentUserProfile || !['admin', 'super_admin'].includes(currentUserProfile.role)) {
-      return { error: 'Unauthorized: Admin access required' }
+    if (!currentUserProfile || !['supervisor', 'manager', 'admin', 'super_admin'].includes(currentUserProfile.role)) {
+      return { error: 'Unauthorized' }
+    }
+
+    // Supervisors and managers may only send reset links to users that report to them
+    if (['supervisor', 'manager'].includes(currentUserProfile.role)) {
+      if (!targetUserId) {
+        return { error: 'Cannot generate link for this user' }
+      }
+      const { data: targetProfile } = await supabase
+        .from('user_profiles')
+        .select('reports_to_id, supervisor_id, manager_id')
+        .eq('id', targetUserId)
+        .single()
+      const reportsToMe =
+        targetProfile?.reports_to_id === user.id ||
+        targetProfile?.supervisor_id === user.id ||
+        targetProfile?.manager_id === user.id
+      if (!reportsToMe) {
+        return { error: 'You can only send password reset links to users who report to you' }
+      }
     }
 
     // Use admin client to generate link
