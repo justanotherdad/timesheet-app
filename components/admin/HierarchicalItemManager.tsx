@@ -40,14 +40,16 @@ interface HierarchicalItemManagerProps {
   sites: Site[]
   tableName: 'systems' | 'activities' | 'deliverables'
   title: string
-  itemName: string // e.g., "System", "Activity", "Deliverable"
+  itemName: string
+  readOnly?: boolean
 }
 
-export default function HierarchicalItemManager({ 
-  sites: initialSites, 
-  tableName, 
+export default function HierarchicalItemManager({
+  sites: initialSites,
+  tableName,
   title,
-  itemName 
+  itemName,
+  readOnly = false,
 }: HierarchicalItemManagerProps) {
   const [sites] = useState(initialSites)
   const [selectedSite, setSelectedSite] = useState<string>('')
@@ -800,6 +802,7 @@ export default function HierarchicalItemManager({
 
       {selectedSite && (
         <>
+          {!readOnly && (
           {/* CSV Import Section with Department/PO Selection */}
           <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Import CSV</h3>
@@ -887,7 +890,9 @@ export default function HierarchicalItemManager({
               </label>
             </div>
           </div>
+          )}
 
+          {!readOnly && (
           <div className="flex justify-end items-center mb-6">
             <button
               onClick={() => setShowAddForm(!showAddForm)}
@@ -897,8 +902,9 @@ export default function HierarchicalItemManager({
               Add {itemName}
             </button>
           </div>
+          )}
 
-          {showAddForm && (
+          {!readOnly && showAddForm && (
             <form onSubmit={handleAdd} className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-4">
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">Add New {itemName}</h3>
               <div>
@@ -997,7 +1003,7 @@ export default function HierarchicalItemManager({
           )}
 
           {/* Bulk Actions Bar */}
-          {selectedItems.length > 0 && (
+          {!readOnly && selectedItems.length > 0 && (
             <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
@@ -1032,6 +1038,7 @@ export default function HierarchicalItemManager({
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
+                  {!readOnly && (
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-12">
                     <input
                       type="checkbox"
@@ -1040,6 +1047,7 @@ export default function HierarchicalItemManager({
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                   </th>
+                  )}
                   <th 
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
                     onClick={() => handleSort('name')}
@@ -1058,7 +1066,7 @@ export default function HierarchicalItemManager({
                   >
                     PO {getSortIcon('po')}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
+                  {!readOnly && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>}
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1066,9 +1074,10 @@ export default function HierarchicalItemManager({
                   const assignments = itemAssignments[item.id] || { departments: [], purchaseOrders: [] }
                   const deptNames = assignments.departments.map(deptId => allDepartments.find(d => d.id === deptId)?.name).filter(Boolean)
                   const poNumbers = assignments.purchaseOrders.map(poId => allPurchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean)
-                  
+
                   return (
                     <tr key={item.id} className={selectedItems.includes(item.id) ? 'bg-blue-50 dark:bg-blue-900/10' : ''}>
+                      {!readOnly && (
                       <td className="px-4 py-4 whitespace-nowrap">
                         <input
                           type="checkbox"
@@ -1077,6 +1086,7 @@ export default function HierarchicalItemManager({
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                       </td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.name}</td>
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                         {deptNames.length > 0 ? deptNames.join(', ') : 'N/A'}
@@ -1084,6 +1094,7 @@ export default function HierarchicalItemManager({
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                         {poNumbers.length > 0 ? poNumbers.join(', ') : 'N/A'}
                       </td>
+                      {!readOnly && (
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button
                           onClick={async () => {
@@ -1091,7 +1102,6 @@ export default function HierarchicalItemManager({
                             if (item.site_id !== selectedSite) {
                               await handleSiteChange(item.site_id)
                             }
-                            // Load assignments from junction tables
                             const itemAssignments = await loadItemAssignments(item.id)
                             setSelectedDepartments(itemAssignments.departments)
                             setSelectedPOs(itemAssignments.purchaseOrders)
@@ -1107,6 +1117,7 @@ export default function HierarchicalItemManager({
                           <Trash2 className="h-4 w-4 inline" />
                         </button>
                       </td>
+                      )}
                     </tr>
                   )
                 })}

@@ -133,7 +133,7 @@ export default async function DashboardPage() {
             </Link>
           )}
 
-          {['manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+          {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
             <>
               <Link
                 href="/dashboard/admin/organization"
@@ -191,6 +191,8 @@ export default async function DashboardPage() {
                   </div>
                 </div>
               </Link>
+              {['manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+              <>
               <Link
                 href="/dashboard/admin/data-view"
                 className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
@@ -219,6 +221,8 @@ export default async function DashboardPage() {
                   </div>
                 </div>
               </Link>
+              </>
+              )}
             </>
           )}
         </div>

@@ -28,7 +28,7 @@ export async function createUser(formData: FormData) {
       .eq('id', user.id)
       .single()
 
-    if (!currentUserProfile || !['supervisor', 'manager', 'admin', 'super_admin'].includes(currentUserProfile.role)) {
+    if (!currentUserProfile || !['manager', 'admin', 'super_admin'].includes(currentUserProfile.role)) {
       return { error: 'Unauthorized' }
     }
 
@@ -38,12 +38,7 @@ export async function createUser(formData: FormData) {
     const finalApproverId = formData.get('final_approver_id') as string || null
 
     let effectiveRole: string
-    if (currentUserProfile.role === 'supervisor') {
-      effectiveRole = 'employee'
-      if (reportsToId !== user.id) {
-        return { error: 'When adding a user, they must report to you. Set Reports To to yourself.' }
-      }
-    } else if (currentUserProfile.role === 'manager') {
+    if (currentUserProfile.role === 'manager') {
       if (!['employee', 'supervisor', 'manager'].includes(role)) {
         return { error: 'You can only create users with role Employee, Supervisor, or Manager.' }
       }
@@ -179,10 +174,10 @@ export async function createUser(formData: FormData) {
 
     const siteId = formData.get('site_id') as string || null
     const departmentId = formData.get('department_id') as string || null
-    const resolvedReportsToId = ['supervisor', 'manager'].includes(currentUserProfile.role) ? user.id : reportsToId
-    const resolvedSupervisorId = currentUserProfile.role === 'supervisor' ? user.id : supervisorId
+    const resolvedReportsToId = currentUserProfile.role === 'manager' ? user.id : reportsToId
+    const resolvedSupervisorId = currentUserProfile.role === 'manager' ? user.id : supervisorId
     const resolvedManagerId = currentUserProfile.role === 'manager' ? user.id : managerId
-    const resolvedFinalApproverId = ['supervisor', 'manager'].includes(currentUserProfile.role) ? null : finalApproverId
+    const resolvedFinalApproverId = currentUserProfile.role === 'manager' ? null : finalApproverId
 
     // Create or update profile using admin client (bypasses RLS)
     const { error: profileError } = await adminClient

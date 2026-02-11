@@ -21,12 +21,12 @@ export async function generatePasswordLink(email: string, targetUserId?: string)
       .eq('id', user.id)
       .single()
 
-    if (!currentUserProfile || !['supervisor', 'manager', 'admin', 'super_admin'].includes(currentUserProfile.role)) {
+    if (!currentUserProfile || !['manager', 'admin', 'super_admin'].includes(currentUserProfile.role)) {
       return { error: 'Unauthorized' }
     }
 
-    // Supervisors and managers may only send reset links to users that report to them
-    if (['supervisor', 'manager'].includes(currentUserProfile.role)) {
+    // Managers may only send reset links to users that report to them
+    if (currentUserProfile.role === 'manager') {
       if (!targetUserId) {
         return { error: 'Cannot generate link for this user' }
       }

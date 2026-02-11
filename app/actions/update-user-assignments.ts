@@ -25,12 +25,12 @@ export async function updateUserAssignments(
       .eq('id', user.id)
       .single()
 
-    if (!currentUserProfile || !['supervisor', 'manager', 'admin', 'super_admin'].includes(currentUserProfile.role)) {
+    if (!currentUserProfile || !['manager', 'admin', 'super_admin'].includes(currentUserProfile.role)) {
       return { error: 'Unauthorized' }
     }
 
-    // Supervisors and managers may only update assignments for users that report to them
-    if (['supervisor', 'manager'].includes(currentUserProfile.role)) {
+    // Managers may only update assignments for users that report to them
+    if (currentUserProfile.role === 'manager') {
       const { data: targetProfile } = await supabase
         .from('user_profiles')
         .select('reports_to_id, supervisor_id, manager_id')

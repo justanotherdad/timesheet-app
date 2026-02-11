@@ -101,7 +101,8 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
     )
   }
   const assignmentsOnlyEdit = currentUserRole === 'supervisor'
-  const canAddUser = ['supervisor', 'manager', 'admin', 'super_admin'].includes(currentUserRole)
+  const viewOnlyUser = currentUserRole === 'supervisor'
+  const canAddUser = ['manager', 'admin', 'super_admin'].includes(currentUserRole)
   const canDeleteUser = ['admin', 'super_admin'].includes(currentUserRole)
 
   // Filter departments by selected sites
@@ -875,8 +876,43 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              {assignmentsOnlyEdit ? `Edit assignments: ${editingUser.name}` : 'Edit User'}
+              {viewOnlyUser ? 'View User' : assignmentsOnlyEdit ? `Edit assignments: ${editingUser.name}` : 'Edit User'}
             </h3>
+            {viewOnlyUser ? (
+              <div className="space-y-4">
+                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Name:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.name}</span></div>
+                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Email:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.email}</span></div>
+                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Role:</span> <span className="text-gray-900 dark:text-gray-100 capitalize">{editingUser.role}</span></div>
+                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Reports To:</span> <span className="text-gray-900 dark:text-gray-100">{users.find(u => u.id === editingUser.reports_to_id)?.name || 'N/A'}</span></div>
+                <div>
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Sites:</span>
+                  <span className="text-gray-900 dark:text-gray-100">
+                    {(userAssignments[editingUser.id]?.sites || []).map((siteId: string) => sites.find(s => s.id === siteId)?.name).filter(Boolean).join(', ') || 'N/A'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Departments:</span>
+                  <span className="text-gray-900 dark:text-gray-100">
+                    {(userAssignments[editingUser.id]?.departments || []).map((deptId: string) => departments.find(d => d.id === deptId)?.name).filter(Boolean).join(', ') || 'N/A'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Purchase Orders:</span>
+                  <span className="text-gray-900 dark:text-gray-100">
+                    {(userAssignments[editingUser.id]?.purchaseOrders || []).map((poId: string) => purchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean).join(', ') || 'N/A'}
+                  </span>
+                </div>
+                <div className="pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUser(null)}
+                    className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
             <form onSubmit={handleUpdateUser} className="space-y-4">
               {!assignmentsOnlyEdit && (
                 <>
@@ -1094,6 +1130,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                 )}
               </div>
             </form>
+            )}
           </div>
         </div>
       )}

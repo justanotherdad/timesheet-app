@@ -28,14 +28,16 @@ interface ConsolidatedManagerProps {
   sites: Site[]
   departments: Department[]
   purchaseOrders: PurchaseOrder[]
+  readOnly?: boolean
 }
 
 type TabType = 'sites' | 'departments' | 'purchase-orders'
 
-export default function ConsolidatedManager({ 
-  sites: initialSites, 
+export default function ConsolidatedManager({
+  sites: initialSites,
   departments: initialDepartments,
-  purchaseOrders: initialPOs 
+  purchaseOrders: initialPOs,
+  readOnly = false,
 }: ConsolidatedManagerProps) {
   const [sites, setSites] = useState(initialSites)
   const [departments, setDepartments] = useState(initialDepartments)
@@ -340,6 +342,7 @@ export default function ConsolidatedManager({
       {/* Sites Tab */}
       {activeTab === 'sites' && (
         <>
+          {!readOnly && (
           <div className="flex justify-between items-center mb-4">
             <div></div>
             <button
@@ -350,8 +353,9 @@ export default function ConsolidatedManager({
               Add Site
             </button>
           </div>
+          )}
 
-          {showAddForm && (
+          {!readOnly && showAddForm && (
             <form onSubmit={handleAddSite} className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-4">
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">Add New Site</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -411,12 +415,16 @@ export default function ConsolidatedManager({
                       {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][site.week_starting_day || 1]}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button onClick={() => setEditingItem({ type: 'site', ...site })} className="text-blue-600 hover:text-blue-900 mr-4">
-                        <Edit className="h-4 w-4 inline" />
-                      </button>
-                      <button onClick={() => handleDelete('sites', site.id)} className="text-red-600 hover:text-red-900">
-                        <Trash2 className="h-4 w-4 inline" />
-                      </button>
+                      {!readOnly && (
+                        <>
+                          <button onClick={() => setEditingItem({ type: 'site', ...site })} className="text-blue-600 hover:text-blue-900 mr-4">
+                            <Edit className="h-4 w-4 inline" />
+                          </button>
+                          <button onClick={() => handleDelete('sites', site.id)} className="text-red-600 hover:text-red-900">
+                            <Trash2 className="h-4 w-4 inline" />
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -451,6 +459,7 @@ export default function ConsolidatedManager({
 
           {selectedSite && (
             <>
+              {!readOnly && (
               <div className="flex justify-between items-center mb-4">
                 <div></div>
                 <button
@@ -461,8 +470,9 @@ export default function ConsolidatedManager({
                   Add Department
                 </button>
               </div>
+              )}
 
-              {showAddForm && (
+              {!readOnly && showAddForm && (
                 <form onSubmit={handleAddDepartment} className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-4">
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Add New Department</h3>
                   <input
@@ -501,12 +511,16 @@ export default function ConsolidatedManager({
                       <tr key={dept.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{dept.name}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button onClick={() => setEditingItem({ type: 'department', ...dept })} className="text-blue-600 hover:text-blue-900 mr-4">
-                            <Edit className="h-4 w-4 inline" />
-                          </button>
-                          <button onClick={() => handleDelete('departments', dept.id)} className="text-red-600 hover:text-red-900">
-                            <Trash2 className="h-4 w-4 inline" />
-                          </button>
+                          {!readOnly && (
+                            <>
+                              <button onClick={() => setEditingItem({ type: 'department', ...dept })} className="text-blue-600 hover:text-blue-900 mr-4">
+                                <Edit className="h-4 w-4 inline" />
+                              </button>
+                              <button onClick={() => handleDelete('departments', dept.id)} className="text-red-600 hover:text-red-900">
+                                <Trash2 className="h-4 w-4 inline" />
+                              </button>
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -565,6 +579,7 @@ export default function ConsolidatedManager({
 
           {selectedSite && (
             <>
+              {!readOnly && (
               <div className="flex justify-between items-center mb-4">
                 <div></div>
                 <button
@@ -575,8 +590,9 @@ export default function ConsolidatedManager({
                   Add Purchase Order
                 </button>
               </div>
+              )}
 
-              {showAddForm && (
+              {!readOnly && showAddForm && (
                 <form onSubmit={handleAddPO} className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-4">
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Add New Purchase Order</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -655,12 +671,16 @@ export default function ConsolidatedManager({
                           <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{po.description || 'N/A'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{dept?.name || 'N/A'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button onClick={() => setEditingItem({ type: 'po', ...po })} className="text-blue-600 hover:text-blue-900 mr-4">
-                              <Edit className="h-4 w-4 inline" />
-                            </button>
-                            <button onClick={() => handleDelete('purchase_orders', po.id)} className="text-red-600 hover:text-red-900">
-                              <Trash2 className="h-4 w-4 inline" />
-                            </button>
+                            {!readOnly && (
+                              <>
+                                <button onClick={() => setEditingItem({ type: 'po', ...po })} className="text-blue-600 hover:text-blue-900 mr-4">
+                                  <Edit className="h-4 w-4 inline" />
+                                </button>
+                                <button onClick={() => handleDelete('purchase_orders', po.id)} className="text-red-600 hover:text-red-900">
+                                  <Trash2 className="h-4 w-4 inline" />
+                                </button>
+                              </>
+                            )}
                           </td>
                         </tr>
                       )
