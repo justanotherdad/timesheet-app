@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { Calendar, FileText, Users, Settings, LogOut } from 'lucide-react'
+import { Calendar, FileText, Users, Settings, Building, Activity, Package } from 'lucide-react'
 import { formatWeekEnding, getWeekEnding, formatDateForInput } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
@@ -97,35 +97,18 @@ export default async function DashboardPage() {
             </div>
           </Link>
 
-          {['admin', 'super_admin'].includes(user.profile.role) && (
-            <Link
-              href="/dashboard/admin"
-              className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-center gap-4">
-                <div className="bg-purple-100 p-3 rounded-lg">
-                  <Settings className="h-6 w-6 text-purple-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Admin Panel</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Manage system settings</p>
-                </div>
-              </div>
-            </Link>
-          )}
-
-          {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+          {['manager', 'admin', 'super_admin'].includes(user.profile.role) && (
             <Link
               href="/dashboard/admin/users"
               className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
             >
               <div className="flex items-center gap-4">
-                <div className="bg-slate-100 dark:bg-slate-700 p-3 rounded-lg">
-                  <Users className="h-6 w-6 text-slate-600 dark:text-slate-300" />
+                <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg">
+                  <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Users</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Add users and edit site, PO, department assignments</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Add, edit, and manage user accounts</p>
                 </div>
               </div>
             </Link>
@@ -148,6 +131,95 @@ export default async function DashboardPage() {
                 </div>
               </div>
             </Link>
+          )}
+
+          {['manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+            <>
+              <Link
+                href="/dashboard/admin/organization"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-lg">
+                    <Building className="h-6 w-6 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Organization</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Sites, departments, purchase orders</p>
+                  </div>
+                </div>
+              </Link>
+              <Link
+                href="/dashboard/admin/systems"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="bg-orange-100 dark:bg-orange-900/30 p-3 rounded-lg">
+                    <Activity className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Systems</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Add and edit system options</p>
+                  </div>
+                </div>
+              </Link>
+              <Link
+                href="/dashboard/admin/activities"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="bg-pink-100 dark:bg-pink-900/30 p-3 rounded-lg">
+                    <Activity className="h-6 w-6 text-pink-600 dark:text-pink-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Activities</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Add and edit activity options</p>
+                  </div>
+                </div>
+              </Link>
+              <Link
+                href="/dashboard/admin/deliverables"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="bg-indigo-100 dark:bg-indigo-900/30 p-3 rounded-lg">
+                    <Package className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Deliverables</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Add and edit deliverable options</p>
+                  </div>
+                </div>
+              </Link>
+              <Link
+                href="/dashboard/admin/data-view"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="bg-teal-100 dark:bg-teal-900/30 p-3 rounded-lg">
+                    <FileText className="h-6 w-6 text-teal-600 dark:text-teal-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">View Timesheet Data</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">View and filter all timesheet entries</p>
+                  </div>
+                </div>
+              </Link>
+              <Link
+                href="/dashboard/admin/export"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="bg-cyan-100 dark:bg-cyan-900/30 p-3 rounded-lg">
+                    <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Export Timesheets</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Export timesheets for any week</p>
+                  </div>
+                </div>
+              </Link>
+            </>
           )}
         </div>
 

@@ -5,7 +5,7 @@ import Header from '@/components/Header'
 import { withQueryTimeout } from '@/lib/timeout'
 
 export default async function SitesAdminPage() {
-  const user = await requireRole(['admin', 'super_admin'])
+  const user = await requireRole(['manager', 'admin', 'super_admin'])
   const supabase = await createClient()
 
   const sitesResult = await withQueryTimeout(() =>
@@ -19,7 +19,7 @@ export default async function SitesAdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Header title="Manage Sites" showBack backUrl="/dashboard/admin" user={user} />
+      <Header title="Manage Sites" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
           <div className="mb-6">

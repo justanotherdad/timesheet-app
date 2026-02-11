@@ -151,18 +151,18 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
 
     // Simple CSV parsing (can be enhanced for Excel)
     const text = await file.text()
-    const lines = text.split('\n').filter(line => line.trim())
-    const headers = lines[0].split(',').map(h => h.trim())
+    const lines = text.split(/\r?\n/).filter(line => line.trim())
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\r$/, ''))
     
     setLoading(true)
     setError(null)
 
     try {
+      let nameIdx = headers.findIndex((h: string) => h.includes('name') || h.includes('department'))
+      if (nameIdx === -1) nameIdx = 0
+
       const deptsToAdd = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim())
-        const nameIdx = headers.findIndex(h => h.toLowerCase().includes('name') || h.toLowerCase().includes('department'))
-        const codeIdx = headers.findIndex(h => h.toLowerCase().includes('code'))
-        
+        const values = line.split(',').map(v => v.trim().replace(/\r$/, ''))
         return {
           site_id: selectedSite,
           name: values[nameIdx] || '',
@@ -209,7 +209,11 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Departments</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2">
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            CSV format: .csv file, first row = header with a column named &quot;Name&quot; or &quot;Department&quot;. One department per row.
+          </p>
+          <div className="flex gap-2">
           <label className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2 cursor-pointer">
             <Upload className="h-4 w-4" />
             Import CSV
@@ -219,7 +223,7 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
               onChange={handleExcelImport}
               className="hidden"
             />
-          </label>
+            </label>
           {departments.length > 0 && (
             <button
               onClick={handleExcelExport}
@@ -229,6 +233,7 @@ export default function SiteDepartmentManager({ sites: initialSites }: SiteDepar
               Export CSV
             </button>
           )}
+          </div>
         </div>
       </div>
 

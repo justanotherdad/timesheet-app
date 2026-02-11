@@ -5,7 +5,7 @@ import { withQueryTimeout } from '@/lib/timeout'
 import PurchaseOrderManager from '@/components/admin/PurchaseOrderManager'
 
 export default async function PurchaseOrdersAdminPage() {
-  const user = await requireRole(['admin', 'super_admin'])
+  const user = await requireRole(['manager', 'admin', 'super_admin'])
   const supabase = await createClient()
 
   const sitesResult = await withQueryTimeout(() =>
@@ -19,7 +19,7 @@ export default async function PurchaseOrdersAdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Header title="Manage Purchase Orders" showBack backUrl="/dashboard/admin" user={user} />
+      <Header title="Manage Purchase Orders" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
           <PurchaseOrderManager sites={sites} />

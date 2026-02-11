@@ -5,7 +5,7 @@ import Link from 'next/link'
 import AdminExport from '@/components/admin/AdminExport'
 
 export default async function AdminExportPage() {
-  await requireRole(['admin', 'super_admin'])
+  await requireRole(['manager', 'admin', 'super_admin'])
   const supabase = await createClient()
 
   // Get timesheets with user profiles
@@ -98,7 +98,7 @@ export default async function AdminExportPage() {
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center gap-4 mb-6">
             <Link
-              href="/dashboard/admin"
+              href="/dashboard"
               className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
             >
               ← Back to Admin

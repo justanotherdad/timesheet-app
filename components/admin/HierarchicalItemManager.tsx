@@ -666,30 +666,36 @@ export default function HierarchicalItemManager({
       return
     }
 
-    // Simple CSV parsing (can be enhanced for Excel)
     const text = await file.text()
-    const lines = text.split('\n').filter(line => line.trim())
+    const lines = text.split(/\r?\n/).filter(line => line.trim())
     if (lines.length < 2) {
       setError('CSV file must have at least a header row and one data row')
       return
     }
     
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\r$/, ''))
     setLoading(true)
     setError(null)
     setSuccess(null)
 
     try {
+      let nameIdx = headers.findIndex((h: string) => h.includes('name'))
+      if (nameIdx === -1 && tableName === 'deliverables') nameIdx = headers.findIndex((h: string) => h.includes('deliverable'))
+      if (nameIdx === -1 && tableName === 'activities') nameIdx = headers.findIndex((h: string) => h.includes('activity'))
+      if (nameIdx === -1 && tableName === 'systems') nameIdx = headers.findIndex((h: string) => h.includes('system'))
+      if (nameIdx === -1) nameIdx = headers.findIndex((h: string) => h.includes('item') || h.includes('title'))
+      if (nameIdx === -1) nameIdx = 0
+
       const itemsToAdd = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim())
-        const nameIdx = headers.findIndex(h => h.includes('name'))
-        const descriptionIdx = tableName === 'systems' 
-          ? headers.findIndex(h => h.includes('description') || h.includes('desc'))
+        const rawValues = line.split(',').map(v => v.trim().replace(/\r$/, ''))
+        const values = rawValues
+        const descriptionIdx = tableName === 'systems'
+          ? headers.findIndex((h: string) => h.includes('description') || h.includes('desc'))
           : -1
-        
+
         const insertData: any = {
           site_id: selectedSite,
-          name: values[nameIdx] || '',
+          name: (values[nameIdx] || '').trim(),
         }
         
         if (tableName === 'systems' && descriptionIdx >= 0) {
@@ -797,9 +803,13 @@ export default function HierarchicalItemManager({
           {/* CSV Import Section with Department/PO Selection */}
           <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Import CSV</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Select departments and/or purchase orders below to assign them to all imported items. This is optional - you can import without assignments and edit items later.
-            </p>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-4 space-y-2">
+              <p><strong>CSV format:</strong> Use a .csv file (filename does not matter). First row must be a header row with column names. One required column for the {itemName.toLowerCase()} name—use a header that includes &quot;name&quot;, &quot;{itemName.toLowerCase()}&quot;, &quot;item&quot;, or &quot;title&quot; (e.g. <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Name</code> or <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Deliverable</code>). Each following row is one {itemName.toLowerCase()}. Empty rows are skipped.</p>
+              {tableName === 'systems' && (
+                <p>Optional column: <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">description</code> or <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">desc</code>.</p>
+              )}
+              <p className="pt-2">Select departments and/or purchase orders below to assign them to all imported items. This is optional—you can import without assignments and edit items later.</p>
+            </div>
             
             {/* Multiple Departments Selection for Import */}
             <div className="mb-4">

@@ -5,7 +5,7 @@ import { withQueryTimeout } from '@/lib/timeout'
 import ConsolidatedManager from '@/components/admin/ConsolidatedManager'
 
 export default async function OrganizationAdminPage() {
-  const user = await requireRole(['admin', 'super_admin'])
+  const user = await requireRole(['manager', 'admin', 'super_admin'])
   const supabase = await createClient()
 
   // Fetch all data
@@ -21,7 +21,7 @@ export default async function OrganizationAdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Header title="Manage Organization" showBack backUrl="/dashboard/admin" user={user} />
+      <Header title="Manage Organization" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
           <ConsolidatedManager 

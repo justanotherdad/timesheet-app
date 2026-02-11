@@ -5,7 +5,7 @@ import { withQueryTimeout } from '@/lib/timeout'
 import UserManagement from '@/components/admin/UserManagement'
 
 export default async function UsersAdminPage() {
-  const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
+  const user = await requireRole(['manager', 'admin', 'super_admin'])
   const supabase = await createClient()
 
   // Fetch users, sites, and departments
@@ -27,7 +27,7 @@ export default async function UsersAdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Header title="Manage Users" showBack backUrl="/dashboard/admin" user={user} />
+      <Header title="Manage Users" showBack backUrl="/dashboard" user={user} />
       <div className="w-full px-4 py-8 md:px-6 lg:px-8">
         <div className="w-full max-w-[1920px] mx-auto">
           <UserManagement 

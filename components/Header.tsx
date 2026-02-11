@@ -129,15 +129,6 @@ export default function Header({ title, showBack = false, backUrl, user }: Heade
                           Pending Approvals
                         </Link>
                       )}
-                      {isAdmin && (
-                        <Link
-                          href="/dashboard/admin"
-                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                          onClick={() => setMenuOpen(false)}
-                        >
-                          Admin Panel
-                        </Link>
-                      )}
                       <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                       <Link
                         href="/dashboard/change-password"
