@@ -584,7 +584,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
           {!assignmentsOnlyEdit && (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reports To</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Supervisor</label>
                 <select
                   name="reports_to_id"
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
@@ -869,7 +869,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
               </th>
               <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 <button type="button" onClick={() => handleSort('reports_to')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
-                  Reports To <SortIcon column="reports_to" />
+                  Supervisor <SortIcon column="reports_to" />
                 </button>
               </th>
               <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">
@@ -933,7 +933,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Name:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.name}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Email:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.email}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Role:</span> <span className="text-gray-900 dark:text-gray-100 capitalize">{editingUser.role}</span></div>
-                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Reports To:</span> <span className="text-gray-900 dark:text-gray-100">{users.find(u => u.id === editingUser.reports_to_id)?.name || 'N/A'}</span></div>
+                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Supervisor:</span> <span className="text-gray-900 dark:text-gray-100">{users.find(u => u.id === editingUser.reports_to_id)?.name || 'N/A'}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Final Approver:</span> <span className="text-gray-900 dark:text-gray-100">{users.find(u => u.id === editingUser.final_approver_id)?.name || 'N/A'}</span></div>
                 <div>
                   <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Sites:</span>
@@ -1077,7 +1077,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
               {!assignmentsOnlyEdit && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reports To</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supervisor</label>
                     <select
                       name="reports_to_id"
                       defaultValue={editingUser.reports_to_id || ''}

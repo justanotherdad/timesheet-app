@@ -44,7 +44,7 @@ export async function createUser(formData: FormData) {
       }
       effectiveRole = role
       if (reportsToId !== user.id) {
-        return { error: 'When adding a user, they must report to you. Set Reports To to yourself.' }
+        return { error: 'When adding a user, they must report to you. Set Supervisor to yourself.' }
       }
     } else if (currentUserProfile.role === 'admin') {
       if (role === 'super_admin') {
