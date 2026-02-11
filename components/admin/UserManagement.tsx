@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { User, UserRole } from '@/types/database'
-import { Plus, Edit, Trash2, Key, X, ArrowUpDown, ArrowUp, ArrowDown, Search } from 'lucide-react'
+import { Plus, Edit, Trash2, Key, X, ArrowUpDown, ArrowUp, ArrowDown, Search, Eye } from 'lucide-react'
 import { createUser } from '@/app/actions/create-user'
 import { deleteUser } from '@/app/actions/delete-user'
 import { updateUserAssignments } from '@/app/actions/update-user-assignments'
@@ -67,7 +67,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
   }>>({})
 
   // Sort: column key and direction
-  type SortKey = 'name' | 'email' | 'role' | 'sites' | 'departments' | 'purchase_orders' | 'reports_to'
+  type SortKey = 'name' | 'email' | 'role' | 'sites' | 'departments' | 'purchase_orders' | 'reports_to' | 'final_approver'
   const [sortColumn, setSortColumn] = useState<SortKey>('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
@@ -142,6 +142,8 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
       const posB = assignmentsB.purchaseOrders.map((id: string) => purchaseOrders.find(p => p.id === id)?.po_number).filter(Boolean).join(', ')
       const reportsToA = users.find(u => u.id === a.reports_to_id)?.name || ''
       const reportsToB = users.find(u => u.id === b.reports_to_id)?.name || ''
+      const finalApproverA = users.find(u => u.id === a.final_approver_id)?.name || ''
+      const finalApproverB = users.find(u => u.id === b.final_approver_id)?.name || ''
       let va: string | number = ''
       let vb: string | number = ''
       switch (sortColumn) {
@@ -152,6 +154,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
         case 'departments': va = deptsA.toLowerCase(); vb = deptsB.toLowerCase(); break
         case 'purchase_orders': va = posA.toLowerCase(); vb = posB.toLowerCase(); break
         case 'reports_to': va = reportsToA.toLowerCase(); vb = reportsToB.toLowerCase(); break
+        case 'final_approver': va = finalApproverA.toLowerCase(); vb = finalApproverB.toLowerCase(); break
         default: return 0
       }
       if (va < vb) return -1 * dir
@@ -238,6 +241,15 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
       console.error('Error loading user assignments:', err)
       return { sites: [], departments: [], purchaseOrders: [] }
     }
+  }
+
+  const openUserDetails = async (user: any) => {
+    setEditingUser(user)
+    const assignments = await loadUserAssignments(user.id)
+    setSelectedSites(assignments.sites)
+    setSelectedDepartments(assignments.departments)
+    setSelectedPOs(assignments.purchaseOrders)
+    setUserAssignments(prev => ({ ...prev, [user.id]: assignments }))
   }
 
   // Load all user assignments on component mount
@@ -783,45 +795,90 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
           </div>
         </div>
 
-        {/* Right: Table */}
-        <div className="flex-1 min-w-0 overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        {/* Mobile: card list */}
+        <div className="flex-1 min-w-0 md:hidden space-y-2">
+          {filteredAndSortedUsers.map((user: any) => {
+            const assignments = userAssignments[user.id] || { sites: [], departments: [], purchaseOrders: [] }
+            const userSites = assignments.sites.map((siteId: string) => sites.find(s => s.id === siteId)?.name).filter(Boolean)
+            return (
+              <div
+                key={user.id}
+                className="rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 p-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{user.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 capitalize">{user.role}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      Final approver: {users.find(u => u.id === user.final_approver_id)?.name || 'N/A'}
+                    </p>
+                    {userSites.length > 0 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate" title={userSites.join(', ')}>
+                        Sites: {userSites.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openUserDetails(user)}
+                    className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/50"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> View
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Desktop: Table (scrollable on small if table shown) */}
+        <div className="flex-1 min-w-0 overflow-x-auto -mx-2 md:mx-0 hidden md:block">
+        <table className="min-w-[800px] md:min-w-full w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 <button type="button" onClick={() => handleSort('name')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
                   Name <SortIcon column="name" />
                 </button>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 <button type="button" onClick={() => handleSort('email')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
                   Email <SortIcon column="email" />
                 </button>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 <button type="button" onClick={() => handleSort('role')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
                   Role <SortIcon column="role" />
                 </button>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 <button type="button" onClick={() => handleSort('sites')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
                   Sites <SortIcon column="sites" />
                 </button>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 <button type="button" onClick={() => handleSort('departments')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
                   Departments <SortIcon column="departments" />
                 </button>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 <button type="button" onClick={() => handleSort('purchase_orders')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
                   Purchase Orders <SortIcon column="purchase_orders" />
                 </button>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 <button type="button" onClick={() => handleSort('reports_to')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
                   Reports To <SortIcon column="reports_to" />
                 </button>
+              </th>
+              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">
+                <button type="button" onClick={() => handleSort('final_approver')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Final Approver <SortIcon column="final_approver" />
+                </button>
+              </th>
+              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-20">
+                View
               </th>
             </tr>
           </thead>
@@ -837,33 +894,26 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
               const editable = canEditUser(user)
               return (
               <tr key={user.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {editable ? (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setEditingUser(user)
-                        const assignments = await loadUserAssignments(user.id)
-                        setSelectedSites(assignments.sites)
-                        setSelectedDepartments(assignments.departments)
-                        setSelectedPOs(assignments.purchaseOrders)
-                        setUserAssignments(prev => ({ ...prev, [user.id]: assignments }))
-                      }}
-                      className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:underline font-medium"
-                    >
-                      {user.name}
-                    </button>
-                  ) : (
-                    <span className="text-gray-900 dark:text-gray-100">{user.name}</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{user.email}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">{user.role}</td>
-                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userSites.length > 0 ? userSites.join(', ') : 'N/A'}</td>
-                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userDepts.length > 0 ? userDepts.join(', ') : 'N/A'}</td>
-                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{userPOs.length > 0 ? userPOs.join(', ') : 'N/A'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 font-medium">{user.name}</td>
+                <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{user.email}</td>
+                <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">{user.role}</td>
+                <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userSites.length > 0 ? userSites.join(', ') : 'N/A'}</td>
+                <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userDepts.length > 0 ? userDepts.join(', ') : 'N/A'}</td>
+                <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userPOs.length > 0 ? userPOs.join(', ') : 'N/A'}</td>
+                <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {users.find(u => u.id === user.reports_to_id)?.name || 'N/A'}
+                </td>
+                <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                  {users.find(u => u.id === user.final_approver_id)?.name || 'N/A'}
+                </td>
+                <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => openUserDetails(user)}
+                    className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/50"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> View
+                  </button>
                 </td>
               </tr>
             )})}
@@ -884,6 +934,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Email:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.email}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Role:</span> <span className="text-gray-900 dark:text-gray-100 capitalize">{editingUser.role}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Reports To:</span> <span className="text-gray-900 dark:text-gray-100">{users.find(u => u.id === editingUser.reports_to_id)?.name || 'N/A'}</span></div>
+                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Final Approver:</span> <span className="text-gray-900 dark:text-gray-100">{users.find(u => u.id === editingUser.final_approver_id)?.name || 'N/A'}</span></div>
                 <div>
                   <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Sites:</span>
                   <span className="text-gray-900 dark:text-gray-100">

@@ -803,8 +803,9 @@ export default function HierarchicalItemManager({
       {selectedSite && (
         <>
           {!readOnly && (
-          {/* CSV Import Section with Department/PO Selection */}
-          <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+          <>
+            {/* CSV Import Section with Department/PO Selection */}
+            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Import CSV</h3>
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-4 space-y-2">
               <p><strong>CSV format:</strong> Use a .csv file (filename does not matter). First row must be a header row with column names. One required column for the {itemName.toLowerCase()} name—use a header that includes &quot;name&quot;, &quot;{itemName.toLowerCase()}&quot;, &quot;item&quot;, or &quot;title&quot; (e.g. <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Name</code> or <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Deliverable</code>). Each following row is one {itemName.toLowerCase()}. Empty rows are skipped.</p>
@@ -890,6 +891,7 @@ export default function HierarchicalItemManager({
               </label>
             </div>
           </div>
+          </>
           )}
 
           {!readOnly && (
