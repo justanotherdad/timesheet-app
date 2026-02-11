@@ -32,18 +32,32 @@ export async function createUser(formData: FormData) {
       return { error: 'Unauthorized' }
     }
 
-    // Supervisors and managers may only create employees; role must be employee
-    const effectiveRole = ['supervisor', 'manager'].includes(currentUserProfile.role) ? 'employee' : role
     const reportsToId = formData.get('reports_to_id') as string || null
     const supervisorId = formData.get('supervisor_id') as string || null
     const managerId = formData.get('manager_id') as string || null
     const finalApproverId = formData.get('final_approver_id') as string || null
 
-    if (['supervisor', 'manager'].includes(currentUserProfile.role)) {
-      // Require reports_to to be current user (they are adding someone who reports to them)
+    let effectiveRole: string
+    if (currentUserProfile.role === 'supervisor') {
+      effectiveRole = 'employee'
       if (reportsToId !== user.id) {
         return { error: 'When adding a user, they must report to you. Set Reports To to yourself.' }
       }
+    } else if (currentUserProfile.role === 'manager') {
+      if (!['employee', 'supervisor', 'manager'].includes(role)) {
+        return { error: 'You can only create users with role Employee, Supervisor, or Manager.' }
+      }
+      effectiveRole = role
+      if (reportsToId !== user.id) {
+        return { error: 'When adding a user, they must report to you. Set Reports To to yourself.' }
+      }
+    } else if (currentUserProfile.role === 'admin') {
+      if (role === 'super_admin') {
+        return { error: 'You cannot create a Super Admin user.' }
+      }
+      effectiveRole = role
+    } else {
+      effectiveRole = role
     }
 
     // Use admin client to create user

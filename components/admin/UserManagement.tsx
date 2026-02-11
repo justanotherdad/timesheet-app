@@ -78,10 +78,20 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
   const assignmentsLoadedRef = useRef(false)
   const supabase = createClient()
 
-  // Super_admin can change any role; admin can change any except super_admin
-  const canChangeRole = (target: User) =>
-    currentUserRole === 'super_admin' || (currentUserRole === 'admin' && target.role !== 'super_admin')
-  // Supervisors/managers may only edit users that report to them (and only site, PO, departments)
+  // Who can change role: super_admin any; admin can change admin or lower; manager can change manager or lower; supervisor cannot
+  const canChangeRole = (target: User) => {
+    if (currentUserRole === 'super_admin') return true
+    if (currentUserRole === 'admin' && target.role !== 'super_admin') return true
+    if (currentUserRole === 'manager' && ['manager', 'supervisor', 'employee'].includes(target.role)) return true
+    return false
+  }
+  // Roles the current user can assign when editing (for dropdown)
+  const assignableRoles = (): UserRole[] => {
+    if (currentUserRole === 'super_admin') return ['employee', 'supervisor', 'manager', 'admin', 'super_admin']
+    if (currentUserRole === 'admin') return ['employee', 'supervisor', 'manager', 'admin']
+    if (currentUserRole === 'manager') return ['employee', 'supervisor', 'manager']
+    return ['employee']
+  }
   const canEditUser = (target: User) => {
     if (['admin', 'super_admin'].includes(currentUserRole)) return true
     return (
@@ -90,7 +100,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
       target.manager_id === currentUserId
     )
   }
-  const assignmentsOnlyEdit = ['supervisor', 'manager'].includes(currentUserRole)
+  const assignmentsOnlyEdit = currentUserRole === 'supervisor'
   const canAddUser = ['supervisor', 'manager', 'admin', 'super_admin'].includes(currentUserRole)
   const canDeleteUser = ['admin', 'super_admin'].includes(currentUserRole)
 
@@ -549,11 +559,9 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                 required
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
               >
-                <option value="employee">Employee</option>
-                <option value="supervisor">Supervisor</option>
-                <option value="manager">Manager</option>
-                <option value="admin">Admin</option>
-                {currentUserRole === 'super_admin' && <option value="super_admin">Super Admin</option>}
+                {assignableRoles().map((r) => (
+                  <option key={r} value={r}>{r.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</option>
+                ))}
               </select>
             )}
             {assignmentsOnlyEdit && (
@@ -884,18 +892,16 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
-                    <select
-                      name="role"
-                      defaultValue={editingUser.role}
-                      disabled={!canChangeRole(editingUser)}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-200 text-gray-900 bg-white dark:bg-white"
-                    >
-                      <option value="employee">Employee</option>
-                      <option value="supervisor">Supervisor</option>
-                      <option value="manager">Manager</option>
-                      <option value="admin">Admin</option>
-                      {canChangeRole(editingUser) && <option value="super_admin">Super Admin</option>}
-                    </select>
+                <select
+                  name="role"
+                  defaultValue={editingUser.role}
+                  disabled={!canChangeRole(editingUser)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-200 text-gray-900 bg-white dark:bg-white"
+                >
+                  {(canChangeRole(editingUser) ? assignableRoles() : [editingUser.role]).map((r) => (
+                    <option key={r} value={r}>{r.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</option>
+                  ))}
+                </select>
                   </div>
                 </>
               )}
