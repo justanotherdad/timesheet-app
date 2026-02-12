@@ -218,14 +218,19 @@ export default function WeeklyTimesheetForm({
 
   const handleSaveEntry = () => {
     if (editingIndex === null || !editingEntry) return
-    
+    // If adding new row (editingIndex === length), append; otherwise update existing
     const updated = [...billableEntries]
-    updated[editingIndex] = editingEntry
+    if (editingIndex >= updated.length) {
+      updated.push(editingEntry)
+    } else {
+      updated[editingIndex] = editingEntry
+    }
     setBillableEntries(updated)
     handleCloseModal()
   }
 
   const handleAddEntry = () => {
+    // Open modal with new entry in memory only; row is added to timesheet only when user clicks Save
     const newEntry: BillableEntry = {
       task_description: '',
       system_name: undefined,
@@ -237,7 +242,6 @@ export default function WeeklyTimesheetForm({
       sat_hours: 0,
       sun_hours: 0
     }
-    setBillableEntries([...billableEntries, newEntry])
     setEditingIndex(billableEntries.length)
     setEditingEntry(newEntry)
   }
@@ -789,8 +793,7 @@ export default function WeeklyTimesheetForm({
         >
           <div
             ref={modalRef}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full mx-4 min-w-[44rem] max-w-[min(56rem,95vw)] min-h-[28rem] max-h-[90vh] overflow-auto resize"
-            style={{ width: 'min(52rem, 92vw)' }}
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 min-h-[28rem] max-h-[90vh] overflow-auto resize w-full mx-0 min-w-0 md:mx-4 md:w-[min(104rem,96vw)] md:min-w-[48rem]"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-4">
