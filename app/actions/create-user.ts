@@ -33,7 +33,6 @@ export async function createUser(formData: FormData) {
     }
 
     const reportsToId = formData.get('reports_to_id') as string || null
-    const supervisorId = formData.get('supervisor_id') as string || null
     const managerId = formData.get('manager_id') as string || null
     const finalApproverId = formData.get('final_approver_id') as string || null
 
@@ -175,7 +174,7 @@ export async function createUser(formData: FormData) {
     const siteId = formData.get('site_id') as string || null
     const departmentId = formData.get('department_id') as string || null
     const resolvedReportsToId = currentUserProfile.role === 'manager' ? user.id : reportsToId
-    const resolvedSupervisorId = currentUserProfile.role === 'manager' ? user.id : supervisorId
+    const resolvedSupervisorId = currentUserProfile.role === 'manager' ? user.id : (reportsToId || null)
     const resolvedManagerId = currentUserProfile.role === 'manager' ? user.id : managerId
     const resolvedFinalApproverId = currentUserProfile.role === 'manager' ? null : finalApproverId
 
