@@ -51,7 +51,7 @@ export default async function TimesheetDetailPage({
             </p>
           )}
           <Link href="/dashboard/timesheets" className="text-blue-600 hover:text-blue-700">
-            ← Back to Timesheets
+            ← Back
           </Link>
         </div>
       </div>
@@ -224,7 +224,7 @@ export default async function TimesheetDetailPage({
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">Task Description</th>
                         {weekDates.days.map((day, idx) => (
                           <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm text-gray-900 dark:text-gray-100">
-                            {format(day, 'EEE').toUpperCase().slice(0, 2)}
+                            {format(day, 'EEE')}
                           </th>
                         ))}
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm text-gray-900 dark:text-gray-100">Total</th>
@@ -270,7 +270,7 @@ export default async function TimesheetDetailPage({
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">Description</th>
                         {weekDates.days.map((day, idx) => (
                           <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm text-gray-900 dark:text-gray-100">
-                            {format(day, 'EEE').toUpperCase().slice(0, 2)}
+                            {format(day, 'EEE')}
                           </th>
                         ))}
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm text-gray-900 dark:text-gray-100">Total</th>

@@ -276,7 +276,7 @@ export default function WeeklyTimesheetExport({
               <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Task Description</th>
               {weekDates.days.map((day, idx) => (
                 <th key={idx} className="day-header" style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>
-                  <div>{format(day, 'EEE').toUpperCase().slice(0, 2)}</div>
+                  <div>{format(day, 'EEE')}</div>
                   <div className="day-date" style={{ fontSize: '8pt', fontWeight: 'normal' }}>
                     {formatDateShort(weekDates.days[idx])}
                   </div>
@@ -336,7 +336,7 @@ export default function WeeklyTimesheetExport({
           </tbody>
         </table>
 
-        {/* Signature Section */}
+        {/* Signature Section - only show approval lines that exist on the user profile */}
         <div className="signature-section" style={{ marginTop: '15px', color: '#000' }}>
           <div style={{ marginBottom: '8px', color: '#000' }}>
             <strong style={{ color: '#000' }}>Employee Signature / Date:</strong>
@@ -348,39 +348,45 @@ export default function WeeklyTimesheetExport({
               <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
             )}
           </div>
-          <div style={{ marginBottom: '8px', color: '#000', textAlign: 'right' }}>
-            <strong style={{ color: '#000' }}>Supervisor Approval by / Date:</strong>
-            {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor') ? (
-              <span style={{ marginLeft: '10px', color: '#000' }}>
-                {timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').user_profiles?.name}{' '}
-                {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').signed_at).toLocaleDateString()}
-              </span>
-            ) : (
-              <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
-            )}
-          </div>
-          <div style={{ marginBottom: '8px', color: '#000', textAlign: 'right' }}>
-            <strong style={{ color: '#000' }}>Manager Approval by / Date:</strong>
-            {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager') ? (
-              <span style={{ marginLeft: '10px', color: '#000' }}>
-                {timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').user_profiles?.name}{' '}
-                {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').signed_at).toLocaleDateString()}
-              </span>
-            ) : (
-              <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
-            )}
-          </div>
-          <div style={{ color: '#000', textAlign: 'right' }}>
-            <strong style={{ color: '#000' }}>Final Approver by / Date:</strong>
-            {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'final_approver') ? (
-              <span style={{ marginLeft: '10px', color: '#000' }}>
-                {timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').user_profiles?.name}{' '}
-                {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').signed_at).toLocaleDateString()}
-              </span>
-            ) : (
-              <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
-            )}
-          </div>
+          {user.supervisor_id != null && user.supervisor_id !== '' && (
+            <div style={{ marginBottom: '8px', color: '#000', textAlign: 'right' }}>
+              <strong style={{ color: '#000' }}>Supervisor Approval by / Date:</strong>
+              {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor') ? (
+                <span style={{ marginLeft: '10px', color: '#000' }}>
+                  {timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').user_profiles?.name}{' '}
+                  {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').signed_at).toLocaleDateString()}
+                </span>
+              ) : (
+                <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
+              )}
+            </div>
+          )}
+          {user.manager_id != null && user.manager_id !== '' && (
+            <div style={{ marginBottom: '8px', color: '#000', textAlign: 'right' }}>
+              <strong style={{ color: '#000' }}>Manager Approval by / Date:</strong>
+              {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager') ? (
+                <span style={{ marginLeft: '10px', color: '#000' }}>
+                  {timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').user_profiles?.name}{' '}
+                  {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').signed_at).toLocaleDateString()}
+                </span>
+              ) : (
+                <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
+              )}
+            </div>
+          )}
+          {user.final_approver_id != null && user.final_approver_id !== '' && (
+            <div style={{ color: '#000', textAlign: 'right' }}>
+              <strong style={{ color: '#000' }}>Final Approver by / Date:</strong>
+              {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'final_approver') ? (
+                <span style={{ marginLeft: '10px', color: '#000' }}>
+                  {timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').user_profiles?.name}{' '}
+                  {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').signed_at).toLocaleDateString()}
+                </span>
+              ) : (
+                <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Unbillable Time Section */}
@@ -392,7 +398,7 @@ export default function WeeklyTimesheetExport({
                 <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Description</th>
                 {weekDates.days.map((day, idx) => (
                   <th key={idx} className="day-header" style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>
-                    <div>{format(day, 'EEE').toUpperCase().slice(0, 2)}</div>
+                    <div>{format(day, 'EEE')}</div>
                     <div className="day-date" style={{ fontSize: '8pt', fontWeight: 'normal' }}>
                       {formatDateShort(weekDates.days[idx])}
                     </div>

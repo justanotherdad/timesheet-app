@@ -218,7 +218,7 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
                   <th style="border: 1px solid #000; padding: 5px; text-align: left;">Task Description</th>
                   ${weekDates.days.map((day, idx) => `
                     <th style="border: 1px solid #000; padding: 5px; text-align: center;">
-                      <div>${format(day, 'EEE').toUpperCase().slice(0, 2)}</div>
+                      <div>${format(day, 'EEE')}</div>
                       <div style="font-size: 8pt; font-weight: normal;">${formatDateShort(weekDates.days[idx])}</div>
                     </th>
                   `).join('')}
@@ -256,7 +256,7 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
               </tbody>
             </table>
 
-            <!-- Signature Section -->
+            <!-- Signature Section - only show approval lines that exist on the user profile -->
             <div style="margin-top: 15px; color: #000;">
               <div style="margin-bottom: 8px; color: #000;">
                 <strong style="color: #000;">Employee Signature / Date:</strong>
@@ -266,6 +266,7 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
                   <span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>
                 `}
               </div>
+              ${(user.supervisor_id != null && user.supervisor_id !== '') ? `
               <div style="margin-bottom: 8px; color: #000; text-align: right;">
                 <strong style="color: #000;">Supervisor Approval by / Date:</strong>
                 ${(() => {
@@ -273,6 +274,8 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
                   return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
+              ` : ''}
+              ${(user.manager_id != null && user.manager_id !== '') ? `
               <div style="margin-bottom: 8px; color: #000; text-align: right;">
                 <strong style="color: #000;">Manager Approval by / Date:</strong>
                 ${(() => {
@@ -280,6 +283,8 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
                   return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
+              ` : ''}
+              ${(user.final_approver_id != null && user.final_approver_id !== '') ? `
               <div style="color: #000; text-align: right;">
                 <strong style="color: #000;">Final Approver by / Date:</strong>
                 ${(() => {
@@ -287,6 +292,7 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
                   return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
+              ` : ''}
             </div>
 
             <!-- Unbillable Time Section -->
@@ -298,7 +304,7 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
                     <th style="border: 1px solid #000; padding: 5px; text-align: left;">Description</th>
                     ${weekDates.days.map((day, idx) => `
                       <th style="border: 1px solid #000; padding: 5px; text-align: center;">
-                        <div>${format(day, 'EEE').toUpperCase().slice(0, 2)}</div>
+                        <div>${format(day, 'EEE')}</div>
                         <div style="font-size: 8pt; font-weight: normal;">${formatDateShort(weekDates.days[idx])}</div>
                       </th>
                     `).join('')}

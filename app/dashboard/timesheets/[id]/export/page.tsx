@@ -25,7 +25,7 @@ export default async function ExportTimesheetPage({
       .from('weekly_timesheets')
       .select(`
         *,
-        user_profiles!user_id(name, email)
+        user_profiles!user_id(name, email, supervisor_id, manager_id, final_approver_id)
       `)
       .eq('id', id)
       .single()
@@ -45,7 +45,7 @@ export default async function ExportTimesheetPage({
             <div className="text-center">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Timesheet not found</h1>
               <a href="/dashboard/timesheets" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
-                ← Back to Timesheets
+                ← Back
               </a>
             </div>
           </div>

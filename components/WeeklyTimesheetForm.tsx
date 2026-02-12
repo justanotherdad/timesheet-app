@@ -589,7 +589,7 @@ export default function WeeklyTimesheetForm({
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Activity</th>
                   {weekDates.days.map((day, idx) => (
                     <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
-                      <div>{format(day, 'EEE').toUpperCase().slice(0, 2)}</div>
+                      <div>{format(day, 'EEE')}</div>
                       <div className="text-xs font-normal">{formatDateShort(weekDates.days[idx])}</div>
                     </th>
                   ))}
@@ -685,7 +685,7 @@ export default function WeeklyTimesheetForm({
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Description</th>
                   {weekDates.days.map((day, idx) => (
                     <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
-                      <div>{format(day, 'EEE').toUpperCase().slice(0, 2)}</div>
+                      <div>{format(day, 'EEE')}</div>
                       <div className="text-xs font-normal">{formatDateShort(weekDates.days[idx])}</div>
                     </th>
                   ))}
@@ -905,7 +905,7 @@ export default function WeeklyTimesheetForm({
                   {days.map((day, idx) => (
                     <div key={day} className="flex flex-col min-h-[3.25rem]">
                       <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 shrink-0">
-                        {format(weekDates.days[idx], 'EEE').toUpperCase().slice(0, 2)}
+                        {format(weekDates.days[idx], 'EEE')}
                       </label>
                       <input
                         type="number"
