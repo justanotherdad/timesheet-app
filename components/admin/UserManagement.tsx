@@ -401,10 +401,10 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                   ...u,
                   name,
                   role: canChangeRole(editingUser) ? role : editingUser.role,
-                  reports_to_id: reportsToId || null,
-                  supervisor_id: supervisorId || null,
-                  manager_id: managerId || null,
-                  final_approver_id: finalApproverId || null,
+                  reports_to_id: reportsToId || undefined,
+                  supervisor_id: supervisorId || undefined,
+                  manager_id: managerId || undefined,
+                  final_approver_id: finalApproverId || undefined,
                 }
               : u
           )
