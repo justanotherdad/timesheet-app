@@ -188,7 +188,7 @@ export default async function TimesheetsPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="My Timesheets" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
+        <div className="w-full max-w-[1920px] mx-auto">
           <div className="flex justify-end mb-6">
             <a
               href="/dashboard/timesheets/new"
@@ -199,135 +199,171 @@ export default async function TimesheetsPage() {
           </div>
 
           {timesheets && timesheets.length > 0 ? (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) && (
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Employee
-                        </th>
-                      )}
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Week Ending
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Week Starting
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Status
-                      </th>
-                      {(['admin', 'super_admin'].includes(user.profile.role)) && (
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          With
-                        </th>
-                      )}
-                      {(['admin', 'super_admin'].includes(user.profile.role)) && (
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          With (person)
-                        </th>
-                      )}
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Created
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {timesheets.map((ts) => (
-                      <tr key={ts.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+            <>
+              {/* Mobile: cards with Employee, Week Ending, Status, View button only */}
+              <div className="md:hidden space-y-3">
+                {timesheets.map((ts) => (
+                  <div
+                    key={ts.id}
+                    className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-600"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-1">
                         {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                          <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
                             {ts.user_profiles?.name || 'Unknown'}
-                          </td>
+                          </p>
                         )}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                          {formatWeekEnding(ts.week_ending)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                          {formatWeekEnding(ts.week_starting)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ts.status)}`}>
-                            {getStatusIcon(ts.status)}
-                            {ts.status}
-                          </span>
-                        </td>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Week ending {formatWeekEnding(ts.week_ending)}
+                        </p>
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ts.status)}`}>
+                          {getStatusIcon(ts.status)}
+                          {ts.status}
+                        </span>
+                      </div>
+                      <Link
+                        href={`/dashboard/timesheets/${ts.id}`}
+                        className="shrink-0 inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+                      >
+                        View
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop: full table, no horizontal scroll */}
+              <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                <div className="overflow-visible">
+                  <table className="w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-700">
+                      <tr>
+                        {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) && (
+                          <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%] min-w-0">
+                            Employee
+                          </th>
+                        )}
+                        <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[8%] min-w-0">
+                          Week Ending
+                        </th>
+                        <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[8%] min-w-0">
+                          Week Starting
+                        </th>
+                        <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%] min-w-0">
+                          Status
+                        </th>
                         {(['admin', 'super_admin'].includes(user.profile.role)) && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                            {getWithLabel(ts)}
-                          </td>
+                          <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%] min-w-0">
+                            With
+                          </th>
                         )}
                         {(['admin', 'super_admin'].includes(user.profile.role)) && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                            {getWithPersonName(ts)}
-                          </td>
+                          <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[12%] min-w-0">
+                            With (person)
+                          </th>
                         )}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                          {formatWeekEnding(ts.created_at)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex gap-2">
-                            {ts.status === 'draft' && (
-                              <Link
-                                href={`/dashboard/timesheets/${ts.id}/edit`}
-                                className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
-                              >
-                                Edit
-                              </Link>
-                            )}
-                            {ts.status === 'draft' && (
-                              <form action={`/dashboard/timesheets/${ts.id}/submit`} method="post" className="inline">
-                                <button
-                                  type="submit"
-                                  className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
-                                >
-                                  Submit
-                                </button>
-                              </form>
-                            )}
-                            {ts.status === 'submitted' && ts.user_id === user.id && (
-                              <form action={`/dashboard/timesheets/${ts.id}/recall`} method="post" className="inline">
-                                <button
-                                  type="submit"
+                        <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[8%] min-w-0">
+                          Created
+                        </th>
+                        <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[20%] min-w-0">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      {timesheets.map((ts) => (
+                        <tr key={ts.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                          {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) && (
+                            <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 truncate" title={ts.user_profiles?.name || 'Unknown'}>
+                              {ts.user_profiles?.name || 'Unknown'}
+                            </td>
+                          )}
+                          <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0">
+                            {formatWeekEnding(ts.week_ending)}
+                          </td>
+                          <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0">
+                            {formatWeekEnding(ts.week_starting)}
+                          </td>
+                          <td className="px-3 lg:px-6 py-3 min-w-0">
+                            <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ts.status)}`}>
+                              {getStatusIcon(ts.status)}
+                              {ts.status}
+                            </span>
+                          </td>
+                          {(['admin', 'super_admin'].includes(user.profile.role)) && (
+                            <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 truncate">
+                              {getWithLabel(ts)}
+                            </td>
+                          )}
+                          {(['admin', 'super_admin'].includes(user.profile.role)) && (
+                            <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 truncate" title={getWithPersonName(ts)}>
+                              {getWithPersonName(ts)}
+                            </td>
+                          )}
+                          <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0">
+                            {formatWeekEnding(ts.created_at)}
+                          </td>
+                          <td className="px-3 lg:px-6 py-3 text-sm font-medium min-w-0">
+                            <div className="flex flex-wrap gap-2">
+                              {ts.status === 'draft' && (
+                                <Link
+                                  href={`/dashboard/timesheets/${ts.id}/edit`}
                                   className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
                                 >
                                   Edit
-                                </button>
-                              </form>
-                            )}
-                            {ts.status === 'rejected' && ts.user_id === user.id && (
+                                </Link>
+                              )}
+                              {ts.status === 'draft' && (
+                                <form action={`/dashboard/timesheets/${ts.id}/submit`} method="post" className="inline">
+                                  <button
+                                    type="submit"
+                                    className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
+                                  >
+                                    Submit
+                                  </button>
+                                </form>
+                              )}
+                              {ts.status === 'submitted' && ts.user_id === user.id && (
+                                <form action={`/dashboard/timesheets/${ts.id}/recall`} method="post" className="inline">
+                                  <button
+                                    type="submit"
+                                    className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
+                                  >
+                                    Edit
+                                  </button>
+                                </form>
+                              )}
+                              {ts.status === 'rejected' && ts.user_id === user.id && (
+                                <Link
+                                  href={`/dashboard/timesheets/${ts.id}/edit`}
+                                  className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
+                                >
+                                  Edit
+                                </Link>
+                              )}
                               <Link
-                                href={`/dashboard/timesheets/${ts.id}/edit`}
-                                className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
+                                href={`/dashboard/timesheets/${ts.id}/export`}
+                                className="text-purple-600 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300"
                               >
-                                Edit
+                                Export
                               </Link>
-                            )}
-                            <Link
-                              href={`/dashboard/timesheets/${ts.id}/export`}
-                              className="text-purple-600 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300"
-                            >
-                              Export
-                            </Link>
-                            <Link
-                              href={`/dashboard/timesheets/${ts.id}`}
-                              className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-                            >
-                              View
-                            </Link>
-                            <DeleteTimesheetButton timesheetId={ts.id} status={ts.status} userRole={user.profile.role} />
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                              <Link
+                                href={`/dashboard/timesheets/${ts.id}`}
+                                className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+                              >
+                                View
+                              </Link>
+                              <DeleteTimesheetButton timesheetId={ts.id} status={ts.status} userRole={user.profile.role} />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            </>
           ) : (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
               <FileText className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
