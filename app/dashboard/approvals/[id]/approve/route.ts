@@ -23,10 +23,10 @@ export async function POST(
     }
 
     const profile = timesheet.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string }
-    // Approval chain order: manager first, then supervisor, then final approver (if no manager, next in line)
+    // Approval chain: Employee → Supervisor → Manager → Final Approver (skip none = use next in line)
     const chain: string[] = []
-    if (profile?.manager_id) chain.push(profile.manager_id)
-    if (profile?.supervisor_id && !chain.includes(profile.supervisor_id)) chain.push(profile.supervisor_id)
+    if (profile?.supervisor_id) chain.push(profile.supervisor_id)
+    if (profile?.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
     if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
 
     // Allow approval of submitted timesheets, or allow admins to approve any status

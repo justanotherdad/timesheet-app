@@ -82,12 +82,28 @@ export default async function EditTimesheetPage({
     }
   }
 
+  // Systems, deliverables, activities: only those at sites assigned to the user (unless admin)
+  const systemsQuery = supabase.from('systems').select('*').order('name')
+  const deliverablesQuery = supabase.from('deliverables').select('*').order('name')
+  const activitiesQuery = supabase.from('activities').select('*').order('name')
+  if (!['admin', 'super_admin'].includes(user.profile.role)) {
+    if (userSiteIds.length > 0) {
+      systemsQuery.in('site_id', userSiteIds)
+      deliverablesQuery.in('site_id', userSiteIds)
+      activitiesQuery.in('site_id', userSiteIds)
+    } else {
+      systemsQuery.eq('site_id', '00000000-0000-0000-0000-000000000000')
+      deliverablesQuery.eq('site_id', '00000000-0000-0000-0000-000000000000')
+      activitiesQuery.eq('site_id', '00000000-0000-0000-0000-000000000000')
+    }
+  }
+
   const [sitesResult, purchaseOrdersResult, systemsResult, deliverablesResult, activitiesResult] = await Promise.all([
     withQueryTimeout(() => sitesQuery),
     withQueryTimeout(() => posQuery),
-    withQueryTimeout(() => supabase.from('systems').select('*').order('name')),
-    withQueryTimeout(() => supabase.from('deliverables').select('*').order('name')),
-    withQueryTimeout(() => supabase.from('activities').select('*').order('name')),
+    withQueryTimeout(() => systemsQuery),
+    withQueryTimeout(() => deliverablesQuery),
+    withQueryTimeout(() => activitiesQuery),
   ])
 
   const sites = (sitesResult.data || []) as any[]

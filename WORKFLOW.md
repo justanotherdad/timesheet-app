@@ -256,4 +256,11 @@ git push
 
 ---
 
+## 📖 Related documentation
+
+- **JOB_AID.md** – How to use the site (employees through admins): timesheets, approvals, manage users, dropdowns (activities/deliverables/systems filtered by user’s assigned sites), single Supervisor field in edit user, approval chain (Supervisor → Manager → Final Approver; skip none).
+- **Access Levels.md** – Role-based access, who sees which timesheets, implementation notes (admin client for supervisor/manager timesheet visibility, etc.).
+
+---
+
 **Remember:** Work offline, test when needed, deploy when ready! 🎉

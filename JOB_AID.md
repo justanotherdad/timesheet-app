@@ -52,7 +52,7 @@ After login, you see the **Timesheet Dashboard**. The cards and links you see de
 ### Everyone sees
 
 - **New Timesheet** – Start a new timesheet for the current week.
-- **My Timesheets** – List of your timesheets (and, for supervisors/managers, timesheets of people who report to you).
+- **My Timesheets** – List of your timesheets (and, for supervisors/managers, timesheets of people who have you as their Supervisor, Manager, or Final Approver).
 - **Current Week** – Quick view of this week’s timesheet (if one exists) with a link to view or create.
 
 ### Supervisors, Managers, Admins, and Super Admins also see
@@ -80,7 +80,7 @@ After login, you see the **Timesheet Dashboard**. The cards and links you see de
 1. From the Dashboard, click **New Timesheet** (or **Create one** under Current Week).
 2. You are on **New Weekly Timesheet** for the current week.
 3. Optionally use **Copy Previous Week** to bring in rows from last week (see below).
-4. Add **billable** rows: Site/Client, PO, Task description, System/Deliverable/Activity as needed, and hours per day (Mon–Sun).
+4. Add **billable** rows: Site/Client, PO, Task description, System/Deliverable/Activity as needed, and hours per day (Mon–Sun). The **Activity**, **Deliverable**, and **System** dropdowns only show options assigned to your user profile (sites you are assigned to).
 5. Add or adjust **unbillable** rows (Holiday, Internal, PTO) if applicable.
 6. Click **Save as Draft** to save and continue later, or **Submit** when the week is complete.
 
@@ -97,7 +97,7 @@ After login, you see the **Timesheet Dashboard**. The cards and links you see de
 - You can edit your timesheet when it is **Draft** or **Rejected** (after you get a rejection note).
 1. Go to **My Timesheets**.
 2. Click the timesheet (or **Edit** if shown).
-3. You are on the edit page; change rows, hours, or unbillable as needed.
+3. You are on the edit page; change rows, hours, or unbillable as needed. The **Edit Billable Entry** popup is wider and can be resized by dragging the bottom-right corner.
 4. **Save as Draft** or **Submit** when done.
 - **Admins/Super Admins** can edit any timesheet; others can only edit their own (when draft or rejected).
 
@@ -105,7 +105,7 @@ After login, you see the **Timesheet Dashboard**. The cards and links you see de
 
 1. On the new or edit timesheet page, fill in all required rows and hours.
 2. Click **Submit**.
-3. The timesheet moves to **Submitted** and goes to the approval chain (typically Manager → Supervisor → Final Approver, depending on how your profile is set up).
+3. The timesheet moves to **Submitted** and goes to the approval chain: **Employee → Supervisor → Manager → Final Approver**. If Supervisor or Manager is set to “None” on your profile, the system uses the next person in the structure.
 
 ### 3.5 Viewing a timesheet (detail)
 
@@ -186,8 +186,8 @@ You can also open **View Details** first to review the timesheet, then approve f
 ### 5.4 Manager: add and edit users
 
 - You see **employees and supervisors** who report to you.
-- **Add user:** Click **Add User**, fill in name, email, role (Employee, Supervisor, or Manager), Supervisor, Manager, Final Approver, and site/department/PO assignments. Set **Supervisor** to yourself if they report to you. Save.
-- **Edit user:** Open the user with **View**, then use **Edit** (or the edit form). Change name, role, Supervisor, Manager, Final Approver, or assignments as allowed. Save.
+- **Add user:** Click **Add User**, fill in name, email, role (Employee, Supervisor, or Manager), **Supervisor** (one field), Manager, Final Approver, and site/department/PO assignments. Set **Supervisor** to yourself if they report to you. Save.
+- **Edit user:** Open the user with **View**, then use **Edit** (or the edit form). There is a single **Supervisor** field (not two). Change name, role, Supervisor, Manager, Final Approver, or assignments as allowed. Save.
 - You can **generate a password/invite link** for users who report to you and send it to them (e.g. by email).
 
 ### 5.5 Admin / Super Admin: full user management
@@ -286,7 +286,8 @@ Available only to **Managers**, **Admins**, and **Super Admins**. Employees and 
 
 - **Login or password:** Contact your manager or an administrator.
 - **Missing options or access:** Your role or assignments (sites, reports) may need to be updated in **Manage Users** (admin/manager).
-- **Approval chain:** Manager, Supervisor, and Final Approver are set on each user’s profile in **Manage Users**. If a timesheet is not reaching the right person, have an admin or manager check that user’s Supervisor, Manager, and Final Approver.
+- **Approval chain:** The structure is Employee → Supervisor → Manager → Final Approver. Each user’s profile has one **Supervisor** field plus **Manager** and **Final Approver**. If a field is “None,” the next person in the structure is used. Set these in **Manage Users**.
+- **Empty Activity/Deliverable/System dropdowns:** You only see options for sites you are assigned to. Ask an admin or manager to assign you to the right sites (and ensure those sites have systems, activities, and deliverables configured).
 
 ---
 

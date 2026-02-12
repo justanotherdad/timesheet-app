@@ -12,7 +12,7 @@ export async function getSubordinateUserIds(
   const { data, error } = await supabase
     .from('user_profiles')
     .select('id')
-    .or(`reports_to_id.eq.${managerId},supervisor_id.eq.${managerId},manager_id.eq.${managerId}`)
+    .or(`reports_to_id.eq.${managerId},supervisor_id.eq.${managerId},manager_id.eq.${managerId},final_approver_id.eq.${managerId}`)
   if (error || !data) return []
   return (data as { id: string }[]).map((r) => r.id)
 }

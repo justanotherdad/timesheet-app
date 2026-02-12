@@ -367,9 +367,10 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
         const name = formData.get('name') as string
         const role = formData.get('role') as UserRole
         const reportsToId = formData.get('reports_to_id') as string || null
-        const supervisorId = formData.get('supervisor_id') as string || null
         const managerId = formData.get('manager_id') as string || null
         const finalApproverId = formData.get('final_approver_id') as string || null
+        // Single Supervisor field: sync supervisor_id to match reports_to_id for approval chain
+        const supervisorId = reportsToId
 
         const { error: updateError } = await supabase
           .from('user_profiles')
@@ -402,7 +403,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                   name,
                   role: canChangeRole(editingUser) ? role : editingUser.role,
                   reports_to_id: reportsToId || undefined,
-                  supervisor_id: supervisorId || undefined,
+                  supervisor_id: reportsToId || undefined,
                   manager_id: managerId || undefined,
                   final_approver_id: finalApproverId || undefined,
                 }
@@ -1094,22 +1095,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supervisor</label>
                     <select
                       name="reports_to_id"
-                      defaultValue={editingUser.reports_to_id || ''}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-                    >
-                      <option value="">None</option>
-                      {users
-                        .filter(u => u.id !== editingUser.id && ['manager', 'supervisor', 'admin', 'super_admin'].includes(u.role))
-                        .map(u => (
-                          <option key={u.id} value={u.id}>{u.name}</option>
-                        ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supervisor</label>
-                    <select
-                      name="supervisor_id"
-                      defaultValue={editingUser.supervisor_id || ''}
+                      defaultValue={editingUser.reports_to_id || editingUser.supervisor_id || ''}
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                     >
                       <option value="">None</option>

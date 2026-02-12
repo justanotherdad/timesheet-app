@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import { formatWeekEnding } from '@/lib/utils'
 import { FileText, CheckCircle, XCircle, Clock, Trash2 } from 'lucide-react'
@@ -35,7 +36,7 @@ export default async function TimesheetsPage() {
         .order('created_at', { ascending: false })
     )
   } else if (['supervisor', 'manager'].includes(user.profile.role)) {
-    // Supervisors and managers see timesheets of users who have them as reports_to, supervisor, or manager
+    // Users who have this user as reports_to, supervisor, manager, or final approver (skip-none: next in chain)
     const reportsResult = await withQueryTimeout(() =>
       supabase
         .from('user_profiles')
@@ -44,12 +45,12 @@ export default async function TimesheetsPage() {
     )
     const reports = (reportsResult.data || []) as Array<{ id: string }>
     const reportIds = reports.map(r => r.id)
-    
-    // Include own timesheets plus reports' timesheets
     const allUserIds = [user.id, ...reportIds]
-    
+
+    // Use admin client so RLS does not block reading other users' timesheets (we already scoped to reports)
+    const adminSupabase = createAdminClient()
     timesheetsResult = await withQueryTimeout(() =>
-      supabase
+      adminSupabase
         .from('weekly_timesheets')
         .select(`
           *,
@@ -97,8 +98,8 @@ export default async function TimesheetsPage() {
     if (ts.status === 'submitted') {
       const profile = ts.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
       const chain: string[] = []
-      if (profile?.manager_id) chain.push(profile.manager_id)
-      if (profile?.supervisor_id && !chain.includes(profile.supervisor_id)) chain.push(profile.supervisor_id)
+      if (profile?.supervisor_id) chain.push(profile.supervisor_id)
+      if (profile?.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
       if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
       const signedIds = (signaturesByTimesheetId[ts.id] || []).map((s) => s.signer_id)
       const nextId = chain.find((uid) => !signedIds.includes(uid))

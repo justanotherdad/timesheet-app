@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentUser, requireRole } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import { formatWeekEnding } from '@/lib/utils'
 import { CheckCircle, XCircle, Clock } from 'lucide-react'
@@ -38,9 +39,10 @@ export default async function ApprovalsPage() {
 
   const reportIds = reports.map(r => r.id)
 
-  // Get all submitted weekly timesheets from direct reports
+  // Use admin client so RLS does not block reading reports' timesheets
+  const adminSupabase = createAdminClient()
   const timesheetsResult = await withQueryTimeout(() =>
-    supabase
+    adminSupabase
       .from('weekly_timesheets')
       .select(`
         *,

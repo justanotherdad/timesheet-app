@@ -53,7 +53,7 @@ This document describes what each role can see and do: screens, data scope, and 
 
 ### Approval workflow (submitted timesheets)
 
-- **Chain:** Manager → Supervisor → Final Approver (order and presence depend on `user_profiles`).
+- **Chain:** Employee → Supervisor → Manager → Final Approver. Built from `user_profiles` (supervisor_id, manager_id, final_approver_id). If a field is “None,” the next person in the structure is used.
 - **Who can approve:** Next person in chain who hasn’t signed; Admin/Super Admin can always approve (treated as final).
 - **Who can reject:** Same as approve; reject requires a note (reject-form page).
 - **Clear rejection note:** Admin/Super Admin only (before employee resubmits).
@@ -82,7 +82,8 @@ Supervisor, Manager, Admin, Super Admin. (Employees have no access.)
 
 ### Edit user
 
-- **Supervisor:** View only. Can open a user to see name, email, role, reports to, and site/department/PO assignments; no Save, no password link, no delete.
+- **Supervisor:** View only. Can open a user to see name, email, role, Supervisor, and site/department/PO assignments; no Save, no password link, no delete.
+- **Single Supervisor field:** The edit form has one Supervisor dropdown (reports_to_id); supervisor_id is synced to the same value for the approval chain.
 - **Manager:** Full edit for users they see; can set role only to Manager, Supervisor, or Employee.
 - **Admin:** Full edit for non–Super Admins; can set any role except Super Admin.
 - **Super Admin:** Full edit and any role.
@@ -148,6 +149,8 @@ Admin and Super Admin only (and not self).
 
 - **Sites “assigned to” a user:** Stored in `user_sites` (user_id, site_id). Used for both supervisors and managers.
 - **Accessible sites:** `lib/access.ts` – `getAccessibleSiteIds(supabase, userId, role)` returns site IDs the user can access: null = all (admin/super_admin), else sites from `user_sites` for the current user (supervisor) or current user + subordinates (manager). `getSubordinateUserIds(supabase, managerId)` returns user IDs that report to the manager.
-- **Manager subordinates:** Users with `reports_to_id`, `supervisor_id`, or `manager_id` equal to the manager’s id.
+- **Manager subordinates:** Users with `reports_to_id`, `supervisor_id`, `manager_id`, or `final_approver_id` equal to the manager’s id. `getSubordinateUserIds` includes all four.
+- **Timesheets visibility (supervisor/manager):** My Timesheets and Pending Approvals use `createAdminClient()` to fetch `weekly_timesheets` for report IDs so RLS does not block reading subordinates’ timesheets.
+- **Timesheet dropdowns:** On New/Edit timesheet, Activity, Deliverable, and System options are filtered to sites assigned to the user (`user_sites`); admins see all.
 - **Read-only UI:** Organization uses `ConsolidatedManager` with `readOnly={true}` for supervisors; Systems/Activities/Deliverables use `HierarchicalItemManager` with `readOnly={true}` (hides Add, Import, Edit, Delete, bulk actions).
 - **Server actions:** create-user, update-user-assignments, and generate-password-link allow only Manager, Admin, Super Admin (not Supervisor).

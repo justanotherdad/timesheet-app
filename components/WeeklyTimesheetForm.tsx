@@ -787,7 +787,12 @@ export default function WeeklyTimesheetForm({
             }
           }}
         >
-          <div ref={modalRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onMouseDown={(e) => e.stopPropagation()}>
+          <div
+            ref={modalRef}
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full mx-4 min-w-[44rem] max-w-[min(56rem,95vw)] min-h-[28rem] max-h-[90vh] overflow-auto resize"
+            style={{ width: 'min(52rem, 92vw)' }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
                 {editingIndex === billableEntries.length ? 'Add Billable Entry' : 'Edit Billable Entry'}
