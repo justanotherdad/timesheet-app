@@ -30,13 +30,37 @@ export default async function NewTimesheetPage() {
       .single()
   )
 
-  // If timesheet exists for current week: redirect to edit if draft, else to view (so employee isn't sent to list)
   const existing = existingTimesheetResult.data
+  // Effective week for the form: current week by default; if current week is already submitted, use next week so user gets a "new" form
+  let effectiveWeekEnding = new Date(weekEnding)
+  let effectiveWeekEndingStr = weekEndingStr
+
   if (existing?.id) {
     if (existing.status === 'draft') {
       redirect(`/dashboard/timesheets/${existing.id}/edit`)
     }
-    redirect(`/dashboard/timesheets/${existing.id}`)
+    // Current week is submitted/approved/rejected — show new timesheet form for next week instead of redirecting to view
+    const nextWeekEnding = new Date(weekEnding)
+    nextWeekEnding.setDate(nextWeekEnding.getDate() + 7)
+    const nextWeekEndingStr = formatDateForInput(nextWeekEnding)
+
+    const nextExistingResult = await withQueryTimeout<{ id: string; status: string }>(() =>
+      supabase
+        .from('weekly_timesheets')
+        .select('id, status')
+        .eq('user_id', user.id)
+        .eq('week_ending', nextWeekEndingStr)
+        .maybeSingle()
+    )
+    const nextExisting = nextExistingResult.data
+    if (nextExisting?.id) {
+      if (nextExisting.status === 'draft') {
+        redirect(`/dashboard/timesheets/${nextExisting.id}/edit`)
+      }
+      redirect(`/dashboard/timesheets/${nextExisting.id}`)
+    }
+    effectiveWeekEnding = nextWeekEnding
+    effectiveWeekEndingStr = nextWeekEndingStr
   }
 
   // Get user's assigned sites and POs (unless admin)
@@ -85,8 +109,8 @@ export default async function NewTimesheetPage() {
   const deliverables = (deliverablesResult.data || []) as any[]
   const activities = (activitiesResult.data || []) as any[]
 
-  // Calculate previous week ending date
-  const previousWeekEnding = new Date(weekEnding)
+  // Previous week for "Copy Previous Week" is the week before the effective (current or next) week we're creating
+  const previousWeekEnding = new Date(effectiveWeekEnding)
   previousWeekEnding.setDate(previousWeekEnding.getDate() - 7)
   const previousWeekEndingStr = formatDateForInput(previousWeekEnding)
 
@@ -201,7 +225,7 @@ export default async function NewTimesheetPage() {
               systems={systems}
               deliverables={deliverables}
               activities={activities}
-              defaultWeekEnding={weekEndingStr}
+              defaultWeekEnding={effectiveWeekEndingStr}
               userId={user.id}
               previousWeekData={previousWeekData}
             />
