@@ -121,6 +121,109 @@ export default async function EditTimesheetPage({
   )
   const unbillable = Array.isArray(unbillableResult.data) ? unbillableResult.data : []
 
+  // Previous week data for "Copy Previous Week" (week before this timesheet's week_ending)
+  const timesheetUserId = timesheet.user_id
+  let previousWeekData: {
+    entries?: Array<{
+      client_project_id?: string
+      po_id?: string
+      task_description: string
+      system_id?: string
+      system_name?: string
+      deliverable_id?: string
+      activity_id?: string
+      mon_hours: number
+      tue_hours: number
+      wed_hours: number
+      thu_hours: number
+      fri_hours: number
+      sat_hours: number
+      sun_hours: number
+    }>
+    unbillable?: Array<{
+      description: 'HOLIDAY' | 'INTERNAL' | 'PTO'
+      mon_hours: number
+      tue_hours: number
+      wed_hours: number
+      thu_hours: number
+      fri_hours: number
+      sat_hours: number
+      sun_hours: number
+    }>
+  } | undefined = undefined
+  try {
+    const currentWeekEnding = new Date(timesheet.week_ending)
+    const previousWeekEnding = new Date(currentWeekEnding)
+    previousWeekEnding.setDate(previousWeekEnding.getDate() - 7)
+    const previousWeekEndingStr = formatDateForInput(previousWeekEnding)
+
+    const previousTimesheetResult = await withQueryTimeout<{ id: string }>(() =>
+      supabase
+        .from('weekly_timesheets')
+        .select('id')
+        .eq('user_id', timesheetUserId)
+        .eq('week_ending', previousWeekEndingStr)
+        .single()
+    )
+
+    const previousTimesheet = previousTimesheetResult.data as { id: string } | null
+    if (previousTimesheet?.id) {
+      const previousTimesheetId = previousTimesheet.id
+      const [prevEntriesResult, prevUnbillableResult] = await Promise.all([
+        withQueryTimeout<Array<any>>(() =>
+          supabase
+            .from('timesheet_entries')
+            .select('*')
+            .eq('timesheet_id', previousTimesheetId)
+            .order('created_at')
+        ),
+        withQueryTimeout<Array<any>>(() =>
+          supabase
+            .from('timesheet_unbillable')
+            .select('*')
+            .eq('timesheet_id', previousTimesheetId)
+            .order('description')
+        ),
+      ])
+
+      const prevEntries = Array.isArray(prevEntriesResult.data) ? prevEntriesResult.data : []
+      const prevUnbillable = Array.isArray(prevUnbillableResult.data) ? prevUnbillableResult.data : []
+
+      if (prevEntries.length > 0 || prevUnbillable.length > 0) {
+        previousWeekData = {
+          entries: prevEntries.map((entry: any) => ({
+            client_project_id: entry.client_project_id,
+            po_id: entry.po_id,
+            task_description: entry.task_description,
+            system_id: entry.system_id,
+            system_name: entry.system_name,
+            deliverable_id: entry.deliverable_id,
+            activity_id: entry.activity_id,
+            mon_hours: entry.mon_hours,
+            tue_hours: entry.tue_hours,
+            wed_hours: entry.wed_hours,
+            thu_hours: entry.thu_hours,
+            fri_hours: entry.fri_hours,
+            sat_hours: entry.sat_hours,
+            sun_hours: entry.sun_hours,
+          })),
+          unbillable: prevUnbillable.map((entry: any) => ({
+            description: entry.description,
+            mon_hours: entry.mon_hours,
+            tue_hours: entry.tue_hours,
+            wed_hours: entry.wed_hours,
+            thu_hours: entry.thu_hours,
+            fri_hours: entry.fri_hours,
+            sat_hours: entry.sat_hours,
+            sun_hours: entry.sun_hours,
+          })),
+        }
+      }
+    }
+  } catch {
+    // No previous week or error — continue without copy option
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Edit Weekly Timesheet" showBack backUrl={`/dashboard/timesheets/${id}`} user={user} />
@@ -141,6 +244,7 @@ export default async function EditTimesheetPage({
                 entries: entries || [],
                 unbillable: unbillable || [],
               }}
+              previousWeekData={previousWeekData}
             />
           </div>
         </div>

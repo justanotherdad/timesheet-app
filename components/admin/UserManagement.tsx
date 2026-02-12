@@ -392,6 +392,23 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
           selectedPOs
         )
         if (assignResult.error) throw new Error(assignResult.error)
+
+        // Update local state so table (e.g. Supervisor column) reflects changes without reload
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === editingUser.id
+              ? {
+                  ...u,
+                  name,
+                  role: canChangeRole(editingUser) ? role : editingUser.role,
+                  reports_to_id: reportsToId || null,
+                  supervisor_id: supervisorId || null,
+                  manager_id: managerId || null,
+                  final_approver_id: finalApproverId || null,
+                }
+              : u
+          )
+        )
       }
 
       setEditingUser(null)
@@ -400,9 +417,6 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
       setSelectedDepartments([])
       setSelectedPOs([])
       setSuccess('User updated successfully')
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {
