@@ -13,9 +13,9 @@ export default async function ChangePasswordPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Change Password" showBack backUrl="/dashboard" user={user} />
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
         <div className="max-w-md mx-auto">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
             <ChangePasswordForm />
           </div>
         </div>

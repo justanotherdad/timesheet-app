@@ -22,8 +22,8 @@ export default async function DataViewPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Timesheet Data View" showBack backUrl="/dashboard" user={user} />
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-7xl mx-auto">
+      <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
+        <div className="max-w-7xl mx-auto overflow-hidden">
           <DataViewManager 
             users={users}
             sites={sites}

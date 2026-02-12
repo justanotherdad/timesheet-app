@@ -321,15 +321,15 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Timesheet Data View</h2>
         <button
           onClick={handleExport}
           disabled={expandedEntries.length === 0}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+          className="min-h-[44px] sm:min-h-0 w-full sm:w-auto bg-green-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
         >
-          <Download className="h-4 w-4" />
+          <Download className="h-4 w-4 shrink-0" />
           Export CSV
         </button>
       </div>
@@ -341,7 +341,7 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
       )}
 
       {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">User</label>
           <select

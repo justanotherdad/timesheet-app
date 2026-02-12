@@ -65,13 +65,13 @@ export default async function DashboardPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Timesheet Dashboard" user={user} />
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <Link
             href="/dashboard/timesheets/new"
-            className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
           >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               <div className="bg-blue-100 p-3 rounded-lg">
                 <FileText className="h-6 w-6 text-blue-600" />
               </div>
@@ -84,9 +84,9 @@ export default async function DashboardPage() {
 
           <Link
             href="/dashboard/timesheets"
-            className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
           >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               <div className="bg-green-100 p-3 rounded-lg">
                 <Calendar className="h-6 w-6 text-green-600" />
               </div>
@@ -100,9 +100,9 @@ export default async function DashboardPage() {
           {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
             <Link
               href="/dashboard/admin/users"
-              className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
             >
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 sm:gap-4">
                 <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg">
                   <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                 </div>
@@ -117,9 +117,9 @@ export default async function DashboardPage() {
           {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
             <Link
               href="/dashboard/approvals"
-              className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
             >
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 sm:gap-4">
                 <div className="bg-orange-100 p-3 rounded-lg">
                   <Users className="h-6 w-6 text-orange-600" />
                 </div>
@@ -137,9 +137,9 @@ export default async function DashboardPage() {
             <>
               <Link
                 href="/dashboard/admin/organization"
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 sm:gap-4">
                   <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-lg">
                     <Building className="h-6 w-6 text-green-600 dark:text-green-400" />
                   </div>
@@ -151,9 +151,9 @@ export default async function DashboardPage() {
               </Link>
               <Link
                 href="/dashboard/admin/systems"
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 sm:gap-4">
                   <div className="bg-orange-100 dark:bg-orange-900/30 p-3 rounded-lg">
                     <Activity className="h-6 w-6 text-orange-600 dark:text-orange-400" />
                   </div>
@@ -165,9 +165,9 @@ export default async function DashboardPage() {
               </Link>
               <Link
                 href="/dashboard/admin/activities"
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 sm:gap-4">
                   <div className="bg-pink-100 dark:bg-pink-900/30 p-3 rounded-lg">
                     <Activity className="h-6 w-6 text-pink-600 dark:text-pink-400" />
                   </div>
@@ -179,9 +179,9 @@ export default async function DashboardPage() {
               </Link>
               <Link
                 href="/dashboard/admin/deliverables"
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 sm:gap-4">
                   <div className="bg-indigo-100 dark:bg-indigo-900/30 p-3 rounded-lg">
                     <Package className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
                   </div>
@@ -195,9 +195,9 @@ export default async function DashboardPage() {
               <>
               <Link
                 href="/dashboard/admin/data-view"
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 sm:gap-4">
                   <div className="bg-teal-100 dark:bg-teal-900/30 p-3 rounded-lg">
                     <FileText className="h-6 w-6 text-teal-600 dark:text-teal-400" />
                   </div>
@@ -209,9 +209,9 @@ export default async function DashboardPage() {
               </Link>
               <Link
                 href="/dashboard/admin/export"
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 sm:gap-4">
                   <div className="bg-cyan-100 dark:bg-cyan-900/30 p-3 rounded-lg">
                     <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
                   </div>
@@ -227,8 +227,8 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
               Current Week ({formatWeekEnding(weekEnding)})
             </h2>
@@ -263,7 +263,7 @@ export default async function DashboardPage() {
           </div>
 
           {pendingApprovals.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
                 Pending Approvals
               </h2>

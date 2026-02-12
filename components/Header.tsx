@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Menu, X } from 'lucide-react'
+import { Menu, BookOpen } from 'lucide-react'
+import GuideModal from './GuideModal'
 
 interface HeaderProps {
   title?: string
@@ -19,6 +20,7 @@ interface HeaderProps {
 
 export default function Header({ title, showBack = false, backUrl, user }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -40,18 +42,18 @@ export default function Header({ title, showBack = false, backUrl, user }: Heade
 
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm print:hidden">
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
             {/* CTG Logo */}
-            <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+            <Link href="/dashboard" className="flex items-center shrink-0 hover:opacity-80 transition-opacity">
               {/* Image logo - now active */}
               <Image
                 src="/ctg-logo.png"
                 alt="CTG Logo"
                 width={120}
                 height={40}
-                className="h-10 w-auto"
+                className="h-8 sm:h-10 w-auto"
               />
               
               {/* Text-based logo - now commented out */}
@@ -74,7 +76,7 @@ export default function Header({ title, showBack = false, backUrl, user }: Heade
             {showBack && (
               <Link
                 href={backUrl || '#'}
-                className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 flex items-center gap-1 text-sm"
+                className="shrink-0 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 flex items-center gap-1 text-sm py-1"
               >
                 ← Back
               </Link>
@@ -82,18 +84,27 @@ export default function Header({ title, showBack = false, backUrl, user }: Heade
 
             {/* Title */}
             {title && (
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate min-w-0">
                 {title}
               </h1>
             )}
           </div>
 
-          {/* User Info and Hamburger Menu */}
+          {/* User Info, Guide, and Hamburger Menu */}
           {user && (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <span className="hidden md:block text-sm text-gray-600 dark:text-gray-300">
                 {user.profile.name} ({user.profile.role})
               </span>
+              <button
+                type="button"
+                onClick={() => setGuideOpen(true)}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+                aria-label="Open site guide"
+                title="Site Guide"
+              >
+                <BookOpen className="h-5 w-5 sm:h-6 sm:w-6" />
+              </button>
               <div ref={menuRef} className="relative">
                 <button
                   onClick={() => setMenuOpen(!menuOpen)}
@@ -106,6 +117,13 @@ export default function Header({ title, showBack = false, backUrl, user }: Heade
                 {menuOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
                     <div className="py-1">
+                      <button
+                        type="button"
+                        onClick={() => { setGuideOpen(true); setMenuOpen(false) }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                        Site Guide
+                      </button>
                       <Link
                         href="/dashboard"
                         className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -153,6 +171,7 @@ export default function Header({ title, showBack = false, backUrl, user }: Heade
           )}
         </div>
       </div>
+      <GuideModal isOpen={guideOpen} onClose={() => setGuideOpen(false)} />
     </header>
   )
 }

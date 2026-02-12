@@ -741,11 +741,11 @@ export default function WeeklyTimesheetForm({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-2 sm:gap-4">
           <button
             type="submit"
             disabled={loading || (currentStatus !== 'draft' && currentStatus !== 'rejected')}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="min-h-[44px] sm:min-h-0 bg-blue-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Saving...' : timesheetId ? 'Save Draft' : 'Save Timesheet'}
           </button>
@@ -754,7 +754,7 @@ export default function WeeklyTimesheetForm({
               type="button"
               onClick={handleSubmit}
               disabled={loading}
-              className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="min-h-[44px] sm:min-h-0 bg-green-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Submitting...' : 'Submit for Approval'}
             </button>
@@ -762,7 +762,7 @@ export default function WeeklyTimesheetForm({
           <button
             type="button"
             onClick={() => router.back()}
-            className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-6 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+            className="min-h-[44px] sm:min-h-0 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-6 py-2.5 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
             disabled={loading}
           >
             Cancel

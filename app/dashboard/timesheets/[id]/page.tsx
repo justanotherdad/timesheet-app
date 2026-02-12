@@ -192,12 +192,12 @@ export default async function TimesheetDetailPage({
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Timesheet Details" showBack backUrl="/dashboard/timesheets" user={user} />
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-6 sm:py-8">
         <div className="max-w-7xl mx-auto">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Weekly Timesheet Details</h1>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start mb-6">
+              <div className="min-w-0">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Weekly Timesheet Details</h1>
                 <p className="text-gray-600 dark:text-gray-300 mt-1">
                   Week Ending: {formatWeekEnding(timesheet.week_ending)}
                 </p>
@@ -205,7 +205,7 @@ export default async function TimesheetDetailPage({
                   Employee: {timesheet.user_profiles.name}
                 </p>
               </div>
-              <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(timesheet.status)}`}>
+              <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium shrink-0 ${getStatusColor(timesheet.status)}`}>
                 {getStatusIcon(timesheet.status)}
                 {timesheet.status}
               </span>
@@ -355,17 +355,17 @@ export default async function TimesheetDetailPage({
               </div>
             )}
 
-            <div className="border-t pt-6 mt-6 flex gap-4 flex-wrap">
+            <div className="border-t pt-6 mt-6 flex flex-wrap gap-2 sm:gap-4">
               <Link
                 href={`/dashboard/timesheets/${timesheet.id}/export`}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 bg-blue-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
               >
                 Export Timesheet
               </Link>
               {timesheet.status === 'draft' && timesheet.user_id === user.id && (
                 <Link
                   href={`/dashboard/timesheets/${timesheet.id}/edit`}
-                  className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                  className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2.5 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                 >
                   Edit
                 </Link>
@@ -373,7 +373,7 @@ export default async function TimesheetDetailPage({
               {timesheet.status === 'rejected' && timesheet.user_id === user.id && (
                 <Link
                   href={`/dashboard/timesheets/${timesheet.id}/edit`}
-                  className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                  className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2.5 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                 >
                   Edit & resubmit
                 </Link>
@@ -383,17 +383,17 @@ export default async function TimesheetDetailPage({
                   <form action={`/dashboard/approvals/${timesheet.id}/approve`} method="post" className="inline">
                     <button
                       type="submit"
-                      className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2"
+                      className="min-h-[44px] sm:min-h-0 bg-green-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                     >
-                      <CheckCircle className="h-4 w-4" />
+                      <CheckCircle className="h-4 w-4 shrink-0" />
                       Approve
                     </button>
                   </form>
                   <Link
                     href={`/dashboard/approvals/${timesheet.id}/reject-form`}
-                    className="inline-flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors"
+                    className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 gap-2 bg-red-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-red-700 transition-colors"
                   >
-                    <XCircle className="h-4 w-4" />
+                    <XCircle className="h-4 w-4 shrink-0" />
                     Reject
                   </Link>
                 </>
