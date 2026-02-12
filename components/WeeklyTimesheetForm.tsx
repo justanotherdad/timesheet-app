@@ -793,7 +793,7 @@ export default function WeeklyTimesheetForm({
         >
           <div
             ref={modalRef}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 min-h-[28rem] max-h-[90vh] overflow-auto resize w-full mx-0 min-w-0 md:mx-4 md:w-[min(104rem,96vw)] md:min-w-[48rem]"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 sm:p-6 min-h-[28rem] max-h-[min(90vh,calc(100vh-2rem))] overflow-auto resize w-[calc(100vw-2rem)] max-w-full min-w-0 mx-auto md:mx-4 md:w-[min(104rem,96vw)] md:min-w-[48rem] md:max-h-[90vh]"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-4">
@@ -811,7 +811,7 @@ export default function WeeklyTimesheetForm({
 
             <div className="space-y-4">
               {/* Row 1: Client and PO */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Client
@@ -851,7 +851,7 @@ export default function WeeklyTimesheetForm({
               </div>
 
               {/* Row 3: System, Deliverable, Activity */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     System
@@ -901,10 +901,10 @@ export default function WeeklyTimesheetForm({
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Hours by Day
                 </label>
-                <div className="grid grid-cols-7 gap-2">
+                <div className="grid grid-cols-7 gap-2 items-end">
                   {days.map((day, idx) => (
-                    <div key={day}>
-                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                    <div key={day} className="flex flex-col min-h-[3.25rem]">
+                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 shrink-0">
                         {format(weekDates.days[idx], 'EEE').toUpperCase().slice(0, 2)}
                       </label>
                       <input
@@ -912,9 +912,9 @@ export default function WeeklyTimesheetForm({
                         step="0.01"
                         min="0"
                         max="24"
-                        value={editingEntry[`${day}_hours`] || ''}
+                        value={editingEntry[`${day}_hours`] ?? ''}
                         onChange={(e) => setEditingEntry({ ...editingEntry, [`${day}_hours`]: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                        className="w-full h-9 min-h-9 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-base focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white box-border"
                       />
                     </div>
                   ))}

@@ -63,7 +63,7 @@ export default function SearchableSelect({
           onClick={() => setIsOpen(!isOpen)}
           className="w-full px-4 py-2 text-left bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-center justify-between text-gray-900 dark:text-gray-100"
         >
-          <span className={selectedOption ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}>
+          <span className={`min-w-0 truncate block text-left ${selectedOption ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}`}>
             {selectedOption
               ? `${selectedOption.name}${selectedOption.code ? ` (${selectedOption.code})` : ''}`
               : placeholder}
@@ -83,14 +83,14 @@ export default function SearchableSelect({
         </button>
 
         {isOpen && (
-          <div className="absolute z-[9999] w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto min-w-max">
+          <div className="absolute left-0 right-0 z-[9999] mt-1 w-full min-w-0 max-w-[min(100%,calc(100vw-2rem))] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
             <div className="p-2 sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                className="w-full min-w-0 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 onClick={(e) => e.stopPropagation()}
               />
             </div>
@@ -107,13 +107,13 @@ export default function SearchableSelect({
                       setIsOpen(false)
                       setSearchTerm('')
                     }}
-                    className={`w-full text-left px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900 ${
+                    className={`w-full min-w-0 text-left px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900 ${
                       value === option.id ? 'bg-blue-100 dark:bg-blue-800' : ''
-                    } text-gray-900 dark:text-gray-100`}
+                    } text-gray-900 dark:text-gray-100 break-words`}
                   >
-                    <div className="font-medium whitespace-normal break-words">{option.name}</div>
+                    <span className="font-medium block break-words">{option.name}</span>
                     {option.code && (
-                      <div className="text-sm text-gray-500 dark:text-gray-400 whitespace-normal break-words">{option.code}</div>
+                      <span className="text-sm text-gray-500 dark:text-gray-400 block break-words">{option.code}</span>
                     )}
                   </button>
                 ))

@@ -133,7 +133,7 @@ export default function SystemInput({
               onClick={() => setIsOpen(!isOpen)}
               className="w-full px-4 py-2 text-left bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-center justify-between text-gray-900 dark:text-gray-100"
             >
-              <span className={selectedOption ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}>
+              <span className={`min-w-0 truncate block text-left ${selectedOption ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}`}>
                 {selectedOption
                   ? `${selectedOption.name}${selectedOption.code ? ` (${selectedOption.code})` : ''}`
                   : placeholder}
@@ -167,7 +167,7 @@ export default function SystemInput({
             )}
 
             {isOpen && (
-              <div className="absolute z-[9999] w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto min-w-max">
+              <div className="absolute left-0 right-0 z-[9999] mt-1 w-full min-w-0 max-w-[min(100%,calc(100vw-2rem))] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
                 <div className="p-2 sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                   <input
                     type="text"
