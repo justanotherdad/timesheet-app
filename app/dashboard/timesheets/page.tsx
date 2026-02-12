@@ -76,6 +76,7 @@ export default async function TimesheetsPage() {
 
   // For admin/super_admin: fetch signatures (signer_id) to show "With" in approval workflow
   let signaturesByTimesheetId: Record<string, { signer_id: string }[]> = {}
+  let approverNamesById: Record<string, string> = {}
   if (['admin', 'super_admin'].includes(user.profile.role) && timesheets.length > 0) {
     const ids = timesheets.map((ts: any) => ts.id)
     const sigResult = await withQueryTimeout(() =>
@@ -89,6 +90,43 @@ export default async function TimesheetsPage() {
       if (!signaturesByTimesheetId[s.timesheet_id]) signaturesByTimesheetId[s.timesheet_id] = []
       signaturesByTimesheetId[s.timesheet_id].push({ signer_id: s.signer_id })
     })
+
+    // Collect next-approver user IDs for submitted timesheets (need chain from user_profiles)
+    const nextApproverIds = new Set<string>()
+    timesheets.forEach((ts: any) => {
+      if (ts.status !== 'submitted') return
+      const profile = ts.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
+      if (!profile) return
+      const chain: string[] = []
+      if (profile.supervisor_id) chain.push(profile.supervisor_id)
+      if (profile.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
+      if (profile.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
+      const signedIds = (signaturesByTimesheetId[ts.id] || []).map((s: { signer_id: string }) => s.signer_id)
+      const nextId = chain.find((uid) => !signedIds.includes(uid))
+      if (nextId) nextApproverIds.add(nextId)
+    })
+    if (nextApproverIds.size > 0) {
+      const adminSupabase = createAdminClient()
+      const approversResult = await withQueryTimeout(() =>
+        adminSupabase.from('user_profiles').select('id, name').in('id', [...nextApproverIds])
+      )
+      const approvers = (approversResult.data || []) as { id: string; name: string }[]
+      approvers.forEach((a) => {
+        approverNamesById[a.id] = a.name || 'Unknown'
+      })
+    }
+  }
+
+  const getNextApproverId = (ts: any): string | undefined => {
+    if (ts.status !== 'submitted') return undefined
+    const profile = ts.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
+    if (!profile) return undefined
+    const chain: string[] = []
+    if (profile.supervisor_id) chain.push(profile.supervisor_id)
+    if (profile.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
+    if (profile.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
+    const signedIds = (signaturesByTimesheetId[ts.id] || []).map((s: { signer_id: string }) => s.signer_id)
+    return chain.find((uid) => !signedIds.includes(uid))
   }
 
   const getWithLabel = (ts: any) => {
@@ -96,18 +134,26 @@ export default async function TimesheetsPage() {
     if (ts.status === 'rejected') return 'Rejected'
     if (ts.status === 'approved') return 'Approved'
     if (ts.status === 'submitted') {
-      const profile = ts.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
-      const chain: string[] = []
-      if (profile?.supervisor_id) chain.push(profile.supervisor_id)
-      if (profile?.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
-      if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
-      const signedIds = (signaturesByTimesheetId[ts.id] || []).map((s) => s.signer_id)
-      const nextId = chain.find((uid) => !signedIds.includes(uid))
+      const nextId = getNextApproverId(ts)
       if (nextId === undefined) return 'Approved'
+      const profile = ts.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
       if (nextId === profile?.manager_id) return 'With Manager'
       if (nextId === profile?.supervisor_id) return 'With Supervisor'
       if (nextId === profile?.final_approver_id) return 'With Final Approver'
       return '—'
+    }
+    return '—'
+  }
+
+  const getWithPersonName = (ts: any) => {
+    if (ts.status === 'draft') return '—'
+    if (ts.status === 'rejected') return 'Rejected'
+    if (ts.status === 'approved') return 'Approved'
+    if (ts.status === 'submitted') {
+      const nextId = getNextApproverId(ts)
+      if (nextId === undefined) return 'Approved'
+      if (approverNamesById[nextId]) return approverNamesById[nextId]
+      return getWithLabel(ts)
     }
     return '—'
   }
@@ -177,6 +223,11 @@ export default async function TimesheetsPage() {
                           With
                         </th>
                       )}
+                      {(['admin', 'super_admin'].includes(user.profile.role)) && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          With (person)
+                        </th>
+                      )}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Created
                       </th>
@@ -208,6 +259,11 @@ export default async function TimesheetsPage() {
                         {(['admin', 'super_admin'].includes(user.profile.role)) && (
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                             {getWithLabel(ts)}
+                          </td>
+                        )}
+                        {(['admin', 'super_admin'].includes(user.profile.role)) && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                            {getWithPersonName(ts)}
                           </td>
                         )}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
