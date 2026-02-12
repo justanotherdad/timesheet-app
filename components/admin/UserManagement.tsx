@@ -32,6 +32,8 @@ interface PurchaseOrder {
 
 interface UserManagementProps {
   users: User[]
+  lookupUsers?: User[]
+  initialUserAssignments?: Record<string, { sites: string[]; departments: string[]; purchaseOrders: string[] }>
   currentUserRole: UserRole
   currentUserId?: string
   sites: Site[]
@@ -39,13 +41,21 @@ interface UserManagementProps {
   purchaseOrders: PurchaseOrder[]
 }
 
-export default function UserManagement({ users: initialUsers, currentUserRole, currentUserId, sites, departments, purchaseOrders }: UserManagementProps) {
+export default function UserManagement({ users: initialUsers, lookupUsers, initialUserAssignments, currentUserRole, currentUserId, sites, departments, purchaseOrders }: UserManagementProps) {
   const [users, setUsers] = useState(initialUsers)
+  const nameLookup = lookupUsers ?? users
 
   // Sync users state when initialUsers prop changes (e.g., after page reload)
   useEffect(() => {
     setUsers(initialUsers)
   }, [initialUsers])
+
+  // Sync assignments when server provides them (e.g. supervisor view)
+  useEffect(() => {
+    if (initialUserAssignments && Object.keys(initialUserAssignments).length > 0) {
+      setUserAssignments(initialUserAssignments)
+    }
+  }, [initialUserAssignments])
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -59,12 +69,12 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([])
   const [selectedPOs, setSelectedPOs] = useState<string[]>([])
   
-  // User assignments (loaded from junction tables)
+  // User assignments: prefer server-loaded (so supervisors see reports' data), else loaded from junction tables client-side
   const [userAssignments, setUserAssignments] = useState<Record<string, {
     sites: string[]
     departments: string[]
     purchaseOrders: string[]
-  }>>({})
+  }>>(initialUserAssignments ?? {})
 
   // Sort: column key and direction
   type SortKey = 'name' | 'email' | 'role' | 'sites' | 'departments' | 'purchase_orders' | 'reports_to' | 'final_approver'
@@ -140,10 +150,10 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
       const deptsB = assignmentsB.departments.map((id: string) => departments.find(d => d.id === id)?.name).filter(Boolean).join(', ')
       const posA = assignmentsA.purchaseOrders.map((id: string) => purchaseOrders.find(p => p.id === id)?.po_number).filter(Boolean).join(', ')
       const posB = assignmentsB.purchaseOrders.map((id: string) => purchaseOrders.find(p => p.id === id)?.po_number).filter(Boolean).join(', ')
-      const reportsToA = users.find(u => u.id === a.reports_to_id)?.name || ''
-      const reportsToB = users.find(u => u.id === b.reports_to_id)?.name || ''
-      const finalApproverA = users.find(u => u.id === a.final_approver_id)?.name || ''
-      const finalApproverB = users.find(u => u.id === b.final_approver_id)?.name || ''
+      const reportsToA = nameLookup.find(u => u.id === a.reports_to_id)?.name || ''
+      const reportsToB = nameLookup.find(u => u.id === b.reports_to_id)?.name || ''
+      const finalApproverA = nameLookup.find(u => u.id === a.final_approver_id)?.name || ''
+      const finalApproverB = nameLookup.find(u => u.id === b.final_approver_id)?.name || ''
       let va: string | number = ''
       let vb: string | number = ''
       switch (sortColumn) {
@@ -178,8 +188,14 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
     return sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 ml-1" /> : <ArrowDown className="h-3.5 w-3.5 ml-1" />
   }
 
-  // Load all user assignments on component mount and when users change
+  // Load all user assignments client-side only when server did not provide them (admins: RLS allows; supervisors: use server data)
   useEffect(() => {
+    const hasServerAssignments = initialUserAssignments && Object.keys(initialUserAssignments).length > 0
+    if (hasServerAssignments) {
+      assignmentsLoadedRef.current = true
+      return
+    }
+
     const loadAllUserAssignments = async () => {
       if (users.length === 0) return
 
@@ -189,7 +205,6 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
         purchaseOrders: string[]
       }> = {}
 
-      // Load assignments for all users in parallel
       await Promise.all(
         users.map(async (user) => {
           try {
@@ -215,13 +230,12 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
       assignmentsLoadedRef.current = true
     }
 
-    // Load assignments on mount or when users list changes (e.g., after reload)
     const currentAssignmentsCount = Object.keys(userAssignments).length
     if (!assignmentsLoadedRef.current || users.length !== currentAssignmentsCount) {
       loadAllUserAssignments()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [users]) // Reload when users change
+  }, [users, initialUserAssignments])
 
   // Load user assignments from junction tables
   const loadUserAssignments = async (userId: string) => {
@@ -252,21 +266,20 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
     setUserAssignments(prev => ({ ...prev, [user.id]: assignments }))
   }
 
-  // Load all user assignments on component mount
+  // Fallback: load assignments client-side when no server data (e.g. admin; supervisor path uses initialUserAssignments)
   useEffect(() => {
+    if (initialUserAssignments && Object.keys(initialUserAssignments).length > 0) return
+
     const loadAllAssignments = async () => {
       const assignmentsMap: Record<string, {
         sites: string[]
         departments: string[]
         purchaseOrders: string[]
       }> = {}
-
-      // Load assignments for all users in parallel
       const assignmentPromises = users.map(async (user) => {
         const assignments = await loadUserAssignments(user.id)
         assignmentsMap[user.id] = assignments
       })
-
       await Promise.all(assignmentPromises)
       setUserAssignments(assignmentsMap)
     }
@@ -274,7 +287,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
     if (users.length > 0) {
       loadAllAssignments()
     }
-  }, [users.length]) // Only run when users array length changes
+  }, [users.length, initialUserAssignments])
 
   const handleAddUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -605,7 +618,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                 >
                   <option value="">None</option>
-                  {users
+                  {nameLookup
                     .filter(u => ['supervisor', 'manager', 'admin', 'super_admin'].includes(u.role))
                     .map(u => (
                       <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
@@ -619,7 +632,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                 >
                   <option value="">None</option>
-                  {users
+                  {nameLookup
                     .filter(u => ['manager', 'admin', 'super_admin'].includes(u.role))
                     .map(u => (
                       <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
@@ -633,7 +646,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                 >
                   <option value="">None</option>
-                  {users
+                  {nameLookup
                     .filter(u => ['manager', 'admin', 'super_admin'].includes(u.role))
                     .map(u => (
                       <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
@@ -812,7 +825,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
                     <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 capitalize">{user.role}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      Final approver: {users.find(u => u.id === user.final_approver_id)?.name || 'N/A'}
+                      Final approver: {nameLookup.find(u => u.id === user.final_approver_id)?.name || 'N/A'}
                     </p>
                     {userSites.length > 0 && (
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate" title={userSites.join(', ')}>
@@ -902,10 +915,10 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                 <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userDepts.length > 0 ? userDepts.join(', ') : 'N/A'}</td>
                 <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userPOs.length > 0 ? userPOs.join(', ') : 'N/A'}</td>
                 <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                  {users.find(u => u.id === user.reports_to_id)?.name || 'N/A'}
+                  {nameLookup.find(u => u.id === user.reports_to_id)?.name || 'N/A'}
                 </td>
                 <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                  {users.find(u => u.id === user.final_approver_id)?.name || 'N/A'}
+                  {nameLookup.find(u => u.id === user.final_approver_id)?.name || 'N/A'}
                 </td>
                 <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
                   <button
@@ -934,8 +947,8 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Name:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.name}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Email:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.email}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Role:</span> <span className="text-gray-900 dark:text-gray-100 capitalize">{editingUser.role}</span></div>
-                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Supervisor:</span> <span className="text-gray-900 dark:text-gray-100">{users.find(u => u.id === editingUser.reports_to_id)?.name || 'N/A'}</span></div>
-                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Final Approver:</span> <span className="text-gray-900 dark:text-gray-100">{users.find(u => u.id === editingUser.final_approver_id)?.name || 'N/A'}</span></div>
+                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Supervisor:</span> <span className="text-gray-900 dark:text-gray-100">{nameLookup.find(u => u.id === editingUser.reports_to_id)?.name || 'N/A'}</span></div>
+                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Final Approver:</span> <span className="text-gray-900 dark:text-gray-100">{nameLookup.find(u => u.id === editingUser.final_approver_id)?.name || 'N/A'}</span></div>
                 <div>
                   <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Sites:</span>
                   <span className="text-gray-900 dark:text-gray-100">
@@ -1085,7 +1098,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                     >
                       <option value="">None</option>
-                      {users
+                      {nameLookup
                         .filter(u => u.id !== editingUser.id && ['supervisor', 'manager', 'admin', 'super_admin'].includes(u.role))
                         .map(u => (
                           <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
@@ -1100,7 +1113,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                     >
                       <option value="">None</option>
-                      {users
+                      {nameLookup
                         .filter(u => u.id !== editingUser.id && ['manager', 'admin', 'super_admin'].includes(u.role))
                         .map(u => (
                           <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
@@ -1115,7 +1128,7 @@ export default function UserManagement({ users: initialUsers, currentUserRole, c
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                     >
                       <option value="">None</option>
-                      {users
+                      {nameLookup
                         .filter(u => u.id !== editingUser.id && ['manager', 'admin', 'super_admin'].includes(u.role))
                         .map(u => (
                           <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
