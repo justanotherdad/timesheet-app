@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
@@ -8,13 +8,13 @@ export async function POST(
 ) {
   try {
     const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
-    const supabase = await createClient()
+    const adminSupabase = createAdminClient()
     const { id } = await params
 
-    // Get the timesheet with owner's approval chain: manager first, then supervisor, then final approver
-    const { data: timesheet, error: fetchError } = await supabase
+    // Use admin client so RLS does not block supervisors/managers from reading the employee's timesheet
+    const { data: timesheet, error: fetchError } = await adminSupabase
       .from('weekly_timesheets')
-      .select('*, user_profiles!inner(manager_id, supervisor_id, final_approver_id)')
+      .select('*, user_profiles!user_id(manager_id, supervisor_id, final_approver_id)')
       .eq('id', id)
       .single()
 
@@ -35,7 +35,7 @@ export async function POST(
     }
 
     // Who has already signed (by signer_id)
-    const { data: existingSignatures } = await supabase
+    const { data: existingSignatures } = await adminSupabase
       .from('timesheet_signatures')
       .select('signer_id, signer_role')
       .eq('timesheet_id', id)
@@ -64,7 +64,7 @@ export async function POST(
     }
 
     // Create signature (DB may need signer_role to allow 'final_approver' – add enum value if required)
-    const { error: signatureError } = await supabase
+    const { error: signatureError } = await adminSupabase
       .from('timesheet_signatures')
       .insert({
         timesheet_id: id,
@@ -87,7 +87,7 @@ export async function POST(
       updateData.approved_at = new Date().toISOString()
     }
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await adminSupabase
       .from('weekly_timesheets')
       .update(updateData)
       .eq('id', id)

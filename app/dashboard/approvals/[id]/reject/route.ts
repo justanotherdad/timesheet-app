@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser, requireRole } from '@/lib/auth'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { requireRole } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 export async function POST(
@@ -8,11 +8,11 @@ export async function POST(
 ) {
   try {
     const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
-    const supabase = await createClient()
+    const adminSupabase = createAdminClient()
     const { id } = await params
 
-    // Get the timesheet with owner email and approval chain for permission check
-    const { data: timesheet, error: fetchError } = await supabase
+    // Use admin client so RLS does not block supervisors/managers from reading the employee's timesheet
+    const { data: timesheet, error: fetchError } = await adminSupabase
       .from('weekly_timesheets')
       .select(`
         *,
@@ -47,7 +47,7 @@ export async function POST(
     const rejectionReason = formData.get('reason') as string || 'Rejected by approver'
 
     // Update timesheet status
-    const { error: updateError } = await supabase
+    const { error: updateError } = await adminSupabase
       .from('weekly_timesheets')
       .update({
         status: 'rejected',
