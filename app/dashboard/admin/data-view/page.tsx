@@ -9,15 +9,17 @@ export default async function DataViewPage() {
   const supabase = await createClient()
 
   // Fetch all filter options
-  const [usersResult, sitesResult, departmentsResult] = await Promise.all([
+  const [usersResult, sitesResult, departmentsResult, purchaseOrdersResult] = await Promise.all([
     withQueryTimeout(() => supabase.from('user_profiles').select('id, name, email').order('name')),
     withQueryTimeout(() => supabase.from('sites').select('id, name').order('name')),
     withQueryTimeout(() => supabase.from('departments').select('id, name, site_id').order('name')),
+    withQueryTimeout(() => supabase.from('purchase_orders').select('id, po_number').order('po_number')),
   ])
 
   const users = (usersResult.data || []) as any[]
   const sites = (sitesResult.data || []) as any[]
   const departments = (departmentsResult.data || []) as any[]
+  const purchaseOrders = (purchaseOrdersResult.data || []) as any[]
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -28,6 +30,7 @@ export default async function DataViewPage() {
             users={users}
             sites={sites}
             departments={departments}
+            purchaseOrders={purchaseOrders}
           />
         </div>
       </div>

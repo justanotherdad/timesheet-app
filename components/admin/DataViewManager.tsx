@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Download, Filter } from 'lucide-react'
+import { Download, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatDateForInput, getWeekDates, formatDateForInput as formatInput } from '@/lib/utils'
 import { parseISO, format, addDays } from 'date-fns'
 
@@ -52,7 +52,7 @@ interface TimesheetEntry {
   systems?: { name: string }
   activities?: { name: string }
   deliverables?: { name: string }
-  purchase_orders?: { po_number: string }
+  purchase_orders?: { po_number: string; department_id?: string }
   sites?: { name: string }
 }
 
@@ -76,19 +76,29 @@ interface ExpandedEntry {
   week_ending: string
 }
 
+interface PurchaseOrder {
+  id: string
+  po_number: string
+}
+
 interface DataViewManagerProps {
   users: User[]
   sites: Site[]
   departments: Department[]
+  purchaseOrders: PurchaseOrder[]
 }
 
-export default function DataViewManager({ users, sites, departments }: DataViewManagerProps) {
+export default function DataViewManager({ users, sites, departments, purchaseOrders }: DataViewManagerProps) {
   const [selectedUser, setSelectedUser] = useState<string>('')
   const [selectedSite, setSelectedSite] = useState<string>('')
   const [selectedDepartment, setSelectedDepartment] = useState<string>('')
+  const [selectedPO, setSelectedPO] = useState<string>('')
   const [startDate, setStartDate] = useState<string>('')
   const [endDate, setEndDate] = useState<string>('')
   const [status, setStatus] = useState<string>('')
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
+  const [sortColumn, setSortColumn] = useState<string>('date')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [entries, setEntries] = useState<TimesheetEntry[]>([])
   const [expandedEntries, setExpandedEntries] = useState<ExpandedEntry[]>([])
   const [loading, setLoading] = useState(false)
@@ -181,7 +191,7 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
           systems (name),
           activities (name),
           deliverables (name),
-          purchase_orders (po_number)
+          purchase_orders (po_number, department_id)
         `)
         .in('timesheet_id', timesheetIds)
 
@@ -266,6 +276,22 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
         })
       }
 
+      // Filter by department if specified (via PO's department)
+      if (selectedDepartment) {
+        filteredExpanded = filteredExpanded.filter(e => {
+          const entry = combinedEntries.find(ent => ent.id === e.entry_id)
+          return entry?.purchase_orders?.department_id === selectedDepartment
+        })
+      }
+
+      // Filter by PO if specified
+      if (selectedPO) {
+        filteredExpanded = filteredExpanded.filter(e => {
+          const entry = combinedEntries.find(ent => ent.id === e.entry_id)
+          return entry?.po_id === selectedPO
+        })
+      }
+
       // Sort by date descending
       filteredExpanded.sort((a, b) => {
         const dateA = parseISO(a.date)
@@ -275,6 +301,7 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
 
       setEntries(combinedEntries)
       setExpandedEntries(filteredExpanded)
+      setSelectedRowIds(new Set())
     } catch (err: any) {
       setError(err.message || 'Failed to load timesheet data')
     } finally {
@@ -284,17 +311,78 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
 
   useEffect(() => {
     loadData()
-  }, [selectedUser, startDate, endDate, status, selectedSite])
+  }, [selectedUser, startDate, endDate, status, selectedSite, selectedDepartment, selectedPO])
+
+  const sortedEntries = useMemo(() => {
+    const sorted = [...expandedEntries]
+    const mult = sortDirection === 'asc' ? 1 : -1
+    sorted.sort((a, b) => {
+      let aVal: string | number = ''
+      let bVal: string | number = ''
+      switch (sortColumn) {
+        case 'week_ending': aVal = a.week_ending; bVal = b.week_ending; break
+        case 'date': aVal = a.date; bVal = b.date; break
+        case 'day': aVal = a.day; bVal = b.day; break
+        case 'user': aVal = a.user_name; bVal = b.user_name; break
+        case 'site': aVal = a.site_name; bVal = b.site_name; break
+        case 'po': aVal = a.po_number; bVal = b.po_number; break
+        case 'task': aVal = a.task_description; bVal = b.task_description; break
+        case 'system': aVal = a.system_name; bVal = b.system_name; break
+        case 'activity': aVal = a.activity_name; bVal = b.activity_name; break
+        case 'deliverable': aVal = a.deliverable_name; bVal = b.deliverable_name; break
+        case 'hours': aVal = a.hours; bVal = b.hours; break
+        case 'status': aVal = a.status; bVal = b.status; break
+        default: aVal = a.date; bVal = b.date
+      }
+      if (typeof aVal === 'number' && typeof bVal === 'number') return mult * (aVal - bVal)
+      return mult * String(aVal).localeCompare(String(bVal))
+    })
+    return sorted
+  }, [expandedEntries, sortColumn, sortDirection])
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const SortIcon = ({ col }: { col: string }) => {
+    if (sortColumn !== col) return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-50" />
+    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1 inline" /> : <ArrowDown className="h-3 w-3 ml-1 inline" />
+  }
+
+  const toggleRowSelection = (id: string) => {
+    setSelectedRowIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedRowIds.size === sortedEntries.length) {
+      setSelectedRowIds(new Set())
+    } else {
+      setSelectedRowIds(new Set(sortedEntries.map(e => e.id)))
+    }
+  }
 
   const handleExport = () => {
-    if (expandedEntries.length === 0) {
-      setError('No data to export')
+    const toExport = selectedRowIds.size > 0
+      ? sortedEntries.filter(e => selectedRowIds.has(e.id))
+      : sortedEntries
+    if (toExport.length === 0) {
+      setError(selectedRowIds.size > 0 ? 'No selected rows to export' : 'No data to export')
       return
     }
 
     const csv = [
       ['Week Ending', 'Date', 'Day', 'User', 'Email', 'Site', 'PO', 'Task Description', 'System', 'Activity', 'Deliverable', 'Hours', 'Status'].join(','),
-      ...expandedEntries.map(entry => [
+      ...toExport.map(entry => [
         entry.week_ending,
         entry.date,
         entry.day,
@@ -330,7 +418,7 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
           className="min-h-[44px] sm:min-h-0 w-full sm:w-auto bg-green-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
         >
           <Download className="h-4 w-4 shrink-0" />
-          Export CSV
+          {selectedRowIds.size > 0 ? `Export Selected (${selectedRowIds.size})` : 'Export CSV'}
         </button>
       </div>
 
@@ -379,11 +467,25 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
             value={selectedDepartment}
             onChange={(e) => setSelectedDepartment(e.target.value)}
             disabled={!selectedSite}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white disabled:bg-gray-100 dark:disabled:bg-gray-700"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white disabled:bg-gray-100 dark:disabled:bg-gray-100"
           >
             <option value="">All Departments</option>
             {filteredDepartments.map(dept => (
               <option key={dept.id} value={dept.id}>{dept.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">PO</label>
+          <select
+            value={selectedPO}
+            onChange={(e) => setSelectedPO(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+          >
+            <option value="">All POs</option>
+            {purchaseOrders.map(po => (
+              <option key={po.id} value={po.id}>{po.po_number}</option>
             ))}
           </select>
         </div>
@@ -434,23 +536,90 @@ export default function DataViewManager({ users, sites, departments }: DataViewM
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Week Ending</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Day</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">User</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Site</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">PO</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Task Description</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">System</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Activity</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Deliverable</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Hours</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                <th className="px-4 py-3 text-left">
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={sortedEntries.length > 0 && selectedRowIds.size === sortedEntries.length}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-300 dark:border-gray-600"
+                    />
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Select</span>
+                  </label>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('week_ending')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    Week Ending <SortIcon col="week_ending" />
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('date')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    Date <SortIcon col="date" />
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('day')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    Day <SortIcon col="day" />
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('user')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    User <SortIcon col="user" />
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('site')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    Site <SortIcon col="site" />
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('po')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    PO <SortIcon col="po" />
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('task')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    Task Description <SortIcon col="task" />
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('system')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    System <SortIcon col="system" />
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('activity')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    Activity <SortIcon col="activity" />
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('deliverable')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    Deliverable <SortIcon col="deliverable" />
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('hours')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    Hours <SortIcon col="hours" />
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <button onClick={() => handleSort('status')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    Status <SortIcon col="status" />
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {expandedEntries.map((entry) => (
-                <tr key={entry.id}>
+              {sortedEntries.map((entry) => (
+                <tr key={entry.id} className={selectedRowIds.has(entry.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}>
+                  <td className="px-4 py-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedRowIds.has(entry.id)}
+                      onChange={() => toggleRowSelection(entry.id)}
+                      className="rounded border-gray-300 dark:border-gray-600"
+                    />
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {format(parseISO(entry.week_ending), 'MMM d, yyyy')}
                   </td>
