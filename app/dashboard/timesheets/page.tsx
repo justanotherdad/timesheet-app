@@ -30,7 +30,7 @@ export default async function TimesheetsPage() {
         .from('weekly_timesheets')
         .select(`
           *,
-          user_profiles!user_id(name, email, manager_id, supervisor_id, final_approver_id)
+          user_profiles!user_id(name, email, reports_to_id, manager_id, supervisor_id, final_approver_id)
         `)
         .order('week_ending', { ascending: false })
         .order('created_at', { ascending: false })
@@ -75,12 +75,14 @@ export default async function TimesheetsPage() {
   const timesheets = (timesheetsResult.data || []) as any[]
 
   // For admin/super_admin: fetch signatures (signer_id) to show "With" in approval workflow
+  // Use admin client so RLS does not block reading signatures
   let signaturesByTimesheetId: Record<string, { signer_id: string }[]> = {}
   let approverNamesById: Record<string, string> = {}
   if (['admin', 'super_admin'].includes(user.profile.role) && timesheets.length > 0) {
     const ids = timesheets.map((ts: any) => ts.id)
+    const adminSupabase = createAdminClient()
     const sigResult = await withQueryTimeout(() =>
-      supabase
+      adminSupabase
         .from('timesheet_signatures')
         .select('timesheet_id, signer_id')
         .in('timesheet_id', ids)
@@ -95,10 +97,11 @@ export default async function TimesheetsPage() {
     const nextApproverIds = new Set<string>()
     timesheets.forEach((ts: any) => {
       if (ts.status !== 'submitted') return
-      const profile = ts.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
+      const profile = ts.user_profiles as { reports_to_id?: string; manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
       if (!profile) return
       const chain: string[] = []
-      if (profile.supervisor_id) chain.push(profile.supervisor_id)
+      const firstApprover = profile.supervisor_id || profile.reports_to_id
+      if (firstApprover) chain.push(firstApprover)
       if (profile.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
       if (profile.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
       const signedIds = (signaturesByTimesheetId[ts.id] || []).map((s: { signer_id: string }) => s.signer_id)
@@ -106,7 +109,6 @@ export default async function TimesheetsPage() {
       if (nextId) nextApproverIds.add(nextId)
     })
     if (nextApproverIds.size > 0) {
-      const adminSupabase = createAdminClient()
       const approversResult = await withQueryTimeout(() =>
         adminSupabase.from('user_profiles').select('id, name').in('id', [...nextApproverIds])
       )
@@ -119,10 +121,11 @@ export default async function TimesheetsPage() {
 
   const getNextApproverId = (ts: any): string | undefined => {
     if (ts.status !== 'submitted') return undefined
-    const profile = ts.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
+    const profile = ts.user_profiles as { reports_to_id?: string; manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
     if (!profile) return undefined
     const chain: string[] = []
-    if (profile.supervisor_id) chain.push(profile.supervisor_id)
+    const firstApprover = profile.supervisor_id || profile.reports_to_id
+    if (firstApprover) chain.push(firstApprover)
     if (profile.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
     if (profile.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
     const signedIds = (signaturesByTimesheetId[ts.id] || []).map((s: { signer_id: string }) => s.signer_id)

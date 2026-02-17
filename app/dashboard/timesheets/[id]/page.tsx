@@ -216,18 +216,18 @@ export default async function TimesheetDetailPage({
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse border border-gray-300">
+                  <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
                     <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">Client/Project</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">PO#</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">Task Description</th>
+                      <tr className="bg-gray-100 dark:bg-gray-700">
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Client/Project</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">PO#</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Task Description</th>
                         {weekDates.days.map((day, idx) => (
-                          <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm text-gray-900 dark:text-gray-100">
+                          <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                             {format(day, 'EEE')}
                           </th>
                         ))}
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm text-gray-900 dark:text-gray-100">Total</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">Total</th>
                       </tr>
                     </thead>
                     <tbody>
