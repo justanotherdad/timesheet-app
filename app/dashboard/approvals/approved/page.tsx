@@ -8,11 +8,10 @@ import ApprovedTimesheetsClient from './ApprovedTimesheetsClient'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10
 
-export default async function ApprovedTimesheetsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ user?: string; start?: string; end?: string; sort?: string; dir?: string }>
-) {
+type SearchParams = { user?: string; start?: string; end?: string; sort?: string; dir?: string }
+
+export default async function ApprovedTimesheetsPage(props: { searchParams: Promise<SearchParams> }) {
+  const { searchParams } = props
   const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
   const params = await searchParams
   const filterUser = params.user || ''
