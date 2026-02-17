@@ -14,10 +14,12 @@ export default async function ApprovalsPage() {
   const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
 
   const supabase = await createClient()
+  const adminSupabase = createAdminClient()
 
   // Get all users who have this user as reports_to, supervisor, manager, or final approver
+  // Use admin client so RLS does not block supervisors/managers from seeing their reports
   const reportsResult = await withQueryTimeout(() =>
-    supabase
+    adminSupabase
       .from('user_profiles')
       .select('id')
       .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`)
@@ -40,14 +42,13 @@ export default async function ApprovalsPage() {
 
   const reportIds = reports.map(r => r.id)
 
-  // Use admin client so RLS does not block reading reports' timesheets
-  const adminSupabase = createAdminClient()
+  // Fetch timesheets from reports (admin client bypasses RLS)
   const timesheetsResult = await withQueryTimeout(() =>
     adminSupabase
       .from('weekly_timesheets')
       .select(`
         *,
-        user_profiles!user_id!inner(name, email, supervisor_id, manager_id, final_approver_id)
+        user_profiles!user_id!inner(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)
       `)
       .in('user_id', reportIds)
       .eq('status', 'submitted')
@@ -73,9 +74,10 @@ export default async function ApprovalsPage() {
     })
 
     timesheets = allSubmitted.filter((ts: any) => {
-      const profile = ts.user_profiles as { supervisor_id?: string; manager_id?: string; final_approver_id?: string }
+      const profile = ts.user_profiles as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string }
       const chain: string[] = []
-      if (profile?.supervisor_id) chain.push(profile.supervisor_id)
+      const firstApprover = profile?.supervisor_id || profile?.reports_to_id
+      if (firstApprover) chain.push(firstApprover)
       if (profile?.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
       if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
       const signedIds = signedByTimesheet[ts.id] || new Set<string>()
