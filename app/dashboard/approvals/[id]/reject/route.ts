@@ -79,14 +79,14 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    // TODO: Send email notification to employee
-    // For now, the employee will see the rejection status in their timesheet list
-    // To implement email notifications, configure Supabase email templates or use a third-party service
-    // Example: await supabase.functions.invoke('send-rejection-email', {
-    //   body: { email: ownerProfile?.email, timesheetId: id, reason: rejectionReason }
-    // })
-
-    return NextResponse.redirect(new URL('/dashboard/approvals', request.url))
+    // Redirect to rejected page which opens default email client with pre-filled draft
+    const baseUrl = new URL(request.url).origin
+    const params = new URLSearchParams({
+      email: ownerProfile?.email || '',
+      reason: rejectionReason,
+      week_ending: timesheet.week_ending || '',
+    })
+    return NextResponse.redirect(new URL(`/dashboard/approvals/rejected?${params.toString()}`, baseUrl))
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
