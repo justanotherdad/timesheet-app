@@ -112,7 +112,7 @@ export default async function DashboardPage() {
           .eq('status', 'approved')
           .order('approved_at', { ascending: false })
       )
-      approvedTimesheets = (approvedResult.data || []).slice(0, 10)
+      approvedTimesheets = (Array.isArray(approvedResult.data) ? approvedResult.data : []).slice(0, 10)
     }
   }
 
