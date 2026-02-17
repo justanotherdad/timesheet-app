@@ -1,5 +1,18 @@
 # Timesheet Workflow Fix & Database Migration
 
+## Issue 0: timesheet_signatures Foreign Key (Approval Error)
+
+**Error:** `insert or update on table "timesheet_signatures" violates foreign key constraint "timesheet_signatures_timesheet_id_fkey"`
+
+**Cause:** The `timesheet_signatures` table has a foreign key that references the old `timesheets` table, but the app uses `weekly_timesheets`. When approving, the insert fails because the ID doesn't exist in the referenced table.
+
+**Solution:** Run the SQL migration in `supabase/migrations/20260217_fix_timesheet_signatures_fk.sql`:
+
+1. Go to Supabase Dashboard → SQL Editor
+2. Run the migration (drops old FK, adds FK to weekly_timesheets)
+
+---
+
 ## Issue 1: Database Error - Missing Columns
 
 **Error:** `Could not find the 'activity_id' column of 'timesheet_entries' in the schema cache`

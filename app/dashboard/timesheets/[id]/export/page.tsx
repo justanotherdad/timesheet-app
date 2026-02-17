@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import WeeklyTimesheetExport from '@/components/WeeklyTimesheetExport'
 import { formatWeekEnding } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
@@ -17,11 +17,11 @@ export default async function ExportTimesheetPage({
   const user = await getCurrentUser()
   if (!user) redirect('/login')
 
-  const supabase = await createClient()
+  const adminSupabase = createAdminClient()
 
-  // Query timesheet with user profile (avoid nested relationships that might fail)
+  // Use admin client so RLS does not block managers/supervisors from exporting their reports' timesheets
   const timesheetResult = await withQueryTimeout(() =>
-    supabase
+    adminSupabase
       .from('weekly_timesheets')
       .select(`
         *,
@@ -53,9 +53,9 @@ export default async function ExportTimesheetPage({
       )
   }
 
-  // Query signatures separately to avoid relationship issues
+  // Query signatures separately
   const signaturesResult = await withQueryTimeout(() =>
-    supabase
+    adminSupabase
     .from('timesheet_signatures')
     .select(`
       *,
@@ -74,7 +74,7 @@ export default async function ExportTimesheetPage({
   // Verify user can view this timesheet (owner's reports_to, supervisor, or manager)
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
     const ownerResult = await withQueryTimeout(() =>
-      supabase
+      adminSupabase
         .from('user_profiles')
         .select('reports_to_id, supervisor_id, manager_id, final_approver_id')
         .eq('id', timesheet.user_id)
@@ -93,7 +93,7 @@ export default async function ExportTimesheetPage({
 
   // Get entries
   const entriesResult = await withQueryTimeout(() =>
-    supabase
+    adminSupabase
       .from('timesheet_entries')
       .select(`
         *,
@@ -107,7 +107,7 @@ export default async function ExportTimesheetPage({
 
   // Get unbillable entries
   const unbillableResult = await withQueryTimeout(() =>
-    supabase
+    adminSupabase
       .from('timesheet_unbillable')
       .select('*')
       .eq('timesheet_id', id)

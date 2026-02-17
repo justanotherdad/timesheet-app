@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 import { formatWeekEnding } from '@/lib/utils'
@@ -15,10 +15,11 @@ export default async function RejectTimesheetPage({
 }) {
   const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
   const { id } = await params
-  const supabase = await createClient()
+  const adminSupabase = createAdminClient()
 
+  // Use admin client so RLS does not block supervisors/managers from loading the reject form
   const { data: timesheet, error } = await withQueryTimeout(() =>
-    supabase
+    adminSupabase
       .from('weekly_timesheets')
       .select(`
         *,
@@ -41,7 +42,7 @@ export default async function RejectTimesheetPage({
 
   if (!canReject) {
     const ownerResult = await withQueryTimeout(() =>
-      supabase
+      adminSupabase
         .from('user_profiles')
         .select('reports_to_id, supervisor_id, manager_id, final_approver_id')
         .eq('id', ts.user_id)
