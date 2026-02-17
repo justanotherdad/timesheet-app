@@ -49,7 +49,7 @@ export default function LoginPage() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail, {
-        redirectTo: `${window.location.origin}/auth/setup-password`,
+        redirectTo: `${window.location.origin}/auth/callback?next=/auth/setup-password`,
       })
 
       if (error) throw error
@@ -83,7 +83,12 @@ export default function LoginPage() {
             {forgotPasswordSuccess ? (
               <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 px-4 py-3 rounded mb-4">
                 <p className="font-medium">Check your email</p>
-                <p className="text-sm mt-1">We&apos;ve sent a password reset link to {forgotPasswordEmail}. Click the link to set a new password.</p>
+                <p className="text-sm mt-1">We&apos;ve sent a password reset link to {forgotPasswordEmail}.</p>
+                <p className="text-sm mt-2 font-medium">Important:</p>
+                <ul className="text-sm mt-0.5 list-disc list-inside space-y-0.5">
+                  <li>Click the link in <strong>this same browser</strong></li>
+                  <li>The link expires in about 1 hour</li>
+                </ul>
               </div>
             ) : (
               <form onSubmit={handleForgotPassword} className="space-y-4 mb-4">

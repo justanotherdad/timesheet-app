@@ -360,50 +360,23 @@ export default function SetupPasswordPage() {
         </p>
 
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-4">
-            <p className="font-semibold mb-2">{error}</p>
-            <p className="text-sm mb-2">To help debug this issue:</p>
-            <ol className="text-sm list-decimal list-inside space-y-1 mb-2">
-              <li>Press <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">F12</kbd> to open Developer Tools</li>
-              <li>Click the <strong>"Console"</strong> tab</li>
-              <li>Look for any red error messages</li>
-              <li>Copy the error messages and share them</li>
-            </ol>
-            <button
-              type="button"
-              onClick={async () => {
-                console.log('Manual session check triggered')
-                setError(null)
-                setLoading(true)
-                try {
-                  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-                  console.log('Current session:', session ? 'Exists' : 'Missing', sessionError)
-                  
-                  if (!session) {
-                    const { data: { session: refreshed }, error: refreshError } = await supabase.auth.refreshSession()
-                    console.log('After refresh:', refreshed ? 'Exists' : 'Missing', refreshError)
-                    
-                    if (!refreshed) {
-                      setError('No session found. Please click the invitation link again.')
-                    } else {
-                      setError(null)
-                      setVerifying(false)
-                    }
-                  } else {
-                    setError(null)
-                    setVerifying(false)
-                  }
-                } catch (err: any) {
-                  console.error('Manual check error:', err)
-                  setError('Session check failed: ' + err.message)
-                } finally {
-                  setLoading(false)
-                }
-              }}
-              className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 px-4 py-3 rounded mb-4">
+            <p className="font-medium mb-2">
+              {error.includes('PKCE') || error.includes('code verifier')
+                ? 'This link was opened in a different browser or tab. For security, password reset links only work in the same browser where you requested them.'
+                : error.includes('expired') || error.includes('Invalid')
+                  ? 'This link has expired or has already been used.'
+                  : 'We couldn\'t verify your link.'}
+            </p>
+            <p className="text-sm mb-3 text-amber-700 dark:text-amber-300">
+              Go back to the login page and request a new password reset link. Make sure to click the new link in the same browser.
+            </p>
+            <Link
+              href="/login"
+              className="inline-block w-full text-center bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors"
             >
-              Click here to check session status
-            </button>
+              Request new link
+            </Link>
           </div>
         )}
 
