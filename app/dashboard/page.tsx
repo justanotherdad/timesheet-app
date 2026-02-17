@@ -291,31 +291,35 @@ export default async function DashboardPage() {
             )}
           </div>
 
-          {pendingApprovals.length > 0 && (
+          {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
                 Pending Approvals
               </h2>
-              <div className="space-y-2">
-                {pendingApprovals.map((ts: any) => (
-                  <div key={ts.id} className="border border-orange-200 dark:border-orange-800 rounded p-3 bg-orange-50 dark:bg-orange-900/20">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-gray-100">{ts.user_profiles.name}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-300">
-                          Week Ending: {formatWeekEnding(ts.week_ending)}
-                        </p>
+              {pendingApprovals.length > 0 ? (
+                <div className="space-y-2">
+                  {pendingApprovals.map((ts: any) => (
+                    <div key={ts.id} className="border border-orange-200 dark:border-orange-800 rounded p-3 bg-orange-50 dark:bg-orange-900/20">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-gray-100">{ts.user_profiles.name}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">
+                            Week Ending: {formatWeekEnding(ts.week_ending)}
+                          </p>
+                        </div>
+                        <Link
+                          href={`/dashboard/timesheets/${ts.id}`}
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                        >
+                          Review →
+                        </Link>
                       </div>
-                      <Link
-                        href={`/dashboard/timesheets/${ts.id}`}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                      >
-                        Review →
-                      </Link>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400">No pending approvals.</p>
+              )}
             </div>
           )}
         </div>

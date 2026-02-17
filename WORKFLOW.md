@@ -95,7 +95,7 @@ git push
 # 1. Open Terminal (Cmd + Space, type "Terminal")
 
 # 2. Navigate to project
-cd "/Users/davefletes/Library/Mobile Documents/com~apple~CloudDocs/Buisness/CTG/website/timesheet-app"
+cd "/Users/davefletes/Library/Mobile Documents/com~apple~CloudDocs/Buisness/DJ2/Applications/TIMESHEET APPLICATION - CTG"
 
 # 3. Start dev server
 npm run dev
