@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import { Calendar, FileText, Users, Settings, Building, Activity, Package } from 'lucide-react'
 import { formatWeekEnding, getWeekEnding, formatDateForInput } from '@/lib/utils'
@@ -33,7 +34,8 @@ export default async function DashboardPage() {
 
   const timesheet = timesheetResult.data as any
 
-  // Get pending approvals: include employees who have this user as reports_to, supervisor, or manager
+  // Get pending approvals: include employees who have this user as reports_to, supervisor, manager, or final approver
+  // Use admin client so RLS does not block managers/supervisors from reading their reports' timesheets
   let pendingApprovals: any[] = []
   if (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
     const reportsResult = await withQueryTimeout(() =>
@@ -47,17 +49,44 @@ export default async function DashboardPage() {
 
     if (reports && reports.length > 0) {
       const reportIds = reports.map(r => r.id)
+      const adminSupabase = createAdminClient()
       const pendingResult = await withQueryTimeout(() =>
-        supabase
+        adminSupabase
           .from('weekly_timesheets')
-          .select('*, user_profiles!user_id!inner(name)')
+          .select('*, user_profiles!user_id!inner(name, supervisor_id, manager_id, final_approver_id)')
           .in('user_id', reportIds)
           .eq('status', 'submitted')
           .order('submitted_at', { ascending: true })
-          .limit(10)
       )
 
-      pendingApprovals = (pendingResult.data || []) as any[]
+      const allPending = (pendingResult.data || []) as any[]
+
+      // Filter to only timesheets where current user is the NEXT approver in the chain
+      const signaturesResult = allPending.length > 0
+        ? await withQueryTimeout(() =>
+            adminSupabase
+              .from('timesheet_signatures')
+              .select('timesheet_id, signer_id')
+              .in('timesheet_id', allPending.map((t: any) => t.id))
+          )
+        : { data: [] }
+      const sigs = (signaturesResult.data || []) as { timesheet_id: string; signer_id: string }[]
+      const signedByTimesheet: Record<string, Set<string>> = {}
+      sigs.forEach((s) => {
+        if (!signedByTimesheet[s.timesheet_id]) signedByTimesheet[s.timesheet_id] = new Set()
+        signedByTimesheet[s.timesheet_id].add(s.signer_id)
+      })
+
+      pendingApprovals = allPending.filter((ts: any) => {
+        const profile = ts.user_profiles as { supervisor_id?: string; manager_id?: string; final_approver_id?: string }
+        const chain: string[] = []
+        if (profile?.supervisor_id) chain.push(profile.supervisor_id)
+        if (profile?.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
+        if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
+        const signedIds = signedByTimesheet[ts.id] || new Set<string>()
+        const nextId = chain.find((uid) => !signedIds.has(uid))
+        return nextId === user.id
+      }).slice(0, 10)
     }
   }
 

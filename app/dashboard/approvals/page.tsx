@@ -47,14 +47,42 @@ export default async function ApprovalsPage() {
       .from('weekly_timesheets')
       .select(`
         *,
-        user_profiles!user_id!inner(name, email)
+        user_profiles!user_id!inner(name, email, supervisor_id, manager_id, final_approver_id)
       `)
       .in('user_id', reportIds)
       .eq('status', 'submitted')
       .order('submitted_at', { ascending: true })
   )
 
-  const timesheets = (timesheetsResult.data || []) as any[]
+  const allSubmitted = (timesheetsResult.data || []) as any[]
+
+  // Filter to only timesheets where current user is the NEXT approver in the chain
+  let timesheets = allSubmitted
+  if (allSubmitted.length > 0) {
+    const sigResult = await withQueryTimeout(() =>
+      adminSupabase
+        .from('timesheet_signatures')
+        .select('timesheet_id, signer_id')
+        .in('timesheet_id', allSubmitted.map((t: any) => t.id))
+    )
+    const sigs = (sigResult.data || []) as { timesheet_id: string; signer_id: string }[]
+    const signedByTimesheet: Record<string, Set<string>> = {}
+    sigs.forEach((s) => {
+      if (!signedByTimesheet[s.timesheet_id]) signedByTimesheet[s.timesheet_id] = new Set()
+      signedByTimesheet[s.timesheet_id].add(s.signer_id)
+    })
+
+    timesheets = allSubmitted.filter((ts: any) => {
+      const profile = ts.user_profiles as { supervisor_id?: string; manager_id?: string; final_approver_id?: string }
+      const chain: string[] = []
+      if (profile?.supervisor_id) chain.push(profile.supervisor_id)
+      if (profile?.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
+      if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
+      const signedIds = signedByTimesheet[ts.id] || new Set<string>()
+      const nextId = chain.find((uid) => !signedIds.has(uid))
+      return nextId === user.id
+    })
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

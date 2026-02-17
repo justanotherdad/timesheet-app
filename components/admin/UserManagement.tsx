@@ -259,11 +259,13 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
 
   const openUserDetails = async (user: any) => {
     setEditingUser(user)
-    const assignments = await loadUserAssignments(user.id)
+    // Prefer server-loaded assignments (avoids RLS issues when admin/manager views user)
+    const cached = (initialUserAssignments && initialUserAssignments[user.id]) || userAssignments[user.id]
+    const assignments = cached ?? await loadUserAssignments(user.id)
     setSelectedSites(assignments.sites)
     setSelectedDepartments(assignments.departments)
     setSelectedPOs(assignments.purchaseOrders)
-    setUserAssignments(prev => ({ ...prev, [user.id]: assignments }))
+    if (!cached) setUserAssignments(prev => ({ ...prev, [user.id]: assignments }))
   }
 
   // Fallback: load assignments client-side when no server data (e.g. admin; supervisor path uses initialUserAssignments)
