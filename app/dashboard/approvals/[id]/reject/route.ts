@@ -38,23 +38,41 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    if (timesheet.status !== 'submitted') {
-      return NextResponse.json({ error: 'Timesheet is not in submitted status' }, { status: 400 })
+    if (!['submitted', 'approved'].includes(timesheet.status)) {
+      return NextResponse.json({ error: 'Timesheet must be submitted or approved to reject' }, { status: 400 })
     }
 
     // Get rejection reason from form data if available
     const formData = await request.formData()
     const rejectionReason = formData.get('reason') as string || 'Rejected by approver'
 
-    // Update timesheet status
+    // When rejecting an approved timesheet, delete signatures so the workflow resets
+    if (timesheet.status === 'approved') {
+      const { error: deleteError } = await adminSupabase
+        .from('timesheet_signatures')
+        .delete()
+        .eq('timesheet_id', id)
+
+      if (deleteError) {
+        return NextResponse.json({ error: deleteError.message }, { status: 500 })
+      }
+    }
+
+    // Clear approved fields when rejecting after approval
+    const updatePayload: Record<string, unknown> = {
+      status: 'rejected',
+      rejected_by_id: user.id,
+      rejected_at: new Date().toISOString(),
+      rejection_reason: rejectionReason,
+    }
+    if (timesheet.status === 'approved') {
+      updatePayload.approved_by_id = null
+      updatePayload.approved_at = null
+    }
+
     const { error: updateError } = await adminSupabase
       .from('weekly_timesheets')
-      .update({
-        status: 'rejected',
-        rejected_by_id: user.id,
-        rejected_at: new Date().toISOString(),
-        rejection_reason: rejectionReason,
-      })
+      .update(updatePayload)
       .eq('id', id)
 
     if (updateError) {

@@ -398,6 +398,15 @@ export default async function TimesheetDetailPage({
                   </Link>
                 </>
               )}
+              {timesheet.status === 'approved' && canApprove && ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+                <Link
+                  href={`/dashboard/approvals/${timesheet.id}/reject-form`}
+                  className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 gap-2 bg-red-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-red-700 transition-colors"
+                >
+                  <XCircle className="h-4 w-4 shrink-0" />
+                  Reject (reopen for edit)
+                </Link>
+              )}
             </div>
           </div>
         </div>

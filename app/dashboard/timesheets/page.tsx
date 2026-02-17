@@ -345,6 +345,14 @@ export default async function TimesheetsPage() {
                                   Edit
                                 </Link>
                               )}
+                              {ts.status === 'approved' && ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+                                <Link
+                                  href={`/dashboard/approvals/${ts.id}/reject-form`}
+                                  className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                                >
+                                  Reject
+                                </Link>
+                              )}
                               <Link
                                 href={`/dashboard/timesheets/${ts.id}/export`}
                                 className="text-purple-600 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300"

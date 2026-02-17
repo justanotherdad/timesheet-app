@@ -59,21 +59,27 @@ export default async function RejectTimesheetPage({
     }
   }
 
-  if (ts.status !== 'submitted') {
+  if (!['submitted', 'approved'].includes(ts.status || '')) {
     redirect('/dashboard/approvals')
   }
+
+  const isApprovedTimesheet = ts.status === 'approved'
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Reject Timesheet" showBack backUrl="/dashboard/approvals" user={user} />
       <div className="container mx-auto px-4 py-6 sm:py-8 max-w-2xl">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Reject timesheet</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            {isApprovedTimesheet ? 'Reject approved timesheet' : 'Reject timesheet'}
+          </h2>
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
             {profile?.name} – Week Ending {formatWeekEnding(ts.week_ending ?? '')}
           </p>
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-            Add a note for the employee describing the necessary change. They will see this when they open the timesheet.
+            {isApprovedTimesheet
+              ? 'This will revert the timesheet to editable status. The employee will see your note and must edit and resubmit, then it will go through the full approval workflow again (Supervisor → Manager → Final Approver).'
+              : 'Add a note for the employee describing the necessary change. They will see this when they open the timesheet.'}
           </p>
           <form action={`/dashboard/approvals/${id}/reject`} method="post" className="space-y-4">
             <div>
