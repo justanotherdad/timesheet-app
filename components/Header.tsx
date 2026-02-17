@@ -8,6 +8,7 @@ import GuideModal from './GuideModal'
 
 interface HeaderProps {
   title?: string
+  titleHref?: string
   showBack?: boolean
   backUrl?: string
   user?: {
@@ -18,7 +19,7 @@ interface HeaderProps {
   }
 }
 
-export default function Header({ title, showBack = false, backUrl, user }: HeaderProps) {
+export default function Header({ title, titleHref, showBack = false, backUrl, user }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -84,9 +85,18 @@ export default function Header({ title, showBack = false, backUrl, user }: Heade
 
             {/* Title */}
             {title && (
-              <h1 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate min-w-0">
-                {title}
-              </h1>
+              titleHref ? (
+                <Link
+                  href={titleHref}
+                  className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate min-w-0 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                >
+                  {title}
+                </Link>
+              ) : (
+                <h1 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate min-w-0">
+                  {title}
+                </h1>
+              )
             )}
           </div>
 

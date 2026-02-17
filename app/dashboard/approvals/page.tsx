@@ -30,7 +30,7 @@ export default async function ApprovalsPage() {
   if (!reports || reports.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Header title="Pending Approvals" showBack backUrl="/dashboard" user={user} />
+        <Header title="Pending Approvals" titleHref="/dashboard/approvals" showBack backUrl="/dashboard" user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-lg shadow p-6 sm:p-8 text-center">
             <p className="text-gray-600 dark:text-gray-300">No direct reports found. You don&apos;t have any timesheets to approve.</p>
@@ -88,7 +88,7 @@ export default async function ApprovalsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Header title="Pending Approvals" showBack backUrl="/dashboard" user={user} />
+      <Header title="Pending Approvals" titleHref="/dashboard/approvals" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-4 py-6 sm:py-8">
         <div className="max-w-6xl mx-auto">
 
