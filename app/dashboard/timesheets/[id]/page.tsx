@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import { formatWeekEnding, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
@@ -19,11 +19,11 @@ export default async function TimesheetDetailPage({
   const user = await getCurrentUser()
   if (!user) redirect('/login')
 
-  const supabase = await createClient()
+  const adminSupabase = createAdminClient()
 
-  // Query timesheet with user profile (avoid nested relationships that might fail)
+  // Use admin client so RLS does not block managers/supervisors from viewing their reports' timesheets
   const timesheetResult = await withQueryTimeout(() =>
-    supabase
+    adminSupabase
     .from('weekly_timesheets')
     .select(`
       *,
@@ -58,9 +58,9 @@ export default async function TimesheetDetailPage({
     )
   }
 
-  // Query signatures separately to avoid relationship issues
+  // Query signatures separately (admin client for consistency)
   const signaturesResult = await withQueryTimeout(() =>
-    supabase
+    adminSupabase
     .from('timesheet_signatures')
     .select(`
       *,
@@ -80,7 +80,7 @@ export default async function TimesheetDetailPage({
   let canApprove = false
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
     const ownerResult = await withQueryTimeout(() =>
-      supabase
+      adminSupabase
         .from('user_profiles')
         .select('reports_to_id, supervisor_id, manager_id, final_approver_id')
         .eq('id', timesheet.user_id)
@@ -106,7 +106,7 @@ export default async function TimesheetDetailPage({
   
   try {
     const entriesResult = await withQueryTimeout(() =>
-      supabase
+      adminSupabase
         .from('timesheet_entries')
         .select(`
           *,
@@ -129,7 +129,7 @@ export default async function TimesheetDetailPage({
   // Get unbillable entries (with error handling)
   try {
     const unbillableResult = await withQueryTimeout(() =>
-      supabase
+      adminSupabase
         .from('timesheet_unbillable')
         .select('*')
         .eq('timesheet_id', id)
