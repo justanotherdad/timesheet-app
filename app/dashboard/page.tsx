@@ -294,9 +294,14 @@ export default async function DashboardPage() {
 
           {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                Pending Approvals
-              </h2>
+              <Link
+                href="/dashboard/approvals"
+                className="block mb-4 group"
+              >
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  Pending Approvals
+                </h2>
+              </Link>
               {pendingApprovals.length > 0 ? (
                 <div className="space-y-2">
                   {pendingApprovals.map((ts: any) => (
