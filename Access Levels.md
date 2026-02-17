@@ -22,6 +22,7 @@ This document describes what each role can see and do: screens, data scope, and 
 | New Timesheet            | ✓             | ✓                 | ✓               | ✓         | ✓           |
 | My Timesheets            | ✓ (own only)  | ✓ (own + reports) | ✓ (own + reports) | ✓ (all) | ✓ (all)     |
 | Pending Approvals card   | —             | ✓                 | ✓               | ✓         | ✓           |
+| Approved Timesheets card | —             | ✓                 | ✓               | ✓         | ✓           |
 | Manage Users card        | —             | ✓ (view only)     | ✓               | ✓         | ✓           |
 | Manage Organization      | —             | ✓ (view only)     | ✓               | ✓         | ✓           |
 | Manage Systems           | —             | ✓ (view only)     | ✓               | ✓         | ✓           |
@@ -152,5 +153,6 @@ Admin and Super Admin only (and not self).
 - **Manager subordinates:** Users with `reports_to_id`, `supervisor_id`, `manager_id`, or `final_approver_id` equal to the manager’s id. `getSubordinateUserIds` includes all four.
 - **Timesheets visibility (supervisor/manager):** My Timesheets and Pending Approvals use `createAdminClient()` to fetch `weekly_timesheets` for report IDs so RLS does not block reading subordinates’ timesheets.
 - **Timesheet dropdowns:** On New/Edit timesheet, Activity, Deliverable, and System options are filtered to sites assigned to the user (`user_sites`); admins see all.
+- **Purchase Orders:** Users with sites assigned can view and use POs from those sites even without explicit PO assignments. If explicit POs are assigned (`user_purchase_orders`), only those are shown; otherwise, all POs from assigned sites are available.
 - **Read-only UI:** Organization uses `ConsolidatedManager` with `readOnly={true}` for supervisors; Systems/Activities/Deliverables use `HierarchicalItemManager` with `readOnly={true}` (hides Add, Import, Edit, Delete, bulk actions).
 - **Server actions:** create-user, update-user-assignments, and generate-password-link allow only Manager, Admin, Super Admin (not Supervisor).

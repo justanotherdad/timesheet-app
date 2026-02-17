@@ -79,8 +79,10 @@ export default async function EditTimesheetPage({
     }
     if (userPOIds.length > 0) {
       posQuery.in('id', userPOIds)
+    } else if (userSiteIds.length > 0) {
+      // User has sites but no explicit POs: show POs from assigned sites
+      posQuery.in('site_id', userSiteIds)
     } else {
-      // If user has no POs assigned, return empty array
       posQuery.eq('id', '00000000-0000-0000-0000-000000000000') // Will return empty
     }
   }
@@ -116,7 +118,8 @@ export default async function EditTimesheetPage({
   let activities = (activitiesResult.data || []) as any[]
 
   // Filter systems, deliverables, activities by user's assigned departments and POs (non-admins only)
-  // Show item if: (item has no department assignments OR item's departments intersect user's) AND (item has no PO assignments OR item's POs intersect user's)
+  // When user has sites but no explicit POs, treat POs from those sites as accessible
+  const effectivePOIds = userPOIds.length > 0 ? userPOIds : purchaseOrders.map((p: any) => p.id)
   if (!['admin', 'super_admin'].includes(user.profile.role) && (systems.length > 0 || deliverables.length > 0 || activities.length > 0)) {
     const filterByDeptAndPo = async (
       itemIds: string[],
@@ -142,7 +145,7 @@ export default async function EditTimesheetPage({
         const depts = itemDepts[id] || []
         const pos = itemPOs[id] || []
         const deptOk = depts.length === 0 || depts.some((d) => userDepartmentIds.includes(d))
-        const poOk = pos.length === 0 || pos.some((p) => userPOIds.includes(p))
+        const poOk = pos.length === 0 || pos.some((p) => effectivePOIds.includes(p))
         if (deptOk && poOk) allowed.add(id)
       })
       return allowed
