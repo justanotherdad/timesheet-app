@@ -13,6 +13,19 @@
 
 ---
 
+## Issue 0b: Final Approver Signer Role (Check Constraint)
+
+**Error:** `new row for relation "timesheet_signatures" violates check constraint "timesheet_signatures_signer_role_check"`
+
+**Cause:** The `signer_role` check constraint only allowed `supervisor` and `manager`, not `final_approver`.
+
+**Solution:** Run the SQL migration in `supabase/migrations/20260217_add_final_approver_signer_role.sql`:
+
+1. Go to Supabase Dashboard → SQL Editor
+2. Run the migration (drops old constraint, adds one that includes `final_approver`)
+
+---
+
 ## Issue 1: Database Error - Missing Columns
 
 **Error:** `Could not find the 'activity_id' column of 'timesheet_entries' in the schema cache`
