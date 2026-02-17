@@ -81,12 +81,12 @@ export async function POST(
 
     // Redirect to rejected page which opens default email client with pre-filled draft
     const baseUrl = new URL(request.url).origin
-    const params = new URLSearchParams({
+    const queryParams = new URLSearchParams({
       email: ownerProfile?.email || '',
       reason: rejectionReason,
       week_ending: timesheet.week_ending || '',
     })
-    return NextResponse.redirect(new URL(`/dashboard/approvals/rejected?${params.toString()}`, baseUrl))
+    return NextResponse.redirect(new URL(`/dashboard/approvals/rejected?${queryParams.toString()}`, baseUrl))
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
