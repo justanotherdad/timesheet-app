@@ -91,6 +91,31 @@ export default async function DashboardPage() {
     }
   }
 
+  // Get approved timesheets from reports (for supervisors, managers, admins)
+  let approvedTimesheets: any[] = []
+  if (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
+    const adminSupabase = createAdminClient()
+    const reportsResult = await withQueryTimeout(() =>
+      adminSupabase
+        .from('user_profiles')
+        .select('id')
+        .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`)
+    )
+    const reports = (reportsResult.data || []) as Array<{ id: string }>
+    if (reports && reports.length > 0) {
+      const reportIds = reports.map(r => r.id)
+      const approvedResult = await withQueryTimeout(() =>
+        adminSupabase
+          .from('weekly_timesheets')
+          .select('*, user_profiles!user_id(name)')
+          .in('user_id', reportIds)
+          .eq('status', 'approved')
+          .order('approved_at', { ascending: false })
+      )
+      approvedTimesheets = (approvedResult.data || []).slice(0, 10)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Timesheet Dashboard" user={user} />
@@ -257,7 +282,7 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+        <div className={`grid grid-cols-1 gap-4 sm:gap-6 ${['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
               Current Week ({formatWeekEnding(weekEnding)})
@@ -325,6 +350,43 @@ export default async function DashboardPage() {
                 </div>
               ) : (
                 <p className="text-gray-500 dark:text-gray-400">No pending approvals.</p>
+              )}
+            </div>
+          )}
+
+          {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+              <Link
+                href="/dashboard/approvals/approved"
+                className="block mb-4 group"
+              >
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  Approved Timesheets
+                </h2>
+              </Link>
+              {approvedTimesheets.length > 0 ? (
+                <div className="space-y-2">
+                  {approvedTimesheets.map((ts: any) => (
+                    <div key={ts.id} className="border border-green-200 dark:border-green-800 rounded p-3 bg-green-50 dark:bg-green-900/20">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-gray-100">{ts.user_profiles?.name || 'Unknown'}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">
+                            Week Ending: {formatWeekEnding(ts.week_ending)}
+                          </p>
+                        </div>
+                        <Link
+                          href={`/dashboard/timesheets/${ts.id}`}
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                        >
+                          View →
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400">No approved timesheets.</p>
               )}
             </div>
           )}

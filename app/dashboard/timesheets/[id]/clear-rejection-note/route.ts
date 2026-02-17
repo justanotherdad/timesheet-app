@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
@@ -12,12 +12,13 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const supabase = await createClient()
+    const adminSupabase = createAdminClient()
     const { id } = await params
 
-    const { data: timesheet, error: fetchError } = await supabase
+    // Use admin client so RLS does not block supervisors/managers from reading their reports' timesheets
+    const { data: timesheet, error: fetchError } = await adminSupabase
       .from('weekly_timesheets')
-      .select('*, user_profiles!inner(reports_to_id, manager_id, supervisor_id, final_approver_id)')
+      .select('*, user_profiles!user_id!inner(reports_to_id, manager_id, supervisor_id, final_approver_id)')
       .eq('id', id)
       .single()
 
@@ -38,7 +39,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await adminSupabase
       .from('weekly_timesheets')
       .update({
         rejection_reason: null,
