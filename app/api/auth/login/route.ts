@@ -46,7 +46,7 @@ async function verifyRecaptcha(token: string, expectedAction = 'login'): Promise
 export async function POST(request: Request) {
   const requestUrl = new URL(request.url)
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? request.headers.get('x-real-ip') ?? 'unknown'
-  const userAgent = request.headers.get('user-agent') ?? null
+  const userAgent = request.headers.get('user-agent') ?? undefined
 
   // Rate limit
   const { ok: rateOk } = await checkAuthRateLimit(ip)
