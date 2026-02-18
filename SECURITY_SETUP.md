@@ -44,11 +44,6 @@ This guide covers manual security configuration and app-level security features.
 - Create free Redis at [Upstash Console](https://console.upstash.com/)
 - If not set, rate limiting is skipped (graceful fallback)
 
-### reCAPTCHA v3 (Login)
-- **Env vars:** `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `RECAPTCHA_SECRET_KEY`
-- Get keys at [Google reCAPTCHA Admin](https://www.google.com/recaptcha/admin)
-- If not set, CAPTCHA is skipped (development-friendly)
-
 ### Security Headers
 - Applied automatically via `next.config.ts`
 - CSP, HSTS, X-Frame-Options, etc.

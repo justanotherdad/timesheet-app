@@ -1,16 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
-import { GoogleReCaptchaProvider, useGoogleReCaptcha } from 'react-google-recaptcha-v3'
-import { RecaptchaEnterpriseProvider, useRecaptchaEnterprise } from './RecaptchaEnterpriseProvider'
 
-type LoginFormInnerProps = {
-  getCaptchaToken?: () => Promise<string>
-}
-
-function LoginFormInner({ getCaptchaToken }: LoginFormInnerProps) {
+export default function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -21,6 +16,7 @@ function LoginFormInner({ getCaptchaToken }: LoginFormInnerProps) {
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false)
   const [forgotPasswordSuccess, setForgotPasswordSuccess] = useState(false)
   const router = useRouter()
+  const supabase = createClient()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,39 +24,15 @@ function LoginFormInner({ getCaptchaToken }: LoginFormInnerProps) {
     setLoading(true)
 
     try {
-      let captchaToken = ''
-      if (getCaptchaToken) {
-        try {
-          captchaToken = await getCaptchaToken()
-        } catch (captchaErr) {
-          const msg = captchaErr instanceof Error ? captchaErr.message : String(captchaErr)
-          if (msg.includes('Invalid site key') || msg.includes('api.js')) {
-            throw new Error(
-              'reCAPTCHA error: Add your domain (ctgtimesheet.com and your Vercel URL) to the reCAPTCHA key at console.cloud.google.com/security/recaptcha'
-            )
-          }
-          throw captchaErr
-        }
-      }
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, captchaToken }),
-        credentials: 'same-origin',
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       })
 
-      const data = await res.json().catch(() => ({}))
+      if (error) throw error
 
-      if (!res.ok) {
-        throw new Error(data.error || 'An error occurred')
-      }
-
-      if (data.success) {
-        router.push('/dashboard')
-        router.refresh()
-      } else {
-        throw new Error(data.error || 'An error occurred')
-      }
+      router.push('/dashboard')
+      router.refresh()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -75,8 +47,6 @@ function LoginFormInner({ getCaptchaToken }: LoginFormInnerProps) {
     setForgotPasswordSuccess(false)
 
     try {
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
       const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail, {
         redirectTo: `${window.location.origin}/auth/callback?next=/auth/setup-password`,
       })
@@ -216,46 +186,4 @@ function LoginFormInner({ getCaptchaToken }: LoginFormInnerProps) {
       )}
     </>
   )
-}
-
-function LoginFormWithStandardCaptcha() {
-  const { executeRecaptcha } = useGoogleReCaptcha()
-  const getCaptchaToken = async () => {
-    if (!executeRecaptcha) return ''
-    return executeRecaptcha('login')
-  }
-  return <LoginFormInner getCaptchaToken={getCaptchaToken} />
-}
-
-function LoginFormWithEnterpriseCaptcha({ siteKey }: { siteKey: string }) {
-  const execute = useRecaptchaEnterprise()
-  const getCaptchaToken = async () => (execute ? execute() : '')
-  return <LoginFormInner getCaptchaToken={getCaptchaToken} />
-}
-
-export default function LoginForm() {
-  if (process.env.NEXT_PUBLIC_RECAPTCHA_DISABLED === 'true') {
-    return <LoginFormInner />
-  }
-
-  const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
-  const useEnterprise = process.env.NEXT_PUBLIC_RECAPTCHA_ENTERPRISE === 'true'
-
-  if (siteKey && useEnterprise) {
-    return (
-      <RecaptchaEnterpriseProvider siteKey={siteKey}>
-        <LoginFormWithEnterpriseCaptcha siteKey={siteKey} />
-      </RecaptchaEnterpriseProvider>
-    )
-  }
-
-  if (siteKey) {
-    return (
-      <GoogleReCaptchaProvider reCaptchaKey={siteKey}>
-        <LoginFormWithStandardCaptcha />
-      </GoogleReCaptchaProvider>
-    )
-  }
-
-  return <LoginFormInner />
 }

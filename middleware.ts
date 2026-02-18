@@ -2,7 +2,7 @@ import { updateSession } from './lib/supabase/middleware'
 import { checkAuthRateLimit } from './lib/rate-limit'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const AUTH_PATHS = ['/api/auth/login', '/auth/callback']
+const AUTH_PATHS = ['/auth/callback']
 
 export async function middleware(request: NextRequest) {
   // Rate limit auth-related paths
