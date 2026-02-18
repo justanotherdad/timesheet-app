@@ -277,63 +277,27 @@ export default function SetupPasswordPage() {
     setLoading(true)
 
     try {
-      // First, check if we have a user (more reliable than getSession)
-      console.log('Checking for user session before password update...')
-      let { data: { user }, error: userError } = await supabase.auth.getUser()
-      
-      if (userError || !user) {
-        console.log('No user found, attempting to refresh session...')
-        // If getUser fails, try refreshing the session
-        const { data: { session }, error: refreshError } = await supabase.auth.refreshSession()
-        
-        if (refreshError || !session) {
-          console.error('Session refresh failed:', refreshError)
-          throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
-        }
-        
-        // Try getUser again after refresh
-        const retryResult = await supabase.auth.getUser()
-        user = retryResult.data.user
-        userError = retryResult.error
-        
-        if (userError || !user) {
-          console.error('Still no user after refresh:', userError)
-          throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
-        }
-        console.log('User found after session refresh:', user.email)
-      } else {
-        console.log('User found:', user.email)
-      }
-
-      // Double-check we have a valid session before updating password
-      const { data: { session: finalSession } } = await supabase.auth.getSession()
-      if (!finalSession) {
-        console.error('No session found before password update')
-        throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
-      }
-
-      console.log('Updating password for user:', user.email)
-      // Update the user's password
-      const { error } = await supabase.auth.updateUser({
-        password: password,
+      const res = await fetch('/api/auth/set-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, confirmPassword }),
+        credentials: 'same-origin',
       })
 
-      if (error) {
-        console.error('Password update error:', error)
-        // If it's a session error, provide a helpful message
-        if (error.message.includes('session') || error.message.includes('JWT') || error.message.includes('Auth session missing') || error.message.includes('Invalid JWT')) {
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const msg = data.error || 'Failed to set password. Please try again.'
+        if (msg.includes('session') || msg.includes('JWT') || msg.includes('expired')) {
           throw new Error('Auth session missing! Please click the invitation link again or contact your administrator.')
         }
-        throw error
+        throw new Error(msg)
       }
 
-      console.log('Password updated successfully, redirecting to dashboard')
-      // Password set successfully, redirect to dashboard
       router.push('/dashboard')
       router.refresh()
-    } catch (error: any) {
-      console.error('Password setup error:', error)
-      setError(error.message || 'Failed to set password. Please try again.')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to set password. Please try again.')
       setLoading(false)
     }
   }

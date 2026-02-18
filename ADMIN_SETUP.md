@@ -184,6 +184,17 @@ ORDER BY name;
 
 ---
 
+## ⏱️ Password / Invite Link Expiry (1 day)
+
+Password reset and invite links expire in **1 day** (Supabase maximum). To configure in Supabase:
+
+1. **Go to Supabase Dashboard** → Your project
+2. **Auth** → **Providers** → **Email**
+3. Find **Email OTP Expiration** (or similar)
+4. Set to **86400** (seconds in 1 day)
+
+---
+
 ## 📞 Next Steps
 
 1. ✅ Make yourself `super_admin` (follow Step 1)

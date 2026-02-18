@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { logAuditEvent } from '@/lib/audit-log'
 import { NextResponse } from 'next/server'
 
 // List of user agents that indicate a preview/bot request
@@ -76,16 +77,17 @@ export async function GET(request: Request) {
     console.log('Code exchange result:', { hasSession: !!data?.session, error: error?.message })
     
     if (!error && data.session) {
-      // Successfully exchanged code for session
-      // Create redirect response with cookies set
+      const user = data.session.user
+      await logAuditEvent(
+        { type: 'invite_accepted', userId: user.id, email: user.email ?? '' },
+        {
+          ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? undefined,
+          userAgent: request.headers.get('user-agent') ?? undefined,
+        }
+      )
       const redirectUrl = new URL(next, request.url)
-      const response = NextResponse.redirect(redirectUrl)
-      
-      // The session cookies are already set by the Supabase client
-      // But we need to make sure they're included in the response
-      return response
+      return NextResponse.redirect(redirectUrl)
     } else if (error) {
-      // If there's an error, redirect with error message
       console.error('Code exchange error:', error)
       const redirectUrl = new URL('/auth/setup-password?error=' + encodeURIComponent(error.message), request.url)
       return NextResponse.redirect(redirectUrl)

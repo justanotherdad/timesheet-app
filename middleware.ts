@@ -1,7 +1,22 @@
 import { updateSession } from './lib/supabase/middleware'
+import { checkAuthRateLimit } from './lib/rate-limit'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const AUTH_PATHS = ['/api/auth/login', '/auth/callback']
+
 export async function middleware(request: NextRequest) {
+  // Rate limit auth-related paths
+  const pathname = request.nextUrl.pathname
+  if (AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      ?? request.headers.get('x-real-ip')
+      ?? 'unknown'
+    const { ok } = await checkAuthRateLimit(ip)
+    if (!ok) {
+      return new NextResponse('Too many attempts. Please try again later.', { status: 429 })
+    }
+  }
+
   return await updateSession(request)
 }
 
