@@ -28,7 +28,20 @@ function LoginFormInner({ getCaptchaToken }: LoginFormInnerProps) {
     setLoading(true)
 
     try {
-      const captchaToken = getCaptchaToken ? await getCaptchaToken() : ''
+      let captchaToken = ''
+      if (getCaptchaToken) {
+        try {
+          captchaToken = await getCaptchaToken()
+        } catch (captchaErr) {
+          const msg = captchaErr instanceof Error ? captchaErr.message : String(captchaErr)
+          if (msg.includes('Invalid site key') || msg.includes('api.js')) {
+            throw new Error(
+              'reCAPTCHA error: Add your domain (ctgtimesheet.com and your Vercel URL) to the reCAPTCHA key at console.cloud.google.com/security/recaptcha'
+            )
+          }
+          throw captchaErr
+        }
+      }
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -221,6 +234,10 @@ function LoginFormWithEnterpriseCaptcha({ siteKey }: { siteKey: string }) {
 }
 
 export default function LoginForm() {
+  if (process.env.NEXT_PUBLIC_RECAPTCHA_DISABLED === 'true') {
+    return <LoginFormInner />
+  }
+
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
   const useEnterprise = process.env.NEXT_PUBLIC_RECAPTCHA_ENTERPRISE === 'true'
 

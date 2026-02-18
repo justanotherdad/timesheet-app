@@ -4,6 +4,23 @@ Complete these steps to activate reCAPTCHA Enterprise for your CTG Timesheet app
 
 ---
 
+## Fix "Invalid site key" error
+
+If you see **"Invalid site key or not loaded in api.js"**, add your domain to the reCAPTCHA key:
+
+1. Go to [Google Cloud Console → reCAPTCHA](https://console.cloud.google.com/security/recaptcha)
+2. Select your project **ctg-timesheet-1768525801662**
+3. Click your **Web** key (the one with site key `6LcZHG8s...`)
+4. Under **Domains**, add:
+   - `ctgtimesheet.com`
+   - `www.ctgtimesheet.com`
+   - `*.vercel.app` (for Vercel preview URLs)
+   - `localhost` (for local testing)
+5. Ensure **Domain verification** is enabled (toggle ON)
+6. Save
+
+---
+
 ## Step 1: Enable the reCAPTCHA Enterprise API
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com)

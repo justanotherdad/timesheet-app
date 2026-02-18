@@ -66,10 +66,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
   }
 
-  // Verify CAPTCHA (skip if not configured)
+  // Verify CAPTCHA (skip if disabled or not configured)
+  const recaptchaDisabled = process.env.NEXT_PUBLIC_RECAPTCHA_DISABLED === 'true'
   const hasRecaptcha =
-    (process.env.RECAPTCHA_PROJECT_ID && process.env.RECAPTCHA_API_KEY) ||
-    process.env.RECAPTCHA_SECRET_KEY
+    !recaptchaDisabled &&
+    ((process.env.RECAPTCHA_PROJECT_ID && process.env.RECAPTCHA_API_KEY) ||
+      !!process.env.RECAPTCHA_SECRET_KEY)
   if (hasRecaptcha && !(await verifyRecaptcha(captchaToken || ''))) {
     await logAuditEvent(
       { type: 'login_failure', email, reason: 'captcha_failed' },
