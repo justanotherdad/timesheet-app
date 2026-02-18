@@ -103,12 +103,16 @@ export default async function EditTimesheetPage({
     }
   }
 
-  const [sitesResult, purchaseOrdersResult, systemsResult, deliverablesResult, activitiesResult] = await Promise.all([
+  const [sitesResult, purchaseOrdersResult, systemsResult, deliverablesResult, activitiesResult, departmentsResult] = await Promise.all([
     withQueryTimeout(() => sitesQuery),
     withQueryTimeout(() => posQuery),
     withQueryTimeout(() => systemsQuery),
     withQueryTimeout(() => deliverablesQuery),
     withQueryTimeout(() => activitiesQuery),
+    // Fetch departments at user's sites for effectiveDepartmentIds (when user has no explicit departments)
+    userSiteIds.length > 0
+      ? withQueryTimeout<Array<{ id: string }>>(() => supabase.from('departments').select('id').in('site_id', userSiteIds))
+      : Promise.resolve({ data: [] as { id: string }[] }),
   ])
 
   const sites = (sitesResult.data || []) as any[]
@@ -116,10 +120,12 @@ export default async function EditTimesheetPage({
   let systems = (systemsResult.data || []) as any[]
   let deliverables = (deliverablesResult.data || []) as any[]
   let activities = (activitiesResult.data || []) as any[]
+  const departmentsAtSites = (departmentsResult.data || []) as Array<{ id: string }>
 
   // Filter systems, deliverables, activities by user's assigned departments and POs (non-admins only)
-  // When user has sites but no explicit POs, treat POs from those sites as accessible
+  // When user has sites but no explicit POs/departments, treat POs and departments from those sites as accessible
   const effectivePOIds = userPOIds.length > 0 ? userPOIds : purchaseOrders.map((p: any) => p.id)
+  const effectiveDepartmentIds = userDepartmentIds.length > 0 ? userDepartmentIds : departmentsAtSites.map((d) => d.id)
   if (!['admin', 'super_admin'].includes(user.profile.role) && (systems.length > 0 || deliverables.length > 0 || activities.length > 0)) {
     const filterByDeptAndPo = async (
       itemIds: string[],
@@ -144,7 +150,7 @@ export default async function EditTimesheetPage({
       itemIds.forEach((id) => {
         const depts = itemDepts[id] || []
         const pos = itemPOs[id] || []
-        const deptOk = depts.length === 0 || depts.some((d) => userDepartmentIds.includes(d))
+        const deptOk = depts.length === 0 || depts.some((d) => effectiveDepartmentIds.includes(d))
         const poOk = pos.length === 0 || pos.some((p) => effectivePOIds.includes(p))
         if (deptOk && poOk) allowed.add(id)
       })
