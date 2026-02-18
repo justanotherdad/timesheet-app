@@ -98,7 +98,10 @@ export default async function ExportTimesheetPage({
       .select(`
         *,
         sites(name, code),
-        purchase_orders(po_number, description)
+        purchase_orders(po_number, description),
+        systems(name),
+        deliverables(name),
+        activities(name)
       `)
       .eq('timesheet_id', id)
       .order('created_at')

@@ -274,6 +274,9 @@ export default function WeeklyTimesheetExport({
               <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Client / Project #</th>
               <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>PO#</th>
               <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Task Description</th>
+              <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>System</th>
+              <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Deliverable</th>
+              <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Activity</th>
               {weekDates.days.map((day, idx) => (
                 <th key={idx} className="day-header" style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>
                   <div>{format(day, 'EEE')}</div>
@@ -297,6 +300,15 @@ export default function WeeklyTimesheetExport({
                 <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
                   {entry.task_description || ''}
                 </td>
+                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
+                  {entry.system_name || entry.systems?.name || '—'}
+                </td>
+                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
+                  {entry.deliverables?.name || '—'}
+                </td>
+                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
+                  {entry.activities?.name || '—'}
+                </td>
                 {days.map((day) => (
                   <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
                     {(entry[`${day}_hours`] || 0).toFixed(2)}
@@ -314,6 +326,9 @@ export default function WeeklyTimesheetExport({
                 <td style={{ border: '1px solid #000', padding: '5px' }}></td>
                 <td style={{ border: '1px solid #000', padding: '5px' }}></td>
                 <td style={{ border: '1px solid #000', padding: '5px' }}></td>
+                <td style={{ border: '1px solid #000', padding: '5px' }}></td>
+                <td style={{ border: '1px solid #000', padding: '5px' }}></td>
+                <td style={{ border: '1px solid #000', padding: '5px' }}></td>
                 {days.map((day) => (
                   <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right' }}>0.00</td>
                 ))}
@@ -323,7 +338,7 @@ export default function WeeklyTimesheetExport({
 
             {/* Sub Totals */}
             <tr className="subtotal-row" style={{ backgroundColor: '#FFFF99', fontWeight: 'bold', color: '#000' }}>
-              <td colSpan={3} style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>Sub Totals</td>
+              <td colSpan={6} style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>Sub Totals</td>
               {days.map((day) => (
                 <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
                   {getBillableSubtotal(day).toFixed(2)}
