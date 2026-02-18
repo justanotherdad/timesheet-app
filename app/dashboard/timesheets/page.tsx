@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import Link from 'next/link'
 import { formatWeekEnding } from '@/lib/utils'
 import { FileText, CheckCircle, XCircle, Clock, Trash2 } from 'lucide-react'
@@ -74,12 +75,36 @@ export default async function TimesheetsPage() {
 
   const timesheets = (timesheetsResult.data || []) as any[]
 
+  // Auto-approve any submitted timesheets where employee has no approvers (final approver with no one above)
+  let timesheetsForDisplay = timesheets
+  if (['admin', 'super_admin'].includes(user.profile.role)) {
+    const autoApproved = await Promise.all(
+      timesheets
+        .filter((ts: any) => ts.status === 'submitted')
+        .map((ts: any) => checkAndAutoApproveIfFinal(ts.id))
+    )
+    if (autoApproved.some(Boolean)) {
+      const ids = timesheets.map((t: any) => t.id)
+      const adminSupabaseForRefetch = createAdminClient()
+      const { data: refetched } = await adminSupabaseForRefetch
+        .from('weekly_timesheets')
+        .select(`
+          *,
+          user_profiles!user_id(name, email, reports_to_id, manager_id, supervisor_id, final_approver_id)
+        `)
+        .in('id', ids)
+        .order('week_ending', { ascending: false })
+        .order('created_at', { ascending: false })
+      timesheetsForDisplay = (refetched || []) as any[]
+    }
+  }
+
   // For admin/super_admin: fetch signatures (signer_id) to show "With" in approval workflow
   // Use admin client so RLS does not block reading signatures
   let signaturesByTimesheetId: Record<string, { signer_id: string }[]> = {}
   let approverNamesById: Record<string, string> = {}
-  if (['admin', 'super_admin'].includes(user.profile.role) && timesheets.length > 0) {
-    const ids = timesheets.map((ts: any) => ts.id)
+  if (['admin', 'super_admin'].includes(user.profile.role) && timesheetsForDisplay.length > 0) {
+    const ids = timesheetsForDisplay.map((ts: any) => ts.id)
     const adminSupabase = createAdminClient()
     const sigResult = await withQueryTimeout(() =>
       adminSupabase
@@ -95,7 +120,7 @@ export default async function TimesheetsPage() {
 
     // Collect next-approver user IDs for submitted timesheets (need chain from user_profiles)
     const nextApproverIds = new Set<string>()
-    timesheets.forEach((ts: any) => {
+    timesheetsForDisplay.forEach((ts: any) => {
       if (ts.status !== 'submitted') return
       const profile = ts.user_profiles as { reports_to_id?: string; manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
       if (!profile) return
@@ -201,11 +226,11 @@ export default async function TimesheetsPage() {
             </a>
           </div>
 
-          {timesheets && timesheets.length > 0 ? (
+          {timesheetsForDisplay && timesheetsForDisplay.length > 0 ? (
             <>
               {/* Mobile: cards with Employee, Week Ending, Status, View button only */}
               <div className="md:hidden space-y-3">
-                {timesheets.map((ts) => (
+                {timesheetsForDisplay.map((ts) => (
                   <div
                     key={ts.id}
                     className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-600"
@@ -275,7 +300,7 @@ export default async function TimesheetsPage() {
                       </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                      {timesheets.map((ts) => (
+                      {timesheetsForDisplay.map((ts) => (
                         <tr key={ts.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                           {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) && (
                             <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 truncate" title={ts.user_profiles?.name || 'Unknown'}>

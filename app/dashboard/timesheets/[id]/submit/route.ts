@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/auth'
+import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import { NextResponse } from 'next/server'
 
 export async function POST(
@@ -44,6 +45,9 @@ export async function POST(
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
+
+    // If employee has no approvers (final approver with no one above), auto-approve
+    await checkAndAutoApproveIfFinal(id)
 
     return NextResponse.redirect(new URL('/dashboard/timesheets', request.url))
   } catch (error: any) {

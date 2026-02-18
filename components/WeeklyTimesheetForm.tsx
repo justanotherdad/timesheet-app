@@ -416,8 +416,9 @@ export default function WeeklyTimesheetForm({
 
       if (unbillableError) throw unbillableError
 
-      // After Submit for Approval, go to list. After Save Draft, stay on edit page so user can submit without going back.
+      // After Submit for Approval: check if final approver (no one above) → auto-approve, then go to list
       if (shouldSubmit) {
+        await fetch(`/api/timesheets/${currentTimesheetId}/check-auto-approve`, { method: 'POST' })
         window.location.href = '/dashboard/timesheets'
       } else {
         window.location.href = `/dashboard/timesheets/${currentTimesheetId}/edit`
