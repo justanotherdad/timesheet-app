@@ -32,7 +32,7 @@ This document describes what each role can see and do: screens, data scope, and 
 | Export Timesheets        | —             | —                 | ✓               | ✓         | ✓           |
 
 - **Employee:** No “Manage” or admin cards.
-- **Supervisor:** Sees Manage Users, Pending Approvals, and Organization/Systems/Activities/Deliverables; all except Pending Approvals are **view-only**. Does not see View Timesheet Data or Export.
+- **Supervisor:** Sees Manage Users, My Timesheets (own + reports), Pending Approvals, Approved Timesheets, and Organization/Systems/Activities/Deliverables; all except Pending Approvals are **view-only**. Can see timesheets they approved via My Timesheets and Approved Timesheets. Does not see View Timesheet Data or Export.
 - **Manager / Admin / Super Admin:** Full access to the cards they see; Manager is scoped to their team and assigned sites (see below).
 
 ---
@@ -42,7 +42,7 @@ This document describes what each role can see and do: screens, data scope, and 
 ### Who sees which timesheets
 
 - **Employee:** Only their own.
-- **Supervisor / Manager:** Own + timesheets of users who have them as `reports_to_id`, `supervisor_id`, `manager_id`, or `final_approver_id`.
+- **Supervisor / Manager:** Own + timesheets of users who have them as `reports_to_id`, `supervisor_id`, `manager_id`, or `final_approver_id`. This includes timesheets they have approved (via My Timesheets and Approved Timesheets).
 - **Admin / Super Admin:** All timesheets.
 
 ### Create / Edit / Delete
@@ -129,6 +129,7 @@ Admin and Super Admin only (and not self).
    - **Manage Users:** View only – list of employees reporting to them; click to see read-only user details. No add, edit, password link, or delete.
    - **Organization, Systems, Activities, Deliverables:** View only – sites assigned to them via `user_sites`; no add/edit/delete/import.
    - **Pending Approvals:** Full (approve/reject as in chain).
+   - **My Timesheets & Approved Timesheets:** Can see timesheets they approved (timesheets of their reports, including after approval).
    - No access to View Timesheet Data or Export.
 
 2. **Manager**

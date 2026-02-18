@@ -166,13 +166,14 @@ function GuideContent() {
         <h4 className="text-sm font-semibold mt-3 mb-1">Everyone sees</h4>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
           <li><strong>New Timesheet</strong> – Start a new timesheet for the current week.</li>
-          <li><strong>My Timesheets</strong> – List of your timesheets (and, for supervisors/managers, timesheets of people who have you as their Supervisor, Manager, or Final Approver).</li>
+          <li><strong>My Timesheets</strong> – List of your timesheets (and, for supervisors/managers, timesheets of people who have you as their Supervisor, Manager, or Final Approver—including timesheets you have approved).</li>
           <li><strong>Current Week</strong> – Quick view of this week’s timesheet (if one exists) with a link to view or create.</li>
         </ul>
         <h4 className="text-sm font-semibold mt-3 mb-1">Supervisors, Managers, Admins, and Super Admins also see</h4>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
           <li><strong>Manage Users</strong> – Open the user management page (supervisors: view only; managers and above: add/edit as allowed).</li>
           <li><strong>Pending Approvals</strong> – Timesheets waiting for your approval (with count).</li>
+          <li><strong>Approved Timesheets</strong> – Timesheets you or others have approved (supervisors can see timesheets they approved).</li>
           <li><strong>Manage Organization</strong> – Sites, departments, purchase orders (supervisors: view only).</li>
           <li><strong>Manage Systems</strong> – System options for timesheet rows (supervisors: view only).</li>
           <li><strong>Manage Activities</strong> – Activity options (supervisors: view only).</li>
@@ -197,7 +198,7 @@ function GuideContent() {
           <li>From the Dashboard, click <strong>New Timesheet</strong> (or <strong>Create one</strong> under Current Week).</li>
           <li>You are on <strong>New Weekly Timesheet</strong> for the current week.</li>
           <li>Optionally use <strong>Copy Previous Week</strong> to bring in rows from last week (see below).</li>
-          <li>Add <strong>billable</strong> rows: Site/Client, PO, Task description, System/Deliverable/Activity as needed, and hours per day (Mon–Sun). The <strong>Activity</strong>, <strong>Deliverable</strong>, and <strong>System</strong> dropdowns only show options assigned to your user profile (sites you are assigned to).</li>
+          <li>Add <strong>billable</strong> rows: Site/Client, PO, Task description, System/Deliverable/Activity as needed, and hours per day (Mon–Sun). The <strong>Activity</strong>, <strong>Deliverable</strong>, and <strong>System</strong> dropdowns show options for sites you are assigned to (and departments/POs at those sites).</li>
           <li>Add or adjust <strong>unbillable</strong> rows (Holiday, Internal, PTO) if applicable.</li>
           <li>Click <strong>Save as Draft</strong> to save and continue later, or <strong>Submit</strong> when the week is complete.</li>
         </ol>
@@ -247,7 +248,7 @@ function GuideContent() {
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">3.8 Export PDF</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          From the timesheet <strong>detail</strong> page, use <strong>Export PDF</strong> (or <strong>Export</strong>) to download a PDF of that timesheet. Available to the timesheet owner and to Admins/Super Admins.
+          From the timesheet <strong>detail</strong> page, use <strong>Export PDF</strong> (or <strong>Export</strong>) to download a PDF of that timesheet. Available to the timesheet owner, to supervisors/managers for their reports’ timesheets, and to Admins/Super Admins for any timesheet.
         </p>
       </section>
 
@@ -281,7 +282,11 @@ function GuideContent() {
           <li>Submit the rejection.</li>
           <li>The timesheet status becomes <strong>Rejected</strong>. The employee sees your note when they open the timesheet and can edit and resubmit.</li>
         </ol>
-        <h4 className="text-sm font-semibold mt-3 mb-1">4.4 Clearing a rejection note (Admin/Super Admin only)</h4>
+        <h4 className="text-sm font-semibold mt-3 mb-1">4.4 Seeing approved timesheets</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          Supervisors and managers can see timesheets they have approved via <strong>My Timesheets</strong> and the <strong>Approved Timesheets</strong> card on the Dashboard. Click <strong>Approved Timesheets</strong> to view and filter approved timesheets for your reports.
+        </p>
+        <h4 className="text-sm font-semibold mt-3 mb-1">4.5 Clearing a rejection note (Admin/Super Admin only)</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
           <strong>Admins</strong> and <strong>Super Admins</strong> can clear the rejection note on a rejected timesheet (e.g. so the employee can resubmit without seeing the old note). Use the option on the timesheet detail page if available.
         </p>
@@ -384,6 +389,7 @@ function GuideContent() {
               <tr><td className="border px-2 py-1">Edit/Delete own (draft)</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
               <tr><td className="border px-2 py-1">Edit any timesheet</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
               <tr><td className="border px-2 py-1">Pending Approvals</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
+              <tr><td className="border px-2 py-1">Approved Timesheets</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓ (own + reports)</td><td className="border px-2 py-1">✓ (own + reports)</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
               <tr><td className="border px-2 py-1">Approve / Reject</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓ (in chain)</td><td className="border px-2 py-1">✓ (in chain)</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
               <tr><td className="border px-2 py-1">Manage Users</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">View only</td><td className="border px-2 py-1">Add/Edit (reports)</td><td className="border px-2 py-1">Full (no Super Admin)</td><td className="border px-2 py-1">Full</td></tr>
               <tr><td className="border px-2 py-1">Delete user</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
@@ -405,10 +411,10 @@ function GuideContent() {
           <li><strong>Login or password:</strong> Contact your manager or an administrator.</li>
           <li><strong>Missing options or access:</strong> Your role or assignments (sites, reports) may need to be updated in <strong>Manage Users</strong> (admin/manager).</li>
           <li><strong>Approval chain:</strong> The structure is Employee → Supervisor → Manager → Final Approver. Each user’s profile has one <strong>Supervisor</strong> field plus <strong>Manager</strong> and <strong>Final Approver</strong>. If a field is “None,” the next person in the structure is used. Set these in <strong>Manage Users</strong>.</li>
-          <li><strong>Empty Activity/Deliverable/System dropdowns:</strong> You only see options for sites you are assigned to. Ask an admin or manager to assign you to the right sites (and ensure those sites have systems, activities, and deliverables configured).</li>
+          <li><strong>Empty Activity/Deliverable/System dropdowns:</strong> Options are filtered by your assigned sites and departments/POs. Ask an admin or manager to assign you to the right sites (and departments/POs if needed) in <strong>Manage Users</strong>, and ensure those sites have systems, activities, and deliverables configured.</li>
         </ul>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-6 italic">
-          Last updated to match the current CTG Timesheet Management site (employees through admins).
+          Last updated to match the current CTG Timesheet Management site (employees through admins). Supervisors can see timesheets they approved via My Timesheets and Approved Timesheets.
         </p>
       </section>
     </div>
