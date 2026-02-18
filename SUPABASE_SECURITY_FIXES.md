@@ -20,7 +20,13 @@ Enabled Row Level Security on:
 - **SELECT:** All authenticated users (needed for timesheet form filtering)
 - **INSERT/UPDATE/DELETE:** Only users with role `manager`, `admin`, or `super_admin`
 
-### 2. Function Search Path (2 warnings)
+### 2. RLS on Organization Tables (sites, departments, purchase_orders)
+
+**Migration:** `supabase/migrations/20260218_fix_org_tables_rls.sql`
+
+Fixes "new row violates row-level security policy" when managers add POs, sites, or departments. Adds INSERT/UPDATE/DELETE policies for users with role `manager`, `admin`, or `super_admin`.
+
+### 3. Function Search Path (2 warnings)
 
 **Migration:** `supabase/migrations/20260218_fix_function_search_path.sql`
 
@@ -36,14 +42,14 @@ This prevents search_path injection attacks (CVE-2018-1058).
 
 These must be configured in the Supabase Dashboard under **Auth** settings.
 
-### 3. Auth OTP Long Expiry (warning)
+### 4. Auth OTP Long Expiry (warning)
 
 **Location:** Auth → Providers → Email → **Email OTP Expiration**
 
 - Set to **3600** (1 hour) if the Security Advisor flags the current value as too long
 - Or keep at **86400** (1 day) if the warning is acceptable for your use case
 
-### 4. Leaked Password Protection Disabled (warning)
+### 5. Leaked Password Protection Disabled (warning)
 
 **Location:** Auth → Providers → Email (or Auth settings)
 
