@@ -5,15 +5,21 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import Link from 'next/link'
 import { formatWeekEnding } from '@/lib/utils'
-import { FileText, CheckCircle, XCircle, Clock, Trash2 } from 'lucide-react'
+import { FileText, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
-import DeleteTimesheetButton from '@/components/DeleteTimesheetButton'
+import MyTimesheetsTable from '@/components/MyTimesheetsTable'
 
-export const dynamic = 'force-dynamic' // Ensure fresh data on every request
-export const maxDuration = 10 // Maximum duration for this route in seconds
+export const dynamic = 'force-dynamic'
+export const maxDuration = 10
 
-export default async function TimesheetsPage() {
+type SearchParams = { sort?: string; dir?: string }
+
+export default async function TimesheetsPage(props: { searchParams?: Promise<SearchParams> }) {
+  const params = props.searchParams ? await props.searchParams : {}
+  const sortBy = params.sort || 'week_ending'
+  const sortDir = (params.dir || 'desc') as 'asc' | 'desc'
+
   const user = await getCurrentUser()
   
   if (!user) {
@@ -144,48 +150,6 @@ export default async function TimesheetsPage() {
     }
   }
 
-  const getNextApproverId = (ts: any): string | undefined => {
-    if (ts.status !== 'submitted') return undefined
-    const profile = ts.user_profiles as { reports_to_id?: string; manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
-    if (!profile) return undefined
-    const chain: string[] = []
-    const firstApprover = profile.supervisor_id || profile.reports_to_id
-    if (firstApprover) chain.push(firstApprover)
-    if (profile.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
-    if (profile.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
-    const signedIds = (signaturesByTimesheetId[ts.id] || []).map((s: { signer_id: string }) => s.signer_id)
-    return chain.find((uid) => !signedIds.includes(uid))
-  }
-
-  const getWithLabel = (ts: any) => {
-    if (ts.status === 'draft') return '—'
-    if (ts.status === 'rejected') return 'Rejected'
-    if (ts.status === 'approved') return 'Approved'
-    if (ts.status === 'submitted') {
-      const nextId = getNextApproverId(ts)
-      if (nextId === undefined) return 'Approved'
-      const profile = ts.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
-      if (nextId === profile?.manager_id) return 'With Manager'
-      if (nextId === profile?.supervisor_id) return 'With Supervisor'
-      if (nextId === profile?.final_approver_id) return 'With Final Approver'
-      return '—'
-    }
-    return '—'
-  }
-
-  const getWithPersonName = (ts: any) => {
-    if (ts.status === 'draft') return '—'
-    if (ts.status === 'rejected') return 'Rejected'
-    if (ts.status === 'approved') return 'Approved'
-    if (ts.status === 'submitted') {
-      const nextId = getNextApproverId(ts)
-      if (nextId === undefined) return 'Approved'
-      if (approverNamesById[nextId]) return approverNamesById[nextId]
-      return getWithLabel(ts)
-    }
-    return '—'
-  }
-
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'approved':
@@ -212,6 +176,26 @@ export default async function TimesheetsPage() {
     }
   }
 
+  // Sort timesheets for display
+  const orderAsc = sortDir === 'asc'
+  const sortedTimesheets = [...timesheetsForDisplay].sort((a: any, b: any) => {
+    let cmp = 0
+    if (sortBy === 'week_ending') {
+      cmp = (a.week_ending || '').localeCompare(b.week_ending || '')
+    } else if (sortBy === 'week_starting') {
+      cmp = (a.week_starting || '').localeCompare(b.week_starting || '')
+    } else if (sortBy === 'created_at') {
+      cmp = (a.created_at || '').localeCompare(b.created_at || '')
+    } else if (sortBy === 'status') {
+      cmp = (a.status || '').localeCompare(b.status || '')
+    } else if (sortBy === 'user') {
+      cmp = (a.user_profiles?.name || '').toLowerCase().localeCompare((b.user_profiles?.name || '').toLowerCase())
+    } else {
+      cmp = (a.week_ending || '').localeCompare(b.week_ending || '')
+    }
+    return orderAsc ? cmp : -cmp
+  })
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="My Timesheets" showBack backUrl="/dashboard" user={user} />
@@ -226,11 +210,11 @@ export default async function TimesheetsPage() {
             </a>
           </div>
 
-          {timesheetsForDisplay && timesheetsForDisplay.length > 0 ? (
+          {sortedTimesheets && sortedTimesheets.length > 0 ? (
             <>
               {/* Mobile: cards with Employee, Week Ending, Status, View button only */}
               <div className="md:hidden space-y-3">
-                {timesheetsForDisplay.map((ts) => (
+                {sortedTimesheets.map((ts) => (
                   <div
                     key={ts.id}
                     className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-600"
@@ -261,144 +245,15 @@ export default async function TimesheetsPage() {
                 ))}
               </div>
 
-              {/* Desktop: full table, no horizontal scroll */}
-              <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-                <div className="overflow-visible">
-                  <table className="w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-50 dark:bg-gray-700">
-                      <tr>
-                        {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) && (
-                          <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%] min-w-0">
-                            Employee
-                          </th>
-                        )}
-                        <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[8%] min-w-0">
-                          Week Ending
-                        </th>
-                        <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[8%] min-w-0">
-                          Week Starting
-                        </th>
-                        <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%] min-w-0">
-                          Status
-                        </th>
-                        {(['admin', 'super_admin'].includes(user.profile.role)) && (
-                          <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%] min-w-0">
-                            With
-                          </th>
-                        )}
-                        {(['admin', 'super_admin'].includes(user.profile.role)) && (
-                          <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[12%] min-w-0">
-                            With (person)
-                          </th>
-                        )}
-                        <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[8%] min-w-0">
-                          Created
-                        </th>
-                        <th className="px-3 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[20%] min-w-0">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                      {timesheetsForDisplay.map((ts) => (
-                        <tr key={ts.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                          {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) && (
-                            <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 truncate" title={ts.user_profiles?.name || 'Unknown'}>
-                              {ts.user_profiles?.name || 'Unknown'}
-                            </td>
-                          )}
-                          <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0">
-                            {formatWeekEnding(ts.week_ending)}
-                          </td>
-                          <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0">
-                            {formatWeekEnding(ts.week_starting)}
-                          </td>
-                          <td className="px-3 lg:px-6 py-3 min-w-0">
-                            <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ts.status)}`}>
-                              {getStatusIcon(ts.status)}
-                              {ts.status}
-                            </span>
-                          </td>
-                          {(['admin', 'super_admin'].includes(user.profile.role)) && (
-                            <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 truncate">
-                              {getWithLabel(ts)}
-                            </td>
-                          )}
-                          {(['admin', 'super_admin'].includes(user.profile.role)) && (
-                            <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 truncate" title={getWithPersonName(ts)}>
-                              {getWithPersonName(ts)}
-                            </td>
-                          )}
-                          <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0">
-                            {formatWeekEnding(ts.created_at)}
-                          </td>
-                          <td className="px-3 lg:px-6 py-3 text-sm font-medium min-w-0">
-                            <div className="flex flex-wrap gap-2">
-                              {ts.status === 'draft' && (
-                                <Link
-                                  href={`/dashboard/timesheets/${ts.id}/edit`}
-                                  className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
-                                >
-                                  Edit
-                                </Link>
-                              )}
-                              {ts.status === 'draft' && (
-                                <form action={`/dashboard/timesheets/${ts.id}/submit`} method="post" className="inline">
-                                  <button
-                                    type="submit"
-                                    className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
-                                  >
-                                    Submit
-                                  </button>
-                                </form>
-                              )}
-                              {ts.status === 'submitted' && ts.user_id === user.id && (
-                                <form action={`/dashboard/timesheets/${ts.id}/recall`} method="post" className="inline">
-                                  <button
-                                    type="submit"
-                                    className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
-                                  >
-                                    Edit
-                                  </button>
-                                </form>
-                              )}
-                              {ts.status === 'rejected' && ts.user_id === user.id && (
-                                <Link
-                                  href={`/dashboard/timesheets/${ts.id}/edit`}
-                                  className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
-                                >
-                                  Edit
-                                </Link>
-                              )}
-                              {ts.status === 'approved' && ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
-                                <Link
-                                  href={`/dashboard/approvals/${ts.id}/reject-form`}
-                                  className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
-                                >
-                                  Reject
-                                </Link>
-                              )}
-                              <Link
-                                href={`/dashboard/timesheets/${ts.id}/export`}
-                                className="text-purple-600 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300"
-                              >
-                                Export
-                              </Link>
-                              <Link
-                                href={`/dashboard/timesheets/${ts.id}`}
-                                className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-                              >
-                                View
-                              </Link>
-                              <DeleteTimesheetButton timesheetId={ts.id} status={ts.status} userRole={user.profile.role} />
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              {/* Desktop: sortable table */}
+              <MyTimesheetsTable
+                timesheets={sortedTimesheets}
+                sortBy={sortBy}
+                sortDir={sortDir}
+                user={user}
+                signaturesByTimesheetId={signaturesByTimesheetId}
+                approverNamesById={approverNamesById}
+              />
             </>
           ) : (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
