@@ -541,7 +541,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-4 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-4 py-3 text-left">
                   <label className="flex items-center gap-1 cursor-pointer">
                     <input
                       type="checkbox"
@@ -552,62 +552,62 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Select</span>
                   </label>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('week_ending')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Week Ending <SortIcon col="week_ending" />
                   </button>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('date')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Date <SortIcon col="date" />
                   </button>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('day')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Day <SortIcon col="day" />
                   </button>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('user')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     User <SortIcon col="user" />
                   </button>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('site')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Site <SortIcon col="site" />
                   </button>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('po')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     PO <SortIcon col="po" />
                   </button>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('task')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Task Description <SortIcon col="task" />
                   </button>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('system')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     System <SortIcon col="system" />
                   </button>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('activity')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Activity <SortIcon col="activity" />
                   </button>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('deliverable')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Deliverable <SortIcon col="deliverable" />
                   </button>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('hours')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Hours <SortIcon col="hours" />
                   </button>
                 </th>
-                <th className="px-6 py-3 text-left">
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('status')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Status <SortIcon col="status" />
                   </button>
