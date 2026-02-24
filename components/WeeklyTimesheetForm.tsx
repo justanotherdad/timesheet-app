@@ -12,7 +12,7 @@ import { Plus, Trash2, Edit2, X } from 'lucide-react'
 
 interface WeeklyTimesheetFormProps {
   sites: Array<{ id: string; name: string; code?: string }>
-  purchaseOrders: Array<{ id: string; po_number: string; description?: string }>
+  purchaseOrders: Array<{ id: string; po_number: string; description?: string; site_id?: string }>
   systems?: Array<{ id: string; name: string; code?: string }>
   deliverables?: Array<{ id: string; name: string; code?: string }>
   activities?: Array<{ id: string; name: string; code?: string }>
@@ -446,7 +446,11 @@ export default function WeeklyTimesheetForm({
     setUnbillableEntries(updated)
   }
 
-  const poOptions = purchaseOrders.map(po => ({
+  // Filter POs by selected client (site) - when client is selected, only show POs assigned to that client
+  const poOptions = (editingEntry?.client_project_id
+    ? purchaseOrders.filter(po => po.site_id === editingEntry.client_project_id)
+    : purchaseOrders
+  ).map(po => ({
     id: po.id,
     name: po.po_number,
     code: po.description,
@@ -820,7 +824,16 @@ export default function WeeklyTimesheetForm({
                   <SearchableSelect
                     options={sites}
                     value={editingEntry.client_project_id || null}
-                    onChange={(value) => setEditingEntry({ ...editingEntry, client_project_id: value || undefined })}
+                    onChange={(value) => {
+                      const newClientId = value || undefined
+                      // When client changes, clear PO if it's not assigned to the new client
+                      const poStillValid = !newClientId || !editingEntry.po_id || purchaseOrders.some(po => po.id === editingEntry.po_id && po.site_id === newClientId)
+                      setEditingEntry({
+                        ...editingEntry,
+                        client_project_id: newClientId,
+                        ...(poStillValid ? {} : { po_id: undefined }),
+                      })
+                    }}
                     placeholder="Select Client..."
                   />
                 </div>

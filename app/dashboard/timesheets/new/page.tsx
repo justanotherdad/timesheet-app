@@ -92,10 +92,8 @@ export default async function NewTimesheetPage() {
     }
     if (userPOIds.length > 0) {
       posQuery.in('id', userPOIds)
-    } else if (userSiteIds.length > 0) {
-      // User has sites but no explicit POs: show POs from assigned sites
-      posQuery.in('site_id', userSiteIds)
     } else {
+      // Only show POs explicitly assigned in user profile; no fallback to all site POs
       posQuery.eq('id', '00000000-0000-0000-0000-000000000000') // Will return empty
     }
   }
