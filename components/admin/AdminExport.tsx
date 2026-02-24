@@ -13,21 +13,37 @@ type ExportFormat = 'csv' | 'excel' | 'pdf'
 
 export default function AdminExport({ timesheets }: AdminExportProps) {
   const [selectedWeek, setSelectedWeek] = useState<string>('')
+  const [selectedStatus, setSelectedStatus] = useState<string>('')
+  const [selectedSite, setSelectedSite] = useState<string>('')
+  const [selectedPO, setSelectedPO] = useState<string>('')
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('')
   const [selectedTimesheets, setSelectedTimesheets] = useState<string[]>([])
   const [exportFormat, setExportFormat] = useState<ExportFormat>('csv')
   const [exporting, setExporting] = useState(false)
   const [sortColumn, setSortColumn] = useState<string>('week_ending')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
-  // Get unique week endings
-  const weekEndings = Array.from(
-    new Set(timesheets.map(ts => ts.week_ending))
-  ).sort().reverse()
+  // Get unique filter options from timesheets
+  const weekEndings = Array.from(new Set(timesheets.map(ts => ts.week_ending))).filter(Boolean).sort().reverse()
+  const statuses = Array.from(new Set(timesheets.map(ts => ts.status))).filter(Boolean).sort()
+  const sitesList = timesheets.map(ts => ts.sites).filter(Boolean)
+  const uniqueSites = Array.from(new Map(sitesList.map((s: any) => [s.id, s])).values()).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
+  const posList = timesheets.map(ts => ts.purchase_orders).filter(Boolean)
+  const uniquePOs = Array.from(new Map(posList.map((p: any) => [p.id, p])).values()).sort((a: any, b: any) => (a.po_number || '').localeCompare(b.po_number || ''))
+  const employeesList = timesheets.map(ts => ({ id: ts.user_id, name: ts.user_profiles?.name || 'Unknown' }))
+  const uniqueEmployees = Array.from(new Map(employeesList.map((e: any) => [e.id, e])).values()).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
 
-  // Filter timesheets by selected week
-  const filteredTimesheets = selectedWeek
-    ? timesheets.filter(ts => ts.week_ending === selectedWeek)
-    : timesheets
+  // Filter timesheets by all selected filters
+  const filteredTimesheets = useMemo(() => {
+    return timesheets.filter(ts => {
+      if (selectedWeek && ts.week_ending !== selectedWeek) return false
+      if (selectedStatus && ts.status !== selectedStatus) return false
+      if (selectedSite && ts.sites?.id !== selectedSite) return false
+      if (selectedPO && ts.purchase_orders?.id !== selectedPO) return false
+      if (selectedEmployee && ts.user_id !== selectedEmployee) return false
+      return true
+    })
+  }, [timesheets, selectedWeek, selectedStatus, selectedSite, selectedPO, selectedEmployee])
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -443,82 +459,122 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
     }
   }
 
+  const clearFiltersAndSelection = () => setSelectedTimesheets([])
+
+  const filterSelectClass = "px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm min-w-0"
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <div className="mb-6 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Filter by Week Ending
-          </label>
-          <select
-            value={selectedWeek}
-            onChange={(e) => {
-              setSelectedWeek(e.target.value)
-              setSelectedTimesheets([])
-            }}
-            className="w-full md:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-          >
-            <option value="">All Weeks</option>
-            {weekEndings.map(we => (
-              <option key={we} value={we}>
-                {formatWeekEnding(we)}
-              </option>
-            ))}
-          </select>
+        {/* Filters row - all in one row on desktop */}
+        <div className="flex flex-col md:flex-row md:items-end md:gap-4 gap-4">
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Week Ending</label>
+            <select
+              value={selectedWeek}
+              onChange={(e) => { setSelectedWeek(e.target.value); clearFiltersAndSelection() }}
+              className={filterSelectClass}
+            >
+              <option value="">All Weeks</option>
+              {weekEndings.map(we => (
+                <option key={we} value={we}>{formatWeekEnding(we)}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+            <select
+              value={selectedStatus}
+              onChange={(e) => { setSelectedStatus(e.target.value); clearFiltersAndSelection() }}
+              className={filterSelectClass}
+            >
+              <option value="">All Statuses</option>
+              {statuses.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Site</label>
+            <select
+              value={selectedSite}
+              onChange={(e) => { setSelectedSite(e.target.value); clearFiltersAndSelection() }}
+              className={filterSelectClass}
+            >
+              <option value="">All Sites</option>
+              {uniqueSites.map((s: any) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">PO</label>
+            <select
+              value={selectedPO}
+              onChange={(e) => { setSelectedPO(e.target.value); clearFiltersAndSelection() }}
+              className={filterSelectClass}
+            >
+              <option value="">All POs</option>
+              {uniquePOs.map((p: any) => (
+                <option key={p.id} value={p.id}>{p.po_number}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1 min-w-0 md:min-w-[140px]">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Employee</label>
+            <select
+              value={selectedEmployee}
+              onChange={(e) => { setSelectedEmployee(e.target.value); clearFiltersAndSelection() }}
+              className={filterSelectClass}
+            >
+              <option value="">All Employees</option>
+              {uniqueEmployees.map((e: any) => (
+                <option key={e.id} value={e.id}>{e.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Export Format
-            </label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setExportFormat('csv')}
-                className={`px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2 ${
-                  exportFormat === 'csv'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <FileText className="h-4 w-4" />
-                CSV
-              </button>
-              <button
-                onClick={() => setExportFormat('excel')}
-                className={`px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2 ${
-                  exportFormat === 'excel'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                Excel
-              </button>
-              <button
-                onClick={() => setExportFormat('pdf')}
-                className={`px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2 ${
-                  exportFormat === 'pdf'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <File className="h-4 w-4" />
-                PDF
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1">
+        {/* Export format and Export button - all in one row */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Export Format:</span>
             <button
-              onClick={handleExport}
-              disabled={exporting}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setExportFormat('csv')}
+              className={`px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2 ${
+                exportFormat === 'csv' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+              }`}
             >
-              <Download className="h-4 w-4" />
-              {exporting ? 'Exporting...' : `Export ${selectedTimesheets.length > 0 ? `${selectedTimesheets.length} Selected` : 'All'} Timesheets`}
+              <FileText className="h-4 w-4" />
+              CSV
+            </button>
+            <button
+              onClick={() => setExportFormat('excel')}
+              className={`px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2 ${
+                exportFormat === 'excel' ? 'bg-green-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+              }`}
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Excel
+            </button>
+            <button
+              onClick={() => setExportFormat('pdf')}
+              className={`px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2 ${
+                exportFormat === 'pdf' ? 'bg-red-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+              }`}
+            >
+              <File className="h-4 w-4" />
+              PDF
             </button>
           </div>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="h-4 w-4" />
+            {exporting ? 'Exporting...' : `Export ${selectedTimesheets.length > 0 ? `${selectedTimesheets.length} Selected` : 'All'} Timesheets`}
+          </button>
         </div>
       </div>
 
