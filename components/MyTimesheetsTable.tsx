@@ -267,7 +267,12 @@ export default function MyTimesheetsTable({
                     >
                       View
                     </Link>
-                    <DeleteTimesheetButton timesheetId={ts.id} status={ts.status} userRole={user.profile.role} />
+                    <DeleteTimesheetButton
+                      timesheetId={ts.id}
+                      status={ts.status}
+                      userRole={user.profile.role}
+                      onDeleted={() => router.refresh()}
+                    />
                   </div>
                 </td>
               </tr>
