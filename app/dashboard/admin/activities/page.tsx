@@ -5,6 +5,8 @@ import { withQueryTimeout } from '@/lib/timeout'
 import { getAccessibleSiteIds } from '@/lib/access'
 import HierarchicalItemManager from '@/components/admin/HierarchicalItemManager'
 
+export const dynamic = 'force-dynamic'
+
 export default async function ActivitiesAdminPage() {
   const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
   const supabase = await createClient()

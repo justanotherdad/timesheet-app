@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Plus, Edit, Trash2, Upload, X, CheckSquare, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
@@ -75,6 +76,7 @@ export default function HierarchicalItemManager({
   const [sortColumn, setSortColumn] = useState<string>('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const supabase = createClient()
+  const router = useRouter()
 
   // State to store item assignments for display
   const [itemAssignments, setItemAssignments] = useState<Record<string, { departments: string[]; purchaseOrders: string[] }>>({})
@@ -278,6 +280,7 @@ export default function HierarchicalItemManager({
       }
 
       await loadItems(selectedSite)
+      router.refresh()
       if (e.currentTarget) {
         e.currentTarget.reset()
       }
@@ -361,6 +364,7 @@ export default function HierarchicalItemManager({
       }
 
       await loadItems(selectedSite)
+      router.refresh()
       setEditingItem(null)
       setSelectedDepartments([])
       setSelectedPOs([])
@@ -386,6 +390,7 @@ export default function HierarchicalItemManager({
 
       setItems(items.filter(item => item.id !== id))
       setSelectedItems(selectedItems.filter(itemId => itemId !== id))
+      router.refresh()
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     }
@@ -408,6 +413,7 @@ export default function HierarchicalItemManager({
       // Clear assignments cache and reload
       setItemAssignments({})
       await loadItems(selectedSite)
+      router.refresh()
       setSelectedItems([])
       setShowBulkActions(false)
       setSuccess(`Successfully deleted ${selectedItems.length} ${itemName.toLowerCase()}${selectedItems.length > 1 ? 's' : ''}`)
@@ -538,6 +544,7 @@ export default function HierarchicalItemManager({
       // Clear assignments cache and reload
       setItemAssignments({})
       await loadItems(selectedSite)
+      router.refresh()
       setSelectedItems([])
       setBulkAssignDepartments([])
       setBulkRemoveDepartments([])
@@ -755,6 +762,7 @@ export default function HierarchicalItemManager({
       }
 
       await loadItems(selectedSite)
+      router.refresh()
       setSuccess(`Successfully imported ${itemsToAdd.length} ${itemName.toLowerCase()}s`)
       setTimeout(() => setSuccess(null), 5000)
     } catch (err: any) {

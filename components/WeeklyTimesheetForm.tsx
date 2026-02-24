@@ -13,9 +13,11 @@ import { Plus, Trash2, Edit2, X } from 'lucide-react'
 interface WeeklyTimesheetFormProps {
   sites: Array<{ id: string; name: string; code?: string }>
   purchaseOrders: Array<{ id: string; po_number: string; description?: string; site_id?: string }>
-  systems?: Array<{ id: string; name: string; code?: string }>
-  deliverables?: Array<{ id: string; name: string; code?: string }>
-  activities?: Array<{ id: string; name: string; code?: string }>
+  systems?: Array<{ id: string; name: string; code?: string; site_id?: string }>
+  deliverables?: Array<{ id: string; name: string; code?: string; site_id?: string }>
+  activities?: Array<{ id: string; name: string; code?: string; site_id?: string }>
+  deliverablePOIds?: Record<string, string[]>
+  activityPOIds?: Record<string, string[]>
   defaultWeekEnding: string
   userId: string
   timesheetId?: string
@@ -116,6 +118,8 @@ export default function WeeklyTimesheetForm({
   systems = [],
   deliverables = [],
   activities = [],
+  deliverablePOIds = {},
+  activityPOIds = {},
   defaultWeekEnding,
   userId,
   timesheetId,
@@ -419,9 +423,11 @@ export default function WeeklyTimesheetForm({
       // After Submit for Approval: check if final approver (no one above) → auto-approve, then go to list
       if (shouldSubmit) {
         await fetch(`/api/timesheets/${currentTimesheetId}/check-auto-approve`, { method: 'POST' })
-        window.location.href = '/dashboard/timesheets'
+        router.refresh()
+        router.push('/dashboard/timesheets')
       } else {
-        window.location.href = `/dashboard/timesheets/${currentTimesheetId}/edit`
+        router.refresh()
+        router.push(`/dashboard/timesheets/${currentTimesheetId}/edit`)
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred')
@@ -462,13 +468,43 @@ export default function WeeklyTimesheetForm({
     code: s.code,
   }))
 
-  const deliverableOptions = deliverables.map(d => ({
+  // Filter deliverables by client (site) and PO; deduplicate by id
+  const filteredDeliverables = (() => {
+    let list = deliverables
+    if (editingEntry?.client_project_id) {
+      list = list.filter(d => d.site_id === editingEntry.client_project_id)
+    }
+    if (editingEntry?.po_id) {
+      list = list.filter(d => {
+        const poIds = deliverablePOIds[d.id] || []
+        return poIds.length === 0 || poIds.includes(editingEntry.po_id!)
+      })
+    }
+    return Array.from(new Map(list.map(d => [d.id, d])).values())
+  })()
+
+  const deliverableOptions = filteredDeliverables.map(d => ({
     id: d.id,
     name: d.name,
     code: d.code,
   }))
 
-  const activityOptions = activities.map(a => ({
+  // Filter activities by client (site) and PO; deduplicate by id
+  const filteredActivities = (() => {
+    let list = activities
+    if (editingEntry?.client_project_id) {
+      list = list.filter(a => a.site_id === editingEntry.client_project_id)
+    }
+    if (editingEntry?.po_id) {
+      list = list.filter(a => {
+        const poIds = activityPOIds[a.id] || []
+        return poIds.length === 0 || poIds.includes(editingEntry.po_id!)
+      })
+    }
+    return Array.from(new Map(list.map(a => [a.id, a])).values())
+  })()
+
+  const activityOptions = filteredActivities.map(a => ({
     id: a.id,
     name: a.name,
     code: a.code,
@@ -828,10 +864,15 @@ export default function WeeklyTimesheetForm({
                       const newClientId = value || undefined
                       // When client changes, clear PO if it's not assigned to the new client
                       const poStillValid = !newClientId || !editingEntry.po_id || purchaseOrders.some(po => po.id === editingEntry.po_id && po.site_id === newClientId)
+                      // Clear deliverable/activity if they won't be in the filtered list for the new client
+                      const delStillValid = !newClientId || !editingEntry.deliverable_id || deliverables.some(d => d.id === editingEntry.deliverable_id && d.site_id === newClientId)
+                      const actStillValid = !newClientId || !editingEntry.activity_id || activities.some(a => a.id === editingEntry.activity_id && a.site_id === newClientId)
                       setEditingEntry({
                         ...editingEntry,
                         client_project_id: newClientId,
                         ...(poStillValid ? {} : { po_id: undefined }),
+                        ...(delStillValid ? {} : { deliverable_id: undefined }),
+                        ...(actStillValid ? {} : { activity_id: undefined }),
                       })
                     }}
                     placeholder="Select Client..."
@@ -844,7 +885,24 @@ export default function WeeklyTimesheetForm({
                   <SearchableSelect
                     options={poOptions}
                     value={editingEntry.po_id || null}
-                    onChange={(value) => setEditingEntry({ ...editingEntry, po_id: value || undefined })}
+                    onChange={(value) => {
+                      const newPOId = value || undefined
+                      // When PO changes, clear deliverable/activity if they're not valid for the new PO
+                      const delStillValid = !newPOId || !editingEntry.deliverable_id || (() => {
+                        const poIds = deliverablePOIds[editingEntry.deliverable_id!] || []
+                        return poIds.length === 0 || poIds.includes(newPOId)
+                      })()
+                      const actStillValid = !newPOId || !editingEntry.activity_id || (() => {
+                        const poIds = activityPOIds[editingEntry.activity_id!] || []
+                        return poIds.length === 0 || poIds.includes(newPOId)
+                      })()
+                      setEditingEntry({
+                        ...editingEntry,
+                        po_id: newPOId,
+                        ...(delStillValid ? {} : { deliverable_id: undefined }),
+                        ...(actStillValid ? {} : { activity_id: undefined }),
+                      })
+                    }}
                     placeholder="Select PO..."
                   />
                 </div>
