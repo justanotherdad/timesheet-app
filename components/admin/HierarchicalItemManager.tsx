@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Plus, Edit, Trash2, Upload, X, CheckSquare, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
@@ -77,6 +77,8 @@ export default function HierarchicalItemManager({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const supabase = createClient()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
 
   // State to store item assignments for display
   const [itemAssignments, setItemAssignments] = useState<Record<string, { departments: string[]; purchaseOrders: string[] }>>({})
@@ -207,8 +209,16 @@ export default function HierarchicalItemManager({
     }
   }
 
-  const handleSiteChange = async (siteId: string) => {
+  const handleSiteChange = useCallback(async (siteId: string) => {
     setSelectedSite(siteId)
+    // Update URL to persist selection across router.refresh()
+    const params = new URLSearchParams(searchParams.toString())
+    if (siteId) {
+      params.set('site', siteId)
+    } else {
+      params.delete('site')
+    }
+    router.replace(`${pathname}${params.toString() ? `?${params.toString()}` : ''}`, { scroll: false })
     await loadDepartments(siteId)
     setSelectedDepartments([])
     setSelectedPOs([])
@@ -217,7 +227,20 @@ export default function HierarchicalItemManager({
     setEditingItem(null)
     await loadPurchaseOrders(siteId)
     await loadItems(siteId)
-  }
+  }, [pathname, searchParams, router])
+
+  // Restore selected site from URL on mount and after router.refresh()
+  useEffect(() => {
+    const siteFromUrl = searchParams.get('site')
+    if (!siteFromUrl || !initialSites.some(s => s.id === siteFromUrl)) return
+    if (siteFromUrl === selectedSite) return // Already loaded
+    setSelectedSite(siteFromUrl)
+    loadDepartments(siteFromUrl).then(() => {
+      loadPurchaseOrders(siteFromUrl).then(() => {
+        loadItems(siteFromUrl)
+      })
+    })
+  }, [searchParams, selectedSite])
 
   // Filter purchase orders by selected departments
   const filteredPurchaseOrders = allPurchaseOrders.filter(po => {

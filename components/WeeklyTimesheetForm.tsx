@@ -485,9 +485,10 @@ export default function WeeklyTimesheetForm({
         if (poIds.length > 0) {
           return poIds.includes(editingEntry.po_id!)
         }
-        // No PO assignments: only show if deliverable's department matches PO's department
-        if (!poDepartmentId) return false
+        // No PO assignments
         const delDeptIds = deliverableDepartmentIds[d.id] || []
+        if (delDeptIds.length === 0) return true // N/A department: show for any PO
+        if (!poDepartmentId) return false
         return delDeptIds.includes(poDepartmentId)
       })
     }
@@ -902,9 +903,10 @@ export default function WeeklyTimesheetForm({
                       const delStillValid = !newPOId || !editingEntry.deliverable_id || (() => {
                         const poIds = deliverablePOIds[editingEntry.deliverable_id!] || []
                         if (poIds.length > 0) return poIds.includes(newPOId)
+                        const delDeptIds = deliverableDepartmentIds[editingEntry.deliverable_id!] || []
+                        if (delDeptIds.length === 0) return true // N/A department: valid for any PO
                         const newPO = purchaseOrders.find(p => p.id === newPOId)
                         if (!newPO?.department_id) return false
-                        const delDeptIds = deliverableDepartmentIds[editingEntry.deliverable_id!] || []
                         return delDeptIds.includes(newPO.department_id)
                       })()
                       const actStillValid = !newPOId || !editingEntry.activity_id || (() => {
