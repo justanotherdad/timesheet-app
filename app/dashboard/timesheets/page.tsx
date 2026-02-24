@@ -222,7 +222,7 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0 flex-1 space-y-1">
                         {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) && (
-                          <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                          <p className="font-medium text-gray-900 dark:text-gray-100 break-words">
                             {ts.user_profiles?.name || 'Unknown'}
                           </p>
                         )}

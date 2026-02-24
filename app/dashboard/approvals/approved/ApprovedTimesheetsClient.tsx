@@ -238,7 +238,7 @@ export default function ApprovedTimesheetsClient({
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {timesheets.map((ts: any) => (
                     <tr key={ts.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 truncate" title={ts.user_profiles?.name || 'Unknown'}>
+                      <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 break-words align-top">
                         {ts.user_profiles?.name || 'Unknown'}
                       </td>
                       <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100">
@@ -253,10 +253,10 @@ export default function ApprovedTimesheetsClient({
                           {ts.status}
                         </span>
                       </td>
-                      <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 truncate">
+                      <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 break-words align-top">
                         {getWithLabel(ts)}
                       </td>
-                      <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 truncate" title={getWithPersonName(ts)}>
+                      <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 break-words align-top">
                         {getWithPersonName(ts)}
                       </td>
                       <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100">

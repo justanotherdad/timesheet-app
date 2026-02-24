@@ -180,7 +180,7 @@ export default function MyTimesheetsTable({
             {timesheets.map((ts) => (
               <tr key={ts.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                 {showEmployee && (
-                  <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 truncate" title={ts.user_profiles?.name || 'Unknown'}>
+                  <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 break-words align-top">
                     {ts.user_profiles?.name || 'Unknown'}
                   </td>
                 )}
@@ -197,12 +197,12 @@ export default function MyTimesheetsTable({
                   </span>
                 </td>
                 {showWith && (
-                  <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 truncate">
+                  <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 break-words align-top">
                     {getWithLabel(ts)}
                   </td>
                 )}
                 {showWith && (
-                  <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 truncate" title={getWithPersonName(ts)}>
+                  <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 min-w-0 break-words align-top">
                     {getWithPersonName(ts)}
                   </td>
                 )}
