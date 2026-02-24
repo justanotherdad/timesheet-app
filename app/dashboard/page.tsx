@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
-import { Calendar, FileText, Users, Settings, Building, Activity, Package } from 'lucide-react'
+import { Calendar, FileText, Users, Settings, Building, Activity, Package, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { formatWeekEnding, getWeekEnding, formatDateForInput } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
@@ -22,14 +22,16 @@ export default async function DashboardPage() {
   const weekEnding = getWeekEnding()
   const weekEndingStr = formatDateForInput(weekEnding)
 
-  // Get user's weekly timesheet for current week with timeout
+  // Get user's most recent timesheet for current week (handles multiple per week, e.g. after rejection/resubmit)
   const timesheetResult = await withQueryTimeout(() =>
     supabase
       .from('weekly_timesheets')
       .select('*')
       .eq('user_id', user.id)
       .eq('week_ending', weekEndingStr)
-      .single()
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
   )
 
   const timesheet = timesheetResult.data as any
@@ -288,11 +290,28 @@ export default async function DashboardPage() {
               Current Week ({formatWeekEnding(weekEnding)})
             </h2>
             {timesheet ? (
-              <div className="border border-gray-200 rounded p-3">
+              <div className={`border rounded p-3 ${
+                timesheet.status === 'rejected' ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20' :
+                timesheet.status === 'approved' ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20' :
+                timesheet.status === 'submitted' ? 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20' :
+                'border-gray-200 dark:border-gray-700'
+              }`}>
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="font-medium text-gray-900 dark:text-gray-100 capitalize">{timesheet.status}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                    <div className="flex items-center gap-2">
+                      {timesheet.status === 'approved' && <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />}
+                      {timesheet.status === 'rejected' && <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />}
+                      {timesheet.status === 'submitted' && <Clock className="h-5 w-5 text-orange-600 flex-shrink-0" />}
+                      <span className={`font-medium capitalize ${
+                        timesheet.status === 'rejected' ? 'text-red-800 dark:text-red-300' :
+                        timesheet.status === 'approved' ? 'text-green-800 dark:text-green-300' :
+                        timesheet.status === 'submitted' ? 'text-orange-800 dark:text-orange-300' :
+                        'text-gray-900 dark:text-gray-100'
+                      }`}>
+                        {timesheet.status}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-0.5">
                       Created {new Date(timesheet.created_at).toLocaleDateString()}
                     </p>
                   </div>
