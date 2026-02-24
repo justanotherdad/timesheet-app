@@ -12,11 +12,12 @@ import { Plus, Trash2, Edit2, X } from 'lucide-react'
 
 interface WeeklyTimesheetFormProps {
   sites: Array<{ id: string; name: string; code?: string }>
-  purchaseOrders: Array<{ id: string; po_number: string; description?: string; site_id?: string }>
+  purchaseOrders: Array<{ id: string; po_number: string; description?: string; site_id?: string; department_id?: string }>
   systems?: Array<{ id: string; name: string; code?: string; site_id?: string }>
   deliverables?: Array<{ id: string; name: string; code?: string; site_id?: string }>
   activities?: Array<{ id: string; name: string; code?: string; site_id?: string }>
   deliverablePOIds?: Record<string, string[]>
+  deliverableDepartmentIds?: Record<string, string[]>
   activityPOIds?: Record<string, string[]>
   defaultWeekEnding: string
   userId: string
@@ -119,6 +120,7 @@ export default function WeeklyTimesheetForm({
   deliverables = [],
   activities = [],
   deliverablePOIds = {},
+  deliverableDepartmentIds = {},
   activityPOIds = {},
   defaultWeekEnding,
   userId,
@@ -469,15 +471,24 @@ export default function WeeklyTimesheetForm({
   }))
 
   // Filter deliverables by client (site) and PO; deduplicate by id
+  // When deliverable has no PO assignments: only show if its department matches the selected PO's department
   const filteredDeliverables = (() => {
     let list = deliverables
     if (editingEntry?.client_project_id) {
       list = list.filter(d => d.site_id === editingEntry.client_project_id)
     }
     if (editingEntry?.po_id) {
+      const selectedPO = purchaseOrders.find(p => p.id === editingEntry.po_id)
+      const poDepartmentId = selectedPO?.department_id
       list = list.filter(d => {
         const poIds = deliverablePOIds[d.id] || []
-        return poIds.length === 0 || poIds.includes(editingEntry.po_id!)
+        if (poIds.length > 0) {
+          return poIds.includes(editingEntry.po_id!)
+        }
+        // No PO assignments: only show if deliverable's department matches PO's department
+        if (!poDepartmentId) return false
+        const delDeptIds = deliverableDepartmentIds[d.id] || []
+        return delDeptIds.includes(poDepartmentId)
       })
     }
     return Array.from(new Map(list.map(d => [d.id, d])).values())
@@ -890,7 +901,11 @@ export default function WeeklyTimesheetForm({
                       // When PO changes, clear deliverable/activity if they're not valid for the new PO
                       const delStillValid = !newPOId || !editingEntry.deliverable_id || (() => {
                         const poIds = deliverablePOIds[editingEntry.deliverable_id!] || []
-                        return poIds.length === 0 || poIds.includes(newPOId)
+                        if (poIds.length > 0) return poIds.includes(newPOId)
+                        const newPO = purchaseOrders.find(p => p.id === newPOId)
+                        if (!newPO?.department_id) return false
+                        const delDeptIds = deliverableDepartmentIds[editingEntry.deliverable_id!] || []
+                        return delDeptIds.includes(newPO.department_id)
                       })()
                       const actStillValid = !newPOId || !editingEntry.activity_id || (() => {
                         const poIds = activityPOIds[editingEntry.activity_id!] || []

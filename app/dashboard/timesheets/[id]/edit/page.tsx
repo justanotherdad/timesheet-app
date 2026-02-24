@@ -169,14 +169,20 @@ export default async function EditTimesheetPage({
   deliverables = Array.from(new Map(deliverables.map((d: any) => [d.id, d])).values())
   activities = Array.from(new Map(activities.map((a: any) => [a.id, a])).values())
 
-  // Fetch PO assignments for deliverables and activities (for client-side filtering in form)
+  // Fetch PO and department assignments for deliverables and activities (for client-side filtering in form)
   let deliverablePOIds: Record<string, string[]> = {}
+  let deliverableDepartmentIds: Record<string, string[]> = {}
   let activityPOIds: Record<string, string[]> = {}
   if (deliverables.length > 0 || activities.length > 0) {
-    const [delPORes, actPORes] = await Promise.all([
+    const [delPORes, delDeptRes, actPORes] = await Promise.all([
       deliverables.length > 0
         ? withQueryTimeout<Array<{ deliverable_id: string; purchase_order_id: string }>>(() =>
             supabase.from('deliverable_purchase_orders').select('deliverable_id,purchase_order_id').in('deliverable_id', deliverables.map((d: any) => d.id))
+          )
+        : Promise.resolve({ data: [] }),
+      deliverables.length > 0
+        ? withQueryTimeout<Array<{ deliverable_id: string; department_id: string }>>(() =>
+            supabase.from('deliverable_departments').select('deliverable_id,department_id').in('deliverable_id', deliverables.map((d: any) => d.id))
           )
         : Promise.resolve({ data: [] }),
       activities.length > 0
@@ -188,6 +194,10 @@ export default async function EditTimesheetPage({
     ;(delPORes.data || []).forEach((r: any) => {
       if (!deliverablePOIds[r.deliverable_id]) deliverablePOIds[r.deliverable_id] = []
       deliverablePOIds[r.deliverable_id].push(r.purchase_order_id)
+    })
+    ;(delDeptRes.data || []).forEach((r: any) => {
+      if (!deliverableDepartmentIds[r.deliverable_id]) deliverableDepartmentIds[r.deliverable_id] = []
+      deliverableDepartmentIds[r.deliverable_id].push(r.department_id)
     })
     ;(actPORes.data || []).forEach((r: any) => {
       if (!activityPOIds[r.activity_id]) activityPOIds[r.activity_id] = []
@@ -336,6 +346,7 @@ export default async function EditTimesheetPage({
               deliverables={deliverables}
               activities={activities}
               deliverablePOIds={deliverablePOIds}
+              deliverableDepartmentIds={deliverableDepartmentIds}
               activityPOIds={activityPOIds}
               defaultWeekEnding={formatDateForInput(new Date(timesheet.week_ending))}
               userId={user.id}
