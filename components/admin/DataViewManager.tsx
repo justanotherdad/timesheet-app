@@ -531,8 +531,8 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
         </div>
       </div>
 
-      {/* Results */}
-      <div className="overflow-x-auto">
+      {/* Results - max-height creates scroll context so horizontal scrollbar is visible without scrolling entire page */}
+      <div className="overflow-auto max-h-[calc(100vh-22rem)] min-h-[300px]">
         {loading ? (
           <div className="text-center py-8 text-gray-600 dark:text-gray-300">Loading...</div>
         ) : expandedEntries.length === 0 ? (

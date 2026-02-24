@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Download, FileText, FileSpreadsheet, File } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Download, FileText, FileSpreadsheet, File, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatWeekEnding, formatDate, formatDateShort, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 
@@ -16,6 +16,8 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
   const [selectedTimesheets, setSelectedTimesheets] = useState<string[]>([])
   const [exportFormat, setExportFormat] = useState<ExportFormat>('csv')
   const [exporting, setExporting] = useState(false)
+  const [sortColumn, setSortColumn] = useState<string>('week_ending')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
   // Get unique week endings
   const weekEndings = Array.from(
@@ -26,6 +28,41 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
   const filteredTimesheets = selectedWeek
     ? timesheets.filter(ts => ts.week_ending === selectedWeek)
     : timesheets
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortedTimesheets = useMemo(() => {
+    const sorted = [...filteredTimesheets]
+    const mult = sortDirection === 'asc' ? 1 : -1
+    sorted.sort((a, b) => {
+      let aVal: string | number = ''
+      let bVal: string | number = ''
+      switch (sortColumn) {
+        case 'week_ending': aVal = a.week_ending || ''; bVal = b.week_ending || ''; break
+        case 'employee': aVal = (a.user_profiles?.name || '').toLowerCase(); bVal = (b.user_profiles?.name || '').toLowerCase(); break
+        case 'site': aVal = (a.sites?.name || '').toLowerCase(); bVal = (b.sites?.name || '').toLowerCase(); break
+        case 'po': aVal = (a.purchase_orders?.po_number || '').toLowerCase(); bVal = (b.purchase_orders?.po_number || '').toLowerCase(); break
+        case 'hours': aVal = Number(a.hours) || 0; bVal = Number(b.hours) || 0; break
+        case 'status': aVal = (a.status || '').toLowerCase(); bVal = (b.status || '').toLowerCase(); break
+        default: aVal = a.week_ending || ''; bVal = b.week_ending || ''
+      }
+      if (typeof aVal === 'number' && typeof bVal === 'number') return mult * (aVal - bVal)
+      return mult * String(aVal).localeCompare(String(bVal))
+    })
+    return sorted
+  }, [filteredTimesheets, sortColumn, sortDirection])
+
+  const SortIcon = ({ col }: { col: string }) => {
+    if (sortColumn !== col) return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-50" />
+    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1 inline" /> : <ArrowDown className="h-3 w-3 ml-1 inline" />
+  }
 
   const getExportData = () => {
     return selectedTimesheets.length > 0
@@ -407,10 +444,10 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <div className="mb-6 space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Filter by Week Ending
           </label>
           <select
@@ -419,7 +456,7 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
               setSelectedWeek(e.target.value)
               setSelectedTimesheets([])
             }}
-            className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            className="w-full md:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           >
             <option value="">All Weeks</option>
             {weekEndings.map(we => (
@@ -432,7 +469,7 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
 
         <div className="flex flex-wrap items-center gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Export Format
             </label>
             <div className="flex gap-2">
@@ -486,32 +523,56 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 <input
                   type="checkbox"
-                  checked={selectedTimesheets.length === filteredTimesheets.length && filteredTimesheets.length > 0}
+                  checked={selectedTimesheets.length === sortedTimesheets.length && sortedTimesheets.length > 0}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setSelectedTimesheets(filteredTimesheets.map(ts => ts.id))
+                      setSelectedTimesheets(sortedTimesheets.map(ts => ts.id))
                     } else {
                       setSelectedTimesheets([])
                     }
                   }}
                 />
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Week Ending</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Employee</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Site</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PO</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hours</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button onClick={() => handleSort('week_ending')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Week Ending <SortIcon col="week_ending" />
+                </button>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button onClick={() => handleSort('employee')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Employee <SortIcon col="employee" />
+                </button>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button onClick={() => handleSort('site')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Site <SortIcon col="site" />
+                </button>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button onClick={() => handleSort('po')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  PO <SortIcon col="po" />
+                </button>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button onClick={() => handleSort('hours')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Hours <SortIcon col="hours" />
+                </button>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <button onClick={() => handleSort('status')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Status <SortIcon col="status" />
+                </button>
+              </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredTimesheets.map((ts) => (
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            {sortedTimesheets.map((ts) => (
               <tr key={ts.id}>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <input
@@ -526,22 +587,22 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
                     }}
                   />
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {formatWeekEnding(ts.week_ending)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {ts.user_profiles?.name || 'N/A'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {ts.sites?.name || 'N/A'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {ts.purchase_orders?.po_number || 'N/A'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {ts.hours}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 capitalize">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">
                   {ts.status}
                 </td>
               </tr>
