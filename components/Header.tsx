@@ -47,14 +47,20 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
         <div className="flex items-center justify-between gap-2 min-w-0">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
             {/* CTG Logo */}
-            <Link href="/dashboard" className="flex items-center shrink-0 hover:opacity-80 transition-opacity">
+            <Link
+              href="/dashboard"
+              prefetch={false}
+              className="flex items-center shrink-0 hover:opacity-80 transition-opacity pointer-events-auto"
+            >
               {/* Image logo - now active */}
               <Image
                 src="/ctg-logo.png"
                 alt="CTG Logo"
                 width={120}
                 height={40}
-                className="h-8 sm:h-10 w-auto"
+                className="h-8 sm:h-10 w-auto pointer-events-none select-none"
+                draggable={false}
+                unoptimized
               />
               
               {/* Text-based logo - now commented out */}
