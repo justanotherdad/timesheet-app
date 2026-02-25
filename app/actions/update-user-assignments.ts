@@ -29,27 +29,28 @@ export async function updateUserAssignments(
       return { error: 'Unauthorized' }
     }
 
-    // Managers may only update assignments for users who have them as Supervisor or Manager
-    if (currentUserProfile.role === 'manager') {
-      const { data: targetProfile } = await supabase
-        .from('user_profiles')
-        .select('supervisor_id, manager_id')
-        .eq('id', userId)
-        .single()
-      const canEdit =
-        targetProfile?.supervisor_id === user.id ||
-        targetProfile?.manager_id === user.id
-      if (!canEdit) {
-        return { error: 'You can only edit site, PO, and department assignments for users who have you as their Supervisor or Manager' }
-      }
-    }
-
-    // Use admin client to update assignments
+    // Use admin client for permission check and updates (bypasses RLS so we can read target profile)
     let adminClient
     try {
       adminClient = createAdminClient()
     } catch (err: any) {
       return { error: 'Server configuration error: ' + (err.message || 'Missing SUPABASE_SERVICE_ROLE_KEY environment variable') }
+    }
+
+    // Managers may only update assignments for users who have them as Supervisor or Manager
+    if (currentUserProfile.role === 'manager') {
+      const { data: targetProfile } = await adminClient
+        .from('user_profiles')
+        .select('supervisor_id, manager_id, reports_to_id')
+        .eq('id', userId)
+        .single()
+      const canEdit =
+        targetProfile?.supervisor_id === user.id ||
+        targetProfile?.manager_id === user.id ||
+        targetProfile?.reports_to_id === user.id
+      if (!canEdit) {
+        return { error: 'You can only edit site, PO, and department assignments for users who have you as their Supervisor or Manager' }
+      }
     }
 
     // Delete existing assignments
@@ -115,26 +116,27 @@ export async function updateUserProfile(
       return { error: 'Unauthorized' }
     }
 
-    // Managers may only update profiles for users who have them as Supervisor or Manager
-    if (currentUserProfile.role === 'manager') {
-      const { data: targetProfile } = await supabase
-        .from('user_profiles')
-        .select('supervisor_id, manager_id')
-        .eq('id', userId)
-        .single()
-      const canEdit =
-        targetProfile?.supervisor_id === user.id ||
-        targetProfile?.manager_id === user.id
-      if (!canEdit) {
-        return { error: 'You can only edit users who have you as their Supervisor or Manager' }
-      }
-    }
-
     let adminClient
     try {
       adminClient = createAdminClient()
     } catch (err: any) {
       return { error: 'Server configuration error: ' + (err.message || 'Missing SUPABASE_SERVICE_ROLE_KEY environment variable') }
+    }
+
+    // Managers may only update profiles for users who have them as Supervisor or Manager
+    if (currentUserProfile.role === 'manager') {
+      const { data: targetProfile } = await adminClient
+        .from('user_profiles')
+        .select('supervisor_id, manager_id, reports_to_id')
+        .eq('id', userId)
+        .single()
+      const canEdit =
+        targetProfile?.supervisor_id === user.id ||
+        targetProfile?.manager_id === user.id ||
+        targetProfile?.reports_to_id === user.id
+      if (!canEdit) {
+        return { error: 'You can only edit users who have you as their Supervisor or Manager' }
+      }
     }
 
     const { error } = await adminClient
