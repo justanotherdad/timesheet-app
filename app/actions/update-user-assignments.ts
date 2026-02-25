@@ -87,3 +87,69 @@ export async function updateUserAssignments(
     return { error: error.message || 'An unexpected error occurred' }
   }
 }
+
+export async function updateUserProfile(
+  userId: string,
+  updates: {
+    name?: string
+    role?: string
+    reports_to_id?: string | null
+    supervisor_id?: string | null
+    manager_id?: string | null
+    final_approver_id?: string | null
+  }
+) {
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return { error: 'Unauthorized' }
+    }
+
+    const { data: currentUserProfile } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!currentUserProfile || !['manager', 'admin', 'super_admin'].includes(currentUserProfile.role)) {
+      return { error: 'Unauthorized' }
+    }
+
+    // Managers may only update profiles for users that report to them
+    if (currentUserProfile.role === 'manager') {
+      const { data: targetProfile } = await supabase
+        .from('user_profiles')
+        .select('reports_to_id, supervisor_id, manager_id')
+        .eq('id', userId)
+        .single()
+      const reportsToCurrentUser =
+        targetProfile?.reports_to_id === user.id ||
+        targetProfile?.supervisor_id === user.id ||
+        targetProfile?.manager_id === user.id
+      if (!reportsToCurrentUser) {
+        return { error: 'You can only edit users who report to you' }
+      }
+    }
+
+    let adminClient
+    try {
+      adminClient = createAdminClient()
+    } catch (err: any) {
+      return { error: 'Server configuration error: ' + (err.message || 'Missing SUPABASE_SERVICE_ROLE_KEY environment variable') }
+    }
+
+    const { error } = await adminClient
+      .from('user_profiles')
+      .update(updates)
+      .eq('id', userId)
+
+    if (error) return { error: error.message }
+    revalidatePath('/dashboard/admin/users')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error in updateUserProfile server action:', error)
+    return { error: error.message || 'An unexpected error occurred' }
+  }
+}

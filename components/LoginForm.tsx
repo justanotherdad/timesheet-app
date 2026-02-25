@@ -24,17 +24,31 @@ export default function LoginForm() {
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (error) throw error
+      if (error) {
+        // Log full error for debugging (Supabase may not always log failed attempts)
+        console.error('Sign-in error:', { message: error.message, code: (error as { code?: string }).code, status: (error as { status?: number }).status })
+        throw error
+      }
+
+      // Sign-in succeeded - verify profile exists before redirecting
+      if (data?.user) {
+        const { data: profile } = await supabase.from('user_profiles').select('id').eq('id', data.user.id).single()
+        if (!profile) {
+          setError('Your account is not fully set up. Please contact your administrator to complete your profile.')
+          return
+        }
+      }
 
       router.push('/dashboard')
       router.refresh()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      const msg = err instanceof Error ? err.message : 'An error occurred'
+      setError(msg)
     } finally {
       setLoading(false)
     }

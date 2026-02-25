@@ -6,7 +6,7 @@ import { User, UserRole } from '@/types/database'
 import { Plus, Edit, Trash2, Key, X, ArrowUpDown, ArrowUp, ArrowDown, Search, Eye } from 'lucide-react'
 import { createUser } from '@/app/actions/create-user'
 import { deleteUser } from '@/app/actions/delete-user'
-import { updateUserAssignments } from '@/app/actions/update-user-assignments'
+import { updateUserAssignments, updateUserProfile } from '@/app/actions/update-user-assignments'
 import { generatePasswordLink } from '@/app/actions/generate-password-link'
 
 interface Site {
@@ -310,8 +310,8 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         throw new Error(result.error)
       }
 
-      // If user was created, save multiple assignments
-      if (result.userId && (selectedSites.length > 0 || selectedDepartments.length > 0 || selectedPOs.length > 0)) {
+      // If user was created, save multiple assignments (always call to persist selections)
+      if (result.userId) {
         const assignResult = await updateUserAssignments(
           result.userId,
           selectedSites,
@@ -319,7 +319,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
           selectedPOs
         )
         if (assignResult.error) {
-          console.error('Failed to save assignments:', assignResult.error)
+          throw new Error(assignResult.error)
         }
       }
 
@@ -377,6 +377,10 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
           selectedPOs
         )
         if (assignResult.error) throw new Error(assignResult.error)
+        setUserAssignments((prev) => ({
+          ...prev,
+          [editingUser.id]: { sites: selectedSites, departments: selectedDepartments, purchaseOrders: selectedPOs },
+        }))
       } else {
         const formData = new FormData(e.currentTarget)
         const name = formData.get('name') as string
@@ -387,19 +391,15 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         // Single Supervisor field: sync supervisor_id to match reports_to_id for approval chain
         const supervisorId = reportsToId
 
-        const { error: updateError } = await supabase
-          .from('user_profiles')
-          .update({
-            name,
-            role: canChangeRole(editingUser) ? role : editingUser.role,
-            reports_to_id: reportsToId || null,
-            supervisor_id: supervisorId || null,
-            manager_id: managerId || null,
-            final_approver_id: finalApproverId || null,
-          })
-          .eq('id', editingUser.id)
-
-        if (updateError) throw updateError
+        const profileResult = await updateUserProfile(editingUser.id, {
+          name,
+          role: canChangeRole(editingUser) ? role : editingUser.role,
+          reports_to_id: reportsToId || null,
+          supervisor_id: supervisorId || null,
+          manager_id: managerId || null,
+          final_approver_id: finalApproverId || null,
+        })
+        if (profileResult.error) throw new Error(profileResult.error)
 
         const assignResult = await updateUserAssignments(
           editingUser.id,
@@ -409,7 +409,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         )
         if (assignResult.error) throw new Error(assignResult.error)
 
-        // Update local state so table (e.g. Supervisor column) reflects changes without reload
+        // Update local state so table reflects changes without reload
         setUsers((prev) =>
           prev.map((u) =>
             u.id === editingUser.id
@@ -425,6 +425,10 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
               : u
           )
         )
+        setUserAssignments((prev) => ({
+          ...prev,
+          [editingUser.id]: { sites: selectedSites, departments: selectedDepartments, purchaseOrders: selectedPOs },
+        }))
       }
 
       setEditingUser(null)
