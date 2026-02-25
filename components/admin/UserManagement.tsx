@@ -621,6 +621,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Supervisor</label>
                 <select
                   name="supervisor_id"
+                  defaultValue=""
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                 >
                   <option value="">None</option>
@@ -635,6 +636,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Manager</label>
                 <select
                   name="manager_id"
+                  defaultValue=""
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                 >
                   <option value="">None</option>
@@ -649,6 +651,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Final Approver</label>
                 <select
                   name="final_approver_id"
+                  defaultValue=""
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                 >
                   <option value="">None</option>

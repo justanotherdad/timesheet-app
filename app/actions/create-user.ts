@@ -42,9 +42,6 @@ export async function createUser(formData: FormData) {
         return { error: 'You can only create users with role Employee, Supervisor, or Manager.' }
       }
       effectiveRole = role
-      if (supervisorId !== user.id) {
-        return { error: 'When adding a user, set Supervisor to yourself so you can manage them.' }
-      }
     } else if (currentUserProfile.role === 'admin') {
       if (role === 'super_admin') {
         return { error: 'You cannot create a Super Admin user.' }
@@ -173,9 +170,9 @@ export async function createUser(formData: FormData) {
 
     const siteId = formData.get('site_id') as string || null
     const departmentId = formData.get('department_id') as string || null
-    const resolvedSupervisorId = currentUserProfile.role === 'manager' ? user.id : (supervisorId || null)
-    const resolvedManagerId = currentUserProfile.role === 'manager' ? user.id : managerId
-    const resolvedFinalApproverId = currentUserProfile.role === 'manager' ? null : finalApproverId
+    const resolvedSupervisorId = supervisorId || null
+    const resolvedManagerId = managerId || null
+    const resolvedFinalApproverId = finalApproverId || null
 
     // Create or update profile using admin client (bypasses RLS)
     const { error: profileError } = await adminClient
