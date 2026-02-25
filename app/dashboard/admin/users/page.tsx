@@ -19,19 +19,19 @@ export default async function UsersAdminPage() {
   const allUsers = (usersResult.data || []) as any[]
   const role = user.profile.role
 
-  // Filter who the current user can see: supervisors see only employees who have them as supervisor/reports_to/manager;
-  // managers see employees and supervisors reporting to them; admins see admin and below; super_admins see all.
+  // Filter who the current user can see: supervisors see employees who have them as supervisor/manager/final approver;
+  // managers see employees and supervisors who have them as supervisor or manager; admins see admin and below; super_admins see all.
   let users: any[] = allUsers
   if (role === 'supervisor') {
     users = allUsers.filter(
       (u) =>
-        (u.reports_to_id === user.id || u.supervisor_id === user.id || u.manager_id === user.id || u.final_approver_id === user.id) &&
+        (u.supervisor_id === user.id || u.manager_id === user.id || u.final_approver_id === user.id) &&
         u.role === 'employee'
     )
   } else if (role === 'manager') {
     users = allUsers.filter(
       (u) =>
-        (u.reports_to_id === user.id || u.supervisor_id === user.id || u.manager_id === user.id || u.final_approver_id === user.id) &&
+        (u.supervisor_id === user.id || u.manager_id === user.id || u.final_approver_id === user.id) &&
         ['employee', 'supervisor'].includes(u.role)
     )
   } else if (role === 'admin') {

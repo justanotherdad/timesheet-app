@@ -107,7 +107,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
   const canEditUser = (target: User) => {
     if (['admin', 'super_admin'].includes(currentUserRole)) return true
     return (
-      target.reports_to_id === currentUserId ||
+      target.supervisor_id === currentUserId ||
       target.supervisor_id === currentUserId ||
       target.manager_id === currentUserId
     )
@@ -152,8 +152,8 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
       const deptsB = assignmentsB.departments.map((id: string) => departments.find(d => d.id === id)?.name).filter(Boolean).join(', ')
       const posA = assignmentsA.purchaseOrders.map((id: string) => purchaseOrders.find(p => p.id === id)?.po_number).filter(Boolean).join(', ')
       const posB = assignmentsB.purchaseOrders.map((id: string) => purchaseOrders.find(p => p.id === id)?.po_number).filter(Boolean).join(', ')
-      const reportsToA = nameLookup.find(u => u.id === a.reports_to_id)?.name || ''
-      const reportsToB = nameLookup.find(u => u.id === b.reports_to_id)?.name || ''
+      const reportsToA = nameLookup.find(u => u.id === a.supervisor_id)?.name || ''
+      const reportsToB = nameLookup.find(u => u.id === b.supervisor_id)?.name || ''
       const finalApproverA = nameLookup.find(u => u.id === a.final_approver_id)?.name || ''
       const finalApproverB = nameLookup.find(u => u.id === b.final_approver_id)?.name || ''
       let va: string | number = ''
@@ -388,16 +388,13 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         const formData = new FormData(e.currentTarget)
         const name = formData.get('name') as string
         const role = formData.get('role') as UserRole
-        const reportsToId = formData.get('reports_to_id') as string || null
+        const supervisorId = formData.get('supervisor_id') as string || null
         const managerId = formData.get('manager_id') as string || null
         const finalApproverId = formData.get('final_approver_id') as string || null
-        // Single Supervisor field: sync supervisor_id to match reports_to_id for approval chain
-        const supervisorId = reportsToId
 
         const profileResult = await updateUserProfile(editingUser.id, {
           name,
           role: canChangeRole(editingUser) ? role : editingUser.role,
-          reports_to_id: reportsToId || null,
           supervisor_id: supervisorId || null,
           manager_id: managerId || null,
           final_approver_id: finalApproverId || null,
@@ -420,8 +417,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                   ...u,
                   name,
                   role: canChangeRole(editingUser) ? role : editingUser.role,
-                  reports_to_id: reportsToId || undefined,
-                  supervisor_id: reportsToId || undefined,
+                  supervisor_id: supervisorId || undefined,
                   manager_id: managerId || undefined,
                   final_approver_id: finalApproverId || undefined,
                 }
@@ -624,7 +620,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Supervisor</label>
                 <select
-                  name="reports_to_id"
+                  name="supervisor_id"
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                 >
                   <option value="">None</option>
@@ -666,7 +662,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
             </>
           )}
           {assignmentsOnlyEdit && currentUserId && (
-            <input type="hidden" name="reports_to_id" value={currentUserId} />
+            <input type="hidden" name="supervisor_id" value={currentUserId} />
           )}
           <div className="space-y-4">
             <div>
@@ -925,7 +921,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                 <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userDepts.length > 0 ? userDepts.join(', ') : 'N/A'}</td>
                 <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userPOs.length > 0 ? userPOs.join(', ') : 'N/A'}</td>
                 <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                  {nameLookup.find(u => u.id === user.reports_to_id)?.name || 'N/A'}
+                  {nameLookup.find(u => u.id === user.supervisor_id)?.name || 'N/A'}
                 </td>
                 <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {nameLookup.find(u => u.id === user.final_approver_id)?.name || 'N/A'}
@@ -962,7 +958,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Name:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.name}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Email:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.email}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Role:</span> <span className="text-gray-900 dark:text-gray-100 capitalize">{editingUser.role}</span></div>
-                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Supervisor:</span> <span className="text-gray-900 dark:text-gray-100">{nameLookup.find(u => u.id === editingUser.reports_to_id)?.name || 'N/A'}</span></div>
+                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Supervisor:</span> <span className="text-gray-900 dark:text-gray-100">{nameLookup.find(u => u.id === editingUser.supervisor_id)?.name || 'N/A'}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Final Approver:</span> <span className="text-gray-900 dark:text-gray-100">{nameLookup.find(u => u.id === editingUser.final_approver_id)?.name || 'N/A'}</span></div>
                 <div>
                   <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Sites:</span>
@@ -1108,8 +1104,8 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supervisor</label>
                     <select
-                      name="reports_to_id"
-                      defaultValue={editingUser.reports_to_id || editingUser.supervisor_id || ''}
+                      name="supervisor_id"
+                      defaultValue={editingUser.supervisor_id || ''}
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                     >
                       <option value="">None</option>

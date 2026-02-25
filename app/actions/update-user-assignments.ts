@@ -29,19 +29,18 @@ export async function updateUserAssignments(
       return { error: 'Unauthorized' }
     }
 
-    // Managers may only update assignments for users that report to them
+    // Managers may only update assignments for users who have them as Supervisor or Manager
     if (currentUserProfile.role === 'manager') {
       const { data: targetProfile } = await supabase
         .from('user_profiles')
-        .select('reports_to_id, supervisor_id, manager_id')
+        .select('supervisor_id, manager_id')
         .eq('id', userId)
         .single()
-      const reportsToCurrentUser =
-        targetProfile?.reports_to_id === user.id ||
+      const canEdit =
         targetProfile?.supervisor_id === user.id ||
         targetProfile?.manager_id === user.id
-      if (!reportsToCurrentUser) {
-        return { error: 'You can only edit site, PO, and department assignments for users who report to you' }
+      if (!canEdit) {
+        return { error: 'You can only edit site, PO, and department assignments for users who have you as their Supervisor or Manager' }
       }
     }
 
@@ -93,7 +92,6 @@ export async function updateUserProfile(
   updates: {
     name?: string
     role?: string
-    reports_to_id?: string | null
     supervisor_id?: string | null
     manager_id?: string | null
     final_approver_id?: string | null
@@ -117,19 +115,18 @@ export async function updateUserProfile(
       return { error: 'Unauthorized' }
     }
 
-    // Managers may only update profiles for users that report to them
+    // Managers may only update profiles for users who have them as Supervisor or Manager
     if (currentUserProfile.role === 'manager') {
       const { data: targetProfile } = await supabase
         .from('user_profiles')
-        .select('reports_to_id, supervisor_id, manager_id')
+        .select('supervisor_id, manager_id')
         .eq('id', userId)
         .single()
-      const reportsToCurrentUser =
-        targetProfile?.reports_to_id === user.id ||
+      const canEdit =
         targetProfile?.supervisor_id === user.id ||
         targetProfile?.manager_id === user.id
-      if (!reportsToCurrentUser) {
-        return { error: 'You can only edit users who report to you' }
+      if (!canEdit) {
+        return { error: 'You can only edit users who have you as their Supervisor or Manager' }
       }
     }
 

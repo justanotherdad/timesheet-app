@@ -32,7 +32,7 @@ export async function createUser(formData: FormData) {
       return { error: 'Unauthorized' }
     }
 
-    const reportsToId = formData.get('reports_to_id') as string || null
+    const supervisorId = formData.get('supervisor_id') as string || null
     const managerId = formData.get('manager_id') as string || null
     const finalApproverId = formData.get('final_approver_id') as string || null
 
@@ -42,8 +42,8 @@ export async function createUser(formData: FormData) {
         return { error: 'You can only create users with role Employee, Supervisor, or Manager.' }
       }
       effectiveRole = role
-      if (reportsToId !== user.id) {
-        return { error: 'When adding a user, they must report to you. Set Supervisor to yourself.' }
+      if (supervisorId !== user.id) {
+        return { error: 'When adding a user, set Supervisor to yourself so you can manage them.' }
       }
     } else if (currentUserProfile.role === 'admin') {
       if (role === 'super_admin') {
@@ -173,8 +173,7 @@ export async function createUser(formData: FormData) {
 
     const siteId = formData.get('site_id') as string || null
     const departmentId = formData.get('department_id') as string || null
-    const resolvedReportsToId = currentUserProfile.role === 'manager' ? user.id : reportsToId
-    const resolvedSupervisorId = currentUserProfile.role === 'manager' ? user.id : (reportsToId || null)
+    const resolvedSupervisorId = currentUserProfile.role === 'manager' ? user.id : (supervisorId || null)
     const resolvedManagerId = currentUserProfile.role === 'manager' ? user.id : managerId
     const resolvedFinalApproverId = currentUserProfile.role === 'manager' ? null : finalApproverId
 
@@ -188,7 +187,6 @@ export async function createUser(formData: FormData) {
         role: effectiveRole,
         site_id: siteId || null,
         department_id: departmentId || null,
-        reports_to_id: resolvedReportsToId || null,
         supervisor_id: resolvedSupervisorId || null,
         manager_id: resolvedManagerId || null,
         final_approver_id: resolvedFinalApproverId || null,

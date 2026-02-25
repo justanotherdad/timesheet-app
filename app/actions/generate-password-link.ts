@@ -25,22 +25,21 @@ export async function generatePasswordLink(email: string, targetUserId?: string)
       return { error: 'Unauthorized' }
     }
 
-    // Managers may only send reset links to users that report to them
+    // Managers may only send reset links to users who have them as Supervisor or Manager
     if (currentUserProfile.role === 'manager') {
       if (!targetUserId) {
         return { error: 'Cannot generate link for this user' }
       }
       const { data: targetProfile } = await supabase
         .from('user_profiles')
-        .select('reports_to_id, supervisor_id, manager_id')
+        .select('supervisor_id, manager_id')
         .eq('id', targetUserId)
         .single()
-      const reportsToMe =
-        targetProfile?.reports_to_id === user.id ||
+      const canSend =
         targetProfile?.supervisor_id === user.id ||
         targetProfile?.manager_id === user.id
-      if (!reportsToMe) {
-        return { error: 'You can only send password reset links to users who report to you' }
+      if (!canSend) {
+        return { error: 'You can only send password reset links to users who have you as their Supervisor or Manager' }
       }
     }
 
