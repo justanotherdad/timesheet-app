@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { User, UserRole } from '@/types/database'
 import { Plus, Edit, Trash2, Key, X, ArrowUpDown, ArrowUp, ArrowDown, Search, Eye } from 'lucide-react'
@@ -87,6 +88,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
   
   const assignmentsLoadedRef = useRef(false)
   const supabase = createClient()
+  const router = useRouter()
 
   // Who can change role: super_admin any; admin can change admin or lower; manager can change manager or lower; supervisor cannot
   const canChangeRole = (target: User) => {
@@ -258,6 +260,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
   }
 
   const openUserDetails = async (user: any) => {
+    setError(null)
     setEditingUser(user)
     // Prefer server-loaded assignments (avoids RLS issues when admin/manager views user)
     const cached = (initialUserAssignments && initialUserAssignments[user.id]) || userAssignments[user.id]
@@ -437,6 +440,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
       setSelectedDepartments([])
       setSelectedPOs([])
       setSuccess('User updated successfully')
+      router.refresh()
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {
@@ -948,6 +952,11 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
             <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
               {viewOnlyUser ? 'View User' : assignmentsOnlyEdit ? `Edit assignments: ${editingUser.name}` : 'Edit User'}
             </h3>
+            {error && (
+              <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-4">
+                {error}
+              </div>
+            )}
             {viewOnlyUser ? (
               <div className="space-y-4">
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Name:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.name}</span></div>
