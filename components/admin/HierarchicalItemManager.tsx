@@ -186,6 +186,26 @@ export default function HierarchicalItemManager({
     }
   }
 
+  // Reload assignments for specific items and update display (used after edit/bulk actions)
+  const reloadAssignmentsForItems = async (itemIds: string[]) => {
+    if (itemIds.length === 0) return
+    const junctionTables = getJunctionTableNames()
+    const updates: Record<string, { departments: string[]; purchaseOrders: string[] }> = {}
+    await Promise.all(
+      itemIds.map(async (itemId) => {
+        const [deptsResult, posResult] = await Promise.all([
+          supabase.from(junctionTables.departments).select('department_id').eq(junctionTables.itemIdColumn, itemId),
+          supabase.from(junctionTables.purchaseOrders).select('purchase_order_id').eq(junctionTables.itemIdColumn, itemId),
+        ])
+        updates[itemId] = {
+          departments: Array.isArray(deptsResult.data) ? deptsResult.data.map((r: any) => r.department_id) : [],
+          purchaseOrders: Array.isArray(posResult.data) ? posResult.data.map((r: any) => r.purchase_order_id) : [],
+        }
+      })
+    )
+    setItemAssignments((prev) => ({ ...prev, ...updates }))
+  }
+
   const loadItems = async (siteId: string) => {
     if (!siteId) {
       setItems([])
@@ -387,6 +407,7 @@ export default function HierarchicalItemManager({
       }
 
       await loadItems(selectedSite)
+      await reloadAssignmentsForItems([editingItem.id])
       router.refresh()
       setEditingItem(null)
       setSelectedDepartments([])
@@ -564,8 +585,9 @@ export default function HierarchicalItemManager({
         messages.push(`removed ${bulkRemovePOs.length} purchase order${bulkRemovePOs.length > 1 ? 's' : ''}`)
       }
 
-      // Clear assignments cache and reload
-      setItemAssignments({})
+      // Reload assignments for affected items so changes display immediately
+      const affectedItemIds = [...selectedItems]
+      await reloadAssignmentsForItems(affectedItemIds)
       await loadItems(selectedSite)
       router.refresh()
       setSelectedItems([])
