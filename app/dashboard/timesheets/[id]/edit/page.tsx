@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import WeeklyTimesheetForm from '@/components/WeeklyTimesheetForm'
 import { formatDateForInput } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
@@ -52,15 +53,17 @@ export default async function EditTimesheetPage({
   }
 
   // Get user's assigned sites, POs, and departments (unless admin)
+  // Use admin client to bypass RLS - user assignments may not have SELECT policy for own rows
   let userSiteIds: string[] = []
   let userPOIds: string[] = []
   let userDepartmentIds: string[] = []
 
   if (!['admin', 'super_admin'].includes(user.profile.role)) {
+    const adminSupabase = createAdminClient()
     const [userSitesResult, userPOsResult, userDeptsResult] = await Promise.all([
-      withQueryTimeout<Array<{ site_id: string }>>(() => supabase.from('user_sites').select('site_id').eq('user_id', user.id)),
-      withQueryTimeout<Array<{ purchase_order_id: string }>>(() => supabase.from('user_purchase_orders').select('purchase_order_id').eq('user_id', user.id)),
-      withQueryTimeout<Array<{ department_id: string }>>(() => supabase.from('user_departments').select('department_id').eq('user_id', user.id)),
+      withQueryTimeout<Array<{ site_id: string }>>(() => adminSupabase.from('user_sites').select('site_id').eq('user_id', user.id)),
+      withQueryTimeout<Array<{ purchase_order_id: string }>>(() => adminSupabase.from('user_purchase_orders').select('purchase_order_id').eq('user_id', user.id)),
+      withQueryTimeout<Array<{ department_id: string }>>(() => adminSupabase.from('user_departments').select('department_id').eq('user_id', user.id)),
     ])
     userSiteIds = Array.isArray(userSitesResult.data) ? userSitesResult.data.map((r) => r.site_id) : []
     userPOIds = Array.isArray(userPOsResult.data) ? userPOsResult.data.map((r) => r.purchase_order_id) : []
