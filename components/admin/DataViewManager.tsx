@@ -375,7 +375,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="sticky left-0 top-0 z-20 min-w-[72px] bg-gray-50 dark:bg-gray-700 px-4 py-3 text-left shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+                <th className="sticky left-0 top-0 z-30 min-w-[72px] bg-gray-50 dark:bg-gray-700 px-4 py-3 text-left shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
                   <label className="flex items-center gap-1 cursor-pointer">
                     <input
                       type="checkbox"
@@ -386,7 +386,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Select</span>
                   </label>
                 </th>
-                <th className="sticky left-[72px] top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+                <th className="sticky left-[72px] top-0 z-30 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
                   <button onClick={() => handleSort('user')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     User <SortIcon col="user" />
                   </button>
@@ -456,7 +456,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {sortedEntries.map((entry) => (
                 <tr key={entry.id} className={selectedRowIds.has(entry.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}>
-                  <td className={`sticky left-0 z-10 min-w-[72px] px-4 py-4 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] ${selectedRowIds.has(entry.id) ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white dark:bg-gray-800'}`}>
+                  <td className={`sticky left-0 z-20 min-w-[72px] px-4 py-4 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] ${selectedRowIds.has(entry.id) ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white dark:bg-gray-800'}`}>
                     <input
                       type="checkbox"
                       checked={selectedRowIds.has(entry.id)}
@@ -464,7 +464,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                       className="rounded border-gray-300 dark:border-gray-600"
                     />
                   </td>
-                  <td className={`sticky left-[72px] z-10 px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] ${selectedRowIds.has(entry.id) ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white dark:bg-gray-800'}`}>
+                  <td className={`sticky left-[72px] z-20 px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] ${selectedRowIds.has(entry.id) ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white dark:bg-gray-800'}`}>
                     {entry.user_name}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
