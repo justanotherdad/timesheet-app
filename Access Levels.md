@@ -154,6 +154,6 @@ Admin and Super Admin only (and not self).
 - **Manager subordinates:** Users with `reports_to_id`, `supervisor_id`, `manager_id`, or `final_approver_id` equal to the manager’s id. `getSubordinateUserIds` includes all four.
 - **Timesheets visibility (supervisor/manager):** My Timesheets and Pending Approvals use `createAdminClient()` to fetch `weekly_timesheets` for report IDs so RLS does not block reading subordinates’ timesheets.
 - **Timesheet dropdowns:** On New/Edit timesheet, Activity, Deliverable, and System options are filtered to sites assigned to the user (`user_sites`); admins see all.
-- **Purchase Orders:** Non-admin users only see POs explicitly assigned in their profile (`user_purchase_orders`). No fallback to all POs from assigned sites.
+- **Purchase Orders:** Cascading from profile: Site → Departments (all at site if blank) → POs. If no POs explicitly assigned, employee sees all POs at their sites (filtered by department if departments are assigned). If POs are assigned, only those show.
 - **Read-only UI:** Organization uses `ConsolidatedManager` with `readOnly={true}` for supervisors; Systems/Activities/Deliverables use `HierarchicalItemManager` with `readOnly={true}` (hides Add, Import, Edit, Delete, bulk actions).
 - **Server actions:** create-user, update-user-assignments, and generate-password-link allow only Manager, Admin, Super Admin (not Supervisor).

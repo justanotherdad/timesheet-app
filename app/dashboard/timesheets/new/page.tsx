@@ -84,6 +84,7 @@ export default async function NewTimesheetPage() {
   }
 
   // Fetch dropdown options - filter by user assignments unless admin
+  // Cascading: Site → Departments (all at site if blank) → POs (all filtered by site/dept if blank, else only chosen)
   const sitesQuery = supabase.from('sites').select('*').order('name')
   const posQuery = supabase.from('purchase_orders').select('*').order('po_number')
   
@@ -91,14 +92,18 @@ export default async function NewTimesheetPage() {
     if (userSiteIds.length > 0) {
       sitesQuery.in('id', userSiteIds)
     } else {
-      // If user has no sites assigned, return empty array
       sitesQuery.eq('id', '00000000-0000-0000-0000-000000000000') // Will return empty
     }
     if (userPOIds.length > 0) {
       posQuery.in('id', userPOIds)
+    } else if (userSiteIds.length > 0) {
+      // No explicit POs: show all POs at user's sites, filtered by department if user has departments
+      posQuery.in('site_id', userSiteIds)
+      if (userDepartmentIds.length > 0) {
+        posQuery.in('department_id', userDepartmentIds)
+      }
     } else {
-      // Only show POs explicitly assigned in user profile; no fallback to all site POs
-      posQuery.eq('id', '00000000-0000-0000-0000-000000000000') // Will return empty
+      posQuery.eq('id', '00000000-0000-0000-0000-000000000000') // No sites = no POs
     }
   }
 
