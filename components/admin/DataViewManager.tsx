@@ -365,14 +365,14 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
         </div>
       </div>
 
-      {/* Results - nested scroll: outer=horizontal (sticky left), inner=vertical (sticky top) */}
-      <div className="overflow-x-scroll overflow-y-hidden min-h-[300px]">
+      {/* Results - outer=vertical (scrollbar always on right), inner=horizontal (sticky Select/User) */}
+      <div className="overflow-y-auto overflow-x-hidden max-h-[calc(100vh-22rem)] min-h-[300px]">
         {loading ? (
           <div className="text-center py-8 text-gray-600 dark:text-gray-300">Loading...</div>
         ) : expandedEntries.length === 0 ? (
           <div className="text-center py-8 text-gray-600 dark:text-gray-300">No timesheet entries found</div>
         ) : (
-          <div className="inline-block min-w-max overflow-y-auto max-h-[calc(100vh-22rem)]">
+          <div className="overflow-x-scroll overflow-y-hidden min-w-max">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border-collapse">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
