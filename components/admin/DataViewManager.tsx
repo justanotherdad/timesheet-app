@@ -365,17 +365,18 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
         </div>
       </div>
 
-      {/* Results - overflow-x-scroll keeps horizontal scrollbar always visible */}
-      <div className="overflow-x-scroll overflow-y-auto max-h-[calc(100vh-22rem)] min-h-[300px]">
+      {/* Results - nested scroll: outer=horizontal (sticky left), inner=vertical (sticky top) */}
+      <div className="overflow-x-scroll overflow-y-hidden min-h-[300px]">
         {loading ? (
           <div className="text-center py-8 text-gray-600 dark:text-gray-300">Loading...</div>
         ) : expandedEntries.length === 0 ? (
           <div className="text-center py-8 text-gray-600 dark:text-gray-300">No timesheet entries found</div>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <div className="inline-block min-w-max overflow-y-auto max-h-[calc(100vh-22rem)]">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border-collapse">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="sticky left-0 top-0 z-10 min-w-[72px] bg-gray-50 dark:bg-gray-700 px-4 py-3 text-left shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+                <th className="sticky left-0 top-0 z-20 min-w-[72px] bg-gray-50 dark:bg-gray-700 px-4 py-3 text-left shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
                   <label className="flex items-center gap-1 cursor-pointer">
                     <input
                       type="checkbox"
@@ -386,67 +387,67 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Select</span>
                   </label>
                 </th>
-                <th className="sticky left-[72px] top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+                <th className="sticky left-[72px] top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
                   <button onClick={() => handleSort('user')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     User <SortIcon col="user" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('week_ending')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Week Ending <SortIcon col="week_ending" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('date')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Date <SortIcon col="date" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('day')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Day <SortIcon col="day" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('site')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Site <SortIcon col="site" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('po')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     PO <SortIcon col="po" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('task')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Task Description <SortIcon col="task" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('system')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     System <SortIcon col="system" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('activity')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Activity <SortIcon col="activity" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('deliverable')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Deliverable <SortIcon col="deliverable" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('hours')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Hours <SortIcon col="hours" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('non_billable_hours')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Non-Billable <SortIcon col="non_billable_hours" />
                   </button>
                 </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('status')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Status <SortIcon col="status" />
                   </button>
@@ -499,6 +500,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
