@@ -6,6 +6,12 @@ import { getWeekDates } from '@/lib/utils'
 
 const formatInput = (d: Date) => format(d, 'yyyy-MM-dd')
 
+// Supabase relation can return object or array - extract name safely
+const getUserName = (userProfiles: unknown) => {
+  const p = Array.isArray(userProfiles) ? (userProfiles as { name?: string }[])[0] : (userProfiles as { name?: string } | null)
+  return p?.name || 'N/A'
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
@@ -173,7 +179,7 @@ export async function GET(request: NextRequest) {
             day: dayNames[dayIndex],
             hours,
             non_billable_hours: nonBillableHours,
-            user_name: timesheet.user_profiles?.name || 'N/A',
+            user_name: getUserName(timesheet.user_profiles),
             site_name: siteName,
             po_number: poNumber,
             task_description: entry.task_description || 'N/A',
@@ -206,7 +212,7 @@ export async function GET(request: NextRequest) {
           day: dayName,
           hours: 0,
           non_billable_hours: hrs,
-          user_name: timesheet.user_profiles?.name || 'N/A',
+          user_name: getUserName(timesheet.user_profiles),
           site_name: 'N/A',
           po_number: 'N/A',
           task_description: 'Unbillable',
