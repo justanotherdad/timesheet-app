@@ -50,12 +50,21 @@ export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<b
   // Empty chain: no one to approve. Auto-approve as the employee approving themselves.
   const userId = timesheet.user_id
 
+  // Get employee name for snapshot (signer_name doesn't change if profile is updated later)
+  const { data: empProfile } = await adminSupabase
+    .from('user_profiles')
+    .select('name')
+    .eq('id', userId)
+    .single()
+  const signerName = (empProfile as any)?.name || 'Unknown'
+
   const { error: signatureError } = await adminSupabase
     .from('timesheet_signatures')
     .insert({
       timesheet_id: timesheetId,
       signer_id: userId,
       signer_role: 'final_approver',
+      signer_name: signerName,
     })
 
   if (signatureError) return false

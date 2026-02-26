@@ -63,13 +63,15 @@ export async function POST(
       signerRole = 'supervisor'
     }
 
-    // Create signature (DB may need signer_role to allow 'final_approver' – add enum value if required)
+    // Create signature - snapshot signer_name so it doesn't change if user profile is updated later
+    const signerName = user.profile?.name || 'Unknown'
     const { error: signatureError } = await adminSupabase
       .from('timesheet_signatures')
       .insert({
         timesheet_id: id,
         signer_id: user.id,
         signer_role: signerRole,
+        signer_name: signerName,
       })
 
     if (signatureError) {

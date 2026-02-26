@@ -331,7 +331,7 @@ export default async function TimesheetDetailPage({
                     <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded">
                       <div>
                         <p className="font-medium text-gray-900 dark:text-gray-100 capitalize">{sig.signer_role}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-300">{sig.user_profiles.name}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">{sig.signer_name || sig.user_profiles?.name || 'Unknown'}</p>
                       </div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         {new Date(sig.signed_at).toLocaleString()}

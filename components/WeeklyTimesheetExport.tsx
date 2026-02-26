@@ -363,45 +363,45 @@ export default function WeeklyTimesheetExport({
               <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
             )}
           </div>
-          {user.supervisor_id != null && user.supervisor_id !== '' && (
+          {(user.supervisor_id != null && user.supervisor_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'supervisor') ? (
             <div style={{ marginBottom: '8px', color: '#000', textAlign: 'right' }}>
               <strong style={{ color: '#000' }}>Supervisor Approval by / Date:</strong>
               {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor') ? (
                 <span style={{ marginLeft: '10px', color: '#000' }}>
-                  {timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').user_profiles?.name}{' '}
+                  {(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').signer_name) || timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').user_profiles?.name}{' '}
                   {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').signed_at).toLocaleDateString()}
                 </span>
               ) : (
                 <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
               )}
             </div>
-          )}
-          {user.manager_id != null && user.manager_id !== '' && (
+          ) : null}
+          {(user.manager_id != null && user.manager_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'manager') ? (
             <div style={{ marginBottom: '8px', color: '#000', textAlign: 'right' }}>
               <strong style={{ color: '#000' }}>Manager Approval by / Date:</strong>
               {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager') ? (
                 <span style={{ marginLeft: '10px', color: '#000' }}>
-                  {timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').user_profiles?.name}{' '}
+                  {(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').signer_name) || timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').user_profiles?.name}{' '}
                   {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').signed_at).toLocaleDateString()}
                 </span>
               ) : (
                 <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
               )}
             </div>
-          )}
-          {user.final_approver_id != null && user.final_approver_id !== '' && (
+          ) : null}
+          {(user.final_approver_id != null && user.final_approver_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'final_approver') ? (
             <div style={{ color: '#000', textAlign: 'right' }}>
               <strong style={{ color: '#000' }}>Final Approver by / Date:</strong>
               {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'final_approver') ? (
                 <span style={{ marginLeft: '10px', color: '#000' }}>
-                  {timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').user_profiles?.name}{' '}
+                  {(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').signer_name) || timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').user_profiles?.name}{' '}
                   {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').signed_at).toLocaleDateString()}
                 </span>
               ) : (
                 <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
               )}
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Unbillable Time Section */}

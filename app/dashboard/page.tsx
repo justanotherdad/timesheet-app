@@ -248,7 +248,7 @@ export default async function DashboardPage() {
                   </div>
                 </div>
               </Link>
-              {['manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+              {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
               <>
               <Link
                 href="/dashboard/admin/data-view"

@@ -319,30 +319,33 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
                   <span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>
                 `}
               </div>
-              ${(user.supervisor_id != null && user.supervisor_id !== '') ? `
+              ${(user.supervisor_id != null && user.supervisor_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'supervisor') ? `
               <div style="margin-bottom: 8px; color: #000; text-align: right;">
                 <strong style="color: #000;">Supervisor Approval by / Date:</strong>
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor')
-                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
+                  const name = sig ? (sig.signer_name || sig.user_profiles?.name || '') : ''
+                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
               ` : ''}
-              ${(user.manager_id != null && user.manager_id !== '') ? `
+              ${(user.manager_id != null && user.manager_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'manager') ? `
               <div style="margin-bottom: 8px; color: #000; text-align: right;">
                 <strong style="color: #000;">Manager Approval by / Date:</strong>
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager')
-                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
+                  const name = sig ? (sig.signer_name || sig.user_profiles?.name || '') : ''
+                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
               ` : ''}
-              ${(user.final_approver_id != null && user.final_approver_id !== '') ? `
+              ${(user.final_approver_id != null && user.final_approver_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'final_approver') ? `
               <div style="color: #000; text-align: right;">
                 <strong style="color: #000;">Final Approver by / Date:</strong>
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'final_approver')
-                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(sig.user_profiles?.name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
+                  const name = sig ? (sig.signer_name || sig.user_profiles?.name || '') : ''
+                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
               ` : ''}

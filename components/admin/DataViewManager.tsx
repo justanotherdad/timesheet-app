@@ -1,10 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Download, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
-import { formatDateForInput, getWeekDates, formatDateForInput as formatInput } from '@/lib/utils'
-import { parseISO, format, addDays } from 'date-fns'
+import { parseISO, format } from 'date-fns'
 
 interface User {
   id: string
@@ -61,11 +59,13 @@ interface ExpandedEntry {
   id: string
   entry_id: string
   timesheet_id: string
+  user_id?: string
   date: string
   day: string
   hours: number
+  non_billable_hours?: number
   user_name: string
-  user_email: string
+  user_email?: string
   site_name: string
   po_number: string
   task_description: string
@@ -103,7 +103,6 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
   const [expandedEntries, setExpandedEntries] = useState<ExpandedEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
 
   const filteredDepartments = selectedSite
     ? departments.filter(d => d.site_id === selectedSite)
@@ -114,193 +113,27 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
     setError(null)
 
     try {
-      // First, get weekly_timesheets with filters
-      let timesheetQuery = supabase
-        .from('weekly_timesheets')
-        .select(`
-          id,
-          user_id,
-          week_ending,
-          status,
-          user_profiles!user_id (
-            name,
-            email
-          )
-        `)
+      const params = new URLSearchParams()
+      if (selectedUser) params.set('user', selectedUser)
+      if (selectedSite) params.set('site', selectedSite)
+      if (selectedDepartment) params.set('department', selectedDepartment)
+      if (selectedPO) params.set('po', selectedPO)
+      if (startDate) params.set('startDate', startDate)
+      if (endDate) params.set('endDate', endDate)
+      if (status) params.set('status', status)
 
-      // Apply filters on timesheets
-      if (selectedUser) {
-        timesheetQuery = timesheetQuery.eq('user_id', selectedUser)
+      const res = await fetch(`/api/admin/data-view?${params.toString()}`)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Failed to load data (${res.status})`)
       }
 
-      if (status) {
-        timesheetQuery = timesheetQuery.eq('status', status)
-      }
-
-      // For date filtering, we need to get timesheets that could potentially have days in the range
-      // A week ending on date X contains days from (X-6) to X (assuming week starts Monday)
-      // We'll do the actual date filtering after expanding entries by day
-      // But for efficiency, pre-filter timesheets that could contain dates in the range
-      if (startDate && endDate) {
-        // If both dates are specified, get timesheets where the week could contain any date in the range
-        // Week ending on X contains days (X-6) to X
-        // To contain startDate, we need week_ending >= startDate
-        // To contain endDate, we need week_ending >= endDate (or week could start before endDate)
-        // So get timesheets where week_ending >= startDate - 6 (to include weeks that could contain startDate)
-        // AND week_ending <= endDate + 6 (to include weeks that could contain endDate)
-        const startDateObj = parseISO(startDate)
-        const weekStartForStart = new Date(startDateObj)
-        weekStartForStart.setDate(weekStartForStart.getDate() - 6)
-        const endDateObj = parseISO(endDate)
-        const weekEndForEnd = new Date(endDateObj)
-        weekEndForEnd.setDate(weekEndForEnd.getDate() + 6)
-        timesheetQuery = timesheetQuery.gte('week_ending', formatInput(weekStartForStart))
-        timesheetQuery = timesheetQuery.lte('week_ending', formatInput(weekEndForEnd))
-      } else if (startDate) {
-        // Get timesheets where week_ending >= startDate - 6 (to include weeks that could contain startDate)
-        const startDateObj = parseISO(startDate)
-        const weekStart = new Date(startDateObj)
-        weekStart.setDate(weekStart.getDate() - 6)
-        timesheetQuery = timesheetQuery.gte('week_ending', formatInput(weekStart))
-      } else if (endDate) {
-        // Get timesheets where week_ending <= endDate + 6 (to include weeks that could contain endDate)
-        const endDateObj = parseISO(endDate)
-        const weekEnd = new Date(endDateObj)
-        weekEnd.setDate(weekEnd.getDate() + 6)
-        timesheetQuery = timesheetQuery.lte('week_ending', formatInput(weekEnd))
-      }
-
-      const { data: timesheets, error: timesheetError } = await timesheetQuery
-
-      if (timesheetError) throw timesheetError
-
-      if (!timesheets || timesheets.length === 0) {
-        setEntries([])
-        setLoading(false)
-        return
-      }
-
-      // Get timesheet IDs
-      const timesheetIds = timesheets.map(t => t.id)
-
-      // Now get entries for these timesheets
-      let entriesQuery = supabase
-        .from('timesheet_entries')
-        .select(`
-          *,
-          systems (name),
-          activities (name),
-          deliverables (name),
-          purchase_orders (po_number, department_id)
-        `)
-        .in('timesheet_id', timesheetIds)
-
-      const { data: entriesData, error: entriesError } = await entriesQuery
-
-      if (entriesError) throw entriesError
-
-      // Combine entries with timesheet data
-      const combinedEntries = (entriesData || []).map((entry: any) => {
-        const timesheet = timesheets.find((t: any) => t.id === entry.timesheet_id)
-        return {
-          ...entry,
-          weekly_timesheets: timesheet ? {
-            user_id: timesheet.user_id,
-            week_ending: timesheet.week_ending,
-            status: timesheet.status,
-            user_profiles: timesheet.user_profiles
-          } : null
-        }
-      }) as TimesheetEntry[]
-
-      // Expand entries into daily rows (one row per day with hours > 0)
-      const expanded: ExpandedEntry[] = []
-      const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-      const dayFields = ['mon_hours', 'tue_hours', 'wed_hours', 'thu_hours', 'fri_hours', 'sat_hours', 'sun_hours'] as const
-
-      combinedEntries.forEach((entry) => {
-        if (!entry.weekly_timesheets) return
-
-        const weekEnding = parseISO(entry.weekly_timesheets.week_ending)
-        const weekDates = getWeekDates(weekEnding, 1) // Assuming week starts on Monday
-
-        dayFields.forEach((dayField, dayIndex) => {
-          const hours = entry[dayField] || 0
-          if (hours > 0) {
-            const dayDate = weekDates.days[dayIndex]
-            const systemName = entry.system_name || entry.systems?.name || 'N/A'
-            const activityName = entry.activities?.name || 'N/A'
-            const deliverableName = entry.deliverables?.name || 'N/A'
-            // Find site name from sites array
-            const siteName = entry.client_project_id 
-              ? sites.find(s => s.id === entry.client_project_id)?.name || 'N/A'
-              : 'N/A'
-            const poNumber = entry.purchase_orders?.po_number || 'N/A'
-
-            expanded.push({
-              id: `${entry.id}-${dayIndex}`,
-              entry_id: entry.id,
-              timesheet_id: entry.timesheet_id,
-              date: formatInput(dayDate),
-              day: dayNames[dayIndex],
-              hours: hours,
-              user_name: entry.weekly_timesheets?.user_profiles?.name || 'N/A',
-              user_email: entry.weekly_timesheets?.user_profiles?.email || 'N/A',
-              site_name: siteName,
-              po_number: poNumber,
-              task_description: entry.task_description || 'N/A',
-              system_name: systemName,
-              activity_name: activityName,
-              deliverable_name: deliverableName,
-              status: entry.weekly_timesheets?.status || 'N/A',
-              week_ending: entry.weekly_timesheets?.week_ending || ''
-            })
-          }
-        })
-      })
-
-      // Filter expanded entries by date range if specified
-      let filteredExpanded = expanded
-      if (startDate) {
-        filteredExpanded = filteredExpanded.filter(e => e.date >= startDate)
-      }
-      if (endDate) {
-        filteredExpanded = filteredExpanded.filter(e => e.date <= endDate)
-      }
-
-      // Filter by site if specified
-      if (selectedSite) {
-        filteredExpanded = filteredExpanded.filter(e => {
-          const entry = combinedEntries.find(ent => ent.id === e.entry_id)
-          return entry?.client_project_id === selectedSite
-        })
-      }
-
-      // Filter by department if specified (via PO's department)
-      if (selectedDepartment) {
-        filteredExpanded = filteredExpanded.filter(e => {
-          const entry = combinedEntries.find(ent => ent.id === e.entry_id)
-          return entry?.purchase_orders?.department_id === selectedDepartment
-        })
-      }
-
-      // Filter by PO if specified
-      if (selectedPO) {
-        filteredExpanded = filteredExpanded.filter(e => {
-          const entry = combinedEntries.find(ent => ent.id === e.entry_id)
-          return entry?.po_id === selectedPO
-        })
-      }
-
-      // Sort by date descending
-      filteredExpanded.sort((a, b) => {
-        const dateA = parseISO(a.date)
-        const dateB = parseISO(b.date)
-        return dateB.getTime() - dateA.getTime()
-      })
-
-      setEntries(combinedEntries)
-      setExpandedEntries(filteredExpanded)
+      const { expanded } = await res.json()
+      setEntries([])
+      setExpandedEntries((expanded || []).map((e: any) => ({
+        ...e,
+        non_billable_hours: e.non_billable_hours ?? 0
+      })))
       setSelectedRowIds(new Set())
     } catch (err: any) {
       setError(err.message || 'Failed to load timesheet data')
@@ -331,6 +164,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
         case 'activity': aVal = a.activity_name; bVal = b.activity_name; break
         case 'deliverable': aVal = a.deliverable_name; bVal = b.deliverable_name; break
         case 'hours': aVal = a.hours; bVal = b.hours; break
+        case 'non_billable_hours': aVal = a.non_billable_hours ?? 0; bVal = b.non_billable_hours ?? 0; break
         case 'status': aVal = a.status; bVal = b.status; break
         default: aVal = a.date; bVal = b.date
       }
@@ -381,20 +215,20 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
     }
 
     const csv = [
-      ['Week Ending', 'Date', 'Day', 'User', 'Email', 'Site', 'PO', 'Task Description', 'System', 'Activity', 'Deliverable', 'Hours', 'Status'].join(','),
+      ['Week Ending', 'Date', 'Day', 'User', 'Site', 'PO', 'Task Description', 'System', 'Activity', 'Deliverable', 'Hours', 'Non-Billable Hours', 'Status'].join(','),
       ...toExport.map(entry => [
         entry.week_ending,
         entry.date,
         entry.day,
         entry.user_name,
-        entry.user_email,
         entry.site_name,
         entry.po_number,
-        `"${entry.task_description.replace(/"/g, '""')}"`, // Escape quotes in CSV
+        `"${(entry.task_description || '').replace(/"/g, '""')}"`, // Escape quotes in CSV
         entry.system_name,
         entry.activity_name,
         entry.deliverable_name,
         entry.hours,
+        entry.non_billable_hours ?? 0,
         entry.status,
       ].join(','))
     ].join('\n')
@@ -608,6 +442,11 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                   </button>
                 </th>
                 <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
+                  <button onClick={() => handleSort('non_billable_hours')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    Non-Billable <SortIcon col="non_billable_hours" />
+                  </button>
+                </th>
+                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('status')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Status <SortIcon col="status" />
                   </button>
@@ -652,6 +491,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                     {entry.deliverable_name}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{entry.hours}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{entry.non_billable_hours ?? 0}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">
                     {entry.status}
                   </td>
