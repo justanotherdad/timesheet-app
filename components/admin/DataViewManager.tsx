@@ -365,8 +365,8 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
         </div>
       </div>
 
-      {/* Results - max-height creates scroll context so horizontal scrollbar is visible without scrolling entire page */}
-      <div className="overflow-auto max-h-[calc(100vh-22rem)] min-h-[300px]">
+      {/* Results - overflow-x-scroll keeps horizontal scrollbar always visible */}
+      <div className="overflow-x-scroll overflow-y-auto max-h-[calc(100vh-22rem)] min-h-[300px]">
         {loading ? (
           <div className="text-center py-8 text-gray-600 dark:text-gray-300">Loading...</div>
         ) : expandedEntries.length === 0 ? (
@@ -375,7 +375,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-4 py-3 text-left">
+                <th className="sticky left-0 top-0 z-10 min-w-[72px] bg-gray-50 dark:bg-gray-700 px-4 py-3 text-left shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
                   <label className="flex items-center gap-1 cursor-pointer">
                     <input
                       type="checkbox"
@@ -385,6 +385,11 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                     />
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Select</span>
                   </label>
+                </th>
+                <th className="sticky left-[72px] top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+                  <button onClick={() => handleSort('user')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
+                    User <SortIcon col="user" />
+                  </button>
                 </th>
                 <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('week_ending')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
@@ -399,11 +404,6 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                 <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('day')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Day <SortIcon col="day" />
-                  </button>
-                </th>
-                <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
-                  <button onClick={() => handleSort('user')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
-                    User <SortIcon col="user" />
                   </button>
                 </th>
                 <th className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
@@ -456,13 +456,16 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {sortedEntries.map((entry) => (
                 <tr key={entry.id} className={selectedRowIds.has(entry.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}>
-                  <td className="px-4 py-4">
+                  <td className={`sticky left-0 z-10 min-w-[72px] px-4 py-4 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] ${selectedRowIds.has(entry.id) ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white dark:bg-gray-800'}`}>
                     <input
                       type="checkbox"
                       checked={selectedRowIds.has(entry.id)}
                       onChange={() => toggleRowSelection(entry.id)}
                       className="rounded border-gray-300 dark:border-gray-600"
                     />
+                  </td>
+                  <td className={`sticky left-[72px] z-10 px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] ${selectedRowIds.has(entry.id) ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white dark:bg-gray-800'}`}>
+                    {entry.user_name}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {format(parseISO(entry.week_ending), 'MMM d, yyyy')}
@@ -471,9 +474,6 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                     {format(parseISO(entry.date), 'MMM d, yyyy')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{entry.day}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {entry.user_name}
-                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {entry.site_name}
                   </td>
