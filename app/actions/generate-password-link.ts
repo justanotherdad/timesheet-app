@@ -33,22 +33,23 @@ export async function generatePasswordLink(email: string, targetUserId?: string)
       return { error: 'Server configuration error: ' + (err.message || 'Missing SUPABASE_SERVICE_ROLE_KEY environment variable') }
     }
 
-    // Managers may only send reset links to users who have them as Supervisor or Manager
+    // Managers may only send reset links to users who have them as Supervisor, Manager, or Final Approver
     if (currentUserProfile.role === 'manager') {
       if (!targetUserId) {
         return { error: 'Cannot generate link for this user' }
       }
       const { data: targetProfile } = await adminClient
         .from('user_profiles')
-        .select('supervisor_id, manager_id, reports_to_id')
+        .select('supervisor_id, manager_id, reports_to_id, final_approver_id')
         .eq('id', targetUserId)
         .single()
       const canSend =
         targetProfile?.supervisor_id === user.id ||
         targetProfile?.manager_id === user.id ||
-        targetProfile?.reports_to_id === user.id
+        targetProfile?.reports_to_id === user.id ||
+        targetProfile?.final_approver_id === user.id
       if (!canSend) {
-        return { error: 'You can only send password reset links to users who have you as their Supervisor or Manager' }
+        return { error: 'You can only send password reset links to users who have you as their Supervisor, Manager, or Final Approver' }
       }
     }
 

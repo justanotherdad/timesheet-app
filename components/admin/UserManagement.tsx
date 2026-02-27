@@ -108,8 +108,9 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
     if (['admin', 'super_admin'].includes(currentUserRole)) return true
     return (
       target.supervisor_id === currentUserId ||
-      target.supervisor_id === currentUserId ||
-      target.manager_id === currentUserId
+      target.manager_id === currentUserId ||
+      target.reports_to_id === currentUserId ||
+      target.final_approver_id === currentUserId
     )
   }
   const assignmentsOnlyEdit = currentUserRole === 'supervisor'

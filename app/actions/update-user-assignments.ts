@@ -37,19 +37,20 @@ export async function updateUserAssignments(
       return { error: 'Server configuration error: ' + (err.message || 'Missing SUPABASE_SERVICE_ROLE_KEY environment variable') }
     }
 
-    // Managers may only update assignments for users who have them as Supervisor or Manager
+    // Managers may only update assignments for users who have them as Supervisor, Manager, or Final Approver
     if (currentUserProfile.role === 'manager') {
       const { data: targetProfile } = await adminClient
         .from('user_profiles')
-        .select('supervisor_id, manager_id, reports_to_id')
+        .select('supervisor_id, manager_id, reports_to_id, final_approver_id')
         .eq('id', userId)
         .single()
       const canEdit =
         targetProfile?.supervisor_id === user.id ||
         targetProfile?.manager_id === user.id ||
-        targetProfile?.reports_to_id === user.id
+        targetProfile?.reports_to_id === user.id ||
+        targetProfile?.final_approver_id === user.id
       if (!canEdit) {
-        return { error: 'You can only edit site, PO, and department assignments for users who have you as their Supervisor or Manager' }
+        return { error: 'You can only edit site, PO, and department assignments for users who have you as their Supervisor, Manager, or Final Approver' }
       }
     }
 
@@ -123,19 +124,20 @@ export async function updateUserProfile(
       return { error: 'Server configuration error: ' + (err.message || 'Missing SUPABASE_SERVICE_ROLE_KEY environment variable') }
     }
 
-    // Managers may only update profiles for users who have them as Supervisor or Manager
+    // Managers may only update profiles for users who have them as Supervisor, Manager, or Final Approver
     if (currentUserProfile.role === 'manager') {
       const { data: targetProfile } = await adminClient
         .from('user_profiles')
-        .select('supervisor_id, manager_id, reports_to_id')
+        .select('supervisor_id, manager_id, reports_to_id, final_approver_id')
         .eq('id', userId)
         .single()
       const canEdit =
         targetProfile?.supervisor_id === user.id ||
         targetProfile?.manager_id === user.id ||
-        targetProfile?.reports_to_id === user.id
+        targetProfile?.reports_to_id === user.id ||
+        targetProfile?.final_approver_id === user.id
       if (!canEdit) {
-        return { error: 'You can only edit users who have you as their Supervisor or Manager' }
+        return { error: 'You can only edit users who have you as their Supervisor, Manager, or Final Approver' }
       }
     }
 
