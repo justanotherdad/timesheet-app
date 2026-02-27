@@ -1005,7 +1005,7 @@ export default function WeeklyTimesheetForm({
                         step="0.01"
                         min="0"
                         max="24"
-                        value={editingEntry[`${day}_hours`] ?? ''}
+                        value={editingEntry[`${day}_hours`] || ''}
                         onChange={(e) => setEditingEntry({ ...editingEntry, [`${day}_hours`]: parseFloat(e.target.value) || 0 })}
                         className="w-full h-9 min-h-9 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-base focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white box-border"
                       />
