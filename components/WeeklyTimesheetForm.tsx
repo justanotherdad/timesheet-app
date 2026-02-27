@@ -816,6 +816,16 @@ export default function WeeklyTimesheetForm({
               {loading ? 'Submitting...' : 'Submit for Approval'}
             </button>
           )}
+          {timesheetId && (
+            <button
+              type="button"
+              onClick={() => router.push(`/dashboard/timesheets/${timesheetId}`)}
+              className="min-h-[44px] sm:min-h-0 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-6 py-2.5 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              disabled={loading}
+            >
+              Close
+            </button>
+          )}
           <button
             type="button"
             onClick={() => router.back()}
