@@ -1,20 +1,28 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Download, FileText, FileSpreadsheet, File, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Download, FileText, FileSpreadsheet, File, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
 import { formatWeekEnding, formatDate, formatDateShort, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 
+interface Site { id: string; name: string }
+interface Department { id: string; name: string; site_id: string }
+interface PurchaseOrder { id: string; po_number: string; site_id?: string; department_id?: string }
+
 interface AdminExportProps {
   timesheets: any[]
+  sites: Site[]
+  departments: Department[]
+  purchaseOrders: PurchaseOrder[]
 }
 
 type ExportFormat = 'csv' | 'excel' | 'pdf'
 
-export default function AdminExport({ timesheets }: AdminExportProps) {
+export default function AdminExport({ timesheets, sites, departments, purchaseOrders }: AdminExportProps) {
   const [selectedWeek, setSelectedWeek] = useState<string>('')
   const [selectedStatus, setSelectedStatus] = useState<string>('')
   const [selectedSite, setSelectedSite] = useState<string>('')
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('')
   const [selectedPO, setSelectedPO] = useState<string>('')
   const [selectedEmployee, setSelectedEmployee] = useState<string>('')
   const [selectedTimesheets, setSelectedTimesheets] = useState<string[]>([])
@@ -23,15 +31,52 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
   const [sortColumn, setSortColumn] = useState<string>('week_ending')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
-  // Get unique filter options from timesheets
+  // Cascading filters: each filter narrows the options in the others
+  const filteredSites = useMemo(() => {
+    if (selectedDepartment) {
+      const dept = departments.find(d => d.id === selectedDepartment)
+      return dept ? sites.filter(s => s.id === dept.site_id) : sites
+    }
+    if (selectedPO) {
+      const po = purchaseOrders.find(p => p.id === selectedPO)
+      return po?.site_id ? sites.filter(s => s.id === po.site_id) : sites
+    }
+    return sites
+  }, [sites, departments, purchaseOrders, selectedDepartment, selectedPO])
+
+  const filteredDepartments = useMemo(() => {
+    if (selectedSite) return departments.filter(d => d.site_id === selectedSite)
+    if (selectedPO) {
+      const po = purchaseOrders.find(p => p.id === selectedPO)
+      return po?.department_id ? departments.filter(d => d.id === po.department_id) : departments
+    }
+    return departments
+  }, [departments, purchaseOrders, selectedSite, selectedPO])
+
+  const filteredPOs = useMemo(() => {
+    let list = purchaseOrders
+    if (selectedSite) list = list.filter(po => po.site_id === selectedSite)
+    if (selectedDepartment) list = list.filter(po => po.department_id === selectedDepartment)
+    return list
+  }, [purchaseOrders, selectedSite, selectedDepartment])
+
+  // Get unique filter options from timesheets (for week, status, employee)
   const weekEndings = Array.from(new Set(timesheets.map(ts => ts.week_ending))).filter(Boolean).sort().reverse()
   const statuses = Array.from(new Set(timesheets.map(ts => ts.status))).filter(Boolean).sort()
-  const sitesList = timesheets.map(ts => ts.sites).filter(Boolean)
-  const uniqueSites = Array.from(new Map(sitesList.map((s: any) => [s.id, s])).values()).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
-  const posList = timesheets.map(ts => ts.purchase_orders).filter(Boolean)
-  const uniquePOs = Array.from(new Map(posList.map((p: any) => [p.id, p])).values()).sort((a: any, b: any) => (a.po_number || '').localeCompare(b.po_number || ''))
   const employeesList = timesheets.map(ts => ({ id: ts.user_id, name: ts.user_profiles?.name || 'Unknown' }))
   const uniqueEmployees = Array.from(new Map(employeesList.map((e: any) => [e.id, e])).values()).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
+
+  const clearAllFilters = () => {
+    setSelectedWeek('')
+    setSelectedStatus('')
+    setSelectedSite('')
+    setSelectedDepartment('')
+    setSelectedPO('')
+    setSelectedEmployee('')
+    setSelectedTimesheets([])
+  }
+
+  const hasActiveFilters = selectedWeek || selectedStatus || selectedSite || selectedDepartment || selectedPO || selectedEmployee
 
   // Filter timesheets by all selected filters
   const filteredTimesheets = useMemo(() => {
@@ -39,11 +84,12 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
       if (selectedWeek && ts.week_ending !== selectedWeek) return false
       if (selectedStatus && ts.status !== selectedStatus) return false
       if (selectedSite && ts.sites?.id !== selectedSite) return false
+      if (selectedDepartment && ts.purchase_orders?.department_id !== selectedDepartment) return false
       if (selectedPO && ts.purchase_orders?.id !== selectedPO) return false
       if (selectedEmployee && ts.user_id !== selectedEmployee) return false
       return true
     })
-  }, [timesheets, selectedWeek, selectedStatus, selectedSite, selectedPO, selectedEmployee])
+  }, [timesheets, selectedWeek, selectedStatus, selectedSite, selectedDepartment, selectedPO, selectedEmployee])
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -501,12 +547,49 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Site</label>
             <select
               value={selectedSite}
-              onChange={(e) => { setSelectedSite(e.target.value); clearFiltersAndSelection() }}
+              onChange={(e) => {
+                const newSite = e.target.value
+                setSelectedSite(newSite)
+                clearFiltersAndSelection()
+                if (!newSite) setSelectedDepartment('')
+                else {
+                  const deptsAtSite = departments.filter(d => d.site_id === newSite)
+                  if (!deptsAtSite.some(d => d.id === selectedDepartment)) setSelectedDepartment('')
+                }
+                if (!newSite) setSelectedPO('')
+                else {
+                  const posAtSite = purchaseOrders.filter(p => p.site_id === newSite)
+                  if (!posAtSite.some(p => p.id === selectedPO)) setSelectedPO('')
+                }
+              }}
               className={filterSelectClass}
             >
               <option value="">All Sites</option>
-              {uniqueSites.map((s: any) => (
+              {filteredSites.map((s: any) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
+            <select
+              value={selectedDepartment}
+              onChange={(e) => {
+                const newDept = e.target.value
+                setSelectedDepartment(newDept)
+                clearFiltersAndSelection()
+                if (!newDept) setSelectedPO('')
+                else {
+                  let posForDept = purchaseOrders.filter(p => p.department_id === newDept)
+                  if (selectedSite) posForDept = posForDept.filter(p => p.site_id === selectedSite)
+                  if (!posForDept.some(p => p.id === selectedPO)) setSelectedPO('')
+                }
+              }}
+              className={filterSelectClass}
+            >
+              <option value="">All Departments</option>
+              {filteredDepartments.map((d: any) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
           </div>
@@ -514,11 +597,22 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">PO</label>
             <select
               value={selectedPO}
-              onChange={(e) => { setSelectedPO(e.target.value); clearFiltersAndSelection() }}
+              onChange={(e) => {
+                const newPO = e.target.value
+                setSelectedPO(newPO)
+                clearFiltersAndSelection()
+                if (newPO) {
+                  const po = purchaseOrders.find(p => p.id === newPO)
+                  if (po) {
+                    if (po.site_id && po.site_id !== selectedSite) setSelectedSite(po.site_id)
+                    if (po.department_id && po.department_id !== selectedDepartment) setSelectedDepartment(po.department_id)
+                  }
+                }
+              }}
               className={filterSelectClass}
             >
               <option value="">All POs</option>
-              {uniquePOs.map((p: any) => (
+              {filteredPOs.map((p: any) => (
                 <option key={p.id} value={p.id}>{p.po_number}</option>
               ))}
             </select>
@@ -535,6 +629,18 @@ export default function AdminExport({ timesheets }: AdminExportProps) {
                 <option key={e.id} value={e.id}>{e.name}</option>
               ))}
             </select>
+          </div>
+          <div className="flex flex-col gap-1 min-w-0 md:min-w-0">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 invisible md:visible">Clear</label>
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              disabled={!hasActiveFilters}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+            >
+              <X className="h-4 w-4" />
+              Clear All
+            </button>
           </div>
         </div>
 

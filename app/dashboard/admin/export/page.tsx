@@ -71,12 +71,12 @@ export default async function AdminExportPage() {
     }, {})
   }
 
-  // Fetch PO names
+  // Fetch PO names with site_id, department_id for cascading filters
   let posMap: Record<string, any> = {}
   if (poIds.length > 0) {
     const { data: pos } = await supabase
       .from('purchase_orders')
-      .select('id, po_number')
+      .select('id, po_number, site_id, department_id')
       .in('id', poIds)
     posMap = (pos || []).reduce((acc: Record<string, any>, po: any) => {
       acc[po.id] = po
@@ -84,7 +84,19 @@ export default async function AdminExportPage() {
     }, {})
   }
 
-  // Add site and PO names to timesheets
+  // Fetch departments for cascading filters
+  const { data: departmentsData } = await supabase
+    .from('departments')
+    .select('id, name, site_id')
+    .order('name')
+  const departments = departmentsData || []
+
+  // Build sites and purchaseOrders for AdminExport (unique from timesheet data + full lists for cascading)
+  const uniqueSiteIds = Array.from(new Set((timesheetsWithHours || []).map((ts: any) => ts._site_id).filter(Boolean)))
+  const sites = uniqueSiteIds.map((id: string) => sitesMap[id]).filter(Boolean)
+  const purchaseOrders = (poIds as string[]).map((id: string) => posMap[id]).filter(Boolean)
+
+  // Add site and PO names to timesheets (PO includes department_id for filtering)
   const timesheetsWithData = timesheetsWithHours.map((ts: any) => ({
     ...ts,
     sites: ts._site_id ? sitesMap[ts._site_id] : null,
@@ -96,7 +108,12 @@ export default async function AdminExportPage() {
       <Header title="Export Timesheets" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          <AdminExport timesheets={timesheetsWithData || []} />
+          <AdminExport
+            timesheets={timesheetsWithData || []}
+            sites={sites}
+            departments={departments}
+            purchaseOrders={purchaseOrders}
+          />
         </div>
       </div>
     </div>

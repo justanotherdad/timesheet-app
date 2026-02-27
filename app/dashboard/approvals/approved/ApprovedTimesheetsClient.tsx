@@ -116,7 +116,7 @@ export default function ApprovedTimesheetsClient({
       <form
         method="get"
         action="/dashboard/approvals/approved"
-        className="flex flex-col lg:flex-row gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+        className="flex flex-col lg:flex-row gap-4 p-4 rounded-lg"
       >
         <input type="hidden" name="sort" value={sortBy} />
         <input type="hidden" name="dir" value={sortDir} />
@@ -127,7 +127,7 @@ export default function ApprovedTimesheetsClient({
               type="date"
               name="start"
               defaultValue={filterStart}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-gray-800 dark:text-gray-100"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             />
           </div>
           <div>
@@ -136,7 +136,7 @@ export default function ApprovedTimesheetsClient({
               type="date"
               name="end"
               defaultValue={filterEnd}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-gray-800 dark:text-gray-100"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             />
           </div>
         </div>
@@ -146,7 +146,7 @@ export default function ApprovedTimesheetsClient({
             <select
               name="user"
               defaultValue={filterUser}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-gray-800 dark:text-gray-100"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             >
               <option value="">All Users</option>
               {filterUsers.map((u) => (

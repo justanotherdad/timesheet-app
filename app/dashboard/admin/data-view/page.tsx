@@ -15,7 +15,7 @@ export default async function DataViewPage() {
     withQueryTimeout(() => adminSupabase.from('user_profiles').select('id, name, email, supervisor_id, manager_id, final_approver_id, role').order('name')),
     withQueryTimeout(() => supabase.from('sites').select('id, name').order('name')),
     withQueryTimeout(() => supabase.from('departments').select('id, name, site_id').order('name')),
-    withQueryTimeout(() => supabase.from('purchase_orders').select('id, po_number').order('po_number')),
+    withQueryTimeout(() => supabase.from('purchase_orders').select('id, po_number, site_id, department_id').order('po_number')),
   ])
 
   const allUsers = (usersResult.data || []) as any[]

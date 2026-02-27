@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Download, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Download, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
 import { parseISO, format } from 'date-fns'
 
 interface User {
@@ -77,6 +77,8 @@ interface ExpandedEntry {
 interface PurchaseOrder {
   id: string
   po_number: string
+  site_id?: string
+  department_id?: string
 }
 
 interface DataViewManagerProps {
@@ -102,9 +104,54 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const filteredDepartments = selectedSite
-    ? departments.filter(d => d.site_id === selectedSite)
-    : departments
+  // Cascading filters: each filter narrows the options in the others
+  const filteredSites = useMemo(() => {
+    if (selectedDepartment) {
+      const dept = departments.find(d => d.id === selectedDepartment)
+      return dept ? sites.filter(s => s.id === dept.site_id) : sites
+    }
+    if (selectedPO) {
+      const po = purchaseOrders.find(p => p.id === selectedPO)
+      return po?.site_id ? sites.filter(s => s.id === po.site_id) : sites
+    }
+    return sites
+  }, [sites, departments, purchaseOrders, selectedDepartment, selectedPO])
+
+  const filteredDepartments = useMemo(() => {
+    if (selectedSite) {
+      return departments.filter(d => d.site_id === selectedSite)
+    }
+    if (selectedPO) {
+      const po = purchaseOrders.find(p => p.id === selectedPO)
+      return po?.department_id ? departments.filter(d => d.id === po.department_id) : departments
+    }
+    return departments
+  }, [departments, purchaseOrders, selectedSite, selectedPO])
+
+  const filteredPOs = useMemo(() => {
+    let list = purchaseOrders
+    if (selectedSite) list = list.filter(po => po.site_id === selectedSite)
+    if (selectedDepartment) list = list.filter(po => po.department_id === selectedDepartment)
+    return list
+  }, [purchaseOrders, selectedSite, selectedDepartment])
+
+  const filteredUsers = useMemo(() => {
+    // Users are filtered by site/dept/PO via the data - for now show all accessible users
+    // (User assignments would require additional data; cascading works for Site/Dept/PO)
+    return users
+  }, [users])
+
+  const clearAllFilters = () => {
+    setSelectedUser('')
+    setSelectedSite('')
+    setSelectedDepartment('')
+    setSelectedPO('')
+    setStartDate('')
+    setEndDate('')
+    setStatus('')
+  }
+
+  const hasActiveFilters = selectedUser || selectedSite || selectedDepartment || selectedPO || startDate || endDate || status
 
   const loadData = async () => {
     setLoading(true)
@@ -256,8 +303,8 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-col lg:flex-row gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+      {/* Filters - background matches Export Timesheets (blends with page) */}
+      <div className="flex flex-col lg:flex-row gap-4 mb-6 p-4 rounded-lg">
         {/* Date range - stacked, fixed on left for desktop */}
         <div className="flex flex-col gap-4 lg:w-48 lg:shrink-0 lg:border-r lg:border-gray-200 dark:lg:border-gray-600 lg:pr-4">
           <div>
@@ -266,7 +313,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             />
           </div>
           <div>
@@ -275,22 +322,22 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             />
           </div>
         </div>
 
-        {/* Other filters */}
-        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {/* Other filters - cascading: each selection filters the others */}
+        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">User</label>
             <select
               value={selectedUser}
               onChange={(e) => setSelectedUser(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             >
               <option value="">All Users</option>
-              {users.map(user => (
+              {filteredUsers.map(user => (
                 <option key={user.id} value={user.id}>{user.name}</option>
               ))}
             </select>
@@ -301,13 +348,22 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
             <select
               value={selectedSite}
               onChange={(e) => {
-                setSelectedSite(e.target.value)
-                setSelectedDepartment('')
+                const newSite = e.target.value
+                setSelectedSite(newSite)
+                if (!newSite) {
+                  setSelectedDepartment('')
+                  setSelectedPO('')
+                } else {
+                  const deptsAtSite = departments.filter(d => d.site_id === newSite)
+                  const posAtSite = purchaseOrders.filter(p => p.site_id === newSite)
+                  if (!deptsAtSite.some(d => d.id === selectedDepartment)) setSelectedDepartment('')
+                  if (!posAtSite.some(p => p.id === selectedPO)) setSelectedPO('')
+                }
               }}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             >
               <option value="">All Sites</option>
-              {sites.map(site => (
+              {filteredSites.map(site => (
                 <option key={site.id} value={site.id}>{site.name}</option>
               ))}
             </select>
@@ -317,9 +373,17 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
             <select
               value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              disabled={!selectedSite}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white disabled:bg-gray-100 dark:disabled:bg-gray-100"
+              onChange={(e) => {
+                const newDept = e.target.value
+                setSelectedDepartment(newDept)
+                if (!newDept) setSelectedPO('')
+                else {
+                  let posForDept = purchaseOrders.filter(p => p.department_id === newDept)
+                  if (selectedSite) posForDept = posForDept.filter(p => p.site_id === selectedSite)
+                  if (!posForDept.some(p => p.id === selectedPO)) setSelectedPO('')
+                }
+              }}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             >
               <option value="">All Departments</option>
               {filteredDepartments.map(dept => (
@@ -332,11 +396,21 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">PO</label>
             <select
               value={selectedPO}
-              onChange={(e) => setSelectedPO(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+              onChange={(e) => {
+                const newPO = e.target.value
+                setSelectedPO(newPO)
+                if (newPO) {
+                  const po = purchaseOrders.find(p => p.id === newPO)
+                  if (po) {
+                    if (po.site_id && po.site_id !== selectedSite) setSelectedSite(po.site_id)
+                    if (po.department_id && po.department_id !== selectedDepartment) setSelectedDepartment(po.department_id)
+                  }
+                }
+              }}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             >
               <option value="">All POs</option>
-              {purchaseOrders.map(po => (
+              {filteredPOs.map(po => (
                 <option key={po.id} value={po.id}>{po.po_number}</option>
               ))}
             </select>
@@ -347,7 +421,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             >
               <option value="">All Statuses</option>
               <option value="draft">Draft</option>
@@ -355,6 +429,18 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
             </select>
+          </div>
+
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              disabled={!hasActiveFilters}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <X className="h-4 w-4" />
+              Clear All Filters
+            </button>
           </div>
         </div>
       </div>
