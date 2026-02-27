@@ -54,14 +54,12 @@ interface TimesheetEntry {
   sites?: { name: string }
 }
 
-// Expanded entry for display (one row per day with hours)
+// Expanded entry for display (one row per timesheet entry with weekly total hours)
 interface ExpandedEntry {
   id: string
   entry_id: string
   timesheet_id: string
   user_id?: string
-  date: string
-  day: string
   hours: number
   non_billable_hours?: number
   user_name: string
@@ -97,7 +95,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
   const [endDate, setEndDate] = useState<string>('')
   const [status, setStatus] = useState<string>('')
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
-  const [sortColumn, setSortColumn] = useState<string>('date')
+  const [sortColumn, setSortColumn] = useState<string>('week_ending')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [entries, setEntries] = useState<TimesheetEntry[]>([])
   const [expandedEntries, setExpandedEntries] = useState<ExpandedEntry[]>([])
@@ -154,8 +152,6 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
       let bVal: string | number = ''
       switch (sortColumn) {
         case 'week_ending': aVal = a.week_ending; bVal = b.week_ending; break
-        case 'date': aVal = a.date; bVal = b.date; break
-        case 'day': aVal = a.day; bVal = b.day; break
         case 'user': aVal = a.user_name; bVal = b.user_name; break
         case 'site': aVal = a.site_name; bVal = b.site_name; break
         case 'po': aVal = a.po_number; bVal = b.po_number; break
@@ -166,7 +162,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
         case 'hours': aVal = a.hours; bVal = b.hours; break
         case 'non_billable_hours': aVal = a.non_billable_hours ?? 0; bVal = b.non_billable_hours ?? 0; break
         case 'status': aVal = a.status; bVal = b.status; break
-        default: aVal = a.date; bVal = b.date
+        default: aVal = a.week_ending; bVal = b.week_ending
       }
       if (typeof aVal === 'number' && typeof bVal === 'number') return mult * (aVal - bVal)
       return mult * String(aVal).localeCompare(String(bVal))
@@ -215,11 +211,9 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
     }
 
     const csv = [
-      ['Week Ending', 'Date', 'Day', 'User', 'Site', 'PO', 'Task Description', 'System', 'Activity', 'Deliverable', 'Hours', 'Non-Billable Hours', 'Status'].join(','),
+      ['Week Ending', 'User', 'Site', 'PO', 'Task Description', 'System', 'Activity', 'Deliverable', 'Hours', 'Non-Billable Hours', 'Status'].join(','),
       ...toExport.map(entry => [
         entry.week_ending,
-        entry.date,
-        entry.day,
         entry.user_name,
         entry.site_name,
         entry.po_number,
@@ -397,16 +391,6 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                   </button>
                 </th>
                 <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
-                  <button onClick={() => handleSort('date')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
-                    Date <SortIcon col="date" />
-                  </button>
-                </th>
-                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
-                  <button onClick={() => handleSort('day')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
-                    Day <SortIcon col="day" />
-                  </button>
-                </th>
-                <th className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 px-6 py-3 text-left">
                   <button onClick={() => handleSort('site')} className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hover:text-gray-700 dark:hover:text-gray-200">
                     Site <SortIcon col="site" />
                   </button>
@@ -470,10 +454,6 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {format(parseISO(entry.week_ending), 'MMM d, yyyy')}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {format(parseISO(entry.date), 'MMM d, yyyy')}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{entry.day}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {entry.site_name}
                   </td>
