@@ -114,7 +114,7 @@ npm run dev
 git add .
 
 # 2. Commit with a short message describing the change
-git commit -m "fixing login issues"
+git commit -m "fixing issues"
 
 # 3. Push to GitHub (triggers Vercel deployment)
 git push

@@ -253,7 +253,9 @@ export default function WeeklyTimesheetForm({
   }
 
   const handleRemoveEntry = (index: number) => {
-    setBillableEntries(billableEntries.filter((_, i) => i !== index))
+    if (window.confirm('Delete this row?')) {
+      setBillableEntries(billableEntries.filter((_, i) => i !== index))
+    }
   }
 
   const saveTimesheet = async (shouldSubmit: boolean = false) => {
@@ -692,7 +694,8 @@ export default function WeeklyTimesheetForm({
                       <button
                         type="button"
                         onClick={() => handleRemoveEntry(entryIdx)}
-                        className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
+                        title="Delete row"
+                        className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -720,6 +723,7 @@ export default function WeeklyTimesheetForm({
           <button
             type="button"
             onClick={handleAddEntry}
+            title="Add a new billable row"
             className="mt-2 flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium"
           >
             <Plus className="h-4 w-4" />
