@@ -1,9 +1,25 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { Download, Printer } from 'lucide-react'
 import { formatDate, formatDateShort, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
+
+// SVG: Rotate phone to landscape (instructional icon - no external assets)
+const RotateToLandscapeSvg = () => (
+  <svg viewBox="0 0 200 120" className="w-48 h-auto mx-auto" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <rect x="30" y="15" width="40" height="70" rx="4" strokeDasharray="2 2" opacity="0.6" />
+    <circle cx="50" cy="50" r="8" fill="currentColor" opacity="0.5" />
+    <path d="M 75 50 Q 100 30, 125 50" strokeWidth="3" fill="none" markerEnd="url(#arrow-rotate)" />
+    <defs>
+      <marker id="arrow-rotate" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L9,3 z" fill="currentColor" />
+      </marker>
+    </defs>
+    <rect x="130" y="35" width="70" height="40" rx="4" />
+    <circle cx="165" cy="55" r="6" fill="currentColor" />
+  </svg>
+)
 
 interface WeeklyTimesheetExportProps {
   timesheet: any
@@ -28,6 +44,24 @@ export default function WeeklyTimesheetExport({
   companyInfo = {}
 }: WeeklyTimesheetExportProps) {
   const exportRef = useRef<HTMLDivElement>(null)
+  const [isPortrait, setIsPortrait] = useState(false)
+
+  useEffect(() => {
+    const checkOrientation = () => {
+      const portrait = window.matchMedia('(orientation: portrait)').matches
+      const isMobile = window.matchMedia('(max-width: 768px)').matches
+      setIsPortrait(isMobile && portrait)
+    }
+    checkOrientation()
+    const mql = window.matchMedia('(orientation: portrait)')
+    const handler = () => checkOrientation()
+    mql.addEventListener('change', handler)
+    window.addEventListener('resize', handler)
+    return () => {
+      mql.removeEventListener('change', handler)
+      window.removeEventListener('resize', handler)
+    }
+  }, [])
 
   const weekDates = getWeekDates(timesheet.week_ending)
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
@@ -217,7 +251,24 @@ export default function WeeklyTimesheetExport({
         To remove the URL and page number from the printed/PDF output, turn off <strong>Headers and footers</strong> in your browser&apos;s print dialog (e.g. in Chrome: click &quot;More settings&quot; and uncheck &quot;Headers and footers&quot;).
       </p>
 
-      <div ref={exportRef} className="timesheet-print-content bg-white p-8 print:p-0" style={{ fontFamily: 'Arial, sans-serif', fontSize: '10pt', color: '#000' }}>
+      {/* Mobile: portrait shows rotate prompt; landscape shows scrollable timesheet with pinch zoom */}
+      <div className={`relative ${isPortrait ? 'min-h-[400px]' : ''}`}>
+        {isPortrait && (
+          <div className="md:hidden absolute inset-0 z-20 flex flex-col items-center justify-center py-12 px-4 bg-gray-100 dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
+            <RotateToLandscapeSvg />
+            <p className="mt-4 text-center text-gray-700 dark:text-gray-300 font-medium">
+              Rotate your device to landscape
+            </p>
+            <p className="mt-2 text-sm text-center text-gray-500 dark:text-gray-400">
+              For the best view, turn your phone sideways. You can then pinch to zoom.
+            </p>
+          </div>
+        )}
+        <div
+          className={`overflow-auto overscroll-contain touch-pan-x touch-pan-y print:overflow-visible ${isPortrait ? 'md:block max-md:invisible max-md:absolute max-md:inset-0 max-md:opacity-0' : 'max-md:min-h-[60vh]'}`}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          <div ref={exportRef} className={`timesheet-print-content bg-white p-8 print:p-0 ${!isPortrait ? 'md:min-w-0 min-w-max' : ''}`} style={{ fontFamily: 'Arial, sans-serif', fontSize: '10pt', color: '#000' }}>
         {/* Header Logo */}
         <div className="header-logo mb-5">
           <img 
@@ -459,6 +510,8 @@ export default function WeeklyTimesheetExport({
         <div className="grand-total-row" style={{ backgroundColor: '#90EE90', fontWeight: 'bold', padding: '10px', marginTop: '20px', textAlign: 'right', fontSize: '12pt', color: '#000' }}>
           <span style={{ marginRight: '20px', color: '#000' }}>GRAND TOTAL</span>
           <span style={{ color: '#000' }}>{getGrandTotal().toFixed(2)}</span>
+        </div>
+          </div>
         </div>
       </div>
     </div>
