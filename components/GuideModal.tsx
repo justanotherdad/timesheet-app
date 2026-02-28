@@ -9,7 +9,7 @@ const SECTIONS: { id: string; title: string }[] = [
   { id: 'timesheets', title: 'Timesheets' },
   { id: 'approvals', title: 'Approvals' },
   { id: 'manage-users', title: 'Manage Users' },
-  { id: 'organization', title: 'Organization, Systems, Activities, Deliverables' },
+  { id: 'organization', title: 'Organization & Timesheet Options' },
   { id: 'data-export', title: 'View Timesheet Data & Export' },
   { id: 'quick-reference', title: 'Quick Reference by Role' },
   { id: 'need-help', title: 'Need Help?' },
@@ -175,9 +175,7 @@ function GuideContent() {
           <li><strong>Pending Approvals</strong> – Timesheets waiting for your approval (with count).</li>
           <li><strong>Approved Timesheets</strong> – Timesheets you or others have approved (supervisors can see timesheets they approved).</li>
           <li><strong>Manage Organization</strong> – Sites, departments, purchase orders (supervisors: view only).</li>
-          <li><strong>Manage Systems</strong> – System options for timesheet rows (supervisors: view only).</li>
-          <li><strong>Manage Activities</strong> – Activity options (supervisors: view only).</li>
-          <li><strong>Manage Deliverables</strong> – Deliverable options (supervisors: view only).</li>
+          <li><strong>Manage Timesheet Options</strong> – Systems, activities, deliverables (supervisors: view only).</li>
         </ul>
         <h4 className="text-sm font-semibold mt-3 mb-1">Managers, Admins, and Super Admins also see</h4>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
@@ -321,26 +319,18 @@ function GuideContent() {
 
       <section data-section="organization" className="scroll-mt-4">
         <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">
-          6. Organization, Systems, Activities, Deliverables
+          6. Organization & Timesheet Options
         </h3>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
-          These areas set up the options that appear on timesheets (sites, departments, POs, systems, activities, deliverables). What you see and whether you can change anything depends on your role.
+          These areas set up the options that appear on timesheets (sites, departments, POs, systems, activities, deliverables). <strong>Manage Organization</strong> has tabs for Sites, Departments, Purchase Orders. <strong>Manage Timesheet Options</strong> has tabs for Systems, Activities, Deliverables. What you see and whether you can change anything depends on your role.
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">6.1 Manage Organization (Sites, Departments, Purchase Orders)</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">
           <strong>Where:</strong> Dashboard → <strong>Manage Organization</strong>. <strong>Supervisors:</strong> View only (sites you are assigned to). <strong>Managers:</strong> Add, edit, delete sites; manage departments and POs for those sites. <strong>Admins / Super Admins:</strong> See and manage all sites, departments, and purchase orders.
         </p>
-        <h4 className="text-sm font-semibold mt-3 mb-1">6.2 Manage Systems</h4>
+        <h4 className="text-sm font-semibold mt-3 mb-1">6.2 Manage Timesheet Options</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">
-          <strong>Where:</strong> Dashboard → <strong>Manage Systems</strong>. Defines <strong>System</strong> options for timesheet rows. Supervisors: view only. Managers: full add/edit/delete/import for assigned sites. Admins/Super Admins: full access.
-        </p>
-        <h4 className="text-sm font-semibold mt-3 mb-1">6.3 Manage Activities</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">
-          <strong>Where:</strong> Dashboard → <strong>Manage Activities</strong>. Supervisors: view only. Managers and above: full access for their scope.
-        </p>
-        <h4 className="text-sm font-semibold mt-3 mb-1">6.4 Manage Deliverables</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">
-          <strong>Where:</strong> Dashboard → <strong>Manage Deliverables</strong>. Same role rules as above.
+          <strong>Where:</strong> Dashboard → <strong>Manage Timesheet Options</strong>. Single screen with tabs for <strong>Systems</strong>, <strong>Activities</strong>, and <strong>Deliverables</strong>. Defines options for timesheet rows. Supervisors: view only. Managers: full add/edit/delete/import for assigned sites. Admins/Super Admins: full access.
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">6.5 Departments and Purchase Orders</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -395,7 +385,7 @@ function GuideContent() {
               <tr><td className="border px-2 py-1">Delete user</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
               <tr><td className="border px-2 py-1">Password/invite link</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">Reports only</td><td className="border px-2 py-1">Any</td><td className="border px-2 py-1">Any</td></tr>
               <tr><td className="border px-2 py-1">Organization</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">View only</td><td className="border px-2 py-1">Edit (assigned)</td><td className="border px-2 py-1">Full</td><td className="border px-2 py-1">Full</td></tr>
-              <tr><td className="border px-2 py-1">Systems / Activities / Deliverables</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">View only</td><td className="border px-2 py-1">Edit (assigned)</td><td className="border px-2 py-1">Full</td><td className="border px-2 py-1">Full</td></tr>
+              <tr><td className="border px-2 py-1">Timesheet Options (Systems/Activities/Deliverables)</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">View only</td><td className="border px-2 py-1">Edit (assigned)</td><td className="border px-2 py-1">Full</td><td className="border px-2 py-1">Full</td></tr>
               <tr><td className="border px-2 py-1">View Timesheet Data</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
               <tr><td className="border px-2 py-1">Export Timesheets</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
             </tbody>

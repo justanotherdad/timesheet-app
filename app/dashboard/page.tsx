@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
-import { Calendar, FileText, Users, Settings, Building, Activity, Package, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { formatWeekEnding, getWeekEnding, formatDateForInput } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
@@ -207,7 +207,7 @@ export default async function DashboardPage() {
                 </div>
               </Link>
               <Link
-                href="/dashboard/admin/systems"
+                href="/dashboard/admin/timesheet-options"
                 className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
               >
                 <div className="flex items-center gap-3 sm:gap-4">
@@ -215,36 +215,8 @@ export default async function DashboardPage() {
                     <Activity className="h-6 w-6 text-orange-600 dark:text-orange-400" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Systems</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Add and edit system options</p>
-                  </div>
-                </div>
-              </Link>
-              <Link
-                href="/dashboard/admin/activities"
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="bg-pink-100 dark:bg-pink-900/30 p-3 rounded-lg">
-                    <Activity className="h-6 w-6 text-pink-600 dark:text-pink-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Activities</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Add and edit activity options</p>
-                  </div>
-                </div>
-              </Link>
-              <Link
-                href="/dashboard/admin/deliverables"
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="bg-indigo-100 dark:bg-indigo-900/30 p-3 rounded-lg">
-                    <Package className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Deliverables</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Add and edit deliverable options</p>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Timesheet Options</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Systems, activities, deliverables</p>
                   </div>
                 </div>
               </Link>

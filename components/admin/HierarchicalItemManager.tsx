@@ -43,6 +43,8 @@ interface HierarchicalItemManagerProps {
   title: string
   itemName: string
   readOnly?: boolean
+  /** When true, omit outer card and title (for use inside tabbed layout) */
+  embedded?: boolean
 }
 
 export default function HierarchicalItemManager({
@@ -51,6 +53,7 @@ export default function HierarchicalItemManager({
   title,
   itemName,
   readOnly = false,
+  embedded = false,
 }: HierarchicalItemManagerProps) {
   const [sites] = useState(initialSites)
   const [selectedSite, setSelectedSite] = useState<string>('')
@@ -819,9 +822,9 @@ export default function HierarchicalItemManager({
   }
 
 
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">{title}</h2>
+  const content = (
+    <>
+      {!embedded && <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">{title}</h2>}
 
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-4">
@@ -1499,6 +1502,10 @@ export default function HierarchicalItemManager({
           </div>
         </div>
       )}
-    </div>
+    </>
+  )
+
+  return embedded ? content : (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">{content}</div>
   )
 }
