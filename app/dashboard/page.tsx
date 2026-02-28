@@ -224,7 +224,7 @@ export default async function DashboardPage() {
               <>
               <Link
                 href="/dashboard/admin/data-view"
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
+                className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow min-h-[72px] sm:min-h-0"
               >
                 <div className="flex items-center gap-3 sm:gap-4">
                   <div className="bg-teal-100 dark:bg-teal-900/30 p-3 rounded-lg">
@@ -238,7 +238,7 @@ export default async function DashboardPage() {
               </Link>
               <Link
                 href="/dashboard/admin/export"
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
+                className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow min-h-[72px] sm:min-h-0"
               >
                 <div className="flex items-center gap-3 sm:gap-4">
                   <div className="bg-cyan-100 dark:bg-cyan-900/30 p-3 rounded-lg">
