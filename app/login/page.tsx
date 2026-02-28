@@ -1,15 +1,28 @@
 'use client'
 
-import Link from 'next/link'
+import { useState } from 'react'
 import LoginForm from '@/components/LoginForm'
 
 export default function LoginPage() {
+  const [logoError, setLogoError] = useState(false)
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2 text-center">
-          CTG Timesheet Management
-        </h1>
+        <div className="h-[4.5rem] flex items-center justify-center mb-2">
+          {logoError ? (
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 text-center">
+              CTG Timesheet Management
+            </h1>
+          ) : (
+            <img
+              src="/ctg-logo.png"
+              alt="CTG Timesheet Management"
+              className="max-h-full w-auto max-w-full object-contain"
+              onError={() => setLogoError(true)}
+            />
+          )}
+        </div>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 text-center">
           Sign In
         </p>
