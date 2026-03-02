@@ -61,15 +61,24 @@ export default function LoginForm() {
     setForgotPasswordSuccess(false)
 
     try {
+      const redirectTo = `${window.location.origin}/auth/callback?next=/auth/setup-password`
       const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/auth/setup-password`,
+        redirectTo,
       })
 
       if (error) throw error
 
       setForgotPasswordSuccess(true)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to send reset email')
+      let msg = 'Failed to send reset email'
+      if (err instanceof Error && err.message) {
+        msg = err.message
+      } else if (err && typeof err === 'object') {
+        const o = err as Record<string, unknown>
+        const extracted = (o.message || o.msg || o.error_description || (typeof o.error === 'string' ? o.error : null)) as string | undefined
+        msg = extracted && extracted !== '{}' ? extracted : 'Failed to send reset email. Check Supabase SMTP settings and Redirect URLs.'
+      }
+      setError(msg)
     } finally {
       setForgotPasswordLoading(false)
     }
