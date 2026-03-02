@@ -1,19 +1,27 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { startOfWeek, endOfWeek, format, parseISO } from "date-fns"
+import { toZonedTime } from "date-fns-tz"
+
+const APP_TIMEZONE = 'America/New_York' // EST/EDT
+
+/** Get current date in app timezone (EST) for week calculations */
+function getNowInAppTz(): Date {
+  return toZonedTime(new Date(), APP_TIMEZONE)
+}
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function getWeekEnding(date: Date = new Date(), weekStartsOn: number = 1): Date {
-  // weekStartsOn: 0=Sunday, 1=Monday, etc.
-  return endOfWeek(date, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })
+export function getWeekEnding(date?: Date, weekStartsOn: number = 1): Date {
+  const ref = date ?? getNowInAppTz()
+  return endOfWeek(ref, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })
 }
 
-export function getWeekStarting(date: Date = new Date(), weekStartsOn: number = 1): Date {
-  // weekStartsOn: 0=Sunday, 1=Monday, etc.
-  return startOfWeek(date, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })
+export function getWeekStarting(date?: Date, weekStartsOn: number = 1): Date {
+  const ref = date ?? getNowInAppTz()
+  return startOfWeek(ref, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })
 }
 
 export function getWeekDates(weekEnding: Date | string, weekStartsOn: number = 1): { start: Date; end: Date; days: Date[] } {

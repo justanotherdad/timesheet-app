@@ -360,6 +360,7 @@ export default async function EditTimesheetPage({
               userId={user.id}
               timesheetId={timesheet.id}
               timesheetStatus={timesheet.status}
+              rejectionReason={timesheet.rejection_reason ?? undefined}
               initialData={{
                 entries: entries || [],
                 unbillable: unbillable || [],

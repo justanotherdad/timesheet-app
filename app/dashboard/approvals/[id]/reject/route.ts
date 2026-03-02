@@ -42,9 +42,11 @@ export async function POST(
       return NextResponse.json({ error: 'Timesheet must be submitted or approved to reject' }, { status: 400 })
     }
 
-    // Get rejection reason from form data if available
+    // Get rejection reason from form data and prepend rejector name
     const formData = await request.formData()
-    const rejectionReason = formData.get('reason') as string || 'Rejected by approver'
+    const note = (formData.get('reason') as string)?.trim() || 'No note provided'
+    const rejectorName = (user.profile as { name?: string }).name || 'Approver'
+    const rejectionReason = `Rejected by ${rejectorName}: ${note}`
 
     // When rejecting an approved timesheet, delete signatures so the workflow resets
     if (timesheet.status === 'approved') {

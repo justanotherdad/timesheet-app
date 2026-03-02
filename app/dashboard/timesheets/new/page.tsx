@@ -33,11 +33,17 @@ export default async function NewTimesheetPage() {
   )
 
   const existing = existingTimesheetResult.data
-  // Effective week for the form: current week by default; if current week is already submitted, use next week so user gets a "new" form
+  // Effective week for the form: previous week by default (no existing); if current week exists and is submitted, use next week
   let effectiveWeekEnding = new Date(weekEnding)
   let effectiveWeekEndingStr = weekEndingStr
 
-  if (existing?.id) {
+  if (!existing?.id) {
+    // No timesheet for current week — default to previous week
+    const prevWeekEnding = new Date(weekEnding)
+    prevWeekEnding.setDate(prevWeekEnding.getDate() - 7)
+    effectiveWeekEnding = prevWeekEnding
+    effectiveWeekEndingStr = formatDateForInput(prevWeekEnding)
+  } else if (existing?.id) {
     if (existing.status === 'draft') {
       redirect(`/dashboard/timesheets/${existing.id}/edit`)
     }

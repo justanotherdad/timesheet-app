@@ -23,6 +23,7 @@ interface WeeklyTimesheetFormProps {
   userId: string
   timesheetId?: string
   timesheetStatus?: string
+  rejectionReason?: string
   previousWeekData?: {
     entries?: Array<{
       client_project_id?: string
@@ -126,6 +127,7 @@ export default function WeeklyTimesheetForm({
   userId,
   timesheetId,
   timesheetStatus = 'draft',
+  rejectionReason,
   initialData,
   previousWeekData,
 }: WeeklyTimesheetFormProps) {
@@ -533,6 +535,13 @@ export default function WeeklyTimesheetForm({
           </div>
         )}
 
+        {rejectionReason && currentStatus === 'rejected' && (
+          <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+            <p className="text-sm font-semibold text-red-800 dark:text-red-300 mb-1">Rejection Note</p>
+            <p className="text-red-700 dark:text-red-300">{rejectionReason}</p>
+          </div>
+        )}
+
         {/* Week Information */}
         <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg">
           <div className="mb-3 flex justify-between items-center">
@@ -606,14 +615,32 @@ export default function WeeklyTimesheetForm({
                   onClick={() => {
                     if (previousWeekData.entries) {
                       setBillableEntries(previousWeekData.entries.map((e: any) => ({
-                        ...e,
-                        id: undefined, // Remove ID so it's treated as new entry
+                        client_project_id: e.client_project_id,
+                        po_id: e.po_id,
+                        task_description: e.task_description,
+                        system_id: e.system_id,
+                        system_name: e.system_name,
+                        deliverable_id: e.deliverable_id,
+                        activity_id: e.activity_id,
+                        mon_hours: e.mon_hours,
+                        tue_hours: e.tue_hours,
+                        wed_hours: e.wed_hours,
+                        thu_hours: e.thu_hours,
+                        fri_hours: e.fri_hours,
+                        sat_hours: e.sat_hours,
+                        sun_hours: e.sun_hours,
                       })))
                     }
                     if (previousWeekData.unbillable) {
                       setUnbillableEntries(previousWeekData.unbillable.map((e: any) => ({
-                        ...e,
-                        id: undefined, // Remove ID so it's treated as new entry
+                        description: e.description,
+                        mon_hours: e.mon_hours,
+                        tue_hours: e.tue_hours,
+                        wed_hours: e.wed_hours,
+                        thu_hours: e.thu_hours,
+                        fri_hours: e.fri_hours,
+                        sat_hours: e.sat_hours,
+                        sun_hours: e.sun_hours,
                       })))
                     }
                     setShowCopyModal(false)
@@ -806,14 +833,14 @@ export default function WeeklyTimesheetForm({
           >
             {loading ? 'Saving...' : timesheetId ? 'Save Draft' : 'Save Timesheet'}
           </button>
-          {currentStatus === 'draft' && (
+          {(currentStatus === 'draft' || currentStatus === 'rejected') && (
             <button
               type="button"
               onClick={handleSubmit}
               disabled={loading}
               className="min-h-[44px] sm:min-h-0 bg-green-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Submitting...' : 'Submit for Approval'}
+              {loading ? 'Submitting...' : currentStatus === 'rejected' ? 'Resubmit for Approval' : 'Submit for Approval'}
             </button>
           )}
           {timesheetId && (

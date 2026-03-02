@@ -204,7 +204,7 @@ export default async function TimesheetDetailPage({
                 <p className="text-gray-600 dark:text-gray-300 mt-1">
                   Week Ending: {formatWeekEnding(timesheet.week_ending)}
                 </p>
-                <p className="text-gray-600 dark:text-gray-300">
+                <p className="text-xl text-gray-600 dark:text-gray-300">
                   Employee: {timesheet.user_profiles.name}
                 </p>
               </div>
