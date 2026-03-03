@@ -67,7 +67,30 @@ export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<b
       signer_name: signerName,
     })
 
-  if (signatureError) return false
+  if (signatureError) {
+    if (signatureError.code === '23505' || signatureError.message?.includes('duplicate key')) {
+      // Signature already exists (e.g. from parallel auto-approve or manual approve) - ensure status is updated
+      const { data: current } = await adminSupabase
+        .from('weekly_timesheets')
+        .select('status')
+        .eq('id', timesheetId)
+        .single()
+      if (current?.status === 'submitted') {
+        const { error: updateError } = await adminSupabase
+          .from('weekly_timesheets')
+          .update({
+            status: 'approved',
+            approved_by_id: userId,
+            approved_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', timesheetId)
+        return !updateError
+      }
+      return true
+    }
+    return false
+  }
 
   const { error: updateError } = await adminSupabase
     .from('weekly_timesheets')

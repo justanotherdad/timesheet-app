@@ -2,11 +2,21 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
+function getSafeReturnTo(request: Request, formData: FormData): string {
+  const returnTo = formData.get('returnTo') as string | null
+  return returnTo &&
+    returnTo.startsWith('/dashboard/approvals') &&
+    !returnTo.includes('//')
+    ? returnTo
+    : '/dashboard/approvals'
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const formData = await request.formData()
     const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
     const adminSupabase = createAdminClient()
     const { id } = await params
@@ -40,6 +50,11 @@ export async function POST(
       .select('signer_id, signer_role')
       .eq('timesheet_id', id)
     const signedIds = (existingSignatures || []).map((s: { signer_id: string }) => s.signer_id)
+
+    // If user has already signed, treat as success (idempotent - e.g. double-click or stale UI)
+    if (signedIds.includes(user.id)) {
+      return NextResponse.redirect(new URL(getSafeReturnTo(request, formData), request.url))
+    }
 
     // Next approver is first in chain who hasn't signed; admins can always approve (treated as final)
     const nextApproverId = chain.find((uid) => !signedIds.includes(uid))
@@ -75,6 +90,10 @@ export async function POST(
       })
 
     if (signatureError) {
+      if (signatureError.code === '23505' || signatureError.message?.includes('duplicate key')) {
+        // Already signed (e.g. auto-approve ran, or double-click) - redirect as success
+        return NextResponse.redirect(new URL(getSafeReturnTo(request, formData), request.url))
+      }
       return NextResponse.json({ error: signatureError.message }, { status: 500 })
     }
 
@@ -98,15 +117,7 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    const formData = await request.formData()
-    const returnTo = formData.get('returnTo') as string | null
-    const safeReturnTo =
-      returnTo &&
-      returnTo.startsWith('/dashboard/approvals') &&
-      !returnTo.includes('//')
-        ? returnTo
-        : '/dashboard/approvals'
-    return NextResponse.redirect(new URL(safeReturnTo, request.url))
+    return NextResponse.redirect(new URL(getSafeReturnTo(request, formData), request.url))
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
