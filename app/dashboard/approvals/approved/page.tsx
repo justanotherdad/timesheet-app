@@ -1,5 +1,6 @@
 import { requireRole } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 import ApprovedTimesheetsClient from './ApprovedTimesheetsClient'
@@ -106,6 +107,23 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
       timesheets.push(ts)
     }
   })
+
+  // Auto-approve submitted timesheets where employee has no approvers (final approver with no one above)
+  const submittedInList = timesheets.filter((ts: any) => ts.status === 'submitted')
+  if (submittedInList.length > 0) {
+    const autoApproved = await Promise.all(
+      submittedInList.map((ts: any) => checkAndAutoApproveIfFinal(ts.id))
+    )
+    if (autoApproved.some(Boolean)) {
+      const ids = timesheets.map((t: any) => t.id)
+      const { data: refetched } = await adminSupabase
+        .from('weekly_timesheets')
+        .select('*, user_profiles!user_id(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)')
+        .in('id', ids)
+      const refetchedMap = new Map((refetched || []).map((ts: any) => [ts.id, ts]))
+      timesheets = timesheets.map((ts: any) => refetchedMap.get(ts.id) || ts)
+    }
+  }
 
   // Fetch signatures for With/With (person) columns
   let signaturesByTimesheetId: Record<string, string[]> = {}
