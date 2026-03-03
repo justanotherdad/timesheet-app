@@ -82,12 +82,12 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
   const timesheets = (timesheetsResult.data || []) as any[]
 
   // Auto-approve any submitted timesheets where employee has no approvers (final approver with no one above)
+  // Run for all users so final approvers viewing their own timesheets get auto-approved on page load
   let timesheetsForDisplay = timesheets
-  if (['admin', 'super_admin'].includes(user.profile.role)) {
+  const submittedIds = timesheets.filter((ts: any) => ts.status === 'submitted').map((ts: any) => ts.id)
+  if (submittedIds.length > 0) {
     const autoApproved = await Promise.all(
-      timesheets
-        .filter((ts: any) => ts.status === 'submitted')
-        .map((ts: any) => checkAndAutoApproveIfFinal(ts.id))
+      submittedIds.map((id: string) => checkAndAutoApproveIfFinal(id))
     )
     if (autoApproved.some(Boolean)) {
       const ids = timesheets.map((t: any) => t.id)

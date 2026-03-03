@@ -78,7 +78,7 @@ The application will be available at [http://localhost:3000](http://localhost:30
 
 ### New Weekly Timesheet Structure
 
-- **weekly_timesheets** - One timesheet per week per user (contains status, signatures, etc.)
+- **weekly_timesheets** - Multiple timesheets per week per user allowed (contains status, signatures, etc.)
 - **timesheet_entries** - Multiple billable entries per timesheet with:
   - Client/Project (references sites)
   - PO# (references purchase_orders)

@@ -22,17 +22,20 @@ export default async function NewTimesheetPage() {
   const weekEnding = getWeekEnding()
   const weekEndingStr = formatDateForInput(weekEnding)
 
-  // Check if a timesheet already exists for this week
-  const existingTimesheetResult = await withQueryTimeout<{ id: string; status: string }>(() =>
+  // Check for timesheets this week (may have multiple - use most recent for redirect logic)
+  const existingTimesheetResult = await withQueryTimeout<{ id: string; status: string }[]>(() =>
     supabase
       .from('weekly_timesheets')
       .select('id, status')
       .eq('user_id', user.id)
       .eq('week_ending', weekEndingStr)
-      .single()
+      .order('created_at', { ascending: false })
+      .limit(1)
   )
 
-  const existing = existingTimesheetResult.data
+  const existing = Array.isArray(existingTimesheetResult.data) && existingTimesheetResult.data.length > 0
+    ? existingTimesheetResult.data[0]
+    : null
   // Effective week for the form: previous week by default (no existing); if current week exists and is submitted, use next week
   let effectiveWeekEnding = new Date(weekEnding)
   let effectiveWeekEndingStr = weekEndingStr
@@ -44,31 +47,35 @@ export default async function NewTimesheetPage() {
     effectiveWeekEnding = prevWeekEnding
     effectiveWeekEndingStr = formatDateForInput(prevWeekEnding)
   } else if (existing?.id) {
+    // Allow multiple timesheets per week
     if (existing.status === 'draft') {
-      redirect(`/dashboard/timesheets/${existing.id}/edit`)
-    }
-    // Current week is submitted/approved/rejected — show new timesheet form for next week instead of redirecting to view
-    const nextWeekEnding = new Date(weekEnding)
-    nextWeekEnding.setDate(nextWeekEnding.getDate() + 7)
-    const nextWeekEndingStr = formatDateForInput(nextWeekEnding)
+      // Has draft(s) — show form for current week so user can create another
+      effectiveWeekEnding = weekEnding
+      effectiveWeekEndingStr = weekEndingStr
+    } else {
+      // Current week submitted/approved/rejected — default to next week
+      const nextWeekEnding = new Date(weekEnding)
+      nextWeekEnding.setDate(nextWeekEnding.getDate() + 7)
+      const nextWeekEndingStr = formatDateForInput(nextWeekEnding)
 
-    const nextExistingResult = await withQueryTimeout<{ id: string; status: string }>(() =>
-      supabase
-        .from('weekly_timesheets')
-        .select('id, status')
-        .eq('user_id', user.id)
-        .eq('week_ending', nextWeekEndingStr)
-        .maybeSingle()
-    )
-    const nextExisting = nextExistingResult.data
-    if (nextExisting?.id) {
-      if (nextExisting.status === 'draft') {
-        redirect(`/dashboard/timesheets/${nextExisting.id}/edit`)
+      const nextExistingResult = await withQueryTimeout<{ id: string; status: string }[]>(() =>
+        supabase
+          .from('weekly_timesheets')
+          .select('id, status')
+          .eq('user_id', user.id)
+          .eq('week_ending', nextWeekEndingStr)
+          .order('created_at', { ascending: false })
+          .limit(1)
+      )
+      const nextExisting = Array.isArray(nextExistingResult.data) && nextExistingResult.data.length > 0
+        ? nextExistingResult.data[0]
+        : null
+      if (nextExisting?.id && nextExisting.status !== 'draft') {
+        redirect(`/dashboard/timesheets/${nextExisting.id}`)
       }
-      redirect(`/dashboard/timesheets/${nextExisting.id}`)
+      effectiveWeekEnding = nextWeekEnding
+      effectiveWeekEndingStr = nextWeekEndingStr
     }
-    effectiveWeekEnding = nextWeekEnding
-    effectiveWeekEndingStr = nextWeekEndingStr
   }
 
   // Get user's assigned sites, POs, and departments (unless admin)

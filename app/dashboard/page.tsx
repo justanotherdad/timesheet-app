@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import Link from 'next/link'
 import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { formatWeekEnding, getWeekEnding, formatDateForInput } from '@/lib/utils'
@@ -34,7 +35,20 @@ export default async function DashboardPage() {
       .maybeSingle()
   )
 
-  const timesheet = timesheetResult.data as any
+  let timesheet = timesheetResult.data as any
+
+  // Auto-approve current week timesheet if user is final approver with no one above
+  if (timesheet?.status === 'submitted') {
+    const didApprove = await checkAndAutoApproveIfFinal(timesheet.id)
+    if (didApprove) {
+      const { data: refetched } = await supabase
+        .from('weekly_timesheets')
+        .select('*')
+        .eq('id', timesheet.id)
+        .single()
+      timesheet = refetched || timesheet
+    }
+  }
 
   // Get pending approvals: include employees who have this user as reports_to, supervisor, manager, or final approver
   // Use admin client so RLS does not block managers/supervisors from reading their reports' timesheets
@@ -89,7 +103,7 @@ export default async function DashboardPage() {
         const signedIds = signedByTimesheet[ts.id] || new Set<string>()
         const nextId = chain.find((uid) => !signedIds.has(uid))
         return nextId === user.id
-      }).slice(0, 10)
+      }).slice(0, 5)
     }
   }
 
@@ -114,7 +128,7 @@ export default async function DashboardPage() {
           .eq('status', 'approved')
           .order('approved_at', { ascending: false })
       )
-      approvedTimesheets = (Array.isArray(approvedResult.data) ? approvedResult.data : []).slice(0, 10)
+      approvedTimesheets = (Array.isArray(approvedResult.data) ? approvedResult.data : []).slice(0, 5)
     }
   }
 

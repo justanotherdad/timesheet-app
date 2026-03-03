@@ -301,81 +301,32 @@ export default function WeeklyTimesheetForm({
         await supabase.from('timesheet_entries').delete().eq('timesheet_id', currentTimesheetId)
         await supabase.from('timesheet_unbillable').delete().eq('timesheet_id', currentTimesheetId)
       } else {
-        // Check if timesheet already exists for this week
-        const { data: existingTimesheet } = await supabase
+        // Always create a new timesheet (allow multiple per week per user)
+        const insertData: any = {
+          user_id: userId,
+          week_ending: weekEnding,
+          week_starting: formatDateForInput(weekDates.start),
+          status: newStatus,
+        }
+
+        if (shouldSubmit) {
+          insertData.submitted_at = new Date().toISOString()
+          insertData.employee_signed_at = new Date().toISOString()
+        }
+
+        const { data: newTimesheet, error: createError } = await supabase
           .from('weekly_timesheets')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('week_ending', weekEnding)
+          .insert(insertData)
+          .select()
           .single()
 
-        if (existingTimesheet) {
-          currentTimesheetId = existingTimesheet.id
-          const updateData: any = {
-            week_ending: weekEnding,
-            week_starting: formatDateForInput(weekDates.start),
-            updated_at: new Date().toISOString(),
-            status: newStatus,
-          }
-
-          if (shouldSubmit) {
-            updateData.submitted_at = new Date().toISOString()
-            updateData.employee_signed_at = new Date().toISOString()
-          }
-
-          const { error: updateError } = await supabase
-            .from('weekly_timesheets')
-            .update(updateData)
-            .eq('id', currentTimesheetId)
-
-          if (updateError) throw updateError
-
-          await supabase.from('timesheet_entries').delete().eq('timesheet_id', currentTimesheetId)
-          await supabase.from('timesheet_unbillable').delete().eq('timesheet_id', currentTimesheetId)
-        } else {
-          const insertData: any = {
-            user_id: userId,
-            week_ending: weekEnding,
-            week_starting: formatDateForInput(weekDates.start),
-            status: newStatus,
-          }
-
-          if (shouldSubmit) {
-            insertData.submitted_at = new Date().toISOString()
-            insertData.employee_signed_at = new Date().toISOString()
-          }
-
-          const { data: newTimesheet, error: createError } = await supabase
-            .from('weekly_timesheets')
-            .insert(insertData)
-            .select()
-            .single()
-
-          if (createError) {
-            if (createError.code === '23505' || createError.message.includes('duplicate key')) {
-              const { data: existing } = await supabase
-                .from('weekly_timesheets')
-                .select('id')
-                .eq('user_id', userId)
-                .eq('week_ending', weekEnding)
-                .single()
-              
-              if (existing) {
-                currentTimesheetId = existing.id
-                await supabase.from('timesheet_entries').delete().eq('timesheet_id', currentTimesheetId)
-                await supabase.from('timesheet_unbillable').delete().eq('timesheet_id', currentTimesheetId)
-              } else {
-                throw createError
-              }
-            } else {
-              throw createError
-            }
-          } else if (!newTimesheet) {
-            throw new Error('Failed to create timesheet')
-          } else {
-            currentTimesheetId = newTimesheet.id
-          }
+        if (createError) {
+          throw createError
         }
+        if (!newTimesheet) {
+          throw new Error('Failed to create timesheet')
+        }
+        currentTimesheetId = newTimesheet.id
       }
 
       // Insert billable entries
