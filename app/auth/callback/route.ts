@@ -102,7 +102,32 @@ export async function GET(request: Request) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  // If no code or token, redirect to setup password page (it will handle the error)
-  console.log('No code or token found in callback URL')
-  return NextResponse.redirect(new URL('/auth/setup-password?error=No authentication token found', request.url))
+  // No code or token in query - tokens may be in URL hash (Supabase password reset)
+  // Return HTML that runs client-side to preserve hash and forward to setup-password
+  const baseUrl = new URL(request.url).origin
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Redirecting - CTG Timesheet</title>
+</head>
+<body>
+  <p>Redirecting...</p>
+  <script>
+    (function() {
+      var hash = window.location.hash;
+      var next = new URLSearchParams(window.location.search).get('next') || '/auth/setup-password';
+      if (hash && (hash.indexOf('access_token=') !== -1 || hash.indexOf('code=') !== -1)) {
+        window.location.replace(next + hash);
+      } else {
+        window.location.replace(next + '?error=' + encodeURIComponent('No authentication token found'));
+      }
+    })();
+  </script>
+</body>
+</html>`
+  return new NextResponse(html, {
+    headers: { 'Content-Type': 'text/html' },
+  })
 }

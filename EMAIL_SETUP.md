@@ -45,8 +45,8 @@ This app uses **Supabase Auth** for forgot-password and invite emails. Supabase 
 2. Under **Redirect URLs**, add (one per line):
    - `https://ctgtimesheet.com/auth/callback`
    - `https://ctgtimesheet.com/auth/callback?next=/auth/setup-password`
-   - `https://ctgtimesheet.com/auth/setup-password` (forgot password – direct link)
-   - `http://localhost:3000/auth/setup-password` (for local testing)
+   - `https://ctgtimesheet.com/auth/setup-password`
+   - `http://localhost:3000/auth/callback?next=/auth/setup-password` (for local testing)
 3. Set **Site URL** to `https://ctgtimesheet.com`
 4. Click **Save**
 

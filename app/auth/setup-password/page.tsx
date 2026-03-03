@@ -81,21 +81,28 @@ export default function SetupPasswordPage() {
     }
   }, [supabase])
 
-  const handleTokenVerification = useCallback(async (token: string) => {
-    try {
-      // Verify the token (for recovery/invite tokens)
+  const handleTokenVerification = useCallback(async (token: string, otpType: 'recovery' | 'invite' = 'invite') => {
+    const tryVerify = async (type: 'recovery' | 'invite') => {
       const { data, error } = await supabase.auth.verifyOtp({
         token_hash: token,
-        type: 'invite',
+        type,
       })
-
       if (error) throw error
-
       setVerifying(false)
+    }
+    try {
+      await tryVerify(otpType)
     } catch (err: any) {
       console.error('Token verification error:', err)
-      // Try to check if user is already logged in
-      await checkSession()
+      if (otpType === 'invite') {
+        try {
+          await tryVerify('recovery')
+        } catch {
+          await checkSession()
+        }
+      } else {
+        await checkSession()
+      }
     }
   }, [supabase, checkSession])
 
@@ -222,8 +229,9 @@ export default function SetupPasswordPage() {
       // OAuth code flow
       handleCodeExchange(code)
     } else if (token || tokenHash) {
-      // Token is in query params, verify it
-      handleTokenVerification(token || tokenHash || '')
+      const typeParam = searchParams.get('type')
+      const otpType = typeParam === 'recovery' ? 'recovery' : 'invite'
+      handleTokenVerification(token || tokenHash || '', otpType)
     } else {
       // No token found, check if user is already logged in
       // This happens when redirected from callback route

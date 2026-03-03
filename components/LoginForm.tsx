@@ -61,7 +61,7 @@ export default function LoginForm() {
     setForgotPasswordSuccess(false)
 
     try {
-      const redirectTo = `${window.location.origin}/auth/setup-password`
+      const redirectTo = `${window.location.origin}/auth/callback?next=/auth/setup-password`
       const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail, {
         redirectTo,
       })
