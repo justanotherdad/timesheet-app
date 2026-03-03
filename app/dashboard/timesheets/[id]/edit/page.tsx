@@ -345,6 +345,16 @@ export default async function EditTimesheetPage({
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Edit Weekly Timesheet" showBack backUrl={`/dashboard/timesheets/${id}`} user={user} />
       <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
+        {timesheet.status === 'rejected' && (
+          <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+            <a
+              href={`/dashboard/timesheets/new?week=${formatDateForInput(new Date(timesheet.week_ending))}`}
+              className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+            >
+              Start fresh? Create a new timesheet for this week instead of editing →
+            </a>
+          </div>
+        )}
         <div className="max-w-7xl mx-auto overflow-hidden">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
             <WeeklyTimesheetForm

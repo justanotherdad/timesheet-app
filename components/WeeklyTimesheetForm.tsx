@@ -489,7 +489,13 @@ export default function WeeklyTimesheetForm({
         {rejectionReason && currentStatus === 'rejected' && (
           <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
             <p className="text-sm font-semibold text-red-800 dark:text-red-300 mb-1">Rejection Note</p>
-            <p className="text-red-700 dark:text-red-300">{rejectionReason}</p>
+            <p className="text-red-700 dark:text-red-300 mb-3">{rejectionReason}</p>
+            <a
+              href={`/dashboard/timesheets/new?week=${weekEnding}`}
+              className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+            >
+              Create new timesheet (start fresh) →
+            </a>
           </div>
         )}
 

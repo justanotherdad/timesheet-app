@@ -10,7 +10,9 @@ import Header from '@/components/Header'
 export const maxDuration = 10 // Maximum duration for this route in seconds
 export const dynamic = 'force-dynamic'
 
-export default async function NewTimesheetPage() {
+type SearchParams = { week?: string }
+
+export default async function NewTimesheetPage(props: { searchParams?: Promise<SearchParams> }) {
   const user = await getCurrentUser()
   
   if (!user) {
@@ -18,9 +20,14 @@ export default async function NewTimesheetPage() {
   }
 
   const supabase = await createClient()
+  const params = props.searchParams ? await props.searchParams : {}
+  const weekParam = params.week
 
   const weekEnding = getWeekEnding()
   const weekEndingStr = formatDateForInput(weekEnding)
+
+  // If ?week=YYYY-MM-DD is provided (e.g. from "Create new timesheet" on rejected edit page), use it
+  const useWeekFromParam = weekParam && /^\d{4}-\d{2}-\d{2}$/.test(weekParam)
 
   // Check for timesheets this week (may have multiple - use most recent for redirect logic)
   const existingTimesheetResult = await withQueryTimeout<{ id: string; status: string }[]>(() =>
@@ -37,10 +44,14 @@ export default async function NewTimesheetPage() {
     ? existingTimesheetResult.data[0]
     : null
   // Effective week for the form: previous week by default (no existing); if current week exists and is submitted, use next week
+  // When ?week= is provided (e.g. "Create new" from rejected edit), use that week
   let effectiveWeekEnding = new Date(weekEnding)
   let effectiveWeekEndingStr = weekEndingStr
 
-  if (!existing?.id) {
+  if (useWeekFromParam) {
+    effectiveWeekEndingStr = weekParam!
+    effectiveWeekEnding = new Date(weekParam!)
+  } else if (!existing?.id) {
     // No timesheet for current week — default to previous week
     const prevWeekEnding = new Date(weekEnding)
     prevWeekEnding.setDate(prevWeekEnding.getDate() - 7)
