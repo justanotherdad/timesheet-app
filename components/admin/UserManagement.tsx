@@ -388,6 +388,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
       } else {
         const formData = new FormData(e.currentTarget)
         const name = formData.get('name') as string
+        const email = formData.get('email') as string
         const role = formData.get('role') as UserRole
         const supervisorId = formData.get('supervisor_id') as string || null
         const managerId = formData.get('manager_id') as string || null
@@ -395,6 +396,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
 
         const profileResult = await updateUserProfile(editingUser.id, {
           name,
+          email: email?.trim() || undefined,
           role: canChangeRole(editingUser) ? role : editingUser.role,
           supervisor_id: supervisorId || null,
           manager_id: managerId || null,
@@ -417,6 +419,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
               ? {
                   ...u,
                   name,
+                  email: email?.trim() || u.email,
                   role: canChangeRole(editingUser) ? role : editingUser.role,
                   supervisor_id: supervisorId || undefined,
                   manager_id: managerId || undefined,
@@ -1002,6 +1005,16 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                       type="text"
                       name="name"
                       defaultValue={editingUser.name}
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+                    <input
+                      type="email"
+                      name="email"
+                      defaultValue={editingUser.email}
                       required
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                     />
