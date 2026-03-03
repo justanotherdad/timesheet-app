@@ -331,7 +331,7 @@ export default function SetupPasswordPage() {
           Create a password for your account
         </p>
 
-        {error && (
+        {error ? (
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 px-4 py-3 rounded mb-4">
             <p className="font-medium mb-2">
               {error.includes('PKCE') || error.includes('code verifier')
@@ -350,8 +350,7 @@ export default function SetupPasswordPage() {
               Request new link
             </Link>
           </div>
-        )}
-
+        ) : (
         <form onSubmit={handlePasswordSetup} className="space-y-4">
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -415,12 +414,15 @@ export default function SetupPasswordPage() {
             {loading ? 'Setting password...' : 'Set Password'}
           </button>
         </form>
+        )}
 
+        {!error && (
         <div className="mt-6 text-center">
           <Link href="/login" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm">
             Already have a password? Sign in
           </Link>
         </div>
+        )}
       </div>
     </div>
   )
