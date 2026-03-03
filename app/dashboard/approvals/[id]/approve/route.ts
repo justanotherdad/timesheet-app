@@ -98,7 +98,15 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    return NextResponse.redirect(new URL('/dashboard/approvals', request.url))
+    const formData = await request.formData()
+    const returnTo = formData.get('returnTo') as string | null
+    const safeReturnTo =
+      returnTo &&
+      returnTo.startsWith('/dashboard/approvals') &&
+      !returnTo.includes('//')
+        ? returnTo
+        : '/dashboard/approvals'
+    return NextResponse.redirect(new URL(safeReturnTo, request.url))
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

@@ -180,6 +180,7 @@ export default function PendingApprovalsClient({
                     <td className="px-3 lg:px-6 py-3 text-sm font-medium">
                       <div className="flex flex-wrap gap-2">
                         <form action={`/dashboard/approvals/${ts.id}/approve`} method="post" className="inline">
+                          <input type="hidden" name="returnTo" value={`/dashboard/approvals${searchParams.toString() ? '?' + searchParams.toString() : ''}`} />
                           <button
                             type="submit"
                             className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
@@ -200,7 +201,7 @@ export default function PendingApprovalsClient({
                           Export
                         </Link>
                         <Link
-                          href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard/approvals')}`}
+                          href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard/approvals' + (searchParams.toString() ? '?' + searchParams.toString() : ''))}`}
                           className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
                         >
                           View
@@ -273,6 +274,7 @@ export default function PendingApprovalsClient({
               </div>
               <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2">
                 <form action={`/dashboard/approvals/${selectedTimesheet.id}/approve`} method="post" className="inline">
+                  <input type="hidden" name="returnTo" value={`/dashboard/approvals${searchParams.toString() ? '?' + searchParams.toString() : ''}`} />
                   <button
                     type="submit"
                     className="px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700"
@@ -293,7 +295,7 @@ export default function PendingApprovalsClient({
                   Export
                 </Link>
                 <Link
-                  href={`/dashboard/timesheets/${selectedTimesheet.id}?returnTo=${encodeURIComponent('/dashboard/approvals')}`}
+                  href={`/dashboard/timesheets/${selectedTimesheet.id}?returnTo=${encodeURIComponent('/dashboard/approvals' + (searchParams.toString() ? '?' + searchParams.toString() : ''))}`}
                   className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700"
                 >
                   View
