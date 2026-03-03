@@ -45,7 +45,8 @@ This app uses **Supabase Auth** for forgot-password and invite emails. Supabase 
 2. Under **Redirect URLs**, add (one per line):
    - `https://ctgtimesheet.com/auth/callback`
    - `https://ctgtimesheet.com/auth/callback?next=/auth/setup-password`
-   - `http://localhost:3000/auth/callback` (for local testing)
+   - `https://ctgtimesheet.com/auth/setup-password` (forgot password – direct link)
+   - `http://localhost:3000/auth/setup-password` (for local testing)
 3. Set **Site URL** to `https://ctgtimesheet.com`
 4. Click **Save**
 
@@ -72,6 +73,7 @@ This app uses **Supabase Auth** for forgot-password and invite emails. Supabase 
 | "Failed to send" | SMTP misconfigured. Verify Resend API key, port (465/587), and sender domain is verified. |
 | Email not received | Check spam; verify domain in Resend; check Resend delivery logs. |
 | "User not found" | The email must exist in Supabase Auth. Forgot password only works for users who have already been invited/signed up. |
+| "We couldn't verify your link" / can't log in after setting password | Redirect URL was wrong. Forgot password now uses `/auth/setup-password` directly. Add it to Supabase Redirect URLs and request a new reset link. |
 
 ## No Code Changes Needed
 
