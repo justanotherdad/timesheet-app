@@ -559,7 +559,7 @@ export default function WeeklyTimesheetForm({
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
               />
             </div>
-            {previousWeekData && ((previousWeekData.entries?.length ?? 0) > 0 || (previousWeekData.unbillable?.length ?? 0) > 0) && (
+            {previousWeekData && (previousWeekData.entries?.length ?? 0) > 0 && (
               <div className="ml-4">
                 <button
                   type="button"
@@ -600,7 +600,7 @@ export default function WeeklyTimesheetForm({
                 </button>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                This will copy all billable and unbillable entries from the previous week. You can edit them after copying.
+                This will copy the structure (client, PO, task description, system, deliverable, activity) from the previous week&apos;s billable entries. Hours will start at zero for you to fill in.
               </p>
               <div className="flex gap-2 justify-end">
                 <button
@@ -622,25 +622,13 @@ export default function WeeklyTimesheetForm({
                         system_name: e.system_name,
                         deliverable_id: e.deliverable_id,
                         activity_id: e.activity_id,
-                        mon_hours: e.mon_hours,
-                        tue_hours: e.tue_hours,
-                        wed_hours: e.wed_hours,
-                        thu_hours: e.thu_hours,
-                        fri_hours: e.fri_hours,
-                        sat_hours: e.sat_hours,
-                        sun_hours: e.sun_hours,
-                      })))
-                    }
-                    if (previousWeekData.unbillable) {
-                      setUnbillableEntries(previousWeekData.unbillable.map((e: any) => ({
-                        description: e.description,
-                        mon_hours: e.mon_hours,
-                        tue_hours: e.tue_hours,
-                        wed_hours: e.wed_hours,
-                        thu_hours: e.thu_hours,
-                        fri_hours: e.fri_hours,
-                        sat_hours: e.sat_hours,
-                        sun_hours: e.sun_hours,
+                        mon_hours: 0,
+                        tue_hours: 0,
+                        wed_hours: 0,
+                        thu_hours: 0,
+                        fri_hours: 0,
+                        sat_hours: 0,
+                        sun_hours: 0,
                       })))
                     }
                     setShowCopyModal(false)

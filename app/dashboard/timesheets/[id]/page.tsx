@@ -267,6 +267,17 @@ export default async function TimesheetDetailPage({
                           </td>
                         </tr>
                       ))}
+                      <tr className="bg-yellow-50 dark:bg-yellow-900/30 font-semibold">
+                        <td colSpan={6} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">Sub Totals</td>
+                        {days.map((day) => (
+                          <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
+                            {(entries?.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0) || 0).toFixed(2)}
+                          </td>
+                        ))}
+                        <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-right font-medium text-gray-900 dark:text-gray-100">
+                          {billableTotal.toFixed(2)}
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
