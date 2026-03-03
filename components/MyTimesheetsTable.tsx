@@ -262,7 +262,7 @@ export default function MyTimesheetsTable({
                       Export
                     </Link>
                     <Link
-                      href={`/dashboard/timesheets/${ts.id}`}
+                      href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard/timesheets' + (searchParams.toString() ? '?' + searchParams.toString() : ''))}`}
                       className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
                     >
                       View

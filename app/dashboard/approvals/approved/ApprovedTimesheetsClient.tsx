@@ -323,7 +323,7 @@ export default function ApprovedTimesheetsClient({
                             Export
                           </Link>
                           <Link
-                            href={`/dashboard/timesheets/${ts.id}`}
+                            href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard/approvals/approved' + (searchParams.toString() ? '?' + searchParams.toString() : ''))}`}
                             className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
                           >
                             View
@@ -418,7 +418,7 @@ export default function ApprovedTimesheetsClient({
                   Export
                 </Link>
                 <Link
-                  href={`/dashboard/timesheets/${selectedTimesheet.id}`}
+                  href={`/dashboard/timesheets/${selectedTimesheet.id}?returnTo=${encodeURIComponent('/dashboard/approvals/approved' + (searchParams.toString() ? '?' + searchParams.toString() : ''))}`}
                   className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700"
                 >
                   View

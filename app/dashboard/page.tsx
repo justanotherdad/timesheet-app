@@ -288,7 +288,7 @@ export default async function DashboardPage() {
                     </p>
                   </div>
                   <Link
-                    href={`/dashboard/timesheets/${timesheet.id}`}
+                    href={`/dashboard/timesheets/${timesheet.id}?returnTo=${encodeURIComponent('/dashboard')}`}
                     className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                   >
                     View →
@@ -330,7 +330,7 @@ export default async function DashboardPage() {
                           </p>
                         </div>
                         <Link
-                          href={`/dashboard/timesheets/${ts.id}`}
+                          href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard/approvals')}`}
                           className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                         >
                           Review →
@@ -367,7 +367,7 @@ export default async function DashboardPage() {
                           </p>
                         </div>
                         <Link
-                          href={`/dashboard/timesheets/${ts.id}`}
+                          href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard/approvals/approved')}`}
                           className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                         >
                           View →

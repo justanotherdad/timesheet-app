@@ -235,7 +235,7 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
                         </span>
                       </div>
                       <Link
-                        href={`/dashboard/timesheets/${ts.id}`}
+                        href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent(`/dashboard/timesheets?sort=${sortBy}&dir=${sortDir}`)}`}
                         className="shrink-0 inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
                       >
                         View

@@ -12,10 +12,16 @@ export const maxDuration = 10 // Maximum duration for this route in seconds
 
 export default async function TimesheetDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ returnTo?: string }>
 }) {
   const { id } = await params
+  const { returnTo } = await searchParams
+  const safeReturnTo = returnTo && returnTo.startsWith('/dashboard') && !returnTo.includes('//')
+    ? returnTo
+    : '/dashboard/timesheets'
   const user = await getCurrentUser()
   if (!user) redirect('/login')
 
@@ -194,7 +200,7 @@ export default async function TimesheetDetailPage({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Header title="Timesheet Details" showBack backUrl="/dashboard/timesheets" user={user} />
+      <Header title="Timesheet Details" showBack backUrl={safeReturnTo} user={user} />
       <div className="container mx-auto px-4 py-6 sm:py-8">
         <div className="max-w-7xl mx-auto">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
