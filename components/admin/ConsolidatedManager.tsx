@@ -2,12 +2,18 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, FileText } from 'lucide-react'
+import SiteInfoCard from './SiteInfoCard'
 
 interface Site {
   id: string
   name: string
   week_starting_day?: number
+  address?: string
+  contact?: string
+  project_name?: string
+  department_id?: string
+  primary_po_id?: string
 }
 
 interface Department {
@@ -22,6 +28,10 @@ interface PurchaseOrder {
   department_id?: string
   po_number: string
   description?: string
+  original_po_amount?: number
+  po_issue_date?: string
+  po_balance?: number
+  proposal_number?: string
 }
 
 interface ConsolidatedManagerProps {
@@ -57,6 +67,7 @@ export default function ConsolidatedManager({
   const [deptsSortDirection, setDeptsSortDirection] = useState<'asc' | 'desc'>('asc')
   const [posSortColumn, setPosSortColumn] = useState<string>('po_number')
   const [posSortDirection, setPosSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [siteInfoCard, setSiteInfoCard] = useState<Site | null>(null)
   
   const supabase = createClient()
 
@@ -415,6 +426,13 @@ export default function ConsolidatedManager({
                       {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][site.week_starting_day || 1]}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => setSiteInfoCard(site)}
+                        className="text-gray-600 hover:text-blue-600 mr-4"
+                        title="View site details"
+                      >
+                        <FileText className="h-4 w-4 inline" />
+                      </button>
                       {!readOnly && (
                         <>
                           <button onClick={() => setEditingItem({ type: 'site', ...site })} className="text-blue-600 hover:text-blue-900 mr-4">
@@ -693,6 +711,25 @@ export default function ConsolidatedManager({
         </>
       )}
 
+      {/* Site Info Card (clients area - full site record) */}
+      {siteInfoCard && (
+        <SiteInfoCard
+          site={siteInfoCard}
+          departments={departments}
+          purchaseOrders={purchaseOrders}
+          onSave={async () => {
+            const [siteRes, posRes] = await Promise.all([
+              supabase.from('sites').select('*').eq('id', siteInfoCard.id).single(),
+              supabase.from('purchase_orders').select('*').in('site_id', [siteInfoCard.id]),
+            ])
+            if (siteRes.data) setSites(sites.map((s) => (s.id === siteRes.data.id ? siteRes.data : s)))
+            if (posRes.data?.length) setPurchaseOrders((prev) => prev.filter((p) => p.site_id !== siteInfoCard.id).concat(posRes.data))
+          }}
+          onClose={() => setSiteInfoCard(null)}
+          readOnly={readOnly}
+        />
+      )}
+
       {/* Edit Modal for Sites, Departments, and POs */}
       {editingItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onMouseDown={(e) => {
@@ -704,6 +741,7 @@ export default function ConsolidatedManager({
             {editingItem.type === 'site' && (
               <>
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit Site</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">For full site details (address, contact, PO, attachments), use the document icon.</p>
                 <form onSubmit={async (e) => {
                   e.preventDefault()
                   setError(null)
