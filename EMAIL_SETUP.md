@@ -78,7 +78,7 @@ To fix this without requiring private windows, use a **custom template** that li
 
 5. Click **Save**
 
-Your app’s `/auth/confirm-reset` page receives the token, waits ~2 seconds (so link scanners don’t trigger it), then verifies and sends the user to the password form. Employees can use the link in their normal browser without private/incognito.
+Your app’s `/auth/confirm-reset` page receives the token and shows a “Continue to Set Password” button. The user clicks it to verify (link scanners don’t click, so they don’t consume the token). Employees can use the link in their normal browser without private/incognito.
 
 ---
 
