@@ -184,14 +184,17 @@ export default function WeeklyTimesheetExport({
             @page { size: landscape; margin: 0.25in; }
             @media print { @page { size: landscape; margin: 0.25in; } }
             @media print { html, body { width: 100%; height: 100%; margin: 0; padding: 0; } }
+            @media print { .print-hide { display: none !important; } }
             body { font-family: Arial, sans-serif; font-size: 9pt; margin: 0; padding: 0; color: #000; }
             .fit-page { transform-origin: top left; }
+            .print-hide { background: #fef3c7; padding: 8px 12px; margin-bottom: 12px; font-size: 11px; border: 1px solid #f59e0b; border-radius: 6px; }
             @media print {
               .fit-page { width: 11in; height: 8.5in; overflow: hidden; }
             }
           </style>
         </head>
         <body>
+          <div class="print-hide"><strong>Before printing:</strong> In the print dialog, open &quot;More settings&quot; and <strong>uncheck &quot;Headers and footers&quot;</strong> to remove the URL and page numbers from the output.</div>
           <div class="fit-page">${buildExportHtml()}</div>
         </body>
       </html>

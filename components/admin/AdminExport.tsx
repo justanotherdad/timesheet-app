@@ -370,7 +370,8 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                 <strong style="color: #000;">Supervisor Approval by / Date:</strong>
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor')
-                  const name = sig ? (sig.signer_name || sig.user_profiles?.name || '') : ''
+                  const up = sig?.user_profiles
+                  const name = sig ? (sig.signer_name || (Array.isArray(up) ? up[0]?.name : up?.name) || '') : ''
                   return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${formatDateInEastern(sig.signed_at)}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
@@ -380,7 +381,8 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                 <strong style="color: #000;">Manager Approval by / Date:</strong>
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager')
-                  const name = sig ? (sig.signer_name || sig.user_profiles?.name || '') : ''
+                  const up = sig?.user_profiles
+                  const name = sig ? (sig.signer_name || (Array.isArray(up) ? up[0]?.name : up?.name) || '') : ''
                   return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${formatDateInEastern(sig.signed_at)}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
@@ -390,7 +392,8 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                 <strong style="color: #000;">Final Approver by / Date:</strong>
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'final_approver')
-                  const name = sig ? (sig.signer_name || sig.user_profiles?.name || '') : ''
+                  const up = sig?.user_profiles
+                  const name = sig ? (sig.signer_name || (Array.isArray(up) ? up[0]?.name : up?.name) || '') : ''
                   return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${formatDateInEastern(sig.signed_at)}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
@@ -451,23 +454,14 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
             <style>
             @page { size: landscape; margin: 0.25in; }
             @media print { @page { size: landscape; margin: 0.25in; } }
-            @media print {
-              html, body {
-                width: 100%;
-                height: 100%;
-              }
-            }
-              body { 
-                font-family: Arial, sans-serif; 
-                font-size: 10pt;
-                margin: 0;
-                padding: 0;
-                color: #000;
-                width: 100%;
-              }
+            @media print { html, body { width: 100%; height: 100%; } }
+            @media print { .print-hide { display: none !important; } }
+            body { font-family: Arial, sans-serif; font-size: 10pt; margin: 0; padding: 0; color: #000; width: 100%; }
+            .print-hide { background: #fef3c7; padding: 8px 12px; margin-bottom: 12px; font-size: 11px; border: 1px solid #f59e0b; border-radius: 6px; }
             </style>
           </head>
           <body>
+            <div class="print-hide"><strong>Before printing:</strong> In the print dialog, open &quot;More settings&quot; and <strong>uncheck &quot;Headers and footers&quot;</strong> to remove the URL and page numbers from the output.</div>
             ${htmlContent}
           </body>
         </html>
