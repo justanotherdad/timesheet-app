@@ -102,6 +102,7 @@ export default function LoginForm() {
               <ul className="text-sm mt-0.5 list-disc list-inside space-y-0.5">
                 <li>Click the link in <strong>this same browser</strong></li>
                 <li>The link expires in 1 day</li>
+                <li>If using work email: open the link in a <strong>private/incognito window</strong> or copy the link into your browser</li>
               </ul>
             </div>
           ) : (

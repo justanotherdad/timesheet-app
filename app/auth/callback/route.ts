@@ -104,6 +104,7 @@ export async function GET(request: Request) {
 
   // No code or token in query - tokens may be in URL hash (Supabase password reset)
   // Return HTML that runs client-side to preserve hash and forward to setup-password
+  // When code is in hash, forward as query param for better compatibility with email link scanners
   const baseUrl = new URL(request.url).origin
   const html = `<!DOCTYPE html>
 <html>
@@ -118,11 +119,24 @@ export async function GET(request: Request) {
     (function() {
       var hash = window.location.hash;
       var next = new URLSearchParams(window.location.search).get('next') || '/auth/setup-password';
-      if (hash && (hash.indexOf('access_token=') !== -1 || hash.indexOf('code=') !== -1)) {
-        window.location.replace(next + hash);
-      } else {
-        window.location.replace(next + '?error=' + encodeURIComponent('No authentication token found'));
+      if (hash) {
+        if (hash.indexOf('access_token=') !== -1 || hash.indexOf('refresh_token=') !== -1) {
+          window.location.replace(next + hash);
+          return;
+        }
+        if (hash.indexOf('code=') !== -1) {
+          var params = new URLSearchParams(hash.substring(1));
+          var code = params.get('code');
+          if (code) {
+            var target = next + '?code=' + encodeURIComponent(code);
+            var type = params.get('type');
+            if (type) target += '&type=' + encodeURIComponent(type);
+            window.location.replace(target);
+            return;
+          }
+        }
       }
+      window.location.replace(next + '?error=' + encodeURIComponent('No authentication token found. Your email provider (e.g. Microsoft Safe Links) may have altered the link. Try opening the link in a private window, or copy and paste it directly into your browser.'));
     })();
   </script>
 </body>

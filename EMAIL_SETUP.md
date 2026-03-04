@@ -74,6 +74,7 @@ This app uses **Supabase Auth** for forgot-password and invite emails. Supabase 
 | Email not received | Check spam; verify domain in Resend; check Resend delivery logs. |
 | "User not found" | The email must exist in Supabase Auth. Forgot password only works for users who have already been invited/signed up. |
 | "We couldn't verify your link" / can't log in after setting password | Redirect URL was wrong. Forgot password now uses `/auth/setup-password` directly. Add it to Supabase Redirect URLs and request a new reset link. |
+| "This link has expired or has already been used" (right after clicking) | **Email link scanning** (Microsoft Safe Links, Proofpoint, etc.) can consume or alter the reset token. The scanner prefetches the link and uses the one-time token before the user. **Fix:** Request a new link and: 1) Open it in a private/incognito window, 2) Copy the link and paste it directly in the browser address bar, or 3) Use a personal email account. Some organizations can add the app domain to Safe Links exclusions. |
 
 ## No Code Changes Needed
 

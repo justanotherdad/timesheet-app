@@ -207,13 +207,19 @@ export default function SetupPasswordPage() {
       
       const accessToken = hashParams.get('access_token')
       const refreshToken = hashParams.get('refresh_token')
+      const code = hashParams.get('code')
       const type = hashParams.get('type')
       
-      console.log('Hash params:', { hasAccessToken: !!accessToken, hasRefreshToken: !!refreshToken, type })
+      console.log('Hash params:', { hasAccessToken: !!accessToken, hasRefreshToken: !!refreshToken, hasCode: !!code, type })
       
       if (accessToken) {
         // Token is in hash, exchange it for a session
         handleTokenExchange(accessToken, refreshToken || '')
+        return
+      }
+      if (code) {
+        // PKCE code in hash (e.g. password reset) - exchange for session
+        handleCodeExchange(code)
         return
       }
     }
@@ -341,7 +347,7 @@ export default function SetupPasswordPage() {
                   : 'We couldn\'t verify your link.'}
             </p>
             <p className="text-sm mb-3 text-amber-700 dark:text-amber-300">
-              Go back to the login page and request a new password reset link. Make sure to click the new link in the same browser.
+              Corporate email (e.g. Microsoft 365) may alter links. Try: open in a <strong>private/incognito window</strong>, or <strong>copy the link</strong> and paste it into your browser. Then request a new link from the login page.
             </p>
             <Link
               href="/login"
