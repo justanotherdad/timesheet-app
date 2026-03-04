@@ -85,6 +85,12 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
   // Filter / search
   const [searchText, setSearchText] = useState('')
   const [filterRole, setFilterRole] = useState<string>('')
+  const [filterSite, setFilterSite] = useState<string>('')
+  const [filterDepartment, setFilterDepartment] = useState<string>('')
+  const [filterPO, setFilterPO] = useState<string>('')
+  const [filterSupervisor, setFilterSupervisor] = useState<string>('')
+  const [filterFinalApprover, setFilterFinalApprover] = useState<string>('')
+  const [filterEmployeeType, setFilterEmployeeType] = useState<string>('')
   
   const assignmentsLoadedRef = useRef(false)
   const supabase = createClient()
@@ -141,6 +147,15 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         if (!name.includes(search) && !email.includes(search)) return false
       }
       if (roleFilter && u.role !== roleFilter) return false
+      if (filterEmployeeType && ((u.employee_type || 'internal') !== filterEmployeeType)) return false
+      if (filterSupervisor && u.supervisor_id !== filterSupervisor) return false
+      if (filterFinalApprover && u.final_approver_id !== filterFinalApprover) return false
+      if (filterSite || filterDepartment || filterPO) {
+        const assignments = userAssignments[u.id] || { sites: [], departments: [], purchaseOrders: [] }
+        if (filterSite && !assignments.sites.includes(filterSite)) return false
+        if (filterDepartment && !assignments.departments.includes(filterDepartment)) return false
+        if (filterPO && !assignments.purchaseOrders.includes(filterPO)) return false
+      }
       return true
     })
     const dir = sortDirection === 'asc' ? 1 : -1
@@ -799,7 +814,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
       <div className="flex flex-col md:flex-row gap-4">
         {/* Left: Filter / Search */}
         <div className="md:w-56 shrink-0 space-y-4">
-          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600 max-h-[calc(100vh-12rem)] overflow-y-auto">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
               <Search className="h-4 w-4" />
               Filter & Search
@@ -830,6 +845,83 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                   <option value="super_admin">Super Admin</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Employee Type</label>
+                <select
+                  value={filterEmployeeType}
+                  onChange={(e) => setFilterEmployeeType(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">All</option>
+                  <option value="internal">Internal</option>
+                  <option value="external">External</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Site</label>
+                <select
+                  value={filterSite}
+                  onChange={(e) => setFilterSite(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">All sites</option>
+                  {sites.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Department</label>
+                <select
+                  value={filterDepartment}
+                  onChange={(e) => setFilterDepartment(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">All departments</option>
+                  {departments.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Purchase Order</label>
+                <select
+                  value={filterPO}
+                  onChange={(e) => setFilterPO(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">All POs</option>
+                  {purchaseOrders.map(p => (
+                    <option key={p.id} value={p.id}>{p.po_number}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Supervisor</label>
+                <select
+                  value={filterSupervisor}
+                  onChange={(e) => setFilterSupervisor(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">All</option>
+                  {nameLookup.filter(u => ['supervisor', 'manager', 'admin', 'super_admin'].includes(u.role)).map(u => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Final Approver</label>
+                <select
+                  value={filterFinalApprover}
+                  onChange={(e) => setFilterFinalApprover(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="">All</option>
+                  {nameLookup.filter(u => ['manager', 'admin', 'super_admin'].includes(u.role)).map(u => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Showing {filteredAndSortedUsers.length} of {users.length} users
               </p>
@@ -850,7 +942,6 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{user.name}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
                     <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 capitalize">{user.role}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       Final approver: {nameLookup.find(u => u.id === user.final_approver_id)?.name || 'N/A'}
@@ -882,11 +973,6 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
               <th className="sticky left-0 z-10 bg-gray-50 dark:bg-gray-700 px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase border-r border-gray-200 dark:border-gray-600 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.3)]">
                 <button type="button" onClick={() => handleSort('name')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
                   Name <SortIcon column="name" />
-                </button>
-              </th>
-              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                <button type="button" onClick={() => handleSort('email')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
-                  Email <SortIcon column="email" />
                 </button>
               </th>
               <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -937,7 +1023,6 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
               return (
               <tr key={user.id}>
                 <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 font-medium border-r border-gray-200 dark:border-gray-600 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.3)]">{user.name}</td>
-                <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{user.email}</td>
                 <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">{user.role}</td>
                 <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userSites.length > 0 ? userSites.join(', ') : 'N/A'}</td>
                 <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userDepts.length > 0 ? userDepts.join(', ') : 'N/A'}</td>
