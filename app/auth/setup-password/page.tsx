@@ -347,7 +347,7 @@ export default function SetupPasswordPage() {
                   : 'We couldn\'t verify your link.'}
             </p>
             <p className="text-sm mb-3 text-amber-700 dark:text-amber-300">
-              If your organization uses work email (e.g. Microsoft 365), your admin can configure the Reset Password email template so links work in your normal browser—see EMAIL_SETUP in the project docs. Otherwise, try again from the login page.
+              Work email (e.g. Microsoft 365) can alter links. Ask your administrator to configure the custom Reset Password template (see EMAIL_SETUP.md) so links work in your normal browser. Otherwise, request a new link and try again.
             </p>
             <Link
               href="/login"

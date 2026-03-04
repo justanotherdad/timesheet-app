@@ -57,3 +57,10 @@ export function formatDateForInput(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
   return format(d, 'yyyy-MM-dd')
 }
+
+/** Format date in Eastern time for display (e.g. signatures, exports) */
+export function formatDateInEastern(date: Date | string): string {
+  const d = typeof date === 'string' ? parseISO(date) : date
+  const zoned = toZonedTime(d, APP_TIMEZONE)
+  return format(zoned, 'MMM d, yyyy')
+}

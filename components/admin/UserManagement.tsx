@@ -393,11 +393,13 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         const supervisorId = formData.get('supervisor_id') as string || null
         const managerId = formData.get('manager_id') as string || null
         const finalApproverId = formData.get('final_approver_id') as string || null
+        const employeeType = (formData.get('employee_type') as 'internal' | 'external') || 'internal'
 
         const profileResult = await updateUserProfile(editingUser.id, {
           name,
           email: email?.trim() || undefined,
           role: canChangeRole(editingUser) ? role : editingUser.role,
+          employee_type: employeeType,
           supervisor_id: supervisorId || null,
           manager_id: managerId || null,
           final_approver_id: finalApproverId || null,
@@ -421,6 +423,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                   name,
                   email: email?.trim() || u.email,
                   role: canChangeRole(editingUser) ? role : editingUser.role,
+                  employee_type: employeeType,
                   supervisor_id: supervisorId || undefined,
                   manager_id: managerId || undefined,
                   final_approver_id: finalApproverId || undefined,
@@ -619,8 +622,20 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
               <p className="text-sm text-gray-600 dark:text-gray-400 col-span-full">New user will be added as Employee reporting to you.</p>
             )}
           </div>
-          {!assignmentsOnlyEdit && (
+            {!assignmentsOnlyEdit && (
             <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Employee Type</label>
+                <select
+                  name="employee_type"
+                  defaultValue="internal"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="internal">Internal</option>
+                  <option value="external">External</option>
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Used for future functions; not shown on timesheets.</p>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Supervisor</label>
                 <select
@@ -965,6 +980,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Name:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.name}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Email:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.email}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Role:</span> <span className="text-gray-900 dark:text-gray-100 capitalize">{editingUser.role}</span></div>
+                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Employee Type:</span> <span className="text-gray-900 dark:text-gray-100 capitalize">{(editingUser as any).employee_type || 'internal'}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Supervisor:</span> <span className="text-gray-900 dark:text-gray-100">{nameLookup.find(u => u.id === editingUser.supervisor_id)?.name || 'N/A'}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Final Approver:</span> <span className="text-gray-900 dark:text-gray-100">{nameLookup.find(u => u.id === editingUser.final_approver_id)?.name || 'N/A'}</span></div>
                 <div>
@@ -1118,6 +1134,18 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
               </div>
               {!assignmentsOnlyEdit && (
                 <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Employee Type</label>
+                    <select
+                      name="employee_type"
+                      defaultValue={(editingUser as any).employee_type || 'internal'}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                    >
+                      <option value="internal">Internal</option>
+                      <option value="external">External</option>
+                    </select>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Used for future functions; not shown on timesheets.</p>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supervisor</label>
                     <select

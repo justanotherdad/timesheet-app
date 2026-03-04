@@ -1,10 +1,13 @@
 export type UserRole = 'employee' | 'supervisor' | 'manager' | 'admin' | 'super_admin'
 
+export type EmployeeType = 'internal' | 'external'
+
 export interface User {
   id: string
   email: string
   name: string
   role: UserRole
+  employee_type?: EmployeeType
   reports_to_id?: string
   supervisor_id?: string
   manager_id?: string

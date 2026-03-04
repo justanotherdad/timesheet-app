@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid timesheet IDs' }, { status: 400 })
     }
 
-    // Fetch all timesheets with user profiles
+    // Fetch all timesheets with user profiles (include approver ids for signature section)
     const { data: timesheets, error: timesheetError } = await supabase
       .from('weekly_timesheets')
       .select(`
@@ -20,7 +20,10 @@ export async function POST(request: NextRequest) {
         user_profiles!user_id (
           id,
           name,
-          email
+          email,
+          supervisor_id,
+          manager_id,
+          final_approver_id
         )
       `)
       .in('id', timesheetIds)

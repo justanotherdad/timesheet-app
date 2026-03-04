@@ -95,6 +95,7 @@ export async function updateUserProfile(
     name?: string
     email?: string
     role?: string
+    employee_type?: 'internal' | 'external' | null
     supervisor_id?: string | null
     manager_id?: string | null
     final_approver_id?: string | null
@@ -142,7 +143,7 @@ export async function updateUserProfile(
       }
     }
 
-    const { email, ...profileUpdates } = updates
+    const { email, employee_type, ...profileUpdates } = updates
 
     if (email !== undefined) {
       const { error: authError } = await adminClient.auth.admin.updateUserById(userId, { email })
@@ -151,7 +152,11 @@ export async function updateUserProfile(
 
     const { error } = await adminClient
       .from('user_profiles')
-      .update({ ...profileUpdates, ...(email !== undefined && { email }) })
+      .update({
+        ...profileUpdates,
+        ...(email !== undefined && { email }),
+        ...(employee_type !== undefined && { employee_type: employee_type ?? 'internal' }),
+      })
       .eq('id', userId)
 
     if (error) return { error: error.message }

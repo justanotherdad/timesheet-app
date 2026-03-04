@@ -35,6 +35,7 @@ export async function createUser(formData: FormData) {
     const supervisorId = formData.get('supervisor_id') as string || null
     const managerId = formData.get('manager_id') as string || null
     const finalApproverId = formData.get('final_approver_id') as string || null
+    const employeeType = (formData.get('employee_type') as 'internal' | 'external') || 'internal'
 
     let effectiveRole: string
     if (currentUserProfile.role === 'manager') {
@@ -182,6 +183,7 @@ export async function createUser(formData: FormData) {
         email,
         name,
         role: effectiveRole,
+        employee_type: employeeType,
         site_id: siteId || null,
         department_id: departmentId || null,
         supervisor_id: resolvedSupervisorId || null,

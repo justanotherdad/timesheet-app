@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { Download, FileText, FileSpreadsheet, File, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
-import { formatWeekEnding, formatDate, formatDateShort, getWeekDates } from '@/lib/utils'
+import { formatWeekEnding, formatDate, formatDateShort, formatDateInEastern, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 
 interface Site { id: string; name: string }
@@ -360,7 +360,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
               <div style="margin-bottom: 8px; color: #000;">
                 <strong style="color: #000;">Employee Signature / Date:</strong>
                 ${timesheet.employee_signed_at ? `
-                  <span style="margin-left: 10px; color: #000;">${escapeHtml(user.name)} ${new Date(timesheet.employee_signed_at).toLocaleDateString()}</span>
+                  <span style="margin-left: 10px; color: #000;">${escapeHtml(user.name)} ${formatDateInEastern(timesheet.employee_signed_at)}</span>
                 ` : `
                   <span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>
                 `}
@@ -371,7 +371,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor')
                   const name = sig ? (sig.signer_name || sig.user_profiles?.name || '') : ''
-                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
+                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${formatDateInEastern(sig.signed_at)}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
               ` : ''}
@@ -381,7 +381,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager')
                   const name = sig ? (sig.signer_name || sig.user_profiles?.name || '') : ''
-                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
+                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${formatDateInEastern(sig.signed_at)}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
               ` : ''}
@@ -391,7 +391,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'final_approver')
                   const name = sig ? (sig.signer_name || sig.user_profiles?.name || '') : ''
-                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${new Date(sig.signed_at).toLocaleDateString()}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
+                  return sig ? `<span style="margin-left: 10px; color: #000;">${escapeHtml(name)} ${formatDateInEastern(sig.signed_at)}</span>` : `<span style="margin-left: 10px; border-bottom: 1px solid #000; display: inline-block; min-width: 200px;"></span>`
                 })()}
               </div>
               ` : ''}
@@ -449,16 +449,8 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
           <head>
             <title>Timesheets Export - ${new Date().toLocaleDateString()}</title>
             <style>
-            @page {
-              size: landscape;
-              margin: 0.25in;
-            }
-            @media print {
-              @page {
-                size: landscape;
-                margin: 0.25in;
-              }
-            }
+            @page { size: landscape; margin: 0.25in; }
+            @media print { @page { size: landscape; margin: 0.25in; } }
             @media print {
               html, body {
                 width: 100%;

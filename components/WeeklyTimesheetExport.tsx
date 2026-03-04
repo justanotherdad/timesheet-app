@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { Download, Printer } from 'lucide-react'
-import { formatDate, formatDateShort, getWeekDates } from '@/lib/utils'
+import { formatDate, formatDateShort, formatDateInEastern, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 
 // SVG: Rotate phone to landscape (instructional icon - no external assets)
@@ -101,128 +101,105 @@ export default function WeeklyTimesheetExport({
     window.print()
   }
 
-  const handleDownload = () => {
-    if (!exportRef.current) return
+  const escapeHtml = (text: string | null | undefined): string => {
+    if (!text) return ''
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  }
 
+  const buildExportHtml = () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const sig = (role: string) => {
+      const s = timesheet.timesheet_signatures?.find((x: any) => x.signer_role === role)
+      const name = s ? (s.signer_name || s.user_profiles?.name || '') : ''
+      return s ? `${escapeHtml(name)} ${formatDateInEastern(s.signed_at)}` : ''
+    }
+    const showSupervisor = (user?.supervisor_id != null && user?.supervisor_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'supervisor')
+    const showManager = (user?.manager_id != null && user?.manager_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'manager')
+    const showFinal = (user?.final_approver_id != null && user?.final_approver_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'final_approver')
+
+    return `
+      <div style="font-family: Arial, sans-serif; font-size: 9pt; color: #000;">
+        <div style="width: 100%; margin-bottom: 8px;"><img src="${origin}/ctg-header-logo.png" alt="CTG" style="width: 100%; height: auto; max-height: 120px; object-fit: contain;" /></div>
+        <div style="margin-bottom: 8px;"><strong>Time Sheet For:</strong> ${escapeHtml(user?.name)}</div>
+        <div style="margin-bottom: 8px;"><strong>From:</strong> ${formatDate(weekDates.start)} <strong>To:</strong> ${formatDate(weekDates.end)}</div>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 9pt;">
+          <thead><tr style="background-color: #f0f0f0;">
+            <th style="border: 1px solid #000; padding: 4px; text-align: left;">Client / Project #</th>
+            <th style="border: 1px solid #000; padding: 4px; text-align: left;">PO#</th>
+            <th style="border: 1px solid #000; padding: 4px; text-align: left;">Task Description</th>
+            <th style="border: 1px solid #000; padding: 4px; text-align: left;">System</th>
+            <th style="border: 1px solid #000; padding: 4px; text-align: left;">Deliverable</th>
+            <th style="border: 1px solid #000; padding: 4px; text-align: left;">Activity</th>
+            ${weekDates.days.map((d, i) => `<th style="border: 1px solid #000; padding: 4px; text-align: center;"><div>${format(d, 'EEE')}</div><div style="font-size: 7pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}
+            <th style="border: 1px solid #000; padding: 4px; text-align: center;">Total</th>
+          </tr></thead>
+          <tbody>
+            ${entries.map((e: any) => `<tr>
+              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.sites?.name || e.client_project_id)}</td>
+              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.purchase_orders?.po_number || e.po_id)}</td>
+              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.task_description)}</td>
+              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.system_name || e.systems?.name || '—')}</td>
+              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.deliverables?.name || '—')}</td>
+              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.activities?.name || '—')}</td>
+              ${days.map(day => `<td style="border: 1px solid #000; padding: 4px; text-align: right;">${(e[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}
+              <td style="border: 1px solid #000; padding: 4px; text-align: right; font-weight: bold;">${calculateTotal(e).toFixed(2)}</td>
+            </tr>`).join('')}
+            ${Array.from({ length: Math.max(0, 5 - entries.length) }).map(() => `<tr>${[1,2,3,4,5,6].map(() => '<td style="border: 1px solid #000; padding: 4px;"></td>').join('')}${days.map(() => '<td style="border: 1px solid #000; padding: 4px; text-align: right;">0.00</td>').join('')}<td style="border: 1px solid #000; padding: 4px; text-align: right;">0.00</td></tr>`).join('')}
+            <tr style="background-color: #FFFF99; font-weight: bold;"><td colspan="6" style="border: 1px solid #000; padding: 4px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 4px; text-align: right;">${getBillableSubtotal(day).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 4px; text-align: right;">${getBillableGrandTotal().toFixed(2)}</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top: 10px;">
+          <div style="margin-bottom: 6px;"><strong>Employee Signature / Date:</strong> ${timesheet.employee_signed_at ? `${escapeHtml(user?.name)} ${formatDateInEastern(timesheet.employee_signed_at)}` : '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>
+          ${showSupervisor ? `<div style="margin-bottom: 6px; text-align: right;"><strong>Supervisor Approval by / Date:</strong> ${sig('supervisor') || '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>` : ''}
+          ${showManager ? `<div style="margin-bottom: 6px; text-align: right;"><strong>Manager Approval by / Date:</strong> ${sig('manager') || '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>` : ''}
+          ${showFinal ? `<div style="text-align: right;"><strong>Final Approver by / Date:</strong> ${sig('final_approver') || '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>` : ''}
+        </div>
+        <div style="margin-top: 10px;"><h3 style="font-size: 10pt; margin-bottom: 6px;">UNBILLABLE TIME</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+          <thead><tr style="background-color: #f0f0f0;"><th style="border: 1px solid #000; padding: 4px;">Description</th>${weekDates.days.map((d, i) => `<th style="border: 1px solid #000; padding: 4px; text-align: center;"><div>${format(d, 'EEE')}</div><div style="font-size: 7pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}<th style="border: 1px solid #000; padding: 4px; text-align: center;">Total</th></tr></thead>
+          <tbody>${unbillable.map((u: any) => `<tr><td style="border: 1px solid #000; padding: 4px; font-weight: bold;">${escapeHtml(u.description)}</td>${days.map(day => `<td style="border: 1px solid #000; padding: 4px; text-align: right;">${(u[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 4px; text-align: right; font-weight: bold;">${calculateTotal(u).toFixed(2)}</td></tr>`).join('')}
+          <tr style="background-color: #FFFF99; font-weight: bold;"><td style="border: 1px solid #000; padding: 4px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 4px; text-align: right;">${getUnbillableSubtotal(day).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 4px; text-align: right;">${getUnbillableGrandTotal().toFixed(2)}</td></tr>
+          </tbody></table></div>
+        <div style="background-color: #90EE90; font-weight: bold; padding: 8px; margin-top: 10px; text-align: right; font-size: 11pt;">GRAND TOTAL ${getGrandTotal().toFixed(2)}</div>
+      </div>
+    `
+  }
+
+  const handleDownload = () => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
-    // Get the origin for absolute image URLs
     const origin = window.location.origin
-
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
         <head>
           <title>Weekly Time Sheet - ${formatDate(weekDates.end)}</title>
           <style>
-            @page {
-              size: landscape;
-              margin: 0.25in;
-            }
+            @page { size: landscape; margin: 0.25in; }
+            @media print { @page { size: landscape; margin: 0.25in; } }
+            @media print { html, body { width: 100%; height: 100%; margin: 0; padding: 0; } }
+            body { font-family: Arial, sans-serif; font-size: 9pt; margin: 0; padding: 0; color: #000; }
+            .fit-page { transform-origin: top left; }
             @media print {
-              @page {
-                size: landscape;
-                margin: 0.25in;
-              }
-            }
-            @media print {
-              html, body {
-                width: 100%;
-                height: 100%;
-              }
-            }
-            body { 
-              font-family: Arial, sans-serif; 
-              font-size: 10pt;
-              margin: 0;
-              padding: 0;
-              color: #000;
-              width: 100%;
-            }
-            .header-logo {
-              width: 100%;
-              margin-bottom: 10px;
-            }
-            .header-logo img {
-              width: 100%;
-              height: auto;
-              display: block;
-              max-height: 150px;
-              object-fit: contain;
-            }
-            .timesheet-info {
-              margin-bottom: 15px;
-              color: #000;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 10px;
-            }
-            th, td {
-              border: 1px solid #000;
-              padding: 5px;
-              text-align: left;
-              color: #000;
-            }
-            th {
-              background-color: #f0f0f0;
-              font-weight: bold;
-              text-align: center;
-              color: #000;
-            }
-            .day-header {
-              text-align: center;
-            }
-            .day-date {
-              font-size: 8pt;
-              font-weight: normal;
-              color: #000;
-            }
-            .subtotal-row {
-              background-color: #FFFF99;
-              font-weight: bold;
-              color: #000 !important;
-            }
-            .subtotal-row td {
-              color: #000 !important;
-            }
-            .grand-total-row {
-              background-color: #90EE90;
-              font-weight: bold;
-              color: #000;
-            }
-            .signature-section {
-              margin-top: 30px;
-            }
-            .signature-line {
-              border-top: 1px solid #000;
-              width: 250px;
-              margin-top: 40px;
-              padding-top: 5px;
-            }
-            .text-center {
-              text-align: center;
-            }
-            .text-right {
-              text-align: right;
+              .fit-page { width: 11in; height: 8.5in; overflow: hidden; }
             }
           </style>
         </head>
         <body>
-          ${exportRef.current.innerHTML.replace(/src="\/ctg-header-logo\.png"/g, `src="${origin}/ctg-header-logo.png"`)}
+          <div class="fit-page">${buildExportHtml()}</div>
         </body>
       </html>
     `)
     printWindow.document.close()
-    
-    // Wait for content to load, then trigger print (which will open save dialog if Print to PDF is selected)
     setTimeout(() => {
-      // For better PDF generation, users should select "Save as PDF" in the print dialog
-      // This is the standard browser behavior - cannot force a direct save dialog
       printWindow.print()
-    }, 1000)
+    }, 500)
   }
 
   return (
@@ -408,7 +385,7 @@ export default function WeeklyTimesheetExport({
             <strong style={{ color: '#000' }}>Employee Signature / Date:</strong>
             {timesheet.employee_signed_at ? (
               <span style={{ marginLeft: '10px', color: '#000' }}>
-                {user.name} {new Date(timesheet.employee_signed_at).toLocaleDateString()}
+                {user.name} {formatDateInEastern(timesheet.employee_signed_at)}
               </span>
             ) : (
               <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
@@ -420,7 +397,7 @@ export default function WeeklyTimesheetExport({
               {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor') ? (
                 <span style={{ marginLeft: '10px', color: '#000' }}>
                   {(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').signer_name) || timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').user_profiles?.name}{' '}
-                  {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').signed_at).toLocaleDateString()}
+                  {formatDateInEastern(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').signed_at)}
                 </span>
               ) : (
                 <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
@@ -433,7 +410,7 @@ export default function WeeklyTimesheetExport({
               {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager') ? (
                 <span style={{ marginLeft: '10px', color: '#000' }}>
                   {(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').signer_name) || timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').user_profiles?.name}{' '}
-                  {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').signed_at).toLocaleDateString()}
+                  {formatDateInEastern(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').signed_at)}
                 </span>
               ) : (
                 <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
@@ -446,7 +423,7 @@ export default function WeeklyTimesheetExport({
               {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'final_approver') ? (
                 <span style={{ marginLeft: '10px', color: '#000' }}>
                   {(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').signer_name) || timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').user_profiles?.name}{' '}
-                  {new Date(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').signed_at).toLocaleDateString()}
+                  {formatDateInEastern(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').signed_at)}
                 </span>
               ) : (
                 <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
