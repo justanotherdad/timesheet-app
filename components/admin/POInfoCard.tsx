@@ -6,73 +6,55 @@ import { Plus, Trash2, Upload, FileText, X } from 'lucide-react'
 
 const ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 
-interface SiteInfoCardProps {
-  site: any
+interface POInfoCardProps {
+  po: any
+  siteId: string
   departments: Array<{ id: string; name: string; site_id: string }>
-  purchaseOrders: Array<{ id: string; po_number: string; site_id: string; department_id?: string; original_po_amount?: number; po_issue_date?: string; po_balance?: number; proposal_number?: string }>
   onSave: () => void
   onClose: () => void
+  onDepartmentAdded?: (dept: { id: string; name: string; site_id: string }) => void
   readOnly?: boolean
 }
 
-export default function SiteInfoCard({
-  site,
+export default function POInfoCard({
+  po,
+  siteId,
   departments,
-  purchaseOrders,
   onSave,
   onClose,
+  onDepartmentAdded,
   readOnly = false,
-}: SiteInfoCardProps) {
+}: POInfoCardProps) {
   const supabase = createClient()
+  const siteDepts = departments.filter((d) => d.site_id === siteId)
   const [form, setForm] = useState({
-    name: site.name || '',
-    address: site.address || '',
-    contact: site.contact || '',
-    project_name: site.project_name || '',
-    department_id: site.department_id || '',
-    primary_po_id: site.primary_po_id || '',
-    week_starting_day: site.week_starting_day ?? 1,
-    original_po_amount: '' as string | number,
-    po_issue_date: '',
-    po_balance: '' as string | number,
-    proposal_number: '',
+    po_number: po.po_number || '',
+    original_po_amount: po.original_po_amount ?? '',
+    po_issue_date: po.po_issue_date ?? '',
+    po_balance: po.po_balance ?? '',
+    proposal_number: po.proposal_number ?? '',
+    project_name: po.project_name ?? '',
+    department_id: po.department_id ?? '',
   })
+  const [newDeptName, setNewDeptName] = useState('')
+  const [showAddDept, setShowAddDept] = useState(false)
   const [changeOrders, setChangeOrders] = useState<Array<{ id?: string; co_number: string; co_date: string; amount: string }>>([])
   const [attachments, setAttachments] = useState<Array<{ id: string; file_name: string; storage_path: string; file_type?: string }>>([])
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const sitePOs = purchaseOrders.filter((p) => p.site_id === site.id)
-  const siteDepts = departments.filter((d) => d.site_id === site.id)
-  const primaryPO = sitePOs.find((p) => p.id === form.primary_po_id) || sitePOs[0]
-
-  useEffect(() => {
-    const pos = purchaseOrders.filter((p) => p.site_id === site.id)
-    const po = pos.find((p) => p.id === form.primary_po_id) || pos[0]
-    if (po) {
-      setForm((f) => ({
-        ...f,
-        original_po_amount: po.original_po_amount ?? '',
-        po_issue_date: po.po_issue_date ?? '',
-        po_balance: po.po_balance ?? '',
-        proposal_number: po.proposal_number ?? '',
-      }))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only sync when primary_po_id changes
-  }, [form.primary_po_id])
-
   useEffect(() => {
     const load = async () => {
       const [coRes, attRes] = await Promise.all([
-        supabase.from('site_change_orders').select('*').eq('site_id', site.id).order('co_date', { ascending: false }),
-        supabase.from('site_attachments').select('id, file_name, storage_path, file_type').eq('site_id', site.id),
+        supabase.from('po_change_orders').select('*').eq('po_id', po.id).order('co_date', { ascending: false }),
+        supabase.from('po_attachments').select('id, file_name, storage_path, file_type').eq('po_id', po.id),
       ])
       setChangeOrders((coRes.data || []).map((r: any) => ({ id: r.id, co_number: r.co_number || '', co_date: r.co_date || '', amount: r.amount != null ? String(r.amount) : '' })))
       setAttachments(attRes.data || [])
     }
     load()
-  }, [site.id, supabase])
+  }, [po.id, supabase])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -80,35 +62,22 @@ export default function SiteInfoCard({
     setLoading(true)
     try {
       await supabase
-        .from('sites')
+        .from('purchase_orders')
         .update({
-          name: form.name,
-          address: form.address || null,
-          contact: form.contact || null,
+          po_number: form.po_number,
+          original_po_amount: form.original_po_amount != null && form.original_po_amount !== '' ? parseFloat(String(form.original_po_amount)) : null,
+          po_issue_date: form.po_issue_date || null,
+          po_balance: form.po_balance != null && form.po_balance !== '' ? parseFloat(String(form.po_balance)) : null,
+          proposal_number: form.proposal_number || null,
           project_name: form.project_name || null,
           department_id: form.department_id || null,
-          primary_po_id: form.primary_po_id || null,
-          week_starting_day: form.week_starting_day,
         })
-        .eq('id', site.id)
-
-      const po = sitePOs.find((p) => p.id === form.primary_po_id) || sitePOs[0]
-      if (po) {
-        await supabase
-          .from('purchase_orders')
-          .update({
-            original_po_amount: form.original_po_amount != null && form.original_po_amount !== '' ? parseFloat(String(form.original_po_amount)) : null,
-            po_issue_date: form.po_issue_date || null,
-            po_balance: form.po_balance != null && form.po_balance !== '' ? parseFloat(String(form.po_balance)) : null,
-            proposal_number: form.proposal_number || null,
-          })
-          .eq('id', po.id)
-      }
+        .eq('id', po.id)
 
       for (const co of changeOrders) {
         if (co.id) {
           await supabase
-            .from('site_change_orders')
+            .from('po_change_orders')
             .update({
               co_number: co.co_number || null,
               co_date: co.co_date || null,
@@ -116,8 +85,8 @@ export default function SiteInfoCard({
             })
             .eq('id', co.id)
         } else if (co.co_number || co.co_date || co.amount) {
-          await supabase.from('site_change_orders').insert({
-            site_id: site.id,
+          await supabase.from('po_change_orders').insert({
+            po_id: po.id,
             co_number: co.co_number || null,
             co_date: co.co_date || null,
             amount: co.amount ? parseFloat(co.amount) : null,
@@ -130,6 +99,25 @@ export default function SiteInfoCard({
       setError(err.message || 'Failed to save')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleAddDepartment = async () => {
+    if (!newDeptName.trim()) return
+    setError(null)
+    try {
+      const { data, error: insertErr } = await supabase
+        .from('departments')
+        .insert({ site_id: siteId, name: newDeptName.trim() })
+        .select()
+        .single()
+      if (insertErr) throw insertErr
+      onDepartmentAdded?.(data)
+      setForm((f) => ({ ...f, department_id: data.id }))
+      setNewDeptName('')
+      setShowAddDept(false)
+    } catch (err: any) {
+      setError(err.message || 'Failed to add department')
     }
   }
 
@@ -153,13 +141,13 @@ export default function SiteInfoCard({
           setError(`File type not allowed. Use Word, Excel, or PDF.`)
           continue
         }
-        const path = `${site.id}/${crypto.randomUUID()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+        const path = `po_attachments/${po.id}/${crypto.randomUUID()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
         const { error: uploadErr } = await supabase.storage.from('site-attachments').upload(path, file, { upsert: false })
         if (uploadErr) throw uploadErr
         const { data: inserted } = await supabase
-          .from('site_attachments')
+          .from('po_attachments')
           .insert({
-            site_id: site.id,
+            po_id: po.id,
             file_name: file.name,
             storage_path: path,
             file_type: file.type,
@@ -180,7 +168,7 @@ export default function SiteInfoCard({
   const handleDeleteAttachment = async (att: { id: string; storage_path: string }) => {
     try {
       await supabase.storage.from('site-attachments').remove([att.storage_path])
-      await supabase.from('site_attachments').delete().eq('id', att.id)
+      await supabase.from('po_attachments').delete().eq('id', att.id)
       setAttachments((prev) => prev.filter((a) => a.id !== att.id))
     } catch (err: any) {
       setError(err.message || 'Delete failed')
@@ -199,7 +187,7 @@ export default function SiteInfoCard({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Site Info: {site.name}</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">PO: {po.po_number}</h2>
           <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
             <X className="h-5 w-5" />
           </button>
@@ -214,72 +202,28 @@ export default function SiteInfoCard({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Client / Site *</label>
+              <label className={labelClass}>PO# *</label>
               <input
                 type="text"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                value={form.po_number}
+                onChange={(e) => setForm({ ...form, po_number: e.target.value })}
                 required
                 disabled={readOnly}
                 className={inputClass}
               />
             </div>
             <div>
-              <label className={labelClass}>Contact</label>
+              <label className={labelClass}>Original PO $$</label>
               <input
-                type="text"
-                value={form.contact}
-                onChange={(e) => setForm({ ...form, contact: e.target.value })}
+                type="number"
+                step="0.01"
+                value={form.original_po_amount}
+                onChange={(e) => setForm({ ...form, original_po_amount: e.target.value })}
                 disabled={readOnly}
                 className={inputClass}
               />
             </div>
           </div>
-
-          <div>
-            <label className={labelClass}>Address</label>
-            <input
-              type="text"
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-              disabled={readOnly}
-              className={inputClass}
-            />
-          </div>
-
-          {sitePOs.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>PO#</label>
-                <select
-                  value={form.primary_po_id}
-                  onChange={(e) => setForm({ ...form, primary_po_id: e.target.value })}
-                  disabled={readOnly}
-                  className={inputClass}
-                >
-                  <option value="">-- Select PO --</option>
-                  {sitePOs.map((po) => (
-                    <option key={po.id} value={po.id}>
-                      {po.po_number}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>Original PO $$</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={form.original_po_amount}
-                  onChange={(e) => setForm({ ...form, original_po_amount: e.target.value })}
-                  disabled={readOnly}
-                  className={inputClass}
-                />
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">Add a purchase order in the Purchase Orders tab first.</p>
-          )}
 
           <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
             <div className="flex justify-between items-center mb-3">
@@ -340,60 +284,85 @@ export default function SiteInfoCard({
             </div>
             <div>
               <label className={labelClass}>Department</label>
-              <select
-                value={form.department_id}
-                onChange={(e) => setForm({ ...form, department_id: e.target.value })}
-                disabled={readOnly}
-                className={inputClass}
-              >
-                <option value="">-- None --</option>
-                {siteDepts.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex gap-2">
+                <select
+                  value={form.department_id}
+                  onChange={(e) => setForm({ ...form, department_id: e.target.value })}
+                  disabled={readOnly}
+                  className={inputClass}
+                >
+                  <option value="">-- None --</option>
+                  {siteDepts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddDept(!showAddDept)}
+                    className="shrink-0 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                    title="Add department"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              {showAddDept && (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="New department name"
+                    value={newDeptName}
+                    onChange={(e) => setNewDeptName(e.target.value)}
+                    className={inputClass}
+                  />
+                  <button type="button" onClick={handleAddDepartment} className="shrink-0 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    Add
+                  </button>
+                  <button type="button" onClick={() => { setShowAddDept(false); setNewDeptName('') }} className="shrink-0 px-3 py-2 border rounded-lg">
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
-          {sitePOs.length > 0 && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelClass}>PO Issue Date</label>
-                  <input
-                    type="date"
-                    value={form.po_issue_date}
-                    onChange={(e) => setForm({ ...form, po_issue_date: e.target.value })}
-                    disabled={readOnly}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>PO Balance $$ (future use)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.po_balance}
-                    onChange={(e) => setForm({ ...form, po_balance: e.target.value })}
-                    disabled={readOnly}
-                    className={inputClass}
-                  />
-                </div>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>PO Issue Date</label>
+              <input
+                type="date"
+                value={form.po_issue_date}
+                onChange={(e) => setForm({ ...form, po_issue_date: e.target.value })}
+                disabled={readOnly}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>PO Balance $$ (future use)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.po_balance}
+                onChange={(e) => setForm({ ...form, po_balance: e.target.value })}
+                disabled={readOnly}
+                className={inputClass}
+              />
+            </div>
+          </div>
 
-              <div>
-                <label className={labelClass}>Proposal #</label>
-                <input
-                  type="text"
-                  value={form.proposal_number}
-                  onChange={(e) => setForm({ ...form, proposal_number: e.target.value })}
-                  disabled={readOnly}
-                  className={inputClass}
-                />
-              </div>
-            </>
-          )}
+          <div>
+            <label className={labelClass}>Proposal #</label>
+            <input
+              type="text"
+              value={form.proposal_number}
+              onChange={(e) => setForm({ ...form, proposal_number: e.target.value })}
+              disabled={readOnly}
+              className={inputClass}
+            />
+          </div>
 
           <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
             <label className={labelClass}>Attachments</label>

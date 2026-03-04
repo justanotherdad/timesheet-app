@@ -3,17 +3,18 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, FileText } from 'lucide-react'
-import SiteInfoCard from './SiteInfoCard'
+import SiteDetailView from './SiteDetailView'
 
 interface Site {
   id: string
   name: string
   week_starting_day?: number
   address?: string
+  address_street?: string
+  address_city?: string
+  address_state?: string
+  address_zip?: string
   contact?: string
-  project_name?: string
-  department_id?: string
-  primary_po_id?: string
 }
 
 interface Department {
@@ -32,6 +33,7 @@ interface PurchaseOrder {
   po_issue_date?: string
   po_balance?: number
   proposal_number?: string
+  project_name?: string
 }
 
 interface ConsolidatedManagerProps {
@@ -711,9 +713,9 @@ export default function ConsolidatedManager({
         </>
       )}
 
-      {/* Site Info Card (clients area - full site record) */}
+      {/* Site Detail View (Client card + PO cards) */}
       {siteInfoCard && (
-        <SiteInfoCard
+        <SiteDetailView
           site={siteInfoCard}
           departments={departments}
           purchaseOrders={purchaseOrders}
@@ -726,6 +728,7 @@ export default function ConsolidatedManager({
             if (posRes.data?.length) setPurchaseOrders((prev) => prev.filter((p) => p.site_id !== siteInfoCard.id).concat(posRes.data))
           }}
           onClose={() => setSiteInfoCard(null)}
+          onDepartmentAdded={(dept) => setDepartments((prev) => [...prev, dept])}
           readOnly={readOnly}
         />
       )}
@@ -741,7 +744,7 @@ export default function ConsolidatedManager({
             {editingItem.type === 'site' && (
               <>
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit Site</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">For full site details (address, contact, PO, attachments), use the document icon.</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">For client details and POs, use the document icon.</p>
                 <form onSubmit={async (e) => {
                   e.preventDefault()
                   setError(null)
