@@ -46,9 +46,39 @@ This app uses **Supabase Auth** for forgot-password and invite emails. Supabase 
    - `https://ctgtimesheet.com/auth/callback`
    - `https://ctgtimesheet.com/auth/callback?next=/auth/setup-password`
    - `https://ctgtimesheet.com/auth/setup-password`
+   - `https://ctgtimesheet.com/auth/confirm-reset`
    - `http://localhost:3000/auth/callback?next=/auth/setup-password` (for local testing)
+   - `http://localhost:3000/auth/confirm-reset` (for local testing)
 3. Set **Site URL** to `https://ctgtimesheet.com`
 4. Click **Save**
+
+---
+
+## Step 3b: Custom Reset Password Email (recommended for corporate email)
+
+Corporate email (Microsoft 365 Safe Links, Barracuda, etc.) often **prefetches** links before users click. The default reset link goes to Supabase, which consumes the one-time token on first request—so the scanner can use it before the user, causing "We couldn't verify your link."
+
+To fix this without requiring private windows, use a **custom template** that links to your app first:
+
+1. Supabase Dashboard → **Authentication** → **Email Templates**
+2. Open the **Reset Password** template
+3. Replace the link in the template with this (using your actual site URL):
+
+   ```
+   <a href="{{ .SiteURL }}/auth/confirm-reset?token_hash={{ .TokenHash }}&type=recovery">Reset Password</a>
+   ```
+
+4. Keep the rest of the template (subject, body text) as you like. Example full body:
+
+   ```html
+   <h2>Reset Password</h2>
+   <p>Follow this link to reset the password for your user:</p>
+   <p><a href="{{ .SiteURL }}/auth/confirm-reset?token_hash={{ .TokenHash }}&type=recovery">Reset Password</a></p>
+   ```
+
+5. Click **Save**
+
+Your app’s `/auth/confirm-reset` page receives the token, waits ~2 seconds (so link scanners don’t trigger it), then verifies and sends the user to the password form. Employees can use the link in their normal browser without private/incognito.
 
 ---
 
@@ -73,8 +103,8 @@ This app uses **Supabase Auth** for forgot-password and invite emails. Supabase 
 | "Failed to send" | SMTP misconfigured. Verify Resend API key, port (465/587), and sender domain is verified. |
 | Email not received | Check spam; verify domain in Resend; check Resend delivery logs. |
 | "User not found" | The email must exist in Supabase Auth. Forgot password only works for users who have already been invited/signed up. |
-| "We couldn't verify your link" / can't log in after setting password | Redirect URL was wrong. Forgot password now uses `/auth/setup-password` directly. Add it to Supabase Redirect URLs and request a new reset link. |
-| "This link has expired or has already been used" (right after clicking) | **Email link scanning** (Microsoft Safe Links, Proofpoint, etc.) can consume or alter the reset token. The scanner prefetches the link and uses the one-time token before the user. **Fix:** Request a new link and: 1) Open it in a private/incognito window, 2) Copy the link and paste it directly in the browser address bar, or 3) Use a personal email account. Some organizations can add the app domain to Safe Links exclusions. |
+| "We couldn't verify your link" / can't log in after setting password | Redirect URL was wrong. Add all URLs from Step 3 to Supabase Redirect URLs and request a new reset link. |
+| "This link has expired or has already been used" (right after clicking) | **Email link scanning** (Microsoft Safe Links, Proofpoint, etc.) can consume the reset token before the user clicks. **Recommended fix:** Complete **Step 3b** above—use the custom Reset Password template so the link goes to your app first. Employees can then use the link in their normal browser. Otherwise: try a private/incognito window, or copy the link into the address bar. IT can also add your domain to Safe Links exclusions. |
 
 ## No Code Changes Needed
 
