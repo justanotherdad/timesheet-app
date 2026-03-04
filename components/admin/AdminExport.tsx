@@ -290,18 +290,18 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
         }
 
         htmlContent += `
-          <div style="font-family: Arial, sans-serif; font-size: 10pt; color: #000; margin-bottom: 40px;">
+          <div style="font-family: Arial, sans-serif; font-size: 8pt; color: #000; margin-bottom: 12px;">
             <!-- Header Logo -->
-            <div style="width: 100%; margin-bottom: 10px;">
+            <div style="width: 100%; margin-bottom: 6px;">
               <img 
                 src="${origin}/ctg-header-logo.png"
                 alt="Compliance Technology Group, Inc." 
-                style="width: 100%; height: auto; display: block; max-height: 150px; object-fit: contain;"
+                style="width: 100%; height: auto; display: block; max-height: 70px; object-fit: contain;"
               />
             </div>
 
             <!-- Timesheet Info -->
-            <div style="margin-bottom: 10px; color: #000;">
+            <div style="margin-bottom: 6px; color: #000;">
               <div style="color: #000;"><strong style="color: #000;">Time Sheet For:</strong> ${escapeHtml(user.name)}</div>
               <div style="color: #000;">
                 <strong style="color: #000;">From:</strong> ${formatDate(weekDates.start)} <strong style="color: #000;">To:</strong> ${formatDate(weekDates.end)}
@@ -309,55 +309,55 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
             </div>
 
             <!-- Billable Time Table -->
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 8pt;">
               <thead>
                 <tr style="background-color: #f0f0f0;">
-                  <th style="border: 1px solid #000; padding: 5px; text-align: left;">Client / Project #</th>
-                  <th style="border: 1px solid #000; padding: 5px; text-align: left;">PO#</th>
-                  <th style="border: 1px solid #000; padding: 5px; text-align: left;">Task Description</th>
+                  <th style="border: 1px solid #000; padding: 3px; text-align: left;">Client / Project #</th>
+                  <th style="border: 1px solid #000; padding: 3px; text-align: left;">PO#</th>
+                  <th style="border: 1px solid #000; padding: 3px; text-align: left;">Task Description</th>
                   ${weekDates.days.map((day, idx) => `
-                    <th style="border: 1px solid #000; padding: 5px; text-align: center;">
+                    <th style="border: 1px solid #000; padding: 3px; text-align: center;">
                       <div>${format(day, 'EEE')}</div>
-                      <div style="font-size: 8pt; font-weight: normal;">${formatDateShort(weekDates.days[idx])}</div>
+                      <div style="font-size: 7pt; font-weight: normal;">${formatDateShort(weekDates.days[idx])}</div>
                     </th>
                   `).join('')}
-                  <th style="border: 1px solid #000; padding: 5px; text-align: center;">Total</th>
+                  <th style="border: 1px solid #000; padding: 3px; text-align: center;">Total</th>
                 </tr>
               </thead>
               <tbody>
                 ${entries.map((entry: any) => `
                   <tr>
-                    <td style="border: 1px solid #000; padding: 5px; color: #000;">${escapeHtml(entry.sites?.name || entry.client_project_id)}</td>
-                    <td style="border: 1px solid #000; padding: 5px; color: #000;">${escapeHtml(entry.purchase_orders?.po_number || entry.po_id)}</td>
-                    <td style="border: 1px solid #000; padding: 5px; color: #000;">${escapeHtml(entry.task_description)}</td>
+                    <td style="border: 1px solid #000; padding: 3px; color: #000;">${escapeHtml(entry.sites?.name || entry.client_project_id)}</td>
+                    <td style="border: 1px solid #000; padding: 3px; color: #000;">${escapeHtml(entry.purchase_orders?.po_number || entry.po_id)}</td>
+                    <td style="border: 1px solid #000; padding: 3px; color: #000;">${escapeHtml(entry.task_description)}</td>
                     ${days.map(day => `
-                      <td style="border: 1px solid #000; padding: 5px; text-align: right; color: #000;">${(entry[`${day}_hours`] || 0).toFixed(2)}</td>
+                      <td style="border: 1px solid #000; padding: 3px; text-align: right; color: #000;">${(entry[`${day}_hours`] || 0).toFixed(2)}</td>
                     `).join('')}
-                    <td style="border: 1px solid #000; padding: 5px; text-align: right; font-weight: bold; color: #000;">${calculateTotal(entry).toFixed(2)}</td>
+                    <td style="border: 1px solid #000; padding: 3px; text-align: right; font-weight: bold; color: #000;">${calculateTotal(entry).toFixed(2)}</td>
                   </tr>
                 `).join('')}
-                ${Array.from({ length: Math.max(0, 5 - entries.length) }).map(() => `
+                ${Array.from({ length: Math.max(0, 3 - entries.length) }).map(() => `
                   <tr>
-                    <td style="border: 1px solid #000; padding: 5px;"></td>
-                    <td style="border: 1px solid #000; padding: 5px;"></td>
-                    <td style="border: 1px solid #000; padding: 5px;"></td>
-                    ${days.map(() => `<td style="border: 1px solid #000; padding: 5px; text-align: right;">0.00</td>`).join('')}
-                    <td style="border: 1px solid #000; padding: 5px; text-align: right;">0.00</td>
+                    <td style="border: 1px solid #000; padding: 3px;"></td>
+                    <td style="border: 1px solid #000; padding: 3px;"></td>
+                    <td style="border: 1px solid #000; padding: 3px;"></td>
+                    ${days.map(() => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">0.00</td>`).join('')}
+                    <td style="border: 1px solid #000; padding: 3px; text-align: right;">0.00</td>
                   </tr>
                 `).join('')}
                 <tr style="background-color: #FFFF99; font-weight: bold; color: #000;">
-                  <td colspan="3" style="border: 1px solid #000; padding: 5px; color: #000;">Sub Totals</td>
+                  <td colspan="3" style="border: 1px solid #000; padding: 3px; color: #000;">Sub Totals</td>
                   ${days.map(day => `
-                    <td style="border: 1px solid #000; padding: 5px; text-align: right; color: #000;">${getBillableSubtotal(day).toFixed(2)}</td>
+                    <td style="border: 1px solid #000; padding: 3px; text-align: right; color: #000;">${getBillableSubtotal(day).toFixed(2)}</td>
                   `).join('')}
-                  <td style="border: 1px solid #000; padding: 5px; text-align: right; color: #000;">${getBillableGrandTotal().toFixed(2)}</td>
+                  <td style="border: 1px solid #000; padding: 3px; text-align: right; color: #000;">${getBillableGrandTotal().toFixed(2)}</td>
                 </tr>
               </tbody>
             </table>
 
             <!-- Signature Section - only show approval lines that exist on the user profile -->
-            <div style="margin-top: 15px; color: #000;">
-              <div style="margin-bottom: 8px; color: #000;">
+            <div style="margin-top: 8px; color: #000;">
+              <div style="margin-bottom: 4px; color: #000;">
                 <strong style="color: #000;">Employee Signature / Date:</strong>
                 ${timesheet.employee_signed_at ? `
                   <span style="margin-left: 10px; color: #000;">${escapeHtml(user.name)} ${formatDateInEastern(timesheet.employee_signed_at)}</span>
@@ -366,7 +366,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                 `}
               </div>
               ${(user.supervisor_id != null && user.supervisor_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'supervisor') ? `
-              <div style="margin-bottom: 8px; color: #000; text-align: right;">
+              <div style="margin-bottom: 4px; color: #000; text-align: right;">
                 <strong style="color: #000;">Supervisor Approval by / Date:</strong>
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor')
@@ -377,7 +377,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
               </div>
               ` : ''}
               ${(user.manager_id != null && user.manager_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'manager') ? `
-              <div style="margin-bottom: 8px; color: #000; text-align: right;">
+              <div style="margin-bottom: 4px; color: #000; text-align: right;">
                 <strong style="color: #000;">Manager Approval by / Date:</strong>
                 ${(() => {
                   const sig = timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager')
@@ -401,44 +401,44 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
             </div>
 
             <!-- Unbillable Time Section -->
-            <div style="margin-top: 15px; color: #000;">
-              <h3 style="font-size: 12pt; font-weight: bold; margin-bottom: 10px; color: #000;">UNBILLABLE TIME</h3>
-              <table style="width: 100%; border-collapse: collapse;">
+            <div style="margin-top: 8px; color: #000;">
+              <h3 style="font-size: 9pt; font-weight: bold; margin-bottom: 4px; color: #000;">UNBILLABLE TIME</h3>
+              <table style="width: 100%; border-collapse: collapse; font-size: 8pt;">
                 <thead>
                   <tr style="background-color: #f0f0f0;">
-                    <th style="border: 1px solid #000; padding: 5px; text-align: left;">Description</th>
+                    <th style="border: 1px solid #000; padding: 3px; text-align: left;">Description</th>
                     ${weekDates.days.map((day, idx) => `
-                      <th style="border: 1px solid #000; padding: 5px; text-align: center;">
+                      <th style="border: 1px solid #000; padding: 3px; text-align: center;">
                         <div>${format(day, 'EEE')}</div>
-                        <div style="font-size: 8pt; font-weight: normal;">${formatDateShort(weekDates.days[idx])}</div>
+                        <div style="font-size: 7pt; font-weight: normal;">${formatDateShort(weekDates.days[idx])}</div>
                       </th>
                     `).join('')}
-                    <th style="border: 1px solid #000; padding: 5px; text-align: center;">Total</th>
+                    <th style="border: 1px solid #000; padding: 3px; text-align: center;">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${unbillable.map((entry: any) => `
                     <tr>
-                      <td style="border: 1px solid #000; padding: 5px; font-weight: bold; color: #000;">${entry.description}</td>
+                      <td style="border: 1px solid #000; padding: 3px; font-weight: bold; color: #000;">${entry.description}</td>
                       ${days.map(day => `
-                        <td style="border: 1px solid #000; padding: 5px; text-align: right; color: #000;">${(entry[`${day}_hours`] || 0).toFixed(2)}</td>
+                        <td style="border: 1px solid #000; padding: 3px; text-align: right; color: #000;">${(entry[`${day}_hours`] || 0).toFixed(2)}</td>
                       `).join('')}
-                      <td style="border: 1px solid #000; padding: 5px; text-align: right; font-weight: bold; color: #000;">${calculateTotal(entry).toFixed(2)}</td>
+                      <td style="border: 1px solid #000; padding: 3px; text-align: right; font-weight: bold; color: #000;">${calculateTotal(entry).toFixed(2)}</td>
                     </tr>
                   `).join('')}
                   <tr style="background-color: #FFFF99; font-weight: bold; color: #000;">
-                    <td style="border: 1px solid #000; padding: 5px; color: #000;">Sub Totals</td>
+                    <td style="border: 1px solid #000; padding: 3px; color: #000;">Sub Totals</td>
                     ${days.map(day => `
-                      <td style="border: 1px solid #000; padding: 5px; text-align: right; color: #000;">${getUnbillableSubtotal(day).toFixed(2)}</td>
+                      <td style="border: 1px solid #000; padding: 3px; text-align: right; color: #000;">${getUnbillableSubtotal(day).toFixed(2)}</td>
                     `).join('')}
-                    <td style="border: 1px solid #000; padding: 5px; text-align: right; color: #000;">${getUnbillableGrandTotal().toFixed(2)}</td>
+                    <td style="border: 1px solid #000; padding: 3px; text-align: right; color: #000;">${getUnbillableGrandTotal().toFixed(2)}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
             <!-- Grand Total -->
-            <div style="background-color: #90EE90; font-weight: bold; padding: 10px; margin-top: 20px; text-align: right; font-size: 12pt; color: #000;">
+            <div style="background-color: #90EE90; font-weight: bold; padding: 6px; margin-top: 8px; text-align: right; font-size: 9pt; color: #000;">
               <span style="margin-right: 20px; color: #000;">GRAND TOTAL</span>
               <span style="color: #000;">${getGrandTotal().toFixed(2)}</span>
             </div>

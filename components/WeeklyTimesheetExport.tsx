@@ -123,49 +123,49 @@ export default function WeeklyTimesheetExport({
     const showFinal = (user?.final_approver_id != null && user?.final_approver_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'final_approver')
 
     return `
-      <div style="font-family: Arial, sans-serif; font-size: 9pt; color: #000;">
-        <div style="width: 100%; margin-bottom: 8px;"><img src="${origin}/ctg-header-logo.png" alt="CTG" style="width: 100%; height: auto; max-height: 120px; object-fit: contain;" /></div>
-        <div style="margin-bottom: 8px;"><strong>Time Sheet For:</strong> ${escapeHtml(user?.name)}</div>
-        <div style="margin-bottom: 8px;"><strong>From:</strong> ${formatDate(weekDates.start)} <strong>To:</strong> ${formatDate(weekDates.end)}</div>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 9pt;">
+      <div style="font-family: Arial, sans-serif; font-size: 8pt; color: #000;">
+        <div style="width: 100%; margin-bottom: 6px;"><img src="${origin}/ctg-header-logo.png" alt="CTG" style="width: 100%; height: auto; max-height: 70px; object-fit: contain;" /></div>
+        <div style="margin-bottom: 6px;"><strong>Time Sheet For:</strong> ${escapeHtml(user?.name)}</div>
+        <div style="margin-bottom: 6px;"><strong>From:</strong> ${formatDate(weekDates.start)} <strong>To:</strong> ${formatDate(weekDates.end)}</div>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 8pt;">
           <thead><tr style="background-color: #f0f0f0;">
-            <th style="border: 1px solid #000; padding: 4px; text-align: left;">Client / Project #</th>
-            <th style="border: 1px solid #000; padding: 4px; text-align: left;">PO#</th>
-            <th style="border: 1px solid #000; padding: 4px; text-align: left;">Task Description</th>
-            <th style="border: 1px solid #000; padding: 4px; text-align: left;">System</th>
-            <th style="border: 1px solid #000; padding: 4px; text-align: left;">Deliverable</th>
-            <th style="border: 1px solid #000; padding: 4px; text-align: left;">Activity</th>
-            ${weekDates.days.map((d, i) => `<th style="border: 1px solid #000; padding: 4px; text-align: center;"><div>${format(d, 'EEE')}</div><div style="font-size: 7pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}
-            <th style="border: 1px solid #000; padding: 4px; text-align: center;">Total</th>
+            <th style="border: 1px solid #000; padding: 3px; text-align: left;">Client / Project #</th>
+            <th style="border: 1px solid #000; padding: 3px; text-align: left;">PO#</th>
+            <th style="border: 1px solid #000; padding: 3px; text-align: left;">Task Description</th>
+            <th style="border: 1px solid #000; padding: 3px; text-align: left;">System</th>
+            <th style="border: 1px solid #000; padding: 3px; text-align: left;">Deliverable</th>
+            <th style="border: 1px solid #000; padding: 3px; text-align: left;">Activity</th>
+            ${weekDates.days.map((d, i) => `<th style="border: 1px solid #000; padding: 3px; text-align: center;"><div>${format(d, 'EEE')}</div><div style="font-size: 7pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}
+            <th style="border: 1px solid #000; padding: 3px; text-align: center;">Total</th>
           </tr></thead>
           <tbody>
             ${entries.map((e: any) => `<tr>
-              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.sites?.name || e.client_project_id)}</td>
-              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.purchase_orders?.po_number || e.po_id)}</td>
-              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.task_description)}</td>
-              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.system_name || e.systems?.name || '—')}</td>
-              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.deliverables?.name || '—')}</td>
-              <td style="border: 1px solid #000; padding: 4px;">${escapeHtml(e.activities?.name || '—')}</td>
-              ${days.map(day => `<td style="border: 1px solid #000; padding: 4px; text-align: right;">${(e[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}
-              <td style="border: 1px solid #000; padding: 4px; text-align: right; font-weight: bold;">${calculateTotal(e).toFixed(2)}</td>
+              <td style="border: 1px solid #000; padding: 3px;">${escapeHtml(e.sites?.name || e.client_project_id)}</td>
+              <td style="border: 1px solid #000; padding: 3px;">${escapeHtml(e.purchase_orders?.po_number || e.po_id)}</td>
+              <td style="border: 1px solid #000; padding: 3px;">${escapeHtml(e.task_description)}</td>
+              <td style="border: 1px solid #000; padding: 3px;">${escapeHtml(e.system_name || e.systems?.name || '—')}</td>
+              <td style="border: 1px solid #000; padding: 3px;">${escapeHtml(e.deliverables?.name || '—')}</td>
+              <td style="border: 1px solid #000; padding: 3px;">${escapeHtml(e.activities?.name || '—')}</td>
+              ${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${(e[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}
+              <td style="border: 1px solid #000; padding: 3px; text-align: right; font-weight: bold;">${calculateTotal(e).toFixed(2)}</td>
             </tr>`).join('')}
-            ${Array.from({ length: Math.max(0, 5 - entries.length) }).map(() => `<tr>${[1,2,3,4,5,6].map(() => '<td style="border: 1px solid #000; padding: 4px;"></td>').join('')}${days.map(() => '<td style="border: 1px solid #000; padding: 4px; text-align: right;">0.00</td>').join('')}<td style="border: 1px solid #000; padding: 4px; text-align: right;">0.00</td></tr>`).join('')}
-            <tr style="background-color: #FFFF99; font-weight: bold;"><td colspan="6" style="border: 1px solid #000; padding: 4px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 4px; text-align: right;">${getBillableSubtotal(day).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 4px; text-align: right;">${getBillableGrandTotal().toFixed(2)}</td></tr>
+            ${Array.from({ length: Math.max(0, 3 - entries.length) }).map(() => `<tr>${[1,2,3,4,5,6].map(() => '<td style="border: 1px solid #000; padding: 3px;"></td>').join('')}${days.map(() => '<td style="border: 1px solid #000; padding: 3px; text-align: right;">0.00</td>').join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">0.00</td></tr>`).join('')}
+            <tr style="background-color: #FFFF99; font-weight: bold;"><td colspan="6" style="border: 1px solid #000; padding: 3px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getBillableSubtotal(day).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getBillableGrandTotal().toFixed(2)}</td></tr>
           </tbody>
         </table>
-        <div style="margin-top: 10px;">
-          <div style="margin-bottom: 6px;"><strong>Employee Signature / Date:</strong> ${timesheet.employee_signed_at ? `${escapeHtml(user?.name)} ${formatDateInEastern(timesheet.employee_signed_at)}` : '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>
-          ${showSupervisor ? `<div style="margin-bottom: 6px; text-align: right;"><strong>Supervisor Approval by / Date:</strong> ${sig('supervisor') || '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>` : ''}
-          ${showManager ? `<div style="margin-bottom: 6px; text-align: right;"><strong>Manager Approval by / Date:</strong> ${sig('manager') || '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>` : ''}
+        <div style="margin-top: 6px;">
+          <div style="margin-bottom: 4px;"><strong>Employee Signature / Date:</strong> ${timesheet.employee_signed_at ? `${escapeHtml(user?.name)} ${formatDateInEastern(timesheet.employee_signed_at)}` : '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>
+          ${showSupervisor ? `<div style="margin-bottom: 4px; text-align: right;"><strong>Supervisor Approval by / Date:</strong> ${sig('supervisor') || '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>` : ''}
+          ${showManager ? `<div style="margin-bottom: 4px; text-align: right;"><strong>Manager Approval by / Date:</strong> ${sig('manager') || '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>` : ''}
           ${showFinal ? `<div style="text-align: right;"><strong>Final Approver by / Date:</strong> ${sig('final_approver') || '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>` : ''}
         </div>
-        <div style="margin-top: 10px;"><h3 style="font-size: 10pt; margin-bottom: 6px;">UNBILLABLE TIME</h3>
-        <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
-          <thead><tr style="background-color: #f0f0f0;"><th style="border: 1px solid #000; padding: 4px;">Description</th>${weekDates.days.map((d, i) => `<th style="border: 1px solid #000; padding: 4px; text-align: center;"><div>${format(d, 'EEE')}</div><div style="font-size: 7pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}<th style="border: 1px solid #000; padding: 4px; text-align: center;">Total</th></tr></thead>
-          <tbody>${unbillable.map((u: any) => `<tr><td style="border: 1px solid #000; padding: 4px; font-weight: bold;">${escapeHtml(u.description)}</td>${days.map(day => `<td style="border: 1px solid #000; padding: 4px; text-align: right;">${(u[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 4px; text-align: right; font-weight: bold;">${calculateTotal(u).toFixed(2)}</td></tr>`).join('')}
-          <tr style="background-color: #FFFF99; font-weight: bold;"><td style="border: 1px solid #000; padding: 4px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 4px; text-align: right;">${getUnbillableSubtotal(day).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 4px; text-align: right;">${getUnbillableGrandTotal().toFixed(2)}</td></tr>
+        <div style="margin-top: 6px;"><h3 style="font-size: 9pt; margin-bottom: 4px;">UNBILLABLE TIME</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 8pt;">
+          <thead><tr style="background-color: #f0f0f0;"><th style="border: 1px solid #000; padding: 3px;">Description</th>${weekDates.days.map((d, i) => `<th style="border: 1px solid #000; padding: 3px; text-align: center;"><div>${format(d, 'EEE')}</div><div style="font-size: 7pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}<th style="border: 1px solid #000; padding: 3px; text-align: center;">Total</th></tr></thead>
+          <tbody>${unbillable.map((u: any) => `<tr><td style="border: 1px solid #000; padding: 3px; font-weight: bold;">${escapeHtml(u.description)}</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${(u[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right; font-weight: bold;">${calculateTotal(u).toFixed(2)}</td></tr>`).join('')}
+          <tr style="background-color: #FFFF99; font-weight: bold;"><td style="border: 1px solid #000; padding: 3px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableSubtotal(day).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableGrandTotal().toFixed(2)}</td></tr>
           </tbody></table></div>
-        <div style="background-color: #90EE90; font-weight: bold; padding: 8px; margin-top: 10px; text-align: right; font-size: 11pt;">GRAND TOTAL ${getGrandTotal().toFixed(2)}</div>
+        <div style="background-color: #90EE90; font-weight: bold; padding: 6px; margin-top: 6px; text-align: right; font-size: 9pt;">GRAND TOTAL ${getGrandTotal().toFixed(2)}</div>
       </div>
     `
   }
@@ -189,7 +189,7 @@ export default function WeeklyTimesheetExport({
             .fit-page { transform-origin: top left; }
             .print-hide { background: #fef3c7; padding: 8px 12px; margin-bottom: 12px; font-size: 11px; border: 1px solid #f59e0b; border-radius: 6px; }
             @media print {
-              .fit-page { width: 11in; height: 8.5in; overflow: hidden; }
+              .fit-page { width: 11in; max-width: 100%; }
             }
           </style>
         </head>
