@@ -79,11 +79,13 @@ export default function BudgetPageClient({
         {isProject ? (
           <ProjectBudgetShell
             po={selectedPO}
+            sites={sites}
             onBack={handleBackToSelector}
           />
         ) : (
           <BasicBudgetView
             po={selectedPO}
+            sites={sites}
             onBack={handleBackToSelector}
             user={user}
           />

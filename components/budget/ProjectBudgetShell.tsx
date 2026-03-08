@@ -4,10 +4,11 @@ import { ArrowLeft } from 'lucide-react'
 
 interface ProjectBudgetShellProps {
   po: any
+  sites?: Array<{ id: string; name?: string }>
   onBack: () => void
 }
 
-export default function ProjectBudgetShell({ po, onBack }: ProjectBudgetShellProps) {
+export default function ProjectBudgetShell({ po, sites = [], onBack }: ProjectBudgetShellProps) {
   return (
     <div className="space-y-6">
       <button
@@ -27,7 +28,7 @@ export default function ProjectBudgetShell({ po, onBack }: ProjectBudgetShellPro
           budgeted hours compared to actual hours billed per activity. This is under development.
         </p>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-          PO: {po.po_number} — {po.sites?.name || 'Unknown client'}
+          PO: {po.po_number} — {po.sites?.name || (po.site_id && sites.find((s) => s.id === po.site_id)?.name) || 'Unknown client'}
         </p>
       </div>
     </div>

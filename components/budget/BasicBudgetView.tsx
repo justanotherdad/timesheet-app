@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Plus, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatDate, formatDateShort } from '@/lib/utils'
 import InvoiceFormModal from './InvoiceFormModal'
 import ExpenseFormModal from './ExpenseFormModal'
@@ -10,11 +10,12 @@ import BillRateFormModal from './BillRateFormModal'
 
 interface BasicBudgetViewProps {
   po: any
+  sites?: Array<{ id: string; name?: string; address_street?: string; address_city?: string; address_state?: string; address_zip?: string; contact?: string }>
   onBack: () => void
   user?: { id: string; profile: { role: string } }
 }
 
-export default function BasicBudgetView({ po, onBack, user }: BasicBudgetViewProps) {
+export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, user }: BasicBudgetViewProps) {
   const [data, setData] = useState<any>(null)
   const [billableData, setBillableData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -27,6 +28,8 @@ export default function BasicBudgetView({ po, onBack, user }: BasicBudgetViewPro
   const [invoiceModal, setInvoiceModal] = useState<any>(null)
   const [expenseModal, setExpenseModal] = useState<any>(null)
   const [billRateModal, setBillRateModal] = useState<any>(null)
+  const [billableSortColumn, setBillableSortColumn] = useState<string>('employee')
+  const [billableSortDir, setBillableSortDir] = useState<'asc' | 'desc'>('asc')
 
   const refetch = useCallback(async () => {
     const res = await fetch(`/api/budget/${po.id}`)
@@ -61,7 +64,7 @@ export default function BasicBudgetView({ po, onBack, user }: BasicBudgetViewPro
   }
 
   const poData = data?.po ?? po
-  const site = poData.sites || {}
+  const site = poData.sites || (poData.site_id && sitesProp?.length ? sitesProp.find((s) => s.id === poData.site_id) : null) || {}
   const addressParts = [site.address_street, [site.address_city, site.address_state, site.address_zip].filter(Boolean).join(', ')].filter(Boolean)
   const changeOrders = data?.changeOrders || []
   const invoices = data?.invoices || []
@@ -89,6 +92,36 @@ export default function BasicBudgetView({ po, onBack, user }: BasicBudgetViewPro
   const columnTotals = billableData?.columnTotals || {}
   const grandTotalFromTimesheets = billableData?.grandTotal || 0
   const grandTotal = grandTotalFromTimesheets + priorHoursBilled
+
+  const handleBillableSort = (col: string) => {
+    if (billableSortColumn === col) {
+      setBillableSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setBillableSortColumn(col)
+      setBillableSortDir(col === 'employee' ? 'asc' : 'desc')
+    }
+  }
+  const billableSortIcon = (col: string) => {
+    if (billableSortColumn !== col) return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-50" />
+    return billableSortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1 inline" /> : <ArrowDown className="h-3 w-3 ml-1 inline" />
+  }
+  const sortedRows = [...rows].sort((a: any, b: any) => {
+    const mult = billableSortDir === 'asc' ? 1 : -1
+    let aVal: string | number, bVal: string | number
+    if (billableSortColumn === 'employee') {
+      aVal = (a.userName || '').toLowerCase()
+      bVal = (b.userName || '').toLowerCase()
+      return mult * (aVal < bVal ? -1 : aVal > bVal ? 1 : 0)
+    }
+    if (billableSortColumn === 'total') {
+      aVal = a.rowTotal ?? 0
+      bVal = b.rowTotal ?? 0
+      return mult * (aVal < bVal ? -1 : aVal > bVal ? 1 : 0)
+    }
+    aVal = a.weekData?.[billableSortColumn]?.hours ?? 0
+    bVal = b.weekData?.[billableSortColumn]?.hours ?? 0
+    return mult * (aVal < bVal ? -1 : aVal > bVal ? 1 : 0)
+  })
 
   return (
     <div className="space-y-8">
@@ -264,11 +297,23 @@ export default function BasicBudgetView({ po, onBack, user }: BasicBudgetViewPro
           <table className="w-full text-sm min-w-[500px]">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-600">
-                <th className="text-left py-2 font-medium sticky left-0 bg-white dark:bg-gray-800">Employee</th>
+                <th className="text-left py-2 font-medium sticky left-0 bg-white dark:bg-gray-800">
+                  <button type="button" onClick={() => handleBillableSort('employee')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                    Employee{billableSortIcon('employee')}
+                  </button>
+                </th>
                 {weekEndings.map((we: string) => (
-                  <th key={we} className="text-right py-2 font-medium whitespace-nowrap">{formatDateShort(we)}</th>
+                  <th key={we} className="text-right py-2 font-medium whitespace-nowrap">
+                    <button type="button" onClick={() => handleBillableSort(we)} className="inline-flex items-center justify-end w-full hover:text-gray-700 dark:hover:text-gray-200">
+                      {formatDateShort(we)}{billableSortIcon(we)}
+                    </button>
+                  </th>
                 ))}
-                <th className="text-right py-2 font-medium">Total</th>
+                <th className="text-right py-2 font-medium">
+                  <button type="button" onClick={() => handleBillableSort('total')} className="inline-flex items-center justify-end w-full hover:text-gray-700 dark:hover:text-gray-200">
+                    Total{billableSortIcon('total')}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -288,8 +333,8 @@ export default function BasicBudgetView({ po, onBack, user }: BasicBudgetViewPro
               )}
               {rows.length === 0 && priorHoursBilled === 0 ? (
                 <tr><td colSpan={weekEndings.length + 2} className="py-4 text-center text-gray-500">No billable hours for this period</td></tr>
-              ) : rows.length > 0 ? (
-                rows.map((r: any) => (
+              ) : sortedRows.length > 0 ? (
+                sortedRows.map((r: any) => (
                   <tr
                     key={r.userId}
                     className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30"

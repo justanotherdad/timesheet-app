@@ -20,7 +20,7 @@ export default async function BudgetPage({
 
   const [sitesResult, purchaseOrdersResult] = await Promise.all([
     withQueryTimeout(() => supabase.from('sites').select('id, name, address_street, address_city, address_state, address_zip, contact').order('name')),
-    withQueryTimeout(() => supabase.from('purchase_orders').select('*, departments(id, name)').order('po_number')),
+    withQueryTimeout(() => supabase.from('purchase_orders').select('*, departments(id, name), sites(id, name, address_street, address_city, address_state, address_zip, contact)').order('po_number')),
   ])
 
   let sites = (sitesResult.data || []) as any[]
