@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Download, FileText, FileSpreadsheet, File, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
+import { Download, FileText, FileSpreadsheet, File, ArrowUpDown, ArrowUp, ArrowDown, X, Filter } from 'lucide-react'
 import { formatWeekEnding, formatDate, formatDateShort, formatDateInEastern, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 
@@ -14,11 +14,12 @@ interface AdminExportProps {
   sites: Site[]
   departments: Department[]
   purchaseOrders: PurchaseOrder[]
+  systems?: Array<{ id: string; name: string }>
 }
 
 type ExportFormat = 'csv' | 'excel' | 'pdf'
 
-export default function AdminExport({ timesheets, sites, departments, purchaseOrders }: AdminExportProps) {
+export default function AdminExport({ timesheets, sites, departments, purchaseOrders, systems = [] }: AdminExportProps) {
   const [selectedWeek, setSelectedWeek] = useState<string>('')
   const [selectedStatus, setSelectedStatus] = useState<string>('')
   const [selectedSite, setSelectedSite] = useState<string>('')
@@ -30,6 +31,13 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
   const [exporting, setExporting] = useState(false)
   const [sortColumn, setSortColumn] = useState<string>('week_ending')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+  const [showExportFilter, setShowExportFilter] = useState(false)
+  const [exportFilter, setExportFilter] = useState<{
+    clientIds: string[]
+    poIds: string[]
+    systemIds: string[]
+    includeNonBillable: boolean
+  }>({ clientIds: [], poIds: [], systemIds: [], includeNonBillable: true })
 
   // Cascading filters: each filter narrows the options in the others
   const filteredSites = useMemo(() => {
@@ -78,18 +86,21 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
 
   const hasActiveFilters = selectedWeek || selectedStatus || selectedSite || selectedDepartment || selectedPO || selectedEmployee
 
-  // Filter timesheets by all selected filters
+  // Filter timesheets by all selected filters (match if timesheet has ANY of selected site/PO)
   const filteredTimesheets = useMemo(() => {
     return timesheets.filter(ts => {
       if (selectedWeek && ts.week_ending !== selectedWeek) return false
       if (selectedStatus && ts.status !== selectedStatus) return false
-      if (selectedSite && ts.sites?.id !== selectedSite) return false
-      if (selectedDepartment && ts.purchase_orders?.department_id !== selectedDepartment) return false
-      if (selectedPO && ts.purchase_orders?.id !== selectedPO) return false
+      if (selectedSite && !(ts._site_ids || []).includes(selectedSite)) return false
+      if (selectedPO && !(ts._po_ids || []).includes(selectedPO)) return false
+      if (selectedDepartment) {
+        const posForTs = (ts._po_ids || []).map((id: string) => purchaseOrders.find(p => p.id === id)).filter(Boolean)
+        if (!posForTs.some((p: any) => p.department_id === selectedDepartment)) return false
+      }
       if (selectedEmployee && ts.user_id !== selectedEmployee) return false
       return true
     })
-  }, [timesheets, selectedWeek, selectedStatus, selectedSite, selectedDepartment, selectedPO, selectedEmployee])
+  }, [timesheets, purchaseOrders, selectedWeek, selectedStatus, selectedSite, selectedDepartment, selectedPO, selectedEmployee])
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -109,8 +120,8 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
       switch (sortColumn) {
         case 'week_ending': aVal = a.week_ending || ''; bVal = b.week_ending || ''; break
         case 'employee': aVal = (a.user_profiles?.name || '').toLowerCase(); bVal = (b.user_profiles?.name || '').toLowerCase(); break
-        case 'site': aVal = (a.sites?.name || '').toLowerCase(); bVal = (b.sites?.name || '').toLowerCase(); break
-        case 'po': aVal = (a.purchase_orders?.po_number || '').toLowerCase(); bVal = (b.purchase_orders?.po_number || '').toLowerCase(); break
+        case 'site': aVal = (a.sitesDisplay || '').toLowerCase(); bVal = (b.sitesDisplay || '').toLowerCase(); break
+        case 'po': aVal = (a.posDisplay || '').toLowerCase(); bVal = (b.posDisplay || '').toLowerCase(); break
         case 'hours': aVal = Number(a.hours) || 0; bVal = Number(b.hours) || 0; break
         case 'status': aVal = (a.status || '').toLowerCase(); bVal = (b.status || '').toLowerCase(); break
         default: aVal = a.week_ending || ''; bVal = b.week_ending || ''
@@ -146,8 +157,8 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
       formatWeekEnding(ts.week_ending),
       ts.user_profiles?.name || '',
       ts.user_profiles?.email || '',
-      ts.sites?.name || '',
-      ts.purchase_orders?.po_number || '',
+      ts.sitesDisplay || ts.sites?.name || '',
+      ts.posDisplay || ts.purchase_orders?.po_number || '',
       ts.hours || 0,
       ts.status,
     ])
@@ -186,8 +197,8 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
         'Week Ending': formatWeekEnding(ts.week_ending),
         'Employee': ts.user_profiles?.name || '',
         'Email': ts.user_profiles?.email || '',
-        'Site': ts.sites?.name || '',
-        'PO': ts.purchase_orders?.po_number || '',
+        'Site': ts.sitesDisplay || ts.sites?.name || '',
+        'PO': ts.posDisplay || ts.purchase_orders?.po_number || '',
         'Hours': ts.hours || 0,
         'Status': ts.status,
       }))
@@ -215,35 +226,29 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
       .replace(/'/g, '&#039;')
   }
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = async (filter?: { clientIds: string[]; poIds: string[]; systemIds: string[]; includeNonBillable: boolean }) => {
     const toExport = getExportData()
-
     if (toExport.length === 0) {
       alert('No timesheets selected')
       return
     }
 
     setExporting(true)
+    const f = filter || { clientIds: [], poIds: [], systemIds: [], includeNonBillable: true }
 
     try {
-      // Fetch full timesheet data for each selected timesheet
       const timesheetIds = toExport.map(ts => ts.id)
-      
-      // Fetch entries and unbillable for all timesheets
       const response = await fetch('/api/admin/export-timesheets-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timesheetIds })
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch timesheet data')
-      }
+      if (!response.ok) throw new Error('Failed to fetch timesheet data')
 
       const timesheetData = await response.json()
       const origin = window.location.origin
 
-      // Create a new window for PDF generation
       const printWindow = window.open('', '_blank')
       if (!printWindow) {
         alert('Please allow popups to generate PDF')
@@ -251,11 +256,21 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
         return
       }
 
-      // Generate HTML for all timesheets
+      const filterEntry = (entry: any) => {
+        if (f.clientIds.length && !f.clientIds.includes(entry.client_project_id)) return false
+        if (f.poIds.length && !f.poIds.includes(entry.po_id)) return false
+        if (f.systemIds.length) {
+          const sysMatch = entry.system_id ? f.systemIds.includes(entry.system_id) : f.systemIds.some(id => id.startsWith('custom:') && entry.system_name === id.replace('custom:', ''))
+          if (!sysMatch) return false
+        }
+        return true
+      }
+
       let htmlContent = ''
-      
       timesheetData.forEach((data: any, index: number) => {
-        const { timesheet, entries, unbillable, user } = data
+        let { timesheet, entries, unbillable, user } = data
+        entries = entries.filter(filterEntry)
+        if (!f.includeNonBillable) unbillable = []
         const weekDates = getWeekDates(timesheet.week_ending)
         const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
 
@@ -481,17 +496,28 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
   }
 
   const handleExport = () => {
-    switch (exportFormat) {
-      case 'csv':
-        handleExportCSV()
-        break
-      case 'excel':
-        handleExportExcel()
-        break
-      case 'pdf':
-        handleExportPDF()
-        break
+    const toExport = getExportData()
+    if (toExport.length === 0) {
+      alert('No timesheets selected')
+      return
     }
+    if (exportFormat === 'pdf') {
+      setShowExportFilter(true)
+    } else {
+      switch (exportFormat) {
+        case 'csv':
+          handleExportCSV()
+          break
+        case 'excel':
+          handleExportExcel()
+          break
+      }
+    }
+  }
+
+  const handleExportWithFilter = () => {
+    setShowExportFilter(false)
+    handleExportPDF(exportFilter)
   }
 
   const clearFiltersAndSelection = () => setSelectedTimesheets([])
@@ -744,11 +770,11 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {ts.user_profiles?.name || 'N/A'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                  {ts.sites?.name || 'N/A'}
+                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                  {ts.sitesDisplay || 'N/A'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                  {ts.purchase_orders?.po_number || 'N/A'}
+                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                  {ts.posDisplay || 'N/A'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {ts.hours}
@@ -761,6 +787,121 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
           </tbody>
         </table>
       </div>
+
+      {/* Export Filter Popup (for PDF) */}
+      {showExportFilter && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Filter Export Data
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Select which data to include. Leave all unchecked to include everything.
+              </p>
+            </div>
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Client / Site</label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {sites.filter(s => getExportData().some(ts => (ts._site_ids || []).includes(s.id))).map(s => (
+                    <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={exportFilter.clientIds.includes(s.id)}
+                        onChange={e => setExportFilter(prev => ({
+                          ...prev,
+                          clientIds: e.target.checked ? [...prev.clientIds, s.id] : prev.clientIds.filter(id => id !== s.id)
+                        }))}
+                        className="rounded"
+                      />
+                      <span>{s.name}</span>
+                    </label>
+                  ))}
+                  {sites.filter(s => getExportData().some(ts => (ts._site_ids || []).includes(s.id))).length === 0 && (
+                    <p className="text-sm text-gray-500">No clients in selected timesheets</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">PO</label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {purchaseOrders.filter(p => getExportData().some(ts => (ts._po_ids || []).includes(p.id))).map(p => (
+                    <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={exportFilter.poIds.includes(p.id)}
+                        onChange={e => setExportFilter(prev => ({
+                          ...prev,
+                          poIds: e.target.checked ? [...prev.poIds, p.id] : prev.poIds.filter(id => id !== p.id)
+                        }))}
+                        className="rounded"
+                      />
+                      <span>{p.po_number}</span>
+                    </label>
+                  ))}
+                  {purchaseOrders.filter(p => getExportData().some(ts => (ts._po_ids || []).includes(p.id))).length === 0 && (
+                    <p className="text-sm text-gray-500">No POs in selected timesheets</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Systems</label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {systems.filter(s => getExportData().some(ts => 
+                    (ts._system_ids || []).includes(s.id) || (s.id.startsWith('custom:') && (ts._system_names || []).includes(s.name))
+                  )).map(s => (
+                    <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={exportFilter.systemIds.includes(s.id)}
+                        onChange={e => setExportFilter(prev => ({
+                          ...prev,
+                          systemIds: e.target.checked ? [...prev.systemIds, s.id] : prev.systemIds.filter(id => id !== s.id)
+                        }))}
+                        className="rounded"
+                      />
+                      <span>{s.name}</span>
+                    </label>
+                  ))}
+                  {systems.filter(s => getExportData().some(ts => 
+                    (ts._system_ids || []).includes(s.id) || (s.id.startsWith('custom:') && (ts._system_names || []).includes(s.name))
+                  )).length === 0 && (
+                    <p className="text-sm text-gray-500">No systems in selected timesheets</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={exportFilter.includeNonBillable}
+                    onChange={e => setExportFilter(prev => ({ ...prev, includeNonBillable: e.target.checked }))}
+                    className="rounded"
+                  />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Include non-billable hours</span>
+                </label>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-2">
+              <button
+                onClick={handleExportWithFilter}
+                disabled={exporting}
+                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
+              >
+                {exporting ? 'Exporting...' : 'Export PDF'}
+              </button>
+              <button
+                onClick={() => setShowExportFilter(false)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-semibold hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

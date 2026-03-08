@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import { Download, Printer } from 'lucide-react'
+import { Download, Printer, Filter } from 'lucide-react'
 import { formatDate, formatDateShort, formatDateInEastern, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 
@@ -45,6 +45,13 @@ export default function WeeklyTimesheetExport({
 }: WeeklyTimesheetExportProps) {
   const exportRef = useRef<HTMLDivElement>(null)
   const [isPortrait, setIsPortrait] = useState(false)
+  const [showExportFilter, setShowExportFilter] = useState(false)
+  const [exportFilter, setExportFilter] = useState<{
+    clientIds: string[]
+    poIds: string[]
+    systemIds: string[]
+    includeNonBillable: boolean
+  }>({ clientIds: [], poIds: [], systemIds: [], includeNonBillable: true })
 
   useEffect(() => {
     const checkOrientation = () => {
@@ -71,30 +78,30 @@ export default function WeeklyTimesheetExport({
            (entry.thu_hours || 0) + (entry.fri_hours || 0) + (entry.sat_hours || 0) + (entry.sun_hours || 0)
   }
 
-  const getDayTotal = (day: typeof days[number]): number => {
-    const billable = entries.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0)
-    const unbillableTotal = unbillable.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0)
+  const getDayTotal = (day: typeof days[number], entriesToUse = entries, unbillableToUse = unbillable): number => {
+    const billable = entriesToUse.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0)
+    const unbillableTotal = unbillableToUse.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0)
     return billable + unbillableTotal
   }
 
-  const getBillableSubtotal = (day: typeof days[number]): number => {
-    return entries.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0)
+  const getBillableSubtotal = (day: typeof days[number], entriesToUse = entries): number => {
+    return entriesToUse.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0)
   }
 
-  const getUnbillableSubtotal = (day: typeof days[number]): number => {
-    return unbillable.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0)
+  const getUnbillableSubtotal = (day: typeof days[number], unbillableToUse = unbillable): number => {
+    return unbillableToUse.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0)
   }
 
-  const getBillableGrandTotal = (): number => {
-    return entries.reduce((sum, e) => sum + calculateTotal(e), 0)
+  const getBillableGrandTotal = (entriesToUse = entries): number => {
+    return entriesToUse.reduce((sum, e) => sum + calculateTotal(e), 0)
   }
 
-  const getUnbillableGrandTotal = (): number => {
-    return unbillable.reduce((sum, e) => sum + calculateTotal(e), 0)
+  const getUnbillableGrandTotal = (unbillableToUse = unbillable): number => {
+    return unbillableToUse.reduce((sum, e) => sum + calculateTotal(e), 0)
   }
 
-  const getGrandTotal = (): number => {
-    return getBillableGrandTotal() + getUnbillableGrandTotal()
+  const getGrandTotal = (entriesToUse = entries, unbillableToUse = unbillable): number => {
+    return getBillableGrandTotal(entriesToUse) + getUnbillableGrandTotal(unbillableToUse)
   }
 
   const handlePrint = () => {
@@ -111,7 +118,7 @@ export default function WeeklyTimesheetExport({
       .replace(/'/g, '&#039;')
   }
 
-  const buildExportHtml = () => {
+  const buildExportHtml = (entriesToUse = entries, unbillableToUse = unbillable) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const sig = (role: string) => {
       const s = timesheet.timesheet_signatures?.find((x: any) => x.signer_role === role)
@@ -139,7 +146,7 @@ export default function WeeklyTimesheetExport({
             <th style="border: 1px solid #000; padding: 3px; text-align: center;">Total</th>
           </tr></thead>
           <tbody>
-            ${entries.map((e: any) => `<tr>
+            ${entriesToUse.map((e: any) => `<tr>
               <td style="border: 1px solid #000; padding: 3px;">${escapeHtml(e.sites?.name || e.client_project_id)}</td>
               <td style="border: 1px solid #000; padding: 3px;">${escapeHtml(e.purchase_orders?.po_number || e.po_id)}</td>
               <td style="border: 1px solid #000; padding: 3px;">${escapeHtml(e.task_description)}</td>
@@ -149,8 +156,8 @@ export default function WeeklyTimesheetExport({
               ${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${(e[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}
               <td style="border: 1px solid #000; padding: 3px; text-align: right; font-weight: bold;">${calculateTotal(e).toFixed(2)}</td>
             </tr>`).join('')}
-            ${Array.from({ length: Math.max(0, 3 - entries.length) }).map(() => `<tr>${[1,2,3,4,5,6].map(() => '<td style="border: 1px solid #000; padding: 3px;"></td>').join('')}${days.map(() => '<td style="border: 1px solid #000; padding: 3px; text-align: right;">0.00</td>').join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">0.00</td></tr>`).join('')}
-            <tr style="background-color: #FFFF99; font-weight: bold;"><td colspan="6" style="border: 1px solid #000; padding: 3px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getBillableSubtotal(day).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getBillableGrandTotal().toFixed(2)}</td></tr>
+            ${Array.from({ length: Math.max(0, 3 - entriesToUse.length) }).map(() => `<tr>${[1,2,3,4,5,6].map(() => '<td style="border: 1px solid #000; padding: 3px;"></td>').join('')}${days.map(() => '<td style="border: 1px solid #000; padding: 3px; text-align: right;">0.00</td>').join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">0.00</td></tr>`).join('')}
+            <tr style="background-color: #FFFF99; font-weight: bold;"><td colspan="6" style="border: 1px solid #000; padding: 3px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getBillableSubtotal(day, entriesToUse).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getBillableGrandTotal(entriesToUse).toFixed(2)}</td></tr>
           </tbody>
         </table>
         <div style="margin-top: 6px;">
@@ -162,19 +169,30 @@ export default function WeeklyTimesheetExport({
         <div style="margin-top: 6px;"><h3 style="font-size: 9pt; margin-bottom: 4px;">UNBILLABLE TIME</h3>
         <table style="width: 100%; border-collapse: collapse; font-size: 8pt;">
           <thead><tr style="background-color: #f0f0f0;"><th style="border: 1px solid #000; padding: 3px;">Description</th>${weekDates.days.map((d, i) => `<th style="border: 1px solid #000; padding: 3px; text-align: center;"><div>${format(d, 'EEE')}</div><div style="font-size: 7pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}<th style="border: 1px solid #000; padding: 3px; text-align: center;">Total</th></tr></thead>
-          <tbody>${unbillable.map((u: any) => `<tr><td style="border: 1px solid #000; padding: 3px; font-weight: bold;">${escapeHtml(u.description)}</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${(u[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right; font-weight: bold;">${calculateTotal(u).toFixed(2)}</td></tr>`).join('')}
-          <tr style="background-color: #FFFF99; font-weight: bold;"><td style="border: 1px solid #000; padding: 3px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableSubtotal(day).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableGrandTotal().toFixed(2)}</td></tr>
+          <tbody>${unbillableToUse.map((u: any) => `<tr><td style="border: 1px solid #000; padding: 3px; font-weight: bold;">${escapeHtml(u.description)}</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${(u[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right; font-weight: bold;">${calculateTotal(u).toFixed(2)}</td></tr>`).join('')}
+          <tr style="background-color: #FFFF99; font-weight: bold;"><td style="border: 1px solid #000; padding: 3px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableSubtotal(day, unbillableToUse).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableGrandTotal(unbillableToUse).toFixed(2)}</td></tr>
           </tbody></table></div>
-        <div style="background-color: #90EE90; font-weight: bold; padding: 6px; margin-top: 6px; text-align: right; font-size: 9pt;">GRAND TOTAL ${getGrandTotal().toFixed(2)}</div>
+        <div style="background-color: #90EE90; font-weight: bold; padding: 6px; margin-top: 6px; text-align: right; font-size: 9pt;">GRAND TOTAL ${getGrandTotal(entriesToUse, unbillableToUse).toFixed(2)}</div>
       </div>
     `
   }
 
-  const handleDownload = () => {
+  const filterEntry = (e: any, f: typeof exportFilter) => {
+    if (f.clientIds.length && !f.clientIds.includes(e.client_project_id)) return false
+    if (f.poIds.length && !f.poIds.includes(e.po_id)) return false
+    if (f.systemIds.length) {
+      const sysId = e.system_id || (e.system_name ? `custom:${e.system_name}` : null)
+      if (!sysId || !f.systemIds.includes(sysId)) return false
+    }
+    return true
+  }
+
+  const handleDownload = (entriesToUse = entries, unbillableToUse = unbillable) => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
     const origin = window.location.origin
+    const html = buildExportHtml(entriesToUse, unbillableToUse)
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -195,7 +213,7 @@ export default function WeeklyTimesheetExport({
         </head>
         <body>
           <div class="print-hide"><strong>Before printing:</strong> In the print dialog, open &quot;More settings&quot; and <strong>uncheck &quot;Headers and footers&quot;</strong> to remove the URL and page numbers from the output.</div>
-          <div class="fit-page">${buildExportHtml()}</div>
+          <div class="fit-page">${html}</div>
         </body>
       </html>
     `)
@@ -205,11 +223,45 @@ export default function WeeklyTimesheetExport({
     }, 500)
   }
 
+  const handleDownloadClick = () => {
+    setShowExportFilter(true)
+  }
+
+  const handleExportWithFilter = () => {
+    setShowExportFilter(false)
+    const f = exportFilter
+    const filteredEntries = f.clientIds.length || f.poIds.length || f.systemIds.length
+      ? entries.filter((e: any) => filterEntry(e, f))
+      : entries
+    const filteredUnbillable = f.includeNonBillable ? unbillable : []
+    handleDownload(filteredEntries, filteredUnbillable)
+  }
+
+  const filterClients = Array.from(new Map(
+    entries.filter((e: any) => e.client_project_id).map((e: any) => [
+      e.client_project_id,
+      { id: e.client_project_id, name: e.sites?.name || e.client_project_id }
+    ])
+  ).values())
+  const filterPOs = Array.from(new Map(
+    entries.filter((e: any) => e.po_id).map((e: any) => [
+      e.po_id,
+      { id: e.po_id, name: e.purchase_orders?.po_number || e.po_id }
+    ])
+  ).values())
+  const filterSystems = Array.from(new Map(
+    entries.flatMap((e: any) => {
+      const sysId = e.system_id || (e.system_name ? `custom:${e.system_name}` : null)
+      const sysName = e.system_name || e.systems?.name || '—'
+      return sysId ? [[sysId, { id: sysId, name: sysName }]] : []
+    })
+  ).values())
+
   return (
     <div>
       <div className="mb-4 flex gap-2 print:hidden">
         <button
-          onClick={handleDownload}
+          onClick={handleDownloadClick}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
           title="Click to download PDF. In the print dialog, select 'Save as PDF' as the destination."
         >
@@ -230,6 +282,116 @@ export default function WeeklyTimesheetExport({
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 print:hidden">
         To remove the URL and page number from the printed/PDF output, turn off <strong>Headers and footers</strong> in your browser&apos;s print dialog (e.g. in Chrome: click &quot;More settings&quot; and uncheck &quot;Headers and footers&quot;).
       </p>
+
+      {/* Export Filter Popup */}
+      {showExportFilter && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Filter Export Data
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Select which data to include. Leave all unchecked to include everything.
+              </p>
+            </div>
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Client / Site</label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {filterClients.map(c => (
+                    <label key={c.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={exportFilter.clientIds.includes(c.id)}
+                        onChange={e => setExportFilter(prev => ({
+                          ...prev,
+                          clientIds: e.target.checked ? [...prev.clientIds, c.id] : prev.clientIds.filter(id => id !== c.id)
+                        }))}
+                        className="rounded"
+                      />
+                      <span>{c.name}</span>
+                    </label>
+                  ))}
+                  {filterClients.length === 0 && (
+                    <p className="text-sm text-gray-500">No clients in this timesheet</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">PO</label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {filterPOs.map(p => (
+                    <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={exportFilter.poIds.includes(p.id)}
+                        onChange={e => setExportFilter(prev => ({
+                          ...prev,
+                          poIds: e.target.checked ? [...prev.poIds, p.id] : prev.poIds.filter(id => id !== p.id)
+                        }))}
+                        className="rounded"
+                      />
+                      <span>{p.name}</span>
+                    </label>
+                  ))}
+                  {filterPOs.length === 0 && (
+                    <p className="text-sm text-gray-500">No POs in this timesheet</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Systems</label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {filterSystems.map(s => (
+                    <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={exportFilter.systemIds.includes(s.id)}
+                        onChange={e => setExportFilter(prev => ({
+                          ...prev,
+                          systemIds: e.target.checked ? [...prev.systemIds, s.id] : prev.systemIds.filter(id => id !== s.id)
+                        }))}
+                        className="rounded"
+                      />
+                      <span>{s.name}</span>
+                    </label>
+                  ))}
+                  {filterSystems.length === 0 && (
+                    <p className="text-sm text-gray-500">No systems in this timesheet</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={exportFilter.includeNonBillable}
+                    onChange={e => setExportFilter(prev => ({ ...prev, includeNonBillable: e.target.checked }))}
+                    className="rounded"
+                  />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Include non-billable hours</span>
+                </label>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-2">
+              <button
+                onClick={handleExportWithFilter}
+                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700"
+              >
+                Export PDF
+              </button>
+              <button
+                onClick={() => setShowExportFilter(false)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-semibold hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile: portrait shows rotate prompt; landscape shows scrollable timesheet with pinch zoom */}
       <div className={`relative ${isPortrait ? 'min-h-[400px]' : ''}`}>

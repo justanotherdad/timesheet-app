@@ -25,7 +25,7 @@ export default async function AdminExportPage() {
   if (timesheetIds.length > 0) {
     const { data: entries } = await supabase
       .from('timesheet_entries')
-      .select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours, client_project_id, po_id')
+      .select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours, client_project_id, po_id, system_id, system_name')
       .in('timesheet_id', timesheetIds)
     
     entriesData = entries || []
@@ -41,22 +41,23 @@ export default async function AdminExportPage() {
              (entry.sun_hours || 0)
     }, 0)
     
-    // Get the first entry's site and PO for display (or aggregate if needed)
-    const firstEntry = entries[0]
-    const siteId = firstEntry?.client_project_id
-    const poId = firstEntry?.po_id
+    const siteIdsForTs = Array.from(new Set(entries.map((e: any) => e.client_project_id).filter(Boolean)))
+    const poIdsForTs = Array.from(new Set(entries.map((e: any) => e.po_id).filter(Boolean)))
+    const systemIdsForTs = Array.from(new Set(entries.map((e: any) => e.system_id).filter(Boolean)))
+    const systemNamesForTs = Array.from(new Set(entries.map((e: any) => e.system_name).filter(Boolean)))
 
     return {
       ...ts,
       hours: totalHours,
-      _site_id: siteId,
-      _po_id: poId
+      _site_ids: siteIdsForTs,
+      _po_ids: poIdsForTs,
+      _system_ids: systemIdsForTs,
+      _system_names: systemNamesForTs
     }
   })
 
-  // Get unique site and PO IDs to fetch names
-  const siteIds = Array.from(new Set(timesheetsWithHours.map((ts: any) => ts._site_id).filter(Boolean)))
-  const poIds = Array.from(new Set(timesheetsWithHours.map((ts: any) => ts._po_id).filter(Boolean)))
+  const siteIds = Array.from(new Set(timesheetsWithHours.flatMap((ts: any) => ts._site_ids || [])))
+  const poIds = Array.from(new Set(timesheetsWithHours.flatMap((ts: any) => ts._po_ids || [])))
 
   // Fetch site names
   let sitesMap: Record<string, any> = {}
@@ -84,6 +85,21 @@ export default async function AdminExportPage() {
     }, {})
   }
 
+  // Fetch systems for filter options
+  const systemIdsFromTs = Array.from(new Set(timesheetsWithHours.flatMap((ts: any) => ts._system_ids || [])))
+  const customSystemNames = Array.from(new Set(timesheetsWithHours.flatMap((ts: any) => ts._system_names || [])))
+  let systemsMap: Record<string, any> = {}
+  if (systemIdsFromTs.length > 0) {
+    const { data: systemsData } = await supabase
+      .from('systems')
+      .select('id, name')
+      .in('id', systemIdsFromTs)
+    systemsMap = (systemsData || []).reduce((acc: Record<string, any>, s: any) => {
+      acc[s.id] = s
+      return acc
+    }, {})
+  }
+
   // Fetch departments for cascading filters
   const { data: departmentsData } = await supabase
     .from('departments')
@@ -91,17 +107,34 @@ export default async function AdminExportPage() {
     .order('name')
   const departments = departmentsData || []
 
-  // Build sites and purchaseOrders for AdminExport (unique from timesheet data + full lists for cascading)
-  const uniqueSiteIds = Array.from(new Set((timesheetsWithHours || []).map((ts: any) => ts._site_id).filter(Boolean)))
-  const sites = uniqueSiteIds.map((id: string) => sitesMap[id]).filter(Boolean)
+  // Build sites and purchaseOrders for AdminExport
+  const sites = siteIds.map((id: string) => sitesMap[id]).filter(Boolean)
   const purchaseOrders = (poIds as string[]).map((id: string) => posMap[id]).filter(Boolean)
+  const systems = [
+    ...systemIdsFromTs.map((id: string) => systemsMap[id]).filter(Boolean),
+    ...customSystemNames.map((name: string) => ({ id: `custom:${name}`, name }))
+  ]
 
-  // Add site and PO names to timesheets (PO includes department_id for filtering)
-  const timesheetsWithData = timesheetsWithHours.map((ts: any) => ({
-    ...ts,
-    sites: ts._site_id ? sitesMap[ts._site_id] : null,
-    purchase_orders: ts._po_id ? posMap[ts._po_id] : null
-  }))
+  // Add site names, PO names, system names to timesheets (all unique per timesheet)
+  const timesheetsWithData = timesheetsWithHours.map((ts: any) => {
+    const siteNames = (ts._site_ids || []).map((id: string) => sitesMap[id]?.name).filter(Boolean)
+    const poNumbers = (ts._po_ids || []).map((id: string) => posMap[id]?.po_number).filter(Boolean)
+    const systemNamesList = [
+      ...(ts._system_ids || []).map((id: string) => systemsMap[id]?.name).filter(Boolean),
+      ...(ts._system_names || []).filter(Boolean)
+    ].filter(Boolean)
+    const uniqueSystemNames = Array.from(new Set(systemNamesList))
+    return {
+      ...ts,
+      sitesDisplay: siteNames.length ? siteNames.join(', ') : 'N/A',
+      posDisplay: poNumbers.length ? poNumbers.join(', ') : 'N/A',
+      systemsDisplay: uniqueSystemNames.length ? uniqueSystemNames.join(', ') : '—',
+      _site_ids: ts._site_ids,
+      _po_ids: ts._po_ids,
+      _system_ids: ts._system_ids,
+      _system_names: ts._system_names
+    }
+  })
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -113,6 +146,7 @@ export default async function AdminExportPage() {
             sites={sites}
             departments={departments}
             purchaseOrders={purchaseOrders}
+            systems={systems}
           />
         </div>
       </div>
