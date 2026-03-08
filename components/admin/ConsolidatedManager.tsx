@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, FileText } from 'lucide-react'
 import SiteDetailView from './SiteDetailView'
@@ -691,6 +692,14 @@ export default function ConsolidatedManager({
                           <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{po.description || 'N/A'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{dept?.name || 'N/A'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <Link
+                              href={`/dashboard/budget?poId=${po.id}`}
+                              className="text-gray-600 hover:text-blue-600 mr-4 inline-flex items-center gap-1"
+                              title="View budget details"
+                            >
+                              <FileText className="h-4 w-4" />
+                              View Details
+                            </Link>
                             {!readOnly && (
                               <>
                                 <button onClick={() => setEditingItem({ type: 'po', ...po })} className="text-blue-600 hover:text-blue-900 mr-4">
