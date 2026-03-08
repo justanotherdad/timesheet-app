@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getAccessibleSiteIds } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
+import { getWeekEndingsForMonth } from '@/lib/utils'
 
 export async function GET(
   req: Request,
@@ -34,25 +35,41 @@ export async function GET(
 
   let startDate: string
   let endDate: string
+  let weekEndings: string[] = []
+  let useAllWeeksInMonth = false
+  let monthNum = 0
+  let yearNum = 0
 
   if (allMonths) {
     startDate = '2000-01-01'
     endDate = '2100-12-31'
   } else if (month && year) {
-    const m = parseInt(month, 10)
-    const y = parseInt(year, 10)
-    const firstDay = new Date(y, m - 1, 1)
-    const lastDay = new Date(y, m, 0)
+    monthNum = parseInt(month, 10)
+    yearNum = parseInt(year, 10)
+    const firstDay = new Date(yearNum, monthNum - 1, 1)
+    const lastDay = new Date(yearNum, monthNum, 0)
     startDate = firstDay.toISOString().split('T')[0]
     endDate = lastDay.toISOString().split('T')[0]
+    useAllWeeksInMonth = true
   } else {
     const now = new Date()
-    const m = now.getMonth() + 1
-    const y = now.getFullYear()
-    const firstDay = new Date(y, m - 1, 1)
-    const lastDay = new Date(y, m, 0)
+    monthNum = now.getMonth() + 1
+    yearNum = now.getFullYear()
+    const firstDay = new Date(yearNum, monthNum - 1, 1)
+    const lastDay = new Date(yearNum, monthNum, 0)
     startDate = firstDay.toISOString().split('T')[0]
     endDate = lastDay.toISOString().split('T')[0]
+    useAllWeeksInMonth = true
+  }
+
+  if (useAllWeeksInMonth && monthNum && yearNum) {
+    const { data: site } = await supabase
+      .from('sites')
+      .select('week_starting_day')
+      .eq('id', po.site_id)
+      .single()
+    const weekStartsOn = site?.week_starting_day ?? 1
+    weekEndings = getWeekEndingsForMonth(yearNum, monthNum, weekStartsOn)
   }
 
   const { data: timesheets } = await supabase
@@ -62,25 +79,19 @@ export async function GET(
     .lte('week_ending', endDate)
     .eq('status', 'approved')
 
-  if (!timesheets?.length) {
-    return NextResponse.json({
-      rows: [],
-      weekEndings: [],
-      monthLabel: month && year ? `${month}/${year}` : null,
-    })
-  }
-
-  const tsIds = timesheets.map((t: any) => t.id)
-  const { data: entries } = await supabase
-    .from('timesheet_entries')
-    .select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
-    .eq('po_id', poId)
-    .in('timesheet_id', tsIds)
+  const tsIds = timesheets?.length ? timesheets.map((t: any) => t.id) : []
+  const { data: entries } = tsIds.length > 0
+    ? await supabase
+        .from('timesheet_entries')
+        .select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
+        .eq('po_id', poId)
+        .in('timesheet_id', tsIds)
+    : { data: [] }
 
   const hoursByUserWeek: Record<string, Record<string, { hours: number; timesheetId: string }>> = {}
-  const weekSet = new Set<string>()
+  const weekSet = new Set<string>(weekEndings)
 
-  for (const ts of timesheets) {
+  for (const ts of timesheets || []) {
     const tsEntries = (entries || []).filter((e: any) => e.timesheet_id === ts.id)
     const totalHours = tsEntries.reduce((sum: number, e: any) => {
       return sum + (e.mon_hours || 0) + (e.tue_hours || 0) + (e.wed_hours || 0) +
@@ -98,7 +109,12 @@ export async function GET(
     }
   }
 
-  const weekEndings = Array.from(weekSet).sort()
+  if (!useAllWeeksInMonth) {
+    weekEndings = Array.from(weekSet).sort()
+  } else {
+    weekEndings = [...new Set([...weekEndings, ...Array.from(weekSet)])].sort()
+  }
+
   const userIds = Object.keys(hoursByUserWeek)
 
   const { data: profiles } = userIds.length > 0

@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { startOfWeek, endOfWeek, format, parseISO } from "date-fns"
+import { startOfWeek, endOfWeek, format, parseISO, addWeeks } from "date-fns"
 import { toZonedTime } from "date-fns-tz"
 
 const APP_TIMEZONE = 'America/New_York' // EST/EDT
@@ -22,6 +22,21 @@ export function getWeekEnding(date?: Date, weekStartsOn: number = 1): Date {
 export function getWeekStarting(date?: Date, weekStartsOn: number = 1): Date {
   const ref = date ?? getNowInAppTz()
   return startOfWeek(ref, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })
+}
+
+/** Get all week-ending dates (YYYY-MM-DD) that fall within a month. weekStartsOn: 0=Sun, 1=Mon, etc. */
+export function getWeekEndingsForMonth(year: number, month: number, weekStartsOn: number = 1): string[] {
+  const firstDay = new Date(year, month - 1, 1)
+  const lastDay = new Date(year, month, 0)
+  const endings: string[] = []
+  let current = endOfWeek(firstDay, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })
+  while (current <= lastDay) {
+    if (current >= firstDay) {
+      endings.push(format(current, 'yyyy-MM-dd'))
+    }
+    current = addWeeks(current, 1)
+  }
+  return endings
 }
 
 export function getWeekDates(weekEnding: Date | string, weekStartsOn: number = 1): { start: Date; end: Date; days: Date[] } {

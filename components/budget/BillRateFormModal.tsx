@@ -71,6 +71,9 @@ export default function BillRateFormModal({ poId, rate, users, onSave, onClose }
                   <option key={u.id} value={u.id}>{u.name}</option>
                 ))}
               </select>
+              {users.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">No employees assigned to this PO. Assign users in Manage Organization → User Management first.</p>
+              )}
             </div>
           )}
           <div>
