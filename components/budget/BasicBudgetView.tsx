@@ -147,7 +147,7 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
           <div className="space-y-2">
             <p><span className="font-medium text-gray-500 dark:text-gray-400">PO#:</span> {poData.po_number}</p>
             <p><span className="font-medium text-gray-500 dark:text-gray-400">Department:</span> {poData.departments?.name || '—'}</p>
-            <p><span className="font-medium text-gray-500 dark:text-gray-400">Project:</span> {poData.project_name || '—'}</p>
+            <p><span className="font-medium text-gray-500 dark:text-gray-400">Project:</span> {poData.description ?? poData.project_name ?? '—'}</p>
             <p><span className="font-medium text-gray-500 dark:text-gray-400">PO Issue Date:</span> {poData.po_issue_date ? formatDate(poData.po_issue_date) : '—'}</p>
             <p><span className="font-medium text-gray-500 dark:text-gray-400">Proposal #:</span> {poData.proposal_number || '—'}</p>
           </div>
