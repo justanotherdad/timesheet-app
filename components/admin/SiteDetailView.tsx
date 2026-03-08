@@ -8,7 +8,7 @@ import POInfoCard from './POInfoCard'
 interface SiteDetailViewProps {
   site: any
   departments: Array<{ id: string; name: string; site_id: string }>
-  purchaseOrders: Array<{ id: string; po_number: string; site_id: string; department_id?: string; original_po_amount?: number; po_issue_date?: string; po_balance?: number; proposal_number?: string; project_name?: string; budget_type?: string }>
+  purchaseOrders: Array<{ id: string; po_number: string; site_id: string; department_id?: string; description?: string; original_po_amount?: number; po_issue_date?: string; po_balance?: number; proposal_number?: string; project_name?: string; budget_type?: string }>
   onSave: () => void
   onClose: () => void
   onDepartmentAdded?: (dept: { id: string; name: string; site_id: string }) => void
@@ -77,20 +77,27 @@ export default function SiteDetailView({
                 <p className="text-sm text-gray-500 dark:text-gray-400">Add a purchase order in the Purchase Orders tab first.</p>
               ) : (
                 <div className="space-y-2">
-                  {sitePOs.map((po) => (
-                    <button
-                      key={po.id}
-                      type="button"
-                      onClick={() => setEditingPO(po)}
-                      className="w-full flex items-center justify-between p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 text-left"
-                    >
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-5 w-5 text-gray-500" />
-                        <span className="font-medium">{po.po_number}</span>
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-gray-400" />
-                    </button>
-                  ))}
+                  {sitePOs.map((po) => {
+                    const deptName = departments.find((d) => d.id === po.department_id)?.name
+                    const desc = po.description || po.project_name || deptName
+                    return (
+                      <button
+                        key={po.id}
+                        type="button"
+                        onClick={() => setEditingPO(po)}
+                        className="w-full flex items-center justify-between p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 text-left"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className="h-5 w-5 text-gray-500 shrink-0" />
+                          <span className="font-medium truncate">
+                            {po.po_number}
+                            {desc ? ` — ${desc}` : ''}
+                          </span>
+                        </div>
+                        <ChevronRight className="h-5 w-5 text-gray-400 shrink-0" />
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>

@@ -20,6 +20,7 @@ interface PurchaseOrder {
   po_number: string
   site_id: string
   department_id?: string
+  description?: string
   original_po_amount?: number
   po_issue_date?: string
   po_balance?: number
@@ -135,7 +136,10 @@ export default function BudgetPageClient({
                     onClick={() => handleSelectPO(po.id)}
                     className="w-full flex items-center justify-between p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 text-left"
                   >
-                    <span className="font-medium">{po.po_number}</span>
+                    <span className="font-medium">
+                      {po.po_number}
+                      {(po.description || po.departments?.name) ? ` — ${po.description || po.departments?.name}` : ''}
+                    </span>
                     <span className="text-sm text-gray-500 capitalize">
                       {po.budget_type || 'basic'} budget
                     </span>

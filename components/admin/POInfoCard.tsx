@@ -37,7 +37,7 @@ export default function POInfoCard({
     po_issue_date: po.po_issue_date ?? '',
     po_balance: po.po_balance ?? '',
     proposal_number: po.proposal_number ?? '',
-    project_name: po.project_name ?? '',
+    project_name: po.description ?? po.project_name ?? '',
     department_id: po.department_id ?? '',
     budget_type: po.budget_type || 'basic',
     prior_hours_billed: po.prior_hours_billed ?? '',
@@ -78,6 +78,7 @@ export default function POInfoCard({
           po_balance: form.po_balance != null && form.po_balance !== '' ? parseFloat(String(form.po_balance)) : null,
           proposal_number: form.proposal_number || null,
           project_name: form.project_name || null,
+          description: form.project_name || null,
           department_id: form.department_id || null,
           budget_type: form.budget_type || 'basic',
           prior_hours_billed: form.prior_hours_billed != null && form.prior_hours_billed !== '' ? parseFloat(String(form.prior_hours_billed)) : null,
@@ -285,12 +286,13 @@ export default function POInfoCard({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Project Name</label>
+              <label className={labelClass}>Project Name / Description</label>
               <input
                 type="text"
                 value={form.project_name}
                 onChange={(e) => setForm({ ...form, project_name: e.target.value })}
                 disabled={readOnly}
+                placeholder="Same as Description in PO table"
                 className={inputClass}
               />
             </div>
