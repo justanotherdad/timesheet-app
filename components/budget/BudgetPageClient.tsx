@@ -1,0 +1,151 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import BasicBudgetView from './BasicBudgetView'
+import ProjectBudgetShell from './ProjectBudgetShell'
+
+interface Site {
+  id: string
+  name: string
+  address_street?: string
+  address_city?: string
+  address_state?: string
+  address_zip?: string
+  contact?: string
+}
+
+interface PurchaseOrder {
+  id: string
+  po_number: string
+  site_id: string
+  department_id?: string
+  original_po_amount?: number
+  po_issue_date?: string
+  po_balance?: number
+  proposal_number?: string
+  project_name?: string
+  budget_type?: string
+  sites?: Site
+  departments?: { id: string; name: string }
+}
+
+interface BudgetPageClientProps {
+  sites: Site[]
+  purchaseOrders: PurchaseOrder[]
+  initialPoId: string | null
+  user: { id: string; profile: { role: string } }
+}
+
+export default function BudgetPageClient({
+  sites,
+  purchaseOrders,
+  initialPoId,
+  user,
+}: BudgetPageClientProps) {
+  const router = useRouter()
+  const [selectedSiteId, setSelectedSiteId] = useState<string>(() => {
+    if (initialPoId) {
+      const po = purchaseOrders.find((p) => p.id === initialPoId)
+      return po?.site_id || ''
+    }
+    return ''
+  })
+  const [selectedPoId, setSelectedPoId] = useState<string | null>(initialPoId)
+
+  const sitePOs = selectedSiteId
+    ? purchaseOrders.filter((p) => p.site_id === selectedSiteId)
+    : []
+
+  const selectedPO = selectedPoId
+    ? purchaseOrders.find((p) => p.id === selectedPoId)
+    : null
+
+  const handleSelectPO = (poId: string) => {
+    setSelectedPoId(poId)
+    router.replace(`/dashboard/budget?poId=${poId}`, { scroll: false })
+  }
+
+  const handleBackToSelector = () => {
+    setSelectedPoId(null)
+    router.replace('/dashboard/budget', { scroll: false })
+  }
+
+  if (selectedPO) {
+    const isProject = selectedPO.budget_type === 'project'
+    return (
+      <div className="max-w-7xl mx-auto">
+        {isProject ? (
+          <ProjectBudgetShell
+            po={selectedPO}
+            onBack={handleBackToSelector}
+          />
+        ) : (
+          <BasicBudgetView
+            po={selectedPO}
+            onBack={handleBackToSelector}
+            user={user}
+          />
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
+        Select a Budget to View
+      </h2>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Client / Site
+          </label>
+          <select
+            value={selectedSiteId}
+            onChange={(e) => {
+              setSelectedSiteId(e.target.value)
+              setSelectedPoId(null)
+            }}
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          >
+            <option value="">-- Select client --</option>
+            {sites.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        {selectedSiteId && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Purchase Order
+            </label>
+            <div className="space-y-2">
+              {sitePOs.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  No purchase orders for this client.
+                </p>
+              ) : (
+                sitePOs.map((po) => (
+                  <button
+                    key={po.id}
+                    type="button"
+                    onClick={() => handleSelectPO(po.id)}
+                    className="w-full flex items-center justify-between p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 text-left"
+                  >
+                    <span className="font-medium">{po.po_number}</span>
+                    <span className="text-sm text-gray-500 capitalize">
+                      {po.budget_type || 'basic'} budget
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import Link from 'next/link'
-import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3 } from 'lucide-react'
 import { formatWeekEnding, getWeekEnding, formatDateForInput } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
@@ -199,6 +199,23 @@ export default async function DashboardPage() {
                   <p className="text-sm text-gray-600 dark:text-gray-300">
                     {pendingApprovals.length} timesheet{pendingApprovals.length !== 1 ? 's' : ''} pending
                   </p>
+                </div>
+              </div>
+            </Link>
+          )}
+
+          {['manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+            <Link
+              href="/dashboard/budget"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
+            >
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="bg-teal-100 dark:bg-teal-900/30 p-3 rounded-lg">
+                  <BarChart3 className="h-6 w-6 text-teal-600 dark:text-teal-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Budget Detail</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">View PO budgets, invoices, and billable hours</p>
                 </div>
               </div>
             </Link>

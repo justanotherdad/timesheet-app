@@ -719,6 +719,7 @@ export default function ConsolidatedManager({
           site={siteInfoCard}
           departments={departments}
           purchaseOrders={purchaseOrders}
+          showBudgetLink={!readOnly}
           onSave={async () => {
             const [siteRes, posRes] = await Promise.all([
               supabase.from('sites').select('*').eq('id', siteInfoCard.id).single(),

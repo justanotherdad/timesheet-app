@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Trash2, Upload, FileText, X } from 'lucide-react'
+import { Plus, Trash2, Upload, FileText, X, BarChart3 } from 'lucide-react'
 
 const ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 
@@ -14,6 +15,8 @@ interface POInfoCardProps {
   onClose: () => void
   onDepartmentAdded?: (dept: { id: string; name: string; site_id: string }) => void
   readOnly?: boolean
+  /** When true, show View Budget Detail button (manager+ only) */
+  showBudgetLink?: boolean
 }
 
 export default function POInfoCard({
@@ -24,6 +27,7 @@ export default function POInfoCard({
   onClose,
   onDepartmentAdded,
   readOnly = false,
+  showBudgetLink = false,
 }: POInfoCardProps) {
   const supabase = createClient()
   const siteDepts = departments.filter((d) => d.site_id === siteId)
@@ -35,6 +39,10 @@ export default function POInfoCard({
     proposal_number: po.proposal_number ?? '',
     project_name: po.project_name ?? '',
     department_id: po.department_id ?? '',
+    budget_type: po.budget_type || 'basic',
+    prior_hours_billed: po.prior_hours_billed ?? '',
+    prior_amount_spent: po.prior_amount_spent ?? '',
+    prior_period_notes: po.prior_period_notes ?? '',
   })
   const [newDeptName, setNewDeptName] = useState('')
   const [showAddDept, setShowAddDept] = useState(false)
@@ -71,6 +79,10 @@ export default function POInfoCard({
           proposal_number: form.proposal_number || null,
           project_name: form.project_name || null,
           department_id: form.department_id || null,
+          budget_type: form.budget_type || 'basic',
+          prior_hours_billed: form.prior_hours_billed != null && form.prior_hours_billed !== '' ? parseFloat(String(form.prior_hours_billed)) : null,
+          prior_amount_spent: form.prior_amount_spent != null && form.prior_amount_spent !== '' ? parseFloat(String(form.prior_amount_spent)) : null,
+          prior_period_notes: form.prior_period_notes || null,
         })
         .eq('id', po.id)
 
@@ -364,6 +376,80 @@ export default function POInfoCard({
             />
           </div>
 
+          <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-4 bg-amber-50/50 dark:bg-amber-900/10">
+            <label className={labelClass}>Prior Period Adjustment</label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">For budgets in use before timesheets were in this system. Set hours/amount already spent so the budget view reflects reality.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Prior hours billed</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.prior_hours_billed}
+                  onChange={(e) => setForm({ ...form, prior_hours_billed: e.target.value })}
+                  disabled={readOnly}
+                  placeholder="0"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Prior amount spent ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.prior_amount_spent}
+                  onChange={(e) => setForm({ ...form, prior_amount_spent: e.target.value })}
+                  disabled={readOnly}
+                  placeholder="0"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <div className="mt-2">
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes (optional)</label>
+              <input
+                type="text"
+                value={form.prior_period_notes}
+                onChange={(e) => setForm({ ...form, prior_period_notes: e.target.value })}
+                disabled={readOnly}
+                placeholder="e.g. Migrated from Excel - hours through Jan 2026"
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Budget Type</label>
+            <div className="flex gap-4 mt-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="budget_type"
+                  value="basic"
+                  checked={form.budget_type === 'basic'}
+                  onChange={(e) => setForm({ ...form, budget_type: e.target.value })}
+                  disabled={readOnly}
+                  className="rounded-full"
+                />
+                <span>Basic budget</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="budget_type"
+                  value="project"
+                  checked={form.budget_type === 'project'}
+                  onChange={(e) => setForm({ ...form, budget_type: e.target.value })}
+                  disabled={readOnly}
+                  className="rounded-full"
+                />
+                <span>Project budget</span>
+              </label>
+            </div>
+          </div>
+
           <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
             <label className={labelClass}>Attachments</label>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Word, Excel, or PDF files</p>
@@ -406,16 +492,27 @@ export default function POInfoCard({
             </div>
           </div>
 
-          {!readOnly && (
-            <div className="flex gap-2 pt-4">
-              <button type="submit" disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
-                {loading ? 'Saving...' : 'Save'}
-              </button>
-              <button type="button" onClick={onClose} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-500">
-                Cancel
-              </button>
-            </div>
-          )}
+          <div className="flex flex-wrap gap-2 pt-4 items-center">
+            {showBudgetLink && (
+              <Link
+                href={`/dashboard/budget?poId=${po.id}`}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700"
+              >
+                <BarChart3 className="h-4 w-4" />
+                View Budget Detail
+              </Link>
+            )}
+            {!readOnly && (
+              <>
+                <button type="submit" disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
+                  {loading ? 'Saving...' : 'Save'}
+                </button>
+                <button type="button" onClick={onClose} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-500">
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
         </form>
       </div>
     </div>

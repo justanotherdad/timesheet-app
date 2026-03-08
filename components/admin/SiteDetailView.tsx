@@ -8,11 +8,12 @@ import POInfoCard from './POInfoCard'
 interface SiteDetailViewProps {
   site: any
   departments: Array<{ id: string; name: string; site_id: string }>
-  purchaseOrders: Array<{ id: string; po_number: string; site_id: string; department_id?: string; original_po_amount?: number; po_issue_date?: string; po_balance?: number; proposal_number?: string; project_name?: string }>
+  purchaseOrders: Array<{ id: string; po_number: string; site_id: string; department_id?: string; original_po_amount?: number; po_issue_date?: string; po_balance?: number; proposal_number?: string; project_name?: string; budget_type?: string }>
   onSave: () => void
   onClose: () => void
   onDepartmentAdded?: (dept: { id: string; name: string; site_id: string }) => void
   readOnly?: boolean
+  showBudgetLink?: boolean
 }
 
 export default function SiteDetailView({
@@ -23,6 +24,7 @@ export default function SiteDetailView({
   onClose,
   onDepartmentAdded,
   readOnly = false,
+  showBudgetLink = false,
 }: SiteDetailViewProps) {
   const [editingClient, setEditingClient] = useState(false)
   const [editingPO, setEditingPO] = useState<any>(null)
@@ -114,6 +116,7 @@ export default function SiteDetailView({
           onClose={() => setEditingPO(null)}
           onDepartmentAdded={onDepartmentAdded}
           readOnly={readOnly}
+          showBudgetLink={showBudgetLink}
         />
       )}
     </>
