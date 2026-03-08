@@ -68,7 +68,12 @@ export default function BasicBudgetView({ po, onBack, user }: BasicBudgetViewPro
   const billRates = data?.billRates || []
   const expenses = data?.expenses || []
   const expenseTypes = data?.expenseTypes || []
-  const users = data?.users || []
+  const usersFromApi = data?.users || []
+  const usersFromBillable = (billableData?.rows || []).map((r: any) => ({ id: r.userId, name: r.userName }))
+  const usersMap = new Map<string, { id: string; name: string }>()
+  usersFromApi.forEach((u: { id: string; name: string }) => usersMap.set(u.id, u))
+  usersFromBillable.forEach((u: { id: string; name: string }) => usersMap.set(u.id, u))
+  const users = Array.from(usersMap.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
   const isAdmin = user && ['admin', 'super_admin'].includes(user.profile.role)
 
   const originalBudget = poData.original_po_amount ?? 0
