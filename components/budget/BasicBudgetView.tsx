@@ -259,7 +259,7 @@ export default function BasicBudgetView({ po, onBack, user }: BasicBudgetViewPro
                       <span className="block text-xs text-amber-600 dark:text-amber-300 mt-0.5">{poData.prior_period_notes}</span>
                     )}
                   </td>
-                  {weekEndings.map((we) => (
+                  {weekEndings.map((we: string) => (
                     <td key={we} className="text-right py-2 text-amber-700 dark:text-amber-300">—</td>
                   ))}
                   <td className="text-right py-2 font-medium text-amber-700 dark:text-amber-300">{priorHoursBilled.toFixed(1)}</td>
