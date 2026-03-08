@@ -29,7 +29,9 @@ export default function SiteDetailView({
   const [editingClient, setEditingClient] = useState(false)
   const [editingPO, setEditingPO] = useState<any>(null)
 
-  const sitePOs = purchaseOrders.filter((p) => p.site_id === site.id)
+  const sitePOs = purchaseOrders
+    .filter((p) => p.site_id === site.id)
+    .sort((a, b) => (a.po_number || '').localeCompare(b.po_number || '', undefined, { numeric: true }))
   const addressParts = [site.address_street, [site.address_city, site.address_state, site.address_zip].filter(Boolean).join(', ')].filter(Boolean)
 
   return (

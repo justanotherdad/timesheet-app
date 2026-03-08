@@ -255,6 +255,7 @@ export default function POInfoCard({
                     placeholder="CO #"
                     value={co.co_number}
                     onChange={(e) => updateChangeOrder(idx, 'co_number', e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
                     disabled={readOnly}
                     className="flex-1 px-3 py-2 border rounded-lg text-sm"
                   />
@@ -262,6 +263,7 @@ export default function POInfoCard({
                     type="date"
                     value={co.co_date}
                     onChange={(e) => updateChangeOrder(idx, 'co_date', e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
                     disabled={readOnly}
                     className="px-3 py-2 border rounded-lg text-sm"
                   />
@@ -271,6 +273,7 @@ export default function POInfoCard({
                     placeholder="$$"
                     value={co.amount}
                     onChange={(e) => updateChangeOrder(idx, 'amount', e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
                     disabled={readOnly}
                     className="w-24 px-3 py-2 border rounded-lg text-sm"
                   />

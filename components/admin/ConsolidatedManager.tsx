@@ -732,7 +732,7 @@ export default function ConsolidatedManager({
           onSave={async () => {
             const [siteRes, posRes] = await Promise.all([
               supabase.from('sites').select('*').eq('id', siteInfoCard.id).single(),
-              supabase.from('purchase_orders').select('*').in('site_id', [siteInfoCard.id]),
+              supabase.from('purchase_orders').select('*').in('site_id', [siteInfoCard.id]).order('po_number'),
             ])
             if (siteRes.data) setSites(sites.map((s) => (s.id === siteRes.data.id ? siteRes.data : s)))
             if (posRes.data?.length) setPurchaseOrders((prev) => prev.filter((p) => p.site_id !== siteInfoCard.id).concat(posRes.data))
