@@ -34,7 +34,7 @@ export async function GET(
 
   const adminSupabase = createAdminClient()
   const [changeOrdersRes, invoicesRes, billRatesRes, expensesRes, expenseTypesRes, assignedUsersRes, entriesRes] = await Promise.all([
-    supabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: false }),
+    adminSupabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: false }),
     supabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: false }),
     supabase.from('po_bill_rates').select('*, user_profiles!user_id(id, name)').eq('po_id', poId).order('effective_from_date', { ascending: false }),
     supabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false }),
