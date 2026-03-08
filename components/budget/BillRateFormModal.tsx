@@ -72,7 +72,7 @@ export default function BillRateFormModal({ poId, rate, users, onSave, onClose }
                 ))}
               </select>
               {users.length === 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">No employees assigned to this PO. Assign users in Manage Organization → User Management first.</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">No employees with hours on this PO yet. Log timesheet hours to this PO first, or assign users in User Management.</p>
               )}
             </div>
           )}
