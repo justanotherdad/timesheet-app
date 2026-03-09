@@ -31,12 +31,18 @@ export async function POST(
 
   const { data, error } = await supabase
     .from('po_bill_rates')
-    .insert({
-      po_id: poId,
-      user_id,
-      rate: parseFloat(String(rate)),
-      effective_from_date,
-    })
+    .upsert(
+      {
+        po_id: poId,
+        user_id,
+        rate: parseFloat(String(rate)),
+        effective_from_date,
+      },
+      {
+        onConflict: 'po_id,user_id,effective_from_date',
+        ignoreDuplicates: false,
+      }
+    )
     .select('*')
     .single()
 
