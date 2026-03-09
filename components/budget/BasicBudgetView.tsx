@@ -32,12 +32,14 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
   const [billRateModal, setBillRateModal] = useState<any>(null)
   const [billableSortColumn, setBillableSortColumn] = useState<string>('employee')
   const [billableSortDir, setBillableSortDir] = useState<'asc' | 'desc'>('asc')
+  const [laborCostData, setLaborCostData] = useState<any>(null)
 
   const refetch = useCallback(async () => {
-    const [res, coRes, brRes] = await Promise.all([
+    const [res, coRes, brRes, laborRes] = await Promise.all([
       fetch(`/api/budget/${po.id}`),
       fetch(`/api/budget/${po.id}/change-orders`),
       fetch(`/api/budget/${po.id}/bill-rates`),
+      fetch(`/api/budget/${po.id}/billable-hours?all=true`),
     ])
     if (res.ok) setData(await res.json())
     if (coRes.ok) {
@@ -48,17 +50,19 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
       const json = await brRes.json()
       setBillRatesOverride(Array.isArray(json) ? json : null)
     } else setBillRatesOverride(null)
+    if (laborRes.ok) setLaborCostData(await laborRes.json())
   }, [po.id])
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       try {
-        const [res, bhRes, coRes, brRes] = await Promise.all([
+        const [res, bhRes, coRes, brRes, laborRes] = await Promise.all([
           fetch(`/api/budget/${po.id}`),
           fetch(`/api/budget/${po.id}/billable-hours?${showAllMonths ? 'all=true' : `month=${selectedMonth.split('-')[1]}&year=${selectedMonth.split('-')[0]}`}`),
           fetch(`/api/budget/${po.id}/change-orders`),
           fetch(`/api/budget/${po.id}/bill-rates`),
+          fetch(`/api/budget/${po.id}/billable-hours?all=true`),
         ])
         if (res.ok) setData(await res.json())
         if (bhRes.ok) setBillableData(await bhRes.json())
@@ -70,6 +74,7 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
           const json = await brRes.json()
           setBillRatesOverride(Array.isArray(json) ? json : null)
         } else setBillRatesOverride(null)
+        if (laborRes.ok) setLaborCostData(await laborRes.json())
       } catch (e) {
         console.error(e)
       } finally {
@@ -114,6 +119,26 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
   const priorHoursBilled = poData.prior_hours_billed ?? 0
   const invoiceTotal = invoices.reduce((s: number, inv: any) => s + (inv.amount || 0), 0)
   const runningBalance = totalBudget - priorAmountSpent - invoiceTotal
+
+  const getEffectiveRate = (userId: string, dateStr: string) => {
+    const userRates = (billRatesRaw || [])
+      .filter((br: any) => br.user_id === userId && (br.effective_from_date || '') <= dateStr)
+      .sort((a: any, b: any) => (b.effective_from_date || '').localeCompare(a.effective_from_date || ''))
+    return userRates[0]?.rate ?? 0
+  }
+
+  let laborCost = 0
+  for (const row of laborCostData?.rows || []) {
+    for (const [weekEnding, wd] of Object.entries(row.weekData || {})) {
+      const hours = (wd as { hours?: number }).hours ?? 0
+      if (hours > 0) {
+        const rate = getEffectiveRate(row.userId, weekEnding)
+        laborCost += rate * hours
+      }
+    }
+  }
+
+  const budgetBalance = totalBudget - priorAmountSpent - laborCost
 
   const rows = billableData?.rows || []
   const weekEndings = billableData?.weekEndings || []
@@ -281,7 +306,37 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
         </table>
       </div>
 
-      {/* 4. Billable activities table */}
+      {/* 4. Budget Balance */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Budget Balance</h2>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Based on actual labor (rates × hours). Differs from PO Balance when invoicing is scheduled or fixed amounts—PO Balance reflects invoices; Budget Balance reflects earned value from timesheets.
+        </p>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 dark:border-gray-600">
+              <th className="text-left py-2 font-medium">Description</th>
+              <th className="text-right py-2 font-medium">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-gray-100 dark:border-gray-700">
+              <td className="py-2">Total Available</td>
+              <td className="text-right py-2">${(totalBudget - priorAmountSpent).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr className="border-b border-gray-100 dark:border-gray-700">
+              <td className="py-2">Labor cost (rates × hours from timesheets)</td>
+              <td className="text-right py-2">-${laborCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr className="font-semibold bg-blue-50 dark:bg-blue-900/20">
+              <td className="py-2">Budget Balance</td>
+              <td className="text-right py-2">${budgetBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* 5. Billable activities table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Activities (from Timesheets)</h2>
         <div className="flex flex-wrap gap-4 mb-4">
@@ -405,7 +460,7 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
         </div>
       </div>
 
-      {/* 5. Additional expenses */}
+      {/* 6. Additional expenses */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
@@ -449,7 +504,7 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
         </table>
       </div>
 
-      {/* 6. Bill rates */}
+      {/* 7. Bill rates */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
