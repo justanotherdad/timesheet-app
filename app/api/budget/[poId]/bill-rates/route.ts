@@ -92,7 +92,7 @@ export async function POST(
   let result = await db.from('po_bill_rates').insert(payload).select('*').single()
 
   if (result.error && (result.error.code === '23505' || result.error.message?.includes('duplicate key'))) {
-    const { data: updated, error: updateErr } = await db
+    const updateRes = await db
       .from('po_bill_rates')
       .update({ rate: payload.rate })
       .eq('po_id', poId)
@@ -100,7 +100,7 @@ export async function POST(
       .eq('effective_from_date', effective_from_date)
       .select('*')
       .single()
-    if (!updateErr) result = { data: updated, error: null }
+    if (!updateRes.error) return NextResponse.json(updateRes.data)
   }
 
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 })
