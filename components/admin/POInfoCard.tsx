@@ -54,12 +54,17 @@ export default function POInfoCard({
 
   useEffect(() => {
     const load = async () => {
-      const [coRes, attRes] = await Promise.all([
+      const [coRes, attRes, balanceRes] = await Promise.all([
         supabase.from('po_change_orders').select('*').eq('po_id', po.id).order('co_date', { ascending: false }),
         supabase.from('po_attachments').select('id, file_name, storage_path, file_type').eq('po_id', po.id),
+        fetch(`/api/budget/${po.id}/balance`),
       ])
       setChangeOrders((coRes.data || []).map((r: any) => ({ id: r.id, co_number: r.co_number || '', co_date: r.co_date || '', amount: r.amount != null ? String(r.amount) : '' })))
       setAttachments(attRes.data || [])
+      if (balanceRes.ok) {
+        const { balance } = await balanceRes.json()
+        setForm((f) => ({ ...f, po_balance: balance != null ? String(balance) : '' }))
+      }
     }
     load()
   }, [po.id, supabase])
@@ -75,7 +80,6 @@ export default function POInfoCard({
           po_number: form.po_number,
           original_po_amount: form.original_po_amount != null && form.original_po_amount !== '' ? parseFloat(String(form.original_po_amount)) : null,
           po_issue_date: form.po_issue_date || null,
-          po_balance: form.po_balance != null && form.po_balance !== '' ? parseFloat(String(form.po_balance)) : null,
           proposal_number: form.proposal_number || null,
           project_name: form.project_name || null,
           description: form.project_name || null,
@@ -106,6 +110,7 @@ export default function POInfoCard({
           })
         }
       }
+      await fetch(`/api/budget/${po.id}/balance`)
       onSave()
       onClose()
     } catch (err: any) {
@@ -358,13 +363,14 @@ export default function POInfoCard({
               />
             </div>
             <div>
-              <label className={labelClass}>PO Balance $$ (future use)</label>
+              <label className={labelClass}>PO Balance $$</label>
               <input
                 type="number"
                 step="0.01"
                 value={form.po_balance}
                 onChange={(e) => setForm({ ...form, po_balance: e.target.value })}
-                disabled={readOnly}
+                disabled={true}
+                readOnly
                 className={inputClass}
               />
             </div>
