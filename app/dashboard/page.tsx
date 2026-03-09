@@ -53,6 +53,7 @@ export default async function DashboardPage() {
   // Get pending approvals: include employees who have this user as reports_to, supervisor, manager, or final approver
   // Use admin client so RLS does not block managers/supervisors from reading their reports' timesheets
   let pendingApprovals: any[] = []
+  let pendingApprovalsCount = 0
   if (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
     const adminSupabase = createAdminClient()
     const reportsResult = await withQueryTimeout(() =>
@@ -93,7 +94,7 @@ export default async function DashboardPage() {
         signedByTimesheet[s.timesheet_id].add(s.signer_id)
       })
 
-      pendingApprovals = allPending.filter((ts: any) => {
+      const allPendingForUser = allPending.filter((ts: any) => {
         const profile = ts.user_profiles as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string }
         const chain: string[] = []
         const firstApprover = profile?.supervisor_id || profile?.reports_to_id
@@ -103,7 +104,9 @@ export default async function DashboardPage() {
         const signedIds = signedByTimesheet[ts.id] || new Set<string>()
         const nextId = chain.find((uid) => !signedIds.has(uid))
         return nextId === user.id
-      }).slice(0, 5)
+      })
+      pendingApprovals = allPendingForUser.slice(0, 5)
+      pendingApprovalsCount = allPendingForUser.length
     }
   }
 
@@ -197,7 +200,7 @@ export default async function DashboardPage() {
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Pending Approvals</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-300">
-                    {pendingApprovals.length} timesheet{pendingApprovals.length !== 1 ? 's' : ''} pending
+                    {pendingApprovalsCount} timesheet{pendingApprovalsCount !== 1 ? 's' : ''} pending
                   </p>
                 </div>
               </div>

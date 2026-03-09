@@ -12,7 +12,7 @@ type SearchParams = { sort?: string; dir?: string }
 export default async function ApprovalsPage(props: { searchParams: Promise<SearchParams> }) {
   const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
   const params = await props.searchParams
-  const sortBy = params.sort || 'submitted_at'
+  const sortBy = params.sort || 'user'
   const sortDir = (params.dir || 'asc') as 'asc' | 'desc'
 
   const adminSupabase = createAdminClient()
