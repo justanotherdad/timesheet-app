@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 import { ArrowLeft, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatDate, formatDateShort } from '@/lib/utils'
 import InvoiceFormModal from './InvoiceFormModal'
@@ -17,6 +18,7 @@ interface BasicBudgetViewProps {
 
 export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, user }: BasicBudgetViewProps) {
   const [data, setData] = useState<any>(null)
+  const [changeOrdersOverride, setChangeOrdersOverride] = useState<any[] | null>(null)
   const [billableData, setBillableData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -34,18 +36,25 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
   const refetch = useCallback(async () => {
     const res = await fetch(`/api/budget/${po.id}`)
     if (res.ok) setData(await res.json())
+    setChangeOrdersOverride(null)
+    const supabase = createClient()
+    const { data: cos } = await supabase.from('po_change_orders').select('*').eq('po_id', po.id).order('co_date', { ascending: false })
+    setChangeOrdersOverride(cos || [])
   }, [po.id])
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       try {
-        const [res, bhRes] = await Promise.all([
+        const supabase = createClient()
+        const [res, bhRes, coRes] = await Promise.all([
           fetch(`/api/budget/${po.id}`),
           fetch(`/api/budget/${po.id}/billable-hours?${showAllMonths ? 'all=true' : `month=${selectedMonth.split('-')[1]}&year=${selectedMonth.split('-')[0]}`}`),
+          supabase.from('po_change_orders').select('*').eq('po_id', po.id).order('co_date', { ascending: false }),
         ])
         if (res.ok) setData(await res.json())
         if (bhRes.ok) setBillableData(await bhRes.json())
+        setChangeOrdersOverride(coRes.data ?? [])
       } catch (e) {
         console.error(e)
       } finally {
@@ -66,7 +75,7 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
   const poData = data?.po ?? po
   const site = poData.sites || (poData.site_id && sitesProp?.length ? sitesProp.find((s) => s.id === poData.site_id) : null) || {}
   const addressParts = [site.address_street, [site.address_city, site.address_state, site.address_zip].filter(Boolean).join(', ')].filter(Boolean)
-  const changeOrders = data?.changeOrders || []
+  const changeOrders = changeOrdersOverride !== null ? changeOrdersOverride : (data?.changeOrders || [])
   const invoices = data?.invoices || []
   const billRates = data?.billRates || []
   const expenses = data?.expenses || []
