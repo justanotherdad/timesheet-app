@@ -37,7 +37,7 @@ export async function POST(
       rate: parseFloat(String(rate)),
       effective_from_date,
     })
-    .select('*, user_profiles!user_id(id, name)')
+    .select('*')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

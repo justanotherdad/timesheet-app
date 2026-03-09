@@ -46,7 +46,7 @@ export async function GET(
   const [changeOrdersRes, invoicesRes, billRatesRes, expensesRes, expenseTypesRes, assignedUsersRes, entriesRes] = await Promise.all([
     changeOrdersQuery,
     supabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: false }),
-    supabase.from('po_bill_rates').select('*, user_profiles!user_id(id, name)').eq('po_id', poId).order('effective_from_date', { ascending: false }),
+    supabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false }),
     supabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false }),
     supabase.from('po_expense_types').select('*').order('name'),
     supabase.from('user_purchase_orders').select('user_id').eq('purchase_order_id', poId),
@@ -59,7 +59,7 @@ export async function GET(
     changeOrders = fallback || []
   }
   const invoices = invoicesRes.data || []
-  const billRates = billRatesRes.data || []
+  const billRatesRaw = billRatesRes.data || []
   const expenses = expensesRes.data || []
   const expenseTypes = expenseTypesRes.data || []
 
@@ -73,9 +73,11 @@ export async function GET(
       .in('id', tsIdsFromEntries)
     hoursUserIds = [...new Set((tsData || []).map((r: any) => r.user_id).filter(Boolean))]
   }
-  const allUserIds = [...new Set([...assignedUserIds, ...hoursUserIds])]
+  const billRateUserIds = [...new Set((billRatesRaw || []).map((r: any) => r.user_id).filter(Boolean))]
+  const allUserIds = [...new Set([...assignedUserIds, ...hoursUserIds, ...billRateUserIds])]
 
   let users: Array<{ id: string; name: string }> = []
+  let profilesMap: Record<string, { id: string; name: string }> = {}
   if (allUserIds.length > 0) {
     const { data: profiles } = await supabase
       .from('user_profiles')
@@ -83,7 +85,13 @@ export async function GET(
       .in('id', allUserIds)
       .order('name')
     users = (profiles || []).filter((u: any) => u.name)
+    profilesMap = Object.fromEntries((profiles || []).map((p: any) => [p.id, { id: p.id, name: p.name }]))
   }
+
+  const billRates = billRatesRaw.map((br: any) => ({
+    ...br,
+    user_profiles: br.user_id && profilesMap[br.user_id] ? { id: profilesMap[br.user_id].id, name: profilesMap[br.user_id].name } : null,
+  }))
 
   return NextResponse.json({
     po,

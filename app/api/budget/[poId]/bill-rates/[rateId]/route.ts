@@ -35,7 +35,7 @@ export async function PATCH(
     .update(updates)
     .eq('id', rateId)
     .eq('po_id', poId)
-    .select('*, user_profiles!user_id(id, name)')
+    .select('*')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
