@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, FileText } from 'lucide-react'
+import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, FileText, X } from 'lucide-react'
 import SiteDetailView from './SiteDetailView'
 
 interface Site {
@@ -745,15 +745,20 @@ export default function ConsolidatedManager({
 
       {/* Edit Modal for Sites, Departments, and POs */}
       {editingItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onMouseDown={(e) => {
-          if (e.target === e.currentTarget) {
-            setEditingItem(null)
-          }
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onMouseDown={(e) => {
+          if (e.target === e.currentTarget) setEditingItem(null)
         }}>
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              {editingItem.type === 'site' && <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Edit Site</h3>}
+              {editingItem.type === 'department' && <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Edit Department</h3>}
+              {editingItem.type === 'po' && <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Edit Purchase Order</h3>}
+              <button type="button" onClick={() => setEditingItem(null)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 ml-auto">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
             {editingItem.type === 'site' && (
               <>
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit Site</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">For client details and POs, use the document icon.</p>
                 <form onSubmit={async (e) => {
                   e.preventDefault()
@@ -806,7 +811,6 @@ export default function ConsolidatedManager({
 
             {editingItem.type === 'department' && (
               <>
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit Department</h3>
                 <form onSubmit={async (e) => {
                   e.preventDefault()
                   setError(null)
@@ -845,7 +849,6 @@ export default function ConsolidatedManager({
 
             {editingItem.type === 'po' && (
               <>
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit Purchase Order</h3>
                 <form onSubmit={async (e) => {
                   e.preventDefault()
                   setError(null)

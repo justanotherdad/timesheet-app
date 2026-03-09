@@ -790,16 +790,23 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
 
       {/* Export Filter Popup (for PDF) */}
       {showExportFilter && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowExportFilter(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <Filter className="h-5 w-5" />
-                Filter Export Data
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Select which data to include. Leave all unchecked to include everything.
-              </p>
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <Filter className="h-5 w-5" />
+                    Filter Export Data
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Select which data to include. Leave all unchecked to include everything.
+                  </p>
+                </div>
+                <button type="button" onClick={() => setShowExportFilter(false)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 shrink-0">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
             <div className="p-6 space-y-6">
               <div>

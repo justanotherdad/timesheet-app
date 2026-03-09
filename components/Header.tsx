@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Menu, BookOpen } from 'lucide-react'
+import { Menu, BookOpen, Sun, Moon } from 'lucide-react'
 import GuideModal from './GuideModal'
 
 interface HeaderProps {
@@ -22,7 +22,19 @@ interface HeaderProps {
 export default function Header({ title, titleHref, showBack = false, backUrl, user }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
+  const [darkMode, setDarkMode] = useState(true)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setDarkMode(document.documentElement.classList.contains('dark'))
+  }, [])
+
+  const toggleTheme = () => {
+    const isDark = !document.documentElement.classList.contains('dark')
+    document.documentElement.classList.toggle('dark', isDark)
+    localStorage.setItem('theme', isDark ? 'dark' : 'light')
+    setDarkMode(isDark)
+  }
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -112,6 +124,15 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
               <span className="hidden md:block text-sm text-gray-600 dark:text-gray-300">
                 {user.profile.name} ({user.profile.role})
               </span>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+                aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                title={darkMode ? 'Light mode' : 'Dark mode'}
+              >
+                {darkMode ? <Sun className="h-5 w-5 sm:h-6 sm:w-6" /> : <Moon className="h-5 w-5 sm:h-6 sm:w-6" />}
+              </button>
               <button
                 type="button"
                 onClick={() => setGuideOpen(true)}

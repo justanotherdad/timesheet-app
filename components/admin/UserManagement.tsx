@@ -1050,11 +1050,16 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
       </div>
 
       {editingUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              {viewOnlyUser ? 'View User' : assignmentsOnlyEdit ? `Edit assignments: ${editingUser.name}` : 'Edit User'}
-            </h3>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setEditingUser(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                {viewOnlyUser ? 'View User' : assignmentsOnlyEdit ? `Edit assignments: ${editingUser.name}` : 'Edit User'}
+              </h3>
+              <button type="button" onClick={() => setEditingUser(null)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
             {error && (
               <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-4">
                 {error}

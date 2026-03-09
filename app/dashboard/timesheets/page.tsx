@@ -176,8 +176,10 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
     }
   }
 
-  // Sort timesheets for display
+  // Sort timesheets for display: default week_ending (newest first), then employee first name (A-Z)
   const orderAsc = sortDir === 'asc'
+  const firstName = (name: string) => (name || '').split(/\s+/)[0] || ''
+  const secondaryCmp = (a: any, b: any) => firstName(a.user_profiles?.name).toLowerCase().localeCompare(firstName(b.user_profiles?.name).toLowerCase())
   const sortedTimesheets = [...timesheetsForDisplay].sort((a: any, b: any) => {
     let cmp = 0
     if (sortBy === 'week_ending') {
@@ -193,7 +195,9 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
     } else {
       cmp = (a.week_ending || '').localeCompare(b.week_ending || '')
     }
-    return orderAsc ? cmp : -cmp
+    if (cmp !== 0) return orderAsc ? cmp : -cmp
+    if (sortBy === 'user') return (a.week_ending || '').localeCompare(b.week_ending || '') * (orderAsc ? 1 : -1)
+    return secondaryCmp(a, b)
   })
 
   return (

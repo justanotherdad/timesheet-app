@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
 import { formatDate, formatDateShort } from '@/lib/utils'
 import InvoiceFormModal from './InvoiceFormModal'
 import ExpenseFormModal from './ExpenseFormModal'
@@ -577,7 +577,12 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
       {employeePopup && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEmployeePopup(null)}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{employeePopup.userName}</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{employeePopup.userName}</h3>
+              <button type="button" onClick={() => setEmployeePopup(null)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Week endings with hours billed to this PO:</p>
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {Object.entries(employeePopup.weekData)

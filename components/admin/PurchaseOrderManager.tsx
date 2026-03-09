@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Edit, Trash2, FileText } from 'lucide-react'
+import { Plus, Edit, Trash2, FileText, X } from 'lucide-react'
 
 interface Site {
   id: string
@@ -345,9 +345,14 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
       )}
 
       {editingPO && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit Purchase Order</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setEditingPO(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Edit Purchase Order</h3>
+              <button type="button" onClick={() => setEditingPO(null)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">PO Number *</label>
