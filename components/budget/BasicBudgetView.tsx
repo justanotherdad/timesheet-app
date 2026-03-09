@@ -18,6 +18,7 @@ interface BasicBudgetViewProps {
 export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, user }: BasicBudgetViewProps) {
   const [data, setData] = useState<any>(null)
   const [changeOrdersOverride, setChangeOrdersOverride] = useState<any[] | null>(null)
+  const [billRatesOverride, setBillRatesOverride] = useState<any[] | null>(null)
   const [billableData, setBillableData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -33,34 +34,42 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
   const [billableSortDir, setBillableSortDir] = useState<'asc' | 'desc'>('asc')
 
   const refetch = useCallback(async () => {
-    const [res, coRes] = await Promise.all([
+    const [res, coRes, brRes] = await Promise.all([
       fetch(`/api/budget/${po.id}`),
       fetch(`/api/budget/${po.id}/change-orders`),
+      fetch(`/api/budget/${po.id}/bill-rates`),
     ])
     if (res.ok) setData(await res.json())
     if (coRes.ok) {
       const json = await coRes.json()
       setChangeOrdersOverride(Array.isArray(json) ? json : [])
-    }
-    else setChangeOrdersOverride(null)
+    } else setChangeOrdersOverride(null)
+    if (brRes.ok) {
+      const json = await brRes.json()
+      setBillRatesOverride(Array.isArray(json) ? json : null)
+    } else setBillRatesOverride(null)
   }, [po.id])
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       try {
-        const [res, bhRes, coRes] = await Promise.all([
+        const [res, bhRes, coRes, brRes] = await Promise.all([
           fetch(`/api/budget/${po.id}`),
           fetch(`/api/budget/${po.id}/billable-hours?${showAllMonths ? 'all=true' : `month=${selectedMonth.split('-')[1]}&year=${selectedMonth.split('-')[0]}`}`),
           fetch(`/api/budget/${po.id}/change-orders`),
+          fetch(`/api/budget/${po.id}/bill-rates`),
         ])
         if (res.ok) setData(await res.json())
         if (bhRes.ok) setBillableData(await bhRes.json())
         if (coRes.ok) {
-      const json = await coRes.json()
-      setChangeOrdersOverride(Array.isArray(json) ? json : [])
-    }
-        else setChangeOrdersOverride(null)
+          const json = await coRes.json()
+          setChangeOrdersOverride(Array.isArray(json) ? json : [])
+        } else setChangeOrdersOverride(null)
+        if (brRes.ok) {
+          const json = await brRes.json()
+          setBillRatesOverride(Array.isArray(json) ? json : null)
+        } else setBillRatesOverride(null)
       } catch (e) {
         console.error(e)
       } finally {
@@ -83,15 +92,19 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
   const addressParts = [site.address_street, [site.address_city, site.address_state, site.address_zip].filter(Boolean).join(', ')].filter(Boolean)
   const changeOrders = changeOrdersOverride !== null ? changeOrdersOverride : (data?.changeOrders || [])
   const invoices = data?.invoices || []
-  const billRates = data?.billRates || []
-  const expenses = data?.expenses || []
-  const expenseTypes = data?.expenseTypes || []
   const usersFromApi = data?.users || []
   const usersFromBillable = (billableData?.rows || []).map((r: any) => ({ id: r.userId, name: r.userName }))
   const usersMap = new Map<string, { id: string; name: string }>()
   usersFromApi.forEach((u: { id: string; name: string }) => usersMap.set(u.id, u))
   usersFromBillable.forEach((u: { id: string; name: string }) => usersMap.set(u.id, u))
   const users = Array.from(usersMap.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+  const billRatesRaw = billRatesOverride !== null ? billRatesOverride : (data?.billRates || [])
+  const billRates = billRatesRaw.map((br: any) => ({
+    ...br,
+    user_profiles: br.user_profiles ?? (br.user_id ? { id: br.user_id, name: users.find((u: any) => u.id === br.user_id)?.name || 'Unknown' } : null),
+  }))
+  const expenses = data?.expenses || []
+  const expenseTypes = data?.expenseTypes || []
   const isAdmin = user && ['admin', 'super_admin'].includes(user.profile.role)
 
   const originalBudget = poData.original_po_amount ?? 0
