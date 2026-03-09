@@ -209,64 +209,65 @@ export default function BasicBudgetView({
         Back to budget list
       </button>
 
+      {/* Navigation: prev | Client + PO dropdowns | next — above container */}
+      {(allSites.length > 0 || sitePOs.length > 0) && (
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <button
+            type="button"
+            onClick={onPrev}
+            disabled={!onPrev}
+            className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            title="Previous PO"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+          <div className="flex flex-1 justify-center gap-2 flex-nowrap items-end shrink-0">
+            {allSites.length > 0 && onSelectSite && (
+              <div className="min-w-[140px]">
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Client</label>
+                <select
+                  value={selectedSiteId || poData.site_id || ''}
+                  onChange={(e) => onSelectSite(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="">-- Select client --</option>
+                  {allSites.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name || 'Unknown'}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {sitePOs.length > 0 && onSelectPo && (
+              <div className="min-w-[200px]">
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">PO</label>
+                <select
+                  value={selectedPoId || po.id}
+                  onChange={(e) => onSelectPo(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  {sitePOs.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.po_number}{(p.description || p.departments?.name) ? ` — ${p.description || p.departments?.name}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={!onNext}
+            className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            title="Next PO"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        </div>
+      )}
+
       {/* 1. Client info + PO details */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        {/* Navigation: prev | Client + PO dropdowns | next */}
-        {(allSites.length > 0 || sitePOs.length > 0) && (
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <button
-              type="button"
-              onClick={onPrev}
-              disabled={!onPrev}
-              className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-              title="Previous PO"
-            >
-              <ChevronLeft className="h-6 w-6" />
-            </button>
-            <div className="flex flex-1 justify-center gap-2 flex-nowrap items-end shrink-0">
-              {allSites.length > 0 && onSelectSite && (
-                <div className="min-w-[140px]">
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Client</label>
-                  <select
-                    value={selectedSiteId || poData.site_id || ''}
-                    onChange={(e) => onSelectSite(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  >
-                    <option value="">-- Select client --</option>
-                    {allSites.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name || 'Unknown'}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {sitePOs.length > 0 && onSelectPo && (
-                <div className="min-w-[200px]">
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">PO</label>
-                  <select
-                    value={selectedPoId || po.id}
-                    onChange={(e) => onSelectPo(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  >
-                    {sitePOs.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.po_number}{(p.description || p.departments?.name) ? ` — ${p.description || p.departments?.name}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={onNext}
-              disabled={!onNext}
-              className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-              title="Next PO"
-            >
-              <ChevronRight className="h-6 w-6" />
-            </button>
-          </div>
-        )}
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Client & PO Information</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-base">
           <div>
