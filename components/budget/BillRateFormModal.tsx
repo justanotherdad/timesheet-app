@@ -40,7 +40,7 @@ export default function BillRateFormModal({ poId, rate, users, onSave, onClose }
         const err = await res.json()
         throw new Error(err.error || 'Failed to save')
       }
-      onSave()
+      await onSave()
       onClose()
     } catch (e: any) {
       setError(e.message || 'Failed to save')

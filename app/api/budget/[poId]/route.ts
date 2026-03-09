@@ -43,10 +43,14 @@ export async function GET(
     ? adminSupabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: false })
     : supabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: false })
 
+  const billRatesQuery = adminSupabase
+    ? adminSupabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })
+    : supabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })
+
   const [changeOrdersRes, invoicesRes, billRatesRes, expensesRes, expenseTypesRes, assignedUsersRes, entriesRes] = await Promise.all([
     changeOrdersQuery,
     supabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: false }),
-    supabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false }),
+    billRatesQuery,
     supabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false }),
     supabase.from('po_expense_types').select('*').order('name'),
     supabase.from('user_purchase_orders').select('user_id').eq('purchase_order_id', poId),
@@ -59,7 +63,11 @@ export async function GET(
     changeOrders = fallback || []
   }
   const invoices = invoicesRes.data || []
-  const billRatesRaw = billRatesRes.data || []
+  let billRatesRaw = billRatesRes.data || []
+  if (billRatesRes.error && adminSupabase) {
+    const { data: fallback } = await supabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })
+    billRatesRaw = fallback || []
+  }
   const expenses = expensesRes.data || []
   const expenseTypes = expenseTypesRes.data || []
 
