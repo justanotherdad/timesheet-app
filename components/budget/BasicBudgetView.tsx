@@ -55,6 +55,30 @@ export default function BasicBudgetView({
   const [billableSortColumn, setBillableSortColumn] = useState<string>('employee')
   const [billableSortDir, setBillableSortDir] = useState<'asc' | 'desc'>('asc')
   const [laborCostData, setLaborCostData] = useState<any>(null)
+  const [editingClientPO, setEditingClientPO] = useState(false)
+  const [editingBudget, setEditingBudget] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [clientPOForm, setClientPOForm] = useState({
+    po_number: '',
+    department_id: '',
+    project_name: '',
+    po_issue_date: '',
+    proposal_number: '',
+  })
+  const [budgetForm, setBudgetForm] = useState<{
+    original_po_amount: string
+    prior_hours_billed: string
+    prior_amount_spent: string
+    prior_period_notes: string
+    changeOrders: Array<{ id?: string; co_number: string; co_date: string; amount: string }>
+  }>({
+    original_po_amount: '',
+    prior_hours_billed: '',
+    prior_amount_spent: '',
+    prior_period_notes: '',
+    changeOrders: [],
+  })
 
   const refetch = useCallback(async () => {
     const [res, coRes, brRes, laborRes] = await Promise.all([
@@ -132,7 +156,12 @@ export default function BasicBudgetView({
   }))
   const expenses = data?.expenses || []
   const expenseTypes = data?.expenseTypes || []
+  const siteDepartmentsRaw = (data?.siteDepartments || []) as Array<{ id: string; name: string }>
+  const siteDepartments = poData.department_id && poData.departments && !siteDepartmentsRaw.some((d) => d.id === poData.department_id)
+    ? [{ id: poData.department_id, name: poData.departments.name || 'Unknown' }, ...siteDepartmentsRaw]
+    : siteDepartmentsRaw
   const isAdmin = user && ['admin', 'super_admin'].includes(user.profile.role)
+  const canEdit = user && ['manager', 'admin', 'super_admin'].includes(user.profile.role)
 
   const originalBudget = poData.original_po_amount ?? 0
   const coTotal = changeOrders.reduce((s: number, co: any) => s + (co.amount || 0), 0)
@@ -197,6 +226,97 @@ export default function BasicBudgetView({
     bVal = b.weekData?.[billableSortColumn]?.hours ?? 0
     return mult * (aVal < bVal ? -1 : aVal > bVal ? 1 : 0)
   })
+
+  const startEditClientPO = () => {
+    setClientPOForm({
+      po_number: poData.po_number || '',
+      department_id: poData.department_id || '',
+      project_name: poData.description ?? poData.project_name ?? '',
+      po_issue_date: poData.po_issue_date ? String(poData.po_issue_date).slice(0, 10) : '',
+      proposal_number: poData.proposal_number || '',
+    })
+    setEditingClientPO(true)
+    setSaveError(null)
+  }
+
+  const saveClientPO = async () => {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const res = await fetch(`/api/budget/${po.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(clientPOForm),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to save')
+      await refetch()
+      setEditingClientPO(false)
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const startEditBudget = () => {
+    setBudgetForm({
+      original_po_amount: poData.original_po_amount != null ? String(poData.original_po_amount) : '',
+      prior_hours_billed: poData.prior_hours_billed != null ? String(poData.prior_hours_billed) : '',
+      prior_amount_spent: poData.prior_amount_spent != null ? String(poData.prior_amount_spent) : '',
+      prior_period_notes: poData.prior_period_notes || '',
+      changeOrders: changeOrders.map((co: any) => ({
+        id: co.id,
+        co_number: co.co_number || '',
+        co_date: co.co_date ? String(co.co_date).slice(0, 10) : '',
+        amount: co.amount != null ? String(co.amount) : '',
+      })),
+    })
+    setEditingBudget(true)
+    setSaveError(null)
+  }
+
+  const saveBudget = async () => {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const res = await fetch(`/api/budget/${po.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          original_po_amount: budgetForm.original_po_amount,
+          prior_hours_billed: budgetForm.prior_hours_billed,
+          prior_amount_spent: budgetForm.prior_amount_spent,
+          prior_period_notes: budgetForm.prior_period_notes,
+          changeOrders: budgetForm.changeOrders,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to save')
+      await refetch()
+      setEditingBudget(false)
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const addChangeOrder = () => setBudgetForm((f) => ({
+    ...f,
+    changeOrders: [...f.changeOrders, { co_number: '', co_date: '', amount: '' }],
+  }))
+  const removeChangeOrder = (idx: number) => setBudgetForm((f) => ({
+    ...f,
+    changeOrders: f.changeOrders.filter((_, i) => i !== idx),
+  }))
+  const updateChangeOrder = (idx: number, field: string, value: string) => setBudgetForm((f) => {
+    const next = [...f.changeOrders]
+    next[idx] = { ...next[idx], [field]: value }
+    return { ...f, changeOrders: next }
+  })
+
+  const inputClass = 'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 text-base'
 
   return (
     <div className="space-y-8">
@@ -268,57 +388,170 @@ export default function BasicBudgetView({
 
       {/* 1. Client info + PO details */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Client & PO Information</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-base">
-          <div>
-            <p className="font-medium text-gray-500 dark:text-gray-400">Client / Site</p>
-            <p className="text-gray-900 dark:text-gray-100">{site.name}</p>
-            {addressParts.length > 0 && <p className="text-gray-600 dark:text-gray-300 mt-1">{addressParts.join(', ')}</p>}
-            {site.contact && <p className="text-gray-600 dark:text-gray-300">{site.contact}</p>}
-          </div>
-          <div className="space-y-2">
-            <p><span className="font-medium text-gray-500 dark:text-gray-400">PO#:</span> {poData.po_number}</p>
-            <p><span className="font-medium text-gray-500 dark:text-gray-400">Department:</span> {poData.departments?.name || '—'}</p>
-            <p><span className="font-medium text-gray-500 dark:text-gray-400">Project:</span> {poData.description ?? poData.project_name ?? '—'}</p>
-            <p><span className="font-medium text-gray-500 dark:text-gray-400">PO Issue Date:</span> {poData.po_issue_date ? formatDate(poData.po_issue_date) : '—'}</p>
-            <p><span className="font-medium text-gray-500 dark:text-gray-400">Proposal #:</span> {poData.proposal_number || '—'}</p>
-          </div>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Client & PO Information</h2>
+          {canEdit && !editingClientPO && (
+            <button type="button" onClick={startEditClientPO} className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium">
+              <Pencil className="h-4 w-4" /> Edit
+            </button>
+          )}
         </div>
+        {saveError && editingClientPO && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">{saveError}</div>
+        )}
+        {editingClientPO ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="font-medium text-gray-500 dark:text-gray-400 mb-1">Client / Site</p>
+              <p className="text-gray-900 dark:text-gray-100">{site.name}</p>
+              {addressParts.length > 0 && <p className="text-gray-600 dark:text-gray-300 mt-1 text-sm">{addressParts.join(', ')}</p>}
+              {site.contact && <p className="text-gray-600 dark:text-gray-300 text-sm">{site.contact}</p>}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">PO#</label>
+                <input type="text" value={clientPOForm.po_number} onChange={(e) => setClientPOForm((f) => ({ ...f, po_number: e.target.value }))} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Department</label>
+                <select value={clientPOForm.department_id} onChange={(e) => setClientPOForm((f) => ({ ...f, department_id: e.target.value }))} className={inputClass}>
+                  <option value="">—</option>
+                  {siteDepartments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Project</label>
+                <input type="text" value={clientPOForm.project_name} onChange={(e) => setClientPOForm((f) => ({ ...f, project_name: e.target.value }))} className={inputClass} placeholder="—" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">PO Issue Date</label>
+                <input type="date" value={clientPOForm.po_issue_date} onChange={(e) => setClientPOForm((f) => ({ ...f, po_issue_date: e.target.value }))} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Proposal #</label>
+                <input type="text" value={clientPOForm.proposal_number} onChange={(e) => setClientPOForm((f) => ({ ...f, proposal_number: e.target.value }))} className={inputClass} placeholder="—" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={saveClientPO} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" onClick={() => setEditingClientPO(false)} disabled={saving} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-base">
+            <div>
+              <p className="font-medium text-gray-500 dark:text-gray-400">Client / Site</p>
+              <p className="text-gray-900 dark:text-gray-100">{site.name}</p>
+              {addressParts.length > 0 && <p className="text-gray-600 dark:text-gray-300 mt-1">{addressParts.join(', ')}</p>}
+              {site.contact && <p className="text-gray-600 dark:text-gray-300">{site.contact}</p>}
+            </div>
+            <div className="space-y-2">
+              <p><span className="font-medium text-gray-500 dark:text-gray-400">PO#:</span> {poData.po_number}</p>
+              <p><span className="font-medium text-gray-500 dark:text-gray-400">Department:</span> {poData.departments?.name || '—'}</p>
+              <p><span className="font-medium text-gray-500 dark:text-gray-400">Project:</span> {poData.description ?? poData.project_name ?? '—'}</p>
+              <p><span className="font-medium text-gray-500 dark:text-gray-400">PO Issue Date:</span> {poData.po_issue_date ? formatDate(poData.po_issue_date) : '—'}</p>
+              <p><span className="font-medium text-gray-500 dark:text-gray-400">Proposal #:</span> {poData.proposal_number || '—'}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2. Budget table (original + change orders) */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Budget Summary</h2>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 dark:border-gray-600">
-              <th className="text-left py-2 font-medium">Description</th>
-              <th className="text-right py-2 font-medium">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-b border-gray-100 dark:border-gray-700">
-              <td className="py-2">Original PO</td>
-              <td className="text-right py-2">${originalBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-            </tr>
-            {changeOrders.map((co: any, idx: number) => (
-              <tr key={co.id || `co-${idx}`} className="border-b border-gray-100 dark:border-gray-700">
-                <td className="py-2">Change Order {co.co_number || ''} ({co.co_date ? formatDate(co.co_date) : ''})</td>
-                <td className="text-right py-2">${(co.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Budget Summary</h2>
+          {canEdit && !editingBudget && (
+            <button type="button" onClick={startEditBudget} className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium">
+              <Pencil className="h-4 w-4" /> Edit
+            </button>
+          )}
+        </div>
+        {saveError && editingBudget && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">{saveError}</div>
+        )}
+        {editingBudget ? (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Original PO Amount ($)</label>
+              <input type="number" step="0.01" value={budgetForm.original_po_amount} onChange={(e) => setBudgetForm((f) => ({ ...f, original_po_amount: e.target.value }))} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Hours Billed</label>
+              <input type="number" step="0.1" value={budgetForm.prior_hours_billed} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_hours_billed: e.target.value }))} className={inputClass} placeholder="0" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Amount Spent ($)</label>
+              <input type="number" step="0.01" value={budgetForm.prior_amount_spent} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_amount_spent: e.target.value }))} className={inputClass} placeholder="0" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Period Notes</label>
+              <input type="text" value={budgetForm.prior_period_notes} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_period_notes: e.target.value }))} className={inputClass} placeholder="Optional" />
+            </div>
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Change Orders</span>
+                <button type="button" onClick={addChangeOrder} className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline text-sm">
+                  <Plus className="h-4 w-4" /> Add
+                </button>
+              </div>
+              <div className="space-y-2">
+                {budgetForm.changeOrders.map((co, idx) => (
+                  <div key={idx} className="flex flex-wrap gap-2 items-center p-3 border border-gray-200 dark:border-gray-600 rounded-lg">
+                    <input type="text" value={co.co_number} onChange={(e) => updateChangeOrder(idx, 'co_number', e.target.value)} placeholder="CO #" className="flex-1 min-w-[80px] px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm" />
+                    <input type="date" value={co.co_date} onChange={(e) => updateChangeOrder(idx, 'co_date', e.target.value)} className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm" />
+                    <input type="number" step="0.01" value={co.amount} onChange={(e) => updateChangeOrder(idx, 'amount', e.target.value)} placeholder="Amount" className="w-24 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm" />
+                    <button type="button" onClick={() => removeChangeOrder(idx)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Remove"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button type="button" onClick={saveBudget} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" onClick={() => setEditingBudget(false)} disabled={saving} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700">
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-600">
+                <th className="text-left py-2 font-medium">Description</th>
+                <th className="text-right py-2 font-medium">Amount</th>
               </tr>
-            ))}
-            <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
-              <td className="py-2">Total Available</td>
-              <td className="text-right py-2">${totalBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-            </tr>
-            {priorAmountSpent > 0 && (
+            </thead>
+            <tbody>
               <tr className="border-b border-gray-100 dark:border-gray-700">
-                <td className="py-2 text-amber-700 dark:text-amber-300">Prior period spent (before this system)</td>
-                <td className="text-right py-2 text-amber-700 dark:text-amber-300">-${priorAmountSpent.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                <td className="py-2">Original PO</td>
+                <td className="text-right py-2">${originalBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
               </tr>
-            )}
-          </tbody>
-        </table>
+              {changeOrders.map((co: any, idx: number) => (
+                <tr key={co.id || `co-${idx}`} className="border-b border-gray-100 dark:border-gray-700">
+                  <td className="py-2">Change Order {co.co_number || ''} ({co.co_date ? formatDate(co.co_date) : ''})</td>
+                  <td className="text-right py-2">${(co.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                </tr>
+              ))}
+              <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
+                <td className="py-2">Total Available</td>
+                <td className="text-right py-2">${totalBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              </tr>
+              {priorAmountSpent > 0 && (
+                <tr className="border-b border-gray-100 dark:border-gray-700">
+                  <td className="py-2 text-amber-700 dark:text-amber-300">Prior period spent (before this system)</td>
+                  <td className="text-right py-2 text-amber-700 dark:text-amber-300">-${priorAmountSpent.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* 3. Invoice history */}
