@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getAccessibleSiteIds } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 
-/** Syncs po_balance from running balance (original + COs - prior - invoices) and returns it */
+/** Syncs po_balance from running balance and returns balance + budget_balance */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ poId: string }> }
@@ -39,5 +39,57 @@ export async function GET(
 
   await supabase.from('purchase_orders').update({ po_balance: runningBalance }).eq('id', poId)
 
-  return NextResponse.json({ balance: runningBalance })
+  const { data: billRates } = await supabase
+    .from('po_bill_rates')
+    .select('user_id, rate, effective_from_date')
+    .eq('po_id', poId)
+    .order('effective_from_date', { ascending: false })
+
+  const { data: entries } = await supabase
+    .from('timesheet_entries')
+    .select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
+    .eq('po_id', poId)
+
+  const tsIds = [...new Set((entries || []).map((e: any) => e.timesheet_id).filter(Boolean))]
+  const { data: timesheets } = tsIds.length > 0
+    ? await supabase
+        .from('weekly_timesheets')
+        .select('id, user_id, week_ending')
+        .in('id', tsIds)
+        .eq('status', 'approved')
+    : { data: [] }
+
+  const hoursByUserWeek: Record<string, Record<string, number>> = {}
+  for (const ts of timesheets || []) {
+    const tsEntries = (entries || []).filter((e: any) => e.timesheet_id === ts.id)
+    const totalHours = tsEntries.reduce((sum: number, e: any) => {
+      return sum + (e.mon_hours || 0) + (e.tue_hours || 0) + (e.wed_hours || 0) +
+        (e.thu_hours || 0) + (e.fri_hours || 0) + (e.sat_hours || 0) + (e.sun_hours || 0)
+    }, 0)
+    if (totalHours > 0) {
+      const uid = ts.user_id
+      const we = ts.week_ending
+      if (!hoursByUserWeek[uid]) hoursByUserWeek[uid] = {}
+      hoursByUserWeek[uid][we] = (hoursByUserWeek[uid][we] || 0) + totalHours
+    }
+  }
+
+  const getEffectiveRate = (userId: string, dateStr: string) => {
+    const userRates = (billRates || [])
+      .filter((br: any) => br.user_id === userId && (br.effective_from_date || '') <= dateStr)
+      .sort((a: any, b: any) => (b.effective_from_date || '').localeCompare(a.effective_from_date || ''))
+    return userRates[0]?.rate ?? 0
+  }
+
+  let laborCost = 0
+  for (const [uid, weekData] of Object.entries(hoursByUserWeek)) {
+    for (const [weekEnding, hours] of Object.entries(weekData)) {
+      if (hours > 0) laborCost += getEffectiveRate(uid, weekEnding) * hours
+    }
+  }
+
+  const totalAvailable = original + coTotal - prior
+  const budgetBalance = totalAvailable - laborCost
+
+  return NextResponse.json({ balance: runningBalance, budgetBalance })
 }

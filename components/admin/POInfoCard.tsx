@@ -51,6 +51,7 @@ export default function POInfoCard({
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [budgetBalance, setBudgetBalance] = useState<string>('')
 
   useEffect(() => {
     const load = async () => {
@@ -62,8 +63,9 @@ export default function POInfoCard({
       setChangeOrders((coRes.data || []).map((r: any) => ({ id: r.id, co_number: r.co_number || '', co_date: r.co_date || '', amount: r.amount != null ? String(r.amount) : '' })))
       setAttachments(attRes.data || [])
       if (balanceRes.ok) {
-        const { balance } = await balanceRes.json()
+        const { balance, budgetBalance: bb } = await balanceRes.json()
         setForm((f) => ({ ...f, po_balance: balance != null ? String(balance) : '' }))
+        setBudgetBalance(bb != null ? String(bb) : '')
       }
     }
     load()
@@ -371,6 +373,17 @@ export default function POInfoCard({
                 onChange={(e) => setForm({ ...form, po_balance: e.target.value })}
                 disabled={true}
                 readOnly
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Budget Balance $$</label>
+              <input
+                type="number"
+                step="0.01"
+                value={budgetBalance}
+                readOnly
+                disabled
                 className={inputClass}
               />
             </div>
