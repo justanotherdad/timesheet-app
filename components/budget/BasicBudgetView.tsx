@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 import { ArrowLeft, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatDate, formatDateShort } from '@/lib/utils'
 import InvoiceFormModal from './InvoiceFormModal'
@@ -34,27 +33,34 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
   const [billableSortDir, setBillableSortDir] = useState<'asc' | 'desc'>('asc')
 
   const refetch = useCallback(async () => {
-    const res = await fetch(`/api/budget/${po.id}`)
+    const [res, coRes] = await Promise.all([
+      fetch(`/api/budget/${po.id}`),
+      fetch(`/api/budget/${po.id}/change-orders`),
+    ])
     if (res.ok) setData(await res.json())
-    setChangeOrdersOverride(null)
-    const supabase = createClient()
-    const { data: cos } = await supabase.from('po_change_orders').select('*').eq('po_id', po.id).order('co_date', { ascending: false })
-    setChangeOrdersOverride(cos || [])
+    if (coRes.ok) {
+      const json = await coRes.json()
+      setChangeOrdersOverride(Array.isArray(json) ? json : [])
+    }
+    else setChangeOrdersOverride(null)
   }, [po.id])
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       try {
-        const supabase = createClient()
         const [res, bhRes, coRes] = await Promise.all([
           fetch(`/api/budget/${po.id}`),
           fetch(`/api/budget/${po.id}/billable-hours?${showAllMonths ? 'all=true' : `month=${selectedMonth.split('-')[1]}&year=${selectedMonth.split('-')[0]}`}`),
-          supabase.from('po_change_orders').select('*').eq('po_id', po.id).order('co_date', { ascending: false }),
+          fetch(`/api/budget/${po.id}/change-orders`),
         ])
         if (res.ok) setData(await res.json())
         if (bhRes.ok) setBillableData(await bhRes.json())
-        setChangeOrdersOverride(coRes.data ?? [])
+        if (coRes.ok) {
+      const json = await coRes.json()
+      setChangeOrdersOverride(Array.isArray(json) ? json : [])
+    }
+        else setChangeOrdersOverride(null)
       } catch (e) {
         console.error(e)
       } finally {
@@ -178,8 +184,8 @@ export default function BasicBudgetView({ po, sites: sitesProp = [], onBack, use
               <td className="py-2">Original PO</td>
               <td className="text-right py-2">${originalBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
             </tr>
-            {changeOrders.map((co: any) => (
-              <tr key={co.id} className="border-b border-gray-100 dark:border-gray-700">
+            {changeOrders.map((co: any, idx: number) => (
+              <tr key={co.id || `co-${idx}`} className="border-b border-gray-100 dark:border-gray-700">
                 <td className="py-2">Change Order {co.co_number || ''} ({co.co_date ? formatDate(co.co_date) : ''})</td>
                 <td className="text-right py-2">${(co.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
               </tr>
