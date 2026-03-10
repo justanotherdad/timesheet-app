@@ -4,6 +4,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getAccessibleSiteIds } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ poId: string }> }
@@ -107,16 +110,24 @@ export async function GET(
     .eq('site_id', po.site_id)
     .order('name')
 
-  return NextResponse.json({
-    po,
-    changeOrders,
-    invoices,
-    billRates,
-    expenses,
-    expenseTypes,
-    users,
-    siteDepartments: siteDepartments || [],
-  })
+  return NextResponse.json(
+    {
+      po,
+      changeOrders,
+      invoices,
+      billRates,
+      expenses,
+      expenseTypes,
+      users,
+      siteDepartments: siteDepartments || [],
+    },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        Pragma: 'no-cache',
+      },
+    }
+  )
 }
 
 export async function PATCH(

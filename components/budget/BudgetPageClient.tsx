@@ -92,7 +92,10 @@ export default function BudgetPageClient({
             po={selectedPO}
             sites={sites}
             onBack={handleBackToSelector}
-            onSave={() => setBudgetRefreshKey((k) => k + 1)}
+            onSave={() => {
+              setBudgetRefreshKey((k) => k + 1)
+              router.refresh()
+            }}
             user={user}
             allSites={sites}
             sitePOs={sitePOs}

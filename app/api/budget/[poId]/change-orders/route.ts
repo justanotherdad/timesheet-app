@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getAccessibleSiteIds } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ poId: string }> }

@@ -83,13 +83,15 @@ export default function BasicBudgetView({
     changeOrders: [],
   })
 
+  const fetchOpts: RequestInit = { cache: 'no-store', headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } }
+
   const refetch = useCallback(async () => {
     const t = `t=${Date.now()}`
     const [res, coRes, brRes, laborRes] = await Promise.all([
-      fetch(`/api/budget/${po.id}?${t}`, { cache: 'no-store' }),
-      fetch(`/api/budget/${po.id}/change-orders?${t}`, { cache: 'no-store' }),
-      fetch(`/api/budget/${po.id}/bill-rates?${t}`, { cache: 'no-store' }),
-      fetch(`/api/budget/${po.id}/billable-hours?all=true&${t}`, { cache: 'no-store' }),
+      fetch(`/api/budget/${po.id}?${t}`, fetchOpts),
+      fetch(`/api/budget/${po.id}/change-orders?${t}`, fetchOpts),
+      fetch(`/api/budget/${po.id}/bill-rates?${t}`, fetchOpts),
+      fetch(`/api/budget/${po.id}/billable-hours?all=true&${t}`, fetchOpts),
     ])
     if (res.ok) setData(await res.json())
     if (coRes.ok) {
@@ -109,11 +111,11 @@ export default function BasicBudgetView({
       const t = `t=${Date.now()}`
       try {
         const [res, bhRes, coRes, brRes, laborRes] = await Promise.all([
-          fetch(`/api/budget/${po.id}?${t}`, { cache: 'no-store' }),
-          fetch(`/api/budget/${po.id}/billable-hours?${showAllMonths ? 'all=true' : `month=${selectedMonth.split('-')[1]}&year=${selectedMonth.split('-')[0]}`}&${t}`, { cache: 'no-store' }),
-          fetch(`/api/budget/${po.id}/change-orders?${t}`, { cache: 'no-store' }),
-          fetch(`/api/budget/${po.id}/bill-rates?${t}`, { cache: 'no-store' }),
-          fetch(`/api/budget/${po.id}/billable-hours?all=true&${t}`, { cache: 'no-store' }),
+          fetch(`/api/budget/${po.id}?${t}`, fetchOpts),
+          fetch(`/api/budget/${po.id}/billable-hours?${showAllMonths ? 'all=true' : `month=${selectedMonth.split('-')[1]}&year=${selectedMonth.split('-')[0]}`}&${t}`, fetchOpts),
+          fetch(`/api/budget/${po.id}/change-orders?${t}`, fetchOpts),
+          fetch(`/api/budget/${po.id}/bill-rates?${t}`, fetchOpts),
+          fetch(`/api/budget/${po.id}/billable-hours?all=true&${t}`, fetchOpts),
         ])
         if (res.ok) setData(await res.json())
         if (bhRes.ok) setBillableData(await bhRes.json())
@@ -257,6 +259,7 @@ export default function BasicBudgetView({
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to save')
       setEditingClientPO(false)
+      await new Promise((r) => setTimeout(r, 150))
       onSave?.()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
@@ -300,6 +303,7 @@ export default function BasicBudgetView({
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to save')
       setEditingBudget(false)
+      await new Promise((r) => setTimeout(r, 150))
       onSave?.()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
