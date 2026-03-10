@@ -41,6 +41,7 @@ export default function POInfoCard({
     department_id: po.department_id ?? '',
     budget_type: po.budget_type || 'basic',
     prior_hours_billed: po.prior_hours_billed ?? '',
+    prior_hours_billed_rate: po.prior_hours_billed_rate ?? '',
     prior_amount_spent: po.prior_amount_spent ?? '',
     prior_period_notes: po.prior_period_notes ?? '',
   })
@@ -88,6 +89,7 @@ export default function POInfoCard({
           department_id: form.department_id || null,
           budget_type: form.budget_type || 'basic',
           prior_hours_billed: form.prior_hours_billed != null && form.prior_hours_billed !== '' ? parseFloat(String(form.prior_hours_billed)) : null,
+          prior_hours_billed_rate: form.prior_hours_billed_rate != null && form.prior_hours_billed_rate !== '' ? parseFloat(String(form.prior_hours_billed_rate)) : null,
           prior_amount_spent: form.prior_amount_spent != null && form.prior_amount_spent !== '' ? parseFloat(String(form.prior_amount_spent)) : null,
           prior_period_notes: form.prior_period_notes || null,
         })
@@ -403,7 +405,7 @@ export default function POInfoCard({
           <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-4 bg-amber-50/50 dark:bg-amber-900/10">
             <label className={labelClass}>Prior Period Adjustment</label>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">For budgets in use before timesheets were in this system. Set hours/amount already spent so the budget view reflects reality.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Prior hours billed</label>
                 <input
@@ -418,6 +420,20 @@ export default function POInfoCard({
                 />
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Prior hours rate ($/hr)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.prior_hours_billed_rate}
+                  onChange={(e) => setForm({ ...form, prior_hours_billed_rate: e.target.value })}
+                  disabled={readOnly}
+                  placeholder="0"
+                  className={inputClass}
+                />
+                <p className="text-xs text-gray-500 mt-0.5">Rate for prior hours. Cost = hours × rate.</p>
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Prior amount spent ($)</label>
                 <input
                   type="number"
@@ -429,6 +445,7 @@ export default function POInfoCard({
                   placeholder="0"
                   className={inputClass}
                 />
+                <p className="text-xs text-gray-500 mt-0.5">Other prior spend. Reduces Budget Balance only.</p>
               </div>
             </div>
             <div className="mt-2">

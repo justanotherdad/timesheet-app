@@ -180,6 +180,7 @@ export async function PATCH(
     budget_type,
     client_contact_name,
     prior_hours_billed,
+    prior_hours_billed_rate,
     prior_amount_spent,
     prior_period_notes,
     changeOrders: changeOrdersPayload,
@@ -195,7 +196,7 @@ export async function PATCH(
   try {
     if (po_number !== undefined || original_po_amount !== undefined || po_issue_date !== undefined ||
         proposal_number !== undefined || project_name !== undefined || department_id !== undefined ||
-        budget_type !== undefined || client_contact_name !== undefined || prior_hours_billed !== undefined || prior_amount_spent !== undefined || prior_period_notes !== undefined) {
+        budget_type !== undefined || client_contact_name !== undefined || prior_hours_billed !== undefined || prior_hours_billed_rate !== undefined || prior_amount_spent !== undefined || prior_period_notes !== undefined) {
       const updateData: Record<string, unknown> = {}
       if (po_number !== undefined) updateData.po_number = po_number
       if (original_po_amount !== undefined) updateData.original_po_amount = original_po_amount === '' || original_po_amount == null ? null : parseFloat(String(original_po_amount))
@@ -209,6 +210,7 @@ export async function PATCH(
       if (budget_type !== undefined) updateData.budget_type = budget_type || 'basic'
       if (client_contact_name !== undefined) updateData.client_contact_name = client_contact_name || null
       if (prior_hours_billed !== undefined) updateData.prior_hours_billed = prior_hours_billed === '' || prior_hours_billed == null ? null : parseFloat(String(prior_hours_billed))
+      if (prior_hours_billed_rate !== undefined) updateData.prior_hours_billed_rate = prior_hours_billed_rate === '' || prior_hours_billed_rate == null ? null : parseFloat(String(prior_hours_billed_rate))
       if (prior_amount_spent !== undefined) updateData.prior_amount_spent = prior_amount_spent === '' || prior_amount_spent == null ? null : parseFloat(String(prior_amount_spent))
       if (prior_period_notes !== undefined) updateData.prior_period_notes = prior_period_notes || null
 

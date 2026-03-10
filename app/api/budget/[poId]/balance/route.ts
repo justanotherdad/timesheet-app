@@ -22,7 +22,7 @@ export async function GET(
 
   const { data: po } = await supabase
     .from('purchase_orders')
-    .select('site_id, original_po_amount, prior_amount_spent')
+    .select('site_id, original_po_amount, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
     .eq('id', poId)
     .single()
 
@@ -35,9 +35,8 @@ export async function GET(
 
   const original = po?.original_po_amount ?? 0
   const coTotal = (cos || []).reduce((s: number, c: any) => s + (c.amount || 0), 0)
-  const prior = po?.prior_amount_spent ?? 0
   const invTotal = (invs || []).reduce((s: number, i: any) => s + (i.amount || 0), 0)
-  const runningBalance = original + coTotal - prior - invTotal
+  const runningBalance = original + coTotal - invTotal
 
   await supabase.from('purchase_orders').update({ po_balance: runningBalance }).eq('id', poId)
 
@@ -90,8 +89,12 @@ export async function GET(
     }
   }
 
-  const totalAvailable = original + coTotal - prior
-  const budgetBalance = totalAvailable - laborCost
+  const priorHours = po?.prior_hours_billed ?? 0
+  const priorRate = po?.prior_hours_billed_rate ?? 0
+  const priorAmountSpent = po?.prior_amount_spent ?? 0
+  const priorCostFromHours = priorHours * priorRate
+  const totalAvailable = original + coTotal
+  const budgetBalance = totalAvailable - priorAmountSpent - priorCostFromHours - laborCost
 
   return NextResponse.json({ balance: runningBalance, budgetBalance })
 }

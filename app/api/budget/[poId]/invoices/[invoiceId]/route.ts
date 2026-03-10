@@ -3,16 +3,16 @@ import { createClient } from '@/lib/supabase/server'
 import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 
+/** PO Balance = total budget - invoices only. Prior amount spent affects Budget Balance, not PO Balance. */
 async function updatePoBalance(supabase: any, poId: string) {
-  const { data: po } = await supabase.from('purchase_orders').select('original_po_amount, prior_amount_spent').eq('id', poId).single()
+  const { data: po } = await supabase.from('purchase_orders').select('original_po_amount').eq('id', poId).single()
   const { data: cos } = await supabase.from('po_change_orders').select('amount').eq('po_id', poId)
   const { data: invs } = await supabase.from('po_invoices').select('amount').eq('po_id', poId)
 
   const original = po?.original_po_amount ?? 0
   const coTotal = (cos || []).reduce((s: number, c: any) => s + (c.amount || 0), 0)
-  const prior = po?.prior_amount_spent ?? 0
   const invTotal = (invs || []).reduce((s: number, i: any) => s + (i.amount || 0), 0)
-  const runningBalance = original + coTotal - prior - invTotal
+  const runningBalance = original + coTotal - invTotal
 
   await supabase.from('purchase_orders').update({ po_balance: runningBalance }).eq('id', poId)
 }

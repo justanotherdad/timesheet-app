@@ -79,12 +79,14 @@ export default function BasicBudgetView({
   const [budgetForm, setBudgetForm] = useState<{
     original_po_amount: string
     prior_hours_billed: string
+    prior_hours_billed_rate: string
     prior_amount_spent: string
     prior_period_notes: string
     changeOrders: Array<{ id?: string; co_number: string; co_date: string; amount: string }>
   }>({
     original_po_amount: '',
     prior_hours_billed: '',
+    prior_hours_billed_rate: '',
     prior_amount_spent: '',
     prior_period_notes: '',
     changeOrders: [],
@@ -213,8 +215,10 @@ export default function BasicBudgetView({
   const totalBudget = originalBudget + coTotal
   const priorAmountSpent = poData.prior_amount_spent ?? 0
   const priorHoursBilled = poData.prior_hours_billed ?? 0
+  const priorHoursBilledRate = poData.prior_hours_billed_rate ?? 0
+  const priorCostFromHours = priorHoursBilled * priorHoursBilledRate
   const invoiceTotal = invoices.reduce((s: number, inv: any) => s + (inv.amount || 0), 0)
-  const runningBalance = totalBudget - priorAmountSpent - invoiceTotal
+  const runningBalance = totalBudget - invoiceTotal
 
   const getEffectiveRate = (userId: string, dateStr: string) => {
     const userRates = (billRatesRaw || [])
@@ -234,7 +238,7 @@ export default function BasicBudgetView({
     }
   }
 
-  const budgetBalance = totalBudget - priorAmountSpent - laborCost
+  const budgetBalance = totalBudget - priorAmountSpent - priorCostFromHours - laborCost
 
   const rows = billableData?.rows || []
   const weekEndings = billableData?.weekEndings || []
@@ -319,6 +323,7 @@ export default function BasicBudgetView({
     setBudgetForm({
       original_po_amount: poData.original_po_amount != null ? String(poData.original_po_amount) : '',
       prior_hours_billed: poData.prior_hours_billed != null ? String(poData.prior_hours_billed) : '',
+      prior_hours_billed_rate: poData.prior_hours_billed_rate != null ? String(poData.prior_hours_billed_rate) : '',
       prior_amount_spent: poData.prior_amount_spent != null ? String(poData.prior_amount_spent) : '',
       prior_period_notes: poData.prior_period_notes || '',
       changeOrders: changeOrders.map((co: any) => ({
@@ -342,6 +347,7 @@ export default function BasicBudgetView({
         body: JSON.stringify({
           original_po_amount: budgetForm.original_po_amount,
           prior_hours_billed: budgetForm.prior_hours_billed,
+          prior_hours_billed_rate: budgetForm.prior_hours_billed_rate,
           prior_amount_spent: budgetForm.prior_amount_spent,
           prior_period_notes: budgetForm.prior_period_notes,
           changeOrders: budgetForm.changeOrders,
@@ -662,10 +668,17 @@ export default function BasicBudgetView({
             <div>
               <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Hours Billed</label>
               <input type="number" step="0.1" value={budgetForm.prior_hours_billed} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_hours_billed: e.target.value }))} className={inputClass} placeholder="0" />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Hours billed before this system. Reduces Budget Balance.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Hours Bill Rate ($/hr)</label>
+              <input type="number" step="0.01" value={budgetForm.prior_hours_billed_rate} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_hours_billed_rate: e.target.value }))} className={inputClass} placeholder="0" />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Rate to use for prior hours. Cost = hours × rate.</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Amount Spent ($)</label>
               <input type="number" step="0.01" value={budgetForm.prior_amount_spent} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_amount_spent: e.target.value }))} className={inputClass} placeholder="0" />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Other prior spend (non-labor). Reduces Budget Balance only, not PO Balance.</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Period Notes</label>
@@ -721,10 +734,10 @@ export default function BasicBudgetView({
                 <td className="py-2">Total Available</td>
                 <td className="text-right py-2">${totalBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
               </tr>
-              {priorAmountSpent > 0 && (
+              {(priorAmountSpent > 0 || priorCostFromHours > 0) && (
                 <tr className="border-b border-gray-100 dark:border-gray-700">
-                  <td className="py-2 text-amber-700 dark:text-amber-300">Prior period spent (before this system)</td>
-                  <td className="text-right py-2 text-amber-700 dark:text-amber-300">-${priorAmountSpent.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2 text-amber-700 dark:text-amber-300">Prior period (before this system)</td>
+                  <td className="text-right py-2 text-amber-700 dark:text-amber-300">-${(priorAmountSpent + priorCostFromHours).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                 </tr>
               )}
             </tbody>
@@ -755,12 +768,13 @@ export default function BasicBudgetView({
               <th className="text-left py-2 font-medium">Period</th>
               <th className="text-left py-2 font-medium">Payment Received</th>
               <th className="text-right py-2 font-medium">Amount</th>
+              <th className="text-left py-2 font-medium">Notes</th>
               {isAdmin && <th className="w-20 py-2"></th>}
             </tr>
           </thead>
           <tbody>
             {invoices.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 6 : 5} className="py-4 text-center text-gray-500">No invoices yet</td></tr>
+              <tr><td colSpan={isAdmin ? 7 : 6} className="py-4 text-center text-gray-500">No invoices yet</td></tr>
             ) : (
               invoices.map((inv: any) => (
                 <tr key={inv.id} className="border-b border-gray-100 dark:border-gray-700">
@@ -769,6 +783,7 @@ export default function BasicBudgetView({
                   <td className="py-2">{inv.period_month}/{inv.period_year}</td>
                   <td className="py-2">{inv.payment_received_date ? formatDate(inv.payment_received_date) : '—'}</td>
                   <td className="text-right py-2">${(inv.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2 max-w-[200px] truncate" title={inv.notes || undefined}>{inv.notes || '—'}</td>
                   {isAdmin && (
                     <td className="py-2">
                       <div className="flex gap-1">
@@ -781,17 +796,11 @@ export default function BasicBudgetView({
               ))
             )}
             <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
-              <td colSpan={isAdmin ? 5 : 4} className="py-2">Total Invoiced</td>
+              <td colSpan={isAdmin ? 6 : 5} className="py-2">Total Invoiced</td>
               <td className="text-right py-2">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
             </tr>
-            {priorAmountSpent > 0 && (
-              <tr className="bg-amber-50/50 dark:bg-amber-900/10">
-                <td colSpan={isAdmin ? 5 : 4} className="py-2 text-amber-700 dark:text-amber-300">Prior period spent (before this system)</td>
-                <td className="text-right py-2 text-amber-700 dark:text-amber-300">${priorAmountSpent.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-              </tr>
-            )}
             <tr className="font-semibold bg-green-50 dark:bg-green-900/20">
-              <td colSpan={isAdmin ? 5 : 4} className="py-2">Running Balance (PO Balance)</td>
+              <td colSpan={isAdmin ? 6 : 5} className="py-2">Running Balance (PO Balance)</td>
               <td className="text-right py-2">${runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
             </tr>
           </tbody>
@@ -816,7 +825,7 @@ export default function BasicBudgetView({
           <tbody>
             <tr className="border-b border-gray-100 dark:border-gray-700">
               <td className="py-2">Total Available</td>
-              <td className="text-right py-2">${(totalBudget - priorAmountSpent).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              <td className="text-right py-2">${(totalBudget - priorAmountSpent - priorCostFromHours).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
             </tr>
             <tr className="border-b border-gray-100 dark:border-gray-700">
               <td className="py-2">Labor cost (rates × hours from timesheets)</td>
