@@ -151,6 +151,7 @@ export async function PATCH(
     proposal_number,
     project_name,
     department_id,
+    budget_type,
     prior_hours_billed,
     prior_amount_spent,
     prior_period_notes,
@@ -160,7 +161,7 @@ export async function PATCH(
   try {
     if (po_number !== undefined || original_po_amount !== undefined || po_issue_date !== undefined ||
         proposal_number !== undefined || project_name !== undefined || department_id !== undefined ||
-        prior_hours_billed !== undefined || prior_amount_spent !== undefined || prior_period_notes !== undefined) {
+        budget_type !== undefined || prior_hours_billed !== undefined || prior_amount_spent !== undefined || prior_period_notes !== undefined) {
       const updateData: Record<string, unknown> = {}
       if (po_number !== undefined) updateData.po_number = po_number
       if (original_po_amount !== undefined) updateData.original_po_amount = original_po_amount === '' || original_po_amount == null ? null : parseFloat(String(original_po_amount))
@@ -171,6 +172,7 @@ export async function PATCH(
         updateData.description = project_name || null
       }
       if (department_id !== undefined) updateData.department_id = department_id || null
+      if (budget_type !== undefined) updateData.budget_type = budget_type || 'basic'
       if (prior_hours_billed !== undefined) updateData.prior_hours_billed = prior_hours_billed === '' || prior_hours_billed == null ? null : parseFloat(String(prior_hours_billed))
       if (prior_amount_spent !== undefined) updateData.prior_amount_spent = prior_amount_spent === '' || prior_amount_spent == null ? null : parseFloat(String(prior_amount_spent))
       if (prior_period_notes !== undefined) updateData.prior_period_notes = prior_period_notes || null

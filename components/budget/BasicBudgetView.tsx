@@ -65,6 +65,7 @@ export default function BasicBudgetView({
     project_name: '',
     po_issue_date: '',
     proposal_number: '',
+    budget_type: 'basic' as 'basic' | 'project',
   })
   const [budgetForm, setBudgetForm] = useState<{
     original_po_amount: string
@@ -234,6 +235,7 @@ export default function BasicBudgetView({
       project_name: poData.description ?? poData.project_name ?? '',
       po_issue_date: poData.po_issue_date ? String(poData.po_issue_date).slice(0, 10) : '',
       proposal_number: poData.proposal_number || '',
+      budget_type: (poData.budget_type || 'basic') as 'basic' | 'project',
     })
     setEditingClientPO(true)
     setSaveError(null)
@@ -401,11 +403,26 @@ export default function BasicBudgetView({
         )}
         {editingClientPO ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="font-medium text-gray-500 dark:text-gray-400 mb-1">Client / Site</p>
-              <p className="text-gray-900 dark:text-gray-100">{site.name}</p>
-              {addressParts.length > 0 && <p className="text-gray-600 dark:text-gray-300 mt-1 text-sm">{addressParts.join(', ')}</p>}
-              {site.contact && <p className="text-gray-600 dark:text-gray-300 text-sm">{site.contact}</p>}
+            <div className="space-y-4">
+              <div>
+                <p className="font-medium text-gray-500 dark:text-gray-400 mb-1">Client / Site</p>
+                <p className="text-gray-900 dark:text-gray-100">{site.name}</p>
+                {addressParts.length > 0 && <p className="text-gray-600 dark:text-gray-300 mt-1 text-sm">{addressParts.join(', ')}</p>}
+                {site.contact && <p className="text-gray-600 dark:text-gray-300 text-sm">{site.contact}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Budget Type</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="budget_type" value="basic" checked={clientPOForm.budget_type === 'basic'} onChange={(e) => setClientPOForm((f) => ({ ...f, budget_type: e.target.value as 'basic' | 'project' }))} className="rounded-full" />
+                    <span>Basic</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="budget_type" value="project" checked={clientPOForm.budget_type === 'project'} onChange={(e) => setClientPOForm((f) => ({ ...f, budget_type: e.target.value as 'basic' | 'project' }))} className="rounded-full" />
+                    <span>Project</span>
+                  </label>
+                </div>
+              </div>
             </div>
             <div className="space-y-3">
               <div>
@@ -450,6 +467,8 @@ export default function BasicBudgetView({
               <p className="text-gray-900 dark:text-gray-100">{site.name}</p>
               {addressParts.length > 0 && <p className="text-gray-600 dark:text-gray-300 mt-1">{addressParts.join(', ')}</p>}
               {site.contact && <p className="text-gray-600 dark:text-gray-300">{site.contact}</p>}
+              <p className="font-medium text-gray-500 dark:text-gray-400 mt-4">Budget Type</p>
+              <p className="text-gray-900 dark:text-gray-100 capitalize">{poData.budget_type || 'basic'}</p>
             </div>
             <div className="space-y-2">
               <p><span className="font-medium text-gray-500 dark:text-gray-400">PO#:</span> {poData.po_number}</p>
