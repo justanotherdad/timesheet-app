@@ -44,6 +44,7 @@ export default function BasicBudgetView({
 }: BasicBudgetViewProps) {
   const [data, setData] = useState<any>(null)
   const [changeOrdersOverride, setChangeOrdersOverride] = useState<any[] | null>(null)
+  const [invoicesOverride, setInvoicesOverride] = useState<any[] | null>(null)
   const [billRatesOverride, setBillRatesOverride] = useState<any[] | null>(null)
   const [billableData, setBillableData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -104,9 +105,10 @@ export default function BasicBudgetView({
 
   const refetch = useCallback(async () => {
     const t = `t=${Date.now()}`
-    const [res, coRes, brRes, laborRes] = await Promise.all([
+    const [res, coRes, invRes, brRes, laborRes] = await Promise.all([
       fetch(`/api/budget/${po.id}?${t}`, fetchOpts),
       fetch(`/api/budget/${po.id}/change-orders?${t}`, fetchOpts),
+      fetch(`/api/budget/${po.id}/invoices?${t}`, fetchOpts),
       fetch(`/api/budget/${po.id}/bill-rates?${t}`, fetchOpts),
       fetch(`/api/budget/${po.id}/billable-hours?all=true&${t}`, fetchOpts),
     ])
@@ -115,6 +117,10 @@ export default function BasicBudgetView({
       const json = await coRes.json()
       setChangeOrdersOverride(Array.isArray(json) ? json : [])
     } else setChangeOrdersOverride(null)
+    if (invRes.ok) {
+      const json = await invRes.json()
+      setInvoicesOverride(Array.isArray(json) ? json : [])
+    } else setInvoicesOverride(null)
     if (brRes.ok) {
       const json = await brRes.json()
       setBillRatesOverride(Array.isArray(json) ? json : null)
@@ -128,10 +134,11 @@ export default function BasicBudgetView({
       setLoading(true)
       const t = `t=${Date.now()}`
       try {
-        const [res, bhRes, coRes, brRes, laborRes] = await Promise.all([
+        const [res, bhRes, coRes, invRes, brRes, laborRes] = await Promise.all([
           fetch(`/api/budget/${po.id}?${t}`, fetchOpts),
           fetch(`/api/budget/${po.id}/billable-hours?${showAllMonths ? 'all=true' : `month=${selectedMonth.split('-')[1]}&year=${selectedMonth.split('-')[0]}`}&${t}`, fetchOpts),
           fetch(`/api/budget/${po.id}/change-orders?${t}`, fetchOpts),
+          fetch(`/api/budget/${po.id}/invoices?${t}`, fetchOpts),
           fetch(`/api/budget/${po.id}/bill-rates?${t}`, fetchOpts),
           fetch(`/api/budget/${po.id}/billable-hours?all=true&${t}`, fetchOpts),
         ])
@@ -141,6 +148,10 @@ export default function BasicBudgetView({
           const json = await coRes.json()
           setChangeOrdersOverride(Array.isArray(json) ? json : [])
         } else setChangeOrdersOverride(null)
+        if (invRes.ok) {
+          const json = await invRes.json()
+          setInvoicesOverride(Array.isArray(json) ? json : [])
+        } else setInvoicesOverride(null)
         if (brRes.ok) {
           const json = await brRes.json()
           setBillRatesOverride(Array.isArray(json) ? json : null)
@@ -174,7 +185,7 @@ export default function BasicBudgetView({
   const site = poData.sites || (poData.site_id && sitesProp?.length ? sitesProp.find((s) => s.id === poData.site_id) : null) || {}
   const addressParts = [site.address_street, [site.address_city, site.address_state, site.address_zip].filter(Boolean).join(', ')].filter(Boolean)
   const changeOrders = changeOrdersOverride !== null ? changeOrdersOverride : (data?.changeOrders || [])
-  const invoices = data?.invoices || []
+  const invoices = invoicesOverride !== null ? invoicesOverride : (data?.invoices || [])
   const usersFromApi = data?.users || []
   const usersFromBillable = (billableData?.rows || []).map((r: any) => ({ id: r.userId, name: r.userName }))
   const usersMap = new Map<string, { id: string; name: string }>()
