@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
-import { formatDate, formatDateShort, formatPeriodMonthYear } from '@/lib/utils'
+import { formatDate, formatDateShort, formatPeriodsList } from '@/lib/utils'
 import InvoiceFormModal from './InvoiceFormModal'
 import ExpenseFormModal from './ExpenseFormModal'
 import BillRateFormModal from './BillRateFormModal'
@@ -775,7 +775,7 @@ export default function BasicBudgetView({
                 <tr key={inv.id} className="border-b border-gray-100 dark:border-gray-700">
                   <td className="py-2 px-3">{inv.invoice_date ? formatDate(inv.invoice_date) : '—'}</td>
                   <td className="py-2 px-3">{inv.invoice_number || '—'}</td>
-                  <td className="py-2 px-3">{formatPeriodMonthYear(inv.period_month, inv.period_year)}</td>
+                  <td className="py-2 px-3">{formatPeriodsList(inv.periods?.length ? inv.periods : (inv.period_month != null && inv.period_year != null ? [{ month: inv.period_month, year: inv.period_year }] : []))}</td>
                   <td className="py-2 px-3">{inv.payment_received_date ? formatDate(inv.payment_received_date) : '—'}</td>
                   <td className="text-right py-2 px-3">${(inv.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   {hasAnyNotes && <td className="py-2 px-3 min-w-0 break-words align-top">{inv.notes || '—'}</td>}

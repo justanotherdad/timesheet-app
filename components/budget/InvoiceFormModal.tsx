@@ -1,8 +1,19 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { X } from 'lucide-react'
+import { X, Plus, Minus } from 'lucide-react'
 import { formatDateForInput, isValidDateInputValue } from '@/lib/utils'
+
+type PeriodEntry = { month: number; year: number }
+
+function getInitialPeriods(invoice?: any): PeriodEntry[] {
+  if (invoice?.periods?.length) {
+    return invoice.periods.map((p: any) => ({ month: p.month, year: p.year }))
+  }
+  const m = invoice?.period_month ?? new Date().getMonth() + 1
+  const y = invoice?.period_year ?? new Date().getFullYear()
+  return [{ month: m, year: y }]
+}
 
 interface InvoiceFormModalProps {
   poId: string
@@ -19,8 +30,7 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
   const [form, setForm] = useState({
     invoice_date: invoice?.invoice_date ? formatDateForInput(invoice.invoice_date) : formatDateForInput(new Date()),
     invoice_number: invoice?.invoice_number || '',
-    period_month: invoice?.period_month ?? new Date().getMonth() + 1,
-    period_year: invoice?.period_year ?? new Date().getFullYear(),
+    periods: getInitialPeriods(invoice),
     amount: invoice?.amount != null ? String(invoice.amount) : '',
     notes: invoice?.notes || '',
   })
@@ -61,8 +71,7 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
       const body: any = {
         invoice_date: form.invoice_date,
         invoice_number: form.invoice_number || null,
-        period_month: parseInt(String(form.period_month), 10),
-        period_year: parseInt(String(form.period_year), 10),
+        periods: form.periods.map((p) => ({ month: parseInt(String(p.month), 10), year: parseInt(String(p.year), 10) })),
         amount: parseFloat(String(form.amount)),
         payment_received_date: paymentReceivedVal || null,
         notes: form.notes || null,
@@ -102,19 +111,25 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
             <label className="block text-sm font-medium mb-1">Invoice #</label>
             <input type="text" value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Period Month *</label>
-              <select value={form.period_month} onChange={(e) => setForm({ ...form, period_month: e.target.value })} required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-                  <option key={m} value={m}>{new Date(2000, m-1).toLocaleString('default', { month: 'long' })}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Period Year *</label>
-              <input type="number" value={form.period_year} onChange={(e) => setForm({ ...form, period_year: e.target.value })} min="2020" max="2030" required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
-            </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Period(s) *</label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Add multiple periods if the invoice spans more than one month.</p>
+            {form.periods.map((p, i) => (
+              <div key={i} className="flex gap-2 items-center mb-2">
+                <select value={p.month} onChange={(e) => { const next = [...form.periods]; next[i] = { ...next[i], month: parseInt(e.target.value, 10) }; setForm({ ...form, periods: next })} } className="flex-1 h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                    <option key={m} value={m}>{new Date(2000, m-1).toLocaleString('default', { month: 'long' })}</option>
+                  ))}
+                </select>
+                <input type="number" value={p.year} onChange={(e) => { const next = [...form.periods]; next[i] = { ...next[i], year: parseInt(e.target.value, 10) }; setForm({ ...form, periods: next })} } min="2020" max="2030" className="w-24 h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                {form.periods.length > 1 && (
+                  <button type="button" onClick={() => setForm({ ...form, periods: form.periods.filter((_, j) => j !== i) })} className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Remove period"><Minus className="h-4 w-4" /></button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={() => setForm({ ...form, periods: [...form.periods, { month: new Date().getMonth() + 1, year: new Date().getFullYear() }] })} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg border border-dashed border-blue-300 dark:border-blue-600">
+              <Plus className="h-4 w-4" /> Add period
+            </button>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Amount *</label>

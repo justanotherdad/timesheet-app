@@ -73,20 +73,28 @@ export async function POST(
   }
 
   const body = await req.json()
-  const { invoice_date, invoice_number, period_month, period_year, amount, payment_received_date, notes } = body
+  const { invoice_date, invoice_number, periods, period_month, period_year, amount, payment_received_date, notes } = body
 
-  if (!invoice_date || period_month == null || period_year == null || amount == null) {
-    return NextResponse.json({ error: 'invoice_date, period_month, period_year, and amount are required' }, { status: 400 })
+  const periodsList = Array.isArray(periods) && periods.length > 0
+    ? periods.map((p: any) => ({ month: parseInt(String(p.month), 10), year: parseInt(String(p.year), 10) }))
+    : period_month != null && period_year != null
+      ? [{ month: parseInt(String(period_month), 10), year: parseInt(String(period_year), 10) }]
+      : null
+
+  if (!invoice_date || !periodsList?.length || amount == null) {
+    return NextResponse.json({ error: 'invoice_date, at least one period (month/year), and amount are required' }, { status: 400 })
   }
 
+  const firstPeriod = periodsList[0]
   const { data: inv, error } = await supabase
     .from('po_invoices')
     .insert({
       po_id: poId,
       invoice_date,
       invoice_number: invoice_number || null,
-      period_month: parseInt(String(period_month), 10),
-      period_year: parseInt(String(period_year), 10),
+      period_month: firstPeriod.month,
+      period_year: firstPeriod.year,
+      periods: periodsList,
       amount: parseFloat(String(amount)),
       payment_received_date: payment_received_date || null,
       notes: notes || null,

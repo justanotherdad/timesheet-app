@@ -37,8 +37,12 @@ export async function PATCH(
   const updates: Record<string, any> = {}
   if (body.invoice_date != null) updates.invoice_date = body.invoice_date
   if ('invoice_number' in body) updates.invoice_number = body.invoice_number
-  if (body.period_month != null) updates.period_month = parseInt(String(body.period_month), 10)
-  if (body.period_year != null) updates.period_year = parseInt(String(body.period_year), 10)
+  if (Array.isArray(body.periods) && body.periods.length > 0) {
+    updates.periods = body.periods.map((p: any) => ({ month: parseInt(String(p.month), 10), year: parseInt(String(p.year), 10) }))
+    updates.period_month = updates.periods[0].month
+    updates.period_year = updates.periods[0].year
+  } else if (body.period_month != null) updates.period_month = parseInt(String(body.period_month), 10)
+  else if (body.period_year != null) updates.period_year = parseInt(String(body.period_year), 10)
   if (body.amount != null) updates.amount = parseFloat(String(body.amount))
   if ('payment_received_date' in body) updates.payment_received_date = body.payment_received_date
   if ('notes' in body) updates.notes = body.notes

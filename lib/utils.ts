@@ -81,6 +81,12 @@ export function formatPeriodMonthYear(month: number, year: number): string {
   return format(d, 'MMM-yyyy')
 }
 
+/** Format array of periods: [{month, year}, ...] -> "Jul 2024, Aug 2024, Sep 2024" */
+export function formatPeriodsList(periods: { month: number; year: number }[]): string {
+  if (!periods?.length) return '—'
+  return periods.map((p) => formatPeriodMonthYear(p.month, p.year)).join(', ')
+}
+
 /** Format date for HTML date input (yyyy-MM-dd). Returns '' for invalid/empty. */
 export function formatDateForInput(date: Date | string | null | undefined): string {
   if (date == null || date === '') return ''
