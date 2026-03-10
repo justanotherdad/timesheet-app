@@ -74,6 +74,13 @@ export function formatDateShort(date: Date | string): string {
   return format(d, 'M/d/yy')
 }
 
+/** Format period month/year as MMM-YYYY (e.g. Jul-2024). month is 1-12. */
+export function formatPeriodMonthYear(month: number, year: number): string {
+  if (!month || !year) return '—'
+  const d = new Date(year, month - 1, 1)
+  return format(d, 'MMM-yyyy')
+}
+
 export function formatDateForInput(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
   return format(d, 'yyyy-MM-dd')

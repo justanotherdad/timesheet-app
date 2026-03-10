@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
-import { formatDate, formatDateShort } from '@/lib/utils'
+import { formatDate, formatDateShort, formatPeriodMonthYear } from '@/lib/utils'
 import InvoiceFormModal from './InvoiceFormModal'
 import ExpenseFormModal from './ExpenseFormModal'
 import BillRateFormModal from './BillRateFormModal'
@@ -754,14 +754,14 @@ export default function BasicBudgetView({
             </button>
           )}
         </div>
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-fixed">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-600">
-              <th className="text-left py-2 font-medium">Date</th>
-              <th className="text-left py-2 font-medium">Invoice #</th>
-              <th className="text-left py-2 font-medium">Period</th>
-              <th className="text-left py-2 font-medium">Payment Received</th>
-              <th className="text-right py-2 font-medium">Amount</th>
+              <th className="text-left py-2 font-medium w-[100px]">Date</th>
+              <th className="text-left py-2 font-medium w-[85px]">Invoice #</th>
+              <th className="text-left py-2 font-medium w-[85px]">Period</th>
+              <th className="text-left py-2 font-medium w-[115px]">Payment Received</th>
+              <th className="text-right py-2 font-medium w-[95px]">Amount</th>
               <th className="text-left py-2 font-medium">Notes</th>
               {isAdmin && <th className="w-20 py-2"></th>}
             </tr>
@@ -774,10 +774,10 @@ export default function BasicBudgetView({
                 <tr key={inv.id} className="border-b border-gray-100 dark:border-gray-700">
                   <td className="py-2">{inv.invoice_date ? formatDate(inv.invoice_date) : '—'}</td>
                   <td className="py-2">{inv.invoice_number || '—'}</td>
-                  <td className="py-2">{inv.period_month}/{inv.period_year}</td>
+                  <td className="py-2">{formatPeriodMonthYear(inv.period_month, inv.period_year)}</td>
                   <td className="py-2">{inv.payment_received_date ? formatDate(inv.payment_received_date) : '—'}</td>
                   <td className="text-right py-2">${(inv.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                  <td className="py-2 max-w-[200px] truncate" title={inv.notes || undefined}>{inv.notes || '—'}</td>
+                  <td className="py-2 px-2 min-w-0 break-words align-top">{inv.notes || '—'}</td>
                   {isAdmin && (
                     <td className="py-2">
                       <div className="flex gap-1">

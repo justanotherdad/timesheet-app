@@ -29,7 +29,7 @@ export async function GET(
       .from('po_invoices')
       .select('*')
       .eq('po_id', poId)
-      .order('invoice_date', { ascending: false })
+      .order('invoice_date', { ascending: true })
     if (res.error) throw res.error
     return NextResponse.json(res.data || [])
   } catch {
@@ -37,7 +37,7 @@ export async function GET(
       .from('po_invoices')
       .select('*')
       .eq('po_id', poId)
-      .order('invoice_date', { ascending: false })
+      .order('invoice_date', { ascending: true })
     return NextResponse.json(data || [])
   }
 }

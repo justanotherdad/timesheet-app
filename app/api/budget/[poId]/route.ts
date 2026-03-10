@@ -57,8 +57,8 @@ export async function GET(
     : supabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: false })
 
   const invoicesQuery = adminSupabase
-    ? adminSupabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: false })
-    : supabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: false })
+    ? adminSupabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: true })
+    : supabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: true })
 
   const billRatesQuery = adminSupabase
     ? adminSupabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })
@@ -79,7 +79,7 @@ export async function GET(
   }
   let invoices = invoicesRes.data || []
   if (invoicesRes.error && adminSupabase) {
-    const { data: fallback } = await supabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: false })
+    const { data: fallback } = await supabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: true })
     invoices = fallback || []
   }
   let billRatesRaw = billRatesRes.data || []
