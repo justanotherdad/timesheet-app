@@ -218,6 +218,7 @@ export default function BasicBudgetView({
   const priorHoursBilledRate = poData.prior_hours_billed_rate ?? 0
   const priorCostFromHours = priorHoursBilled * priorHoursBilledRate
   const invoiceTotal = invoices.reduce((s: number, inv: any) => s + (inv.amount || 0), 0)
+  const hasAnyNotes = invoices.some((inv: any) => inv.notes && String(inv.notes).trim() !== '')
   const runningBalance = totalBudget - invoiceTotal
 
   const getEffectiveRate = (userId: string, dateStr: string) => {
@@ -754,32 +755,32 @@ export default function BasicBudgetView({
             </button>
           )}
         </div>
-        <table className="w-full text-sm table-fixed">
+        <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-600">
-              <th className="text-left py-2 font-medium w-[100px]">Date</th>
-              <th className="text-left py-2 font-medium w-[85px]">Invoice #</th>
-              <th className="text-left py-2 font-medium w-[85px]">Period</th>
-              <th className="text-left py-2 font-medium w-[115px]">Payment Received</th>
-              <th className="text-right py-2 font-medium w-[95px]">Amount</th>
-              <th className="text-left py-2 font-medium">Notes</th>
-              {isAdmin && <th className="w-20 py-2"></th>}
+              <th className="text-left py-2 px-3 font-medium min-w-[110px]">Date</th>
+              <th className="text-left py-2 px-3 font-medium min-w-[120px]">Invoice #</th>
+              <th className="text-left py-2 px-3 font-medium min-w-[95px]">Period</th>
+              <th className="text-left py-2 px-3 font-medium min-w-[130px]">Payment Received</th>
+              <th className="text-right py-2 px-3 font-medium min-w-[100px]">Amount</th>
+              {hasAnyNotes && <th className="text-left py-2 px-3 font-medium min-w-[140px]">Notes</th>}
+              {isAdmin && <th className="w-20 py-2 px-2"></th>}
             </tr>
           </thead>
           <tbody>
             {invoices.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 7 : 6} className="py-4 text-center text-gray-500">No invoices yet</td></tr>
+              <tr><td colSpan={(isAdmin ? 1 : 0) + (hasAnyNotes ? 6 : 5)} className="py-4 text-center text-gray-500">No invoices yet</td></tr>
             ) : (
               invoices.map((inv: any) => (
                 <tr key={inv.id} className="border-b border-gray-100 dark:border-gray-700">
-                  <td className="py-2">{inv.invoice_date ? formatDate(inv.invoice_date) : '—'}</td>
-                  <td className="py-2">{inv.invoice_number || '—'}</td>
-                  <td className="py-2">{formatPeriodMonthYear(inv.period_month, inv.period_year)}</td>
-                  <td className="py-2">{inv.payment_received_date ? formatDate(inv.payment_received_date) : '—'}</td>
-                  <td className="text-right py-2">${(inv.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                  <td className="py-2 px-2 min-w-0 break-words align-top">{inv.notes || '—'}</td>
+                  <td className="py-2 px-3">{inv.invoice_date ? formatDate(inv.invoice_date) : '—'}</td>
+                  <td className="py-2 px-3">{inv.invoice_number || '—'}</td>
+                  <td className="py-2 px-3">{formatPeriodMonthYear(inv.period_month, inv.period_year)}</td>
+                  <td className="py-2 px-3">{inv.payment_received_date ? formatDate(inv.payment_received_date) : '—'}</td>
+                  <td className="text-right py-2 px-3">${(inv.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  {hasAnyNotes && <td className="py-2 px-3 min-w-0 break-words align-top">{inv.notes || '—'}</td>}
                   {isAdmin && (
-                    <td className="py-2">
+                    <td className="py-2 px-2">
                       <div className="flex gap-1">
                         <button type="button" onClick={() => setInvoiceModal(inv)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Edit"><Pencil className="h-4 w-4" /></button>
                         <button type="button" onClick={async () => { if (confirm('Delete this invoice?')) { await fetch(`/api/budget/${po.id}/invoices/${inv.id}`, { method: 'DELETE' }); refetch() } }} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Delete"><Trash2 className="h-4 w-4" /></button>
@@ -790,12 +791,12 @@ export default function BasicBudgetView({
               ))
             )}
             <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
-              <td colSpan={isAdmin ? 6 : 5} className="py-2">Total Invoiced</td>
-              <td className="text-right py-2">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              <td colSpan={(hasAnyNotes ? 5 : 4) + (isAdmin ? 1 : 0)} className="py-2 px-3">Total Invoiced</td>
+              <td className="text-right py-2 px-3">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
             </tr>
             <tr className="font-semibold bg-green-50 dark:bg-green-900/20">
-              <td colSpan={isAdmin ? 6 : 5} className="py-2">Running Balance (PO Balance)</td>
-              <td className="text-right py-2">${runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              <td colSpan={(hasAnyNotes ? 5 : 4) + (isAdmin ? 1 : 0)} className="py-2 px-3">Running Balance (PO Balance)</td>
+              <td className="text-right py-2 px-3">${runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
             </tr>
           </tbody>
         </table>
