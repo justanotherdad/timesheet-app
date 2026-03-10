@@ -36,6 +36,7 @@ interface BudgetPageClientProps {
   purchaseOrders: PurchaseOrder[]
   initialPoId: string | null
   user: { id: string; profile: { role: string } }
+  hasLimitedAccess?: boolean
 }
 
 export default function BudgetPageClient({
@@ -43,6 +44,7 @@ export default function BudgetPageClient({
   purchaseOrders,
   initialPoId,
   user,
+  hasLimitedAccess = false,
 }: BudgetPageClientProps) {
   const router = useRouter()
   const [budgetRefreshKey, setBudgetRefreshKey] = useState(0)
@@ -92,6 +94,7 @@ export default function BudgetPageClient({
             po={selectedPO}
             sites={sites}
             onBack={handleBackToSelector}
+            hasLimitedAccess={hasLimitedAccess}
             onSave={() => {
               setBudgetRefreshKey((k) => k + 1)
               router.refresh()

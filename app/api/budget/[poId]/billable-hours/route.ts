@@ -15,13 +15,13 @@ export async function GET(
   const allMonths = searchParams.get('all') === 'true'
 
   const user = await getCurrentUser()
-  if (!user || !['manager', 'admin', 'super_admin'].includes(user.profile.role)) {
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const supabase = await createClient()
-  const role = user.profile.role as 'manager' | 'admin' | 'super_admin'
-  const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role)
+  const role = user.profile.role as string
+  const isManagerOrAbove = ['manager', 'admin', 'super_admin'].includes(role)
 
   const { data: po } = await supabase
     .from('purchase_orders')
@@ -29,8 +29,25 @@ export async function GET(
     .eq('id', poId)
     .single()
 
-  if (!po || (accessibleSiteIds !== null && !accessibleSiteIds.includes(po.site_id))) {
-    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  if (!po) {
+    return NextResponse.json({ error: 'PO not found' }, { status: 404 })
+  }
+
+  if (isManagerOrAbove) {
+    const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role as any)
+    if (accessibleSiteIds !== null && !accessibleSiteIds.includes(po.site_id)) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+  } else {
+    const { data: accessRow } = await supabase
+      .from('po_budget_access')
+      .select('user_id')
+      .eq('purchase_order_id', poId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!accessRow) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
   }
 
   let startDate: string

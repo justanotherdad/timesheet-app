@@ -13,6 +13,7 @@ interface BasicBudgetViewProps {
   sites?: Array<{ id: string; name?: string; address_street?: string; address_city?: string; address_state?: string; address_zip?: string; contact?: string }>
   onBack: () => void
   user?: { id: string; profile: { role: string } }
+  hasLimitedAccess?: boolean
   /** For navigation: sites, POs for current site, and callbacks. Access already filtered by parent. */
   allSites?: Array<{ id: string; name?: string }>
   sitePOs?: Array<{ id: string; po_number: string; site_id: string; description?: string; departments?: { name: string } }>
@@ -39,6 +40,7 @@ export default function BasicBudgetView({
   onPrev,
   onNext,
   onSave,
+  hasLimitedAccess = false,
 }: BasicBudgetViewProps) {
   const [data, setData] = useState<any>(null)
   const [changeOrdersOverride, setChangeOrdersOverride] = useState<any[] | null>(null)
@@ -57,6 +59,9 @@ export default function BasicBudgetView({
   const [billableSortColumn, setBillableSortColumn] = useState<string>('employee')
   const [billableSortDir, setBillableSortDir] = useState<'asc' | 'desc'>('asc')
   const [laborCostData, setLaborCostData] = useState<any>(null)
+  const [budgetAccessUsers, setBudgetAccessUsers] = useState<Array<{ id: string; name: string }>>([])
+  const [budgetAccessModal, setBudgetAccessModal] = useState<'add' | null>(null)
+  const [availableUsers, setAvailableUsers] = useState<Array<{ id: string; name: string }>>([])
   const [editingClientPO, setEditingClientPO] = useState(false)
   const [editingBudget, setEditingBudget] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -67,6 +72,7 @@ export default function BasicBudgetView({
     project_name: '',
     po_issue_date: '',
     proposal_number: '',
+    client_contact_name: '',
     budget_type: 'basic' as 'basic' | 'project',
   })
   const [budgetForm, setBudgetForm] = useState<{
@@ -84,6 +90,17 @@ export default function BasicBudgetView({
   })
 
   const fetchOpts: RequestInit = { cache: 'no-store', headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } }
+
+  const loadBudgetAccess = useCallback(async () => {
+    if (!user || !['admin', 'super_admin'].includes(user.profile.role)) return
+    try {
+      const res = await fetch(`/api/budget/${po.id}/budget-access`, fetchOpts)
+      if (res.ok) {
+        const json = await res.json()
+        setBudgetAccessUsers(json.users || [])
+      }
+    } catch { /* ignore */ }
+  }, [po.id, user])
 
   const refetch = useCallback(async () => {
     const t = `t=${Date.now()}`
@@ -103,7 +120,8 @@ export default function BasicBudgetView({
       setBillRatesOverride(Array.isArray(json) ? json : null)
     } else setBillRatesOverride(null)
     if (laborRes.ok) setLaborCostData(await laborRes.json())
-  }, [po.id])
+    loadBudgetAccess()
+  }, [po.id, loadBudgetAccess])
 
   useEffect(() => {
     const load = async () => {
@@ -128,6 +146,13 @@ export default function BasicBudgetView({
           setBillRatesOverride(Array.isArray(json) ? json : null)
         } else setBillRatesOverride(null)
         if (laborRes.ok) setLaborCostData(await laborRes.json())
+        if (user && ['admin', 'super_admin'].includes(user.profile.role)) {
+          const accRes = await fetch(`/api/budget/${po.id}/budget-access`, fetchOpts)
+          if (accRes.ok) {
+            const accJson = await accRes.json()
+            setBudgetAccessUsers(accJson.users || [])
+          }
+        }
       } catch (e) {
         console.error(e)
       } finally {
@@ -135,7 +160,7 @@ export default function BasicBudgetView({
       }
     }
     load()
-  }, [po.id, selectedMonth, showAllMonths])
+  }, [po.id, selectedMonth, showAllMonths, user])
 
   if (loading && !data) {
     return (
@@ -168,7 +193,7 @@ export default function BasicBudgetView({
     ? [{ id: poData.department_id, name: poData.departments.name || 'Unknown' }, ...siteDepartmentsRaw]
     : siteDepartmentsRaw
   const isAdmin = user && ['admin', 'super_admin'].includes(user.profile.role)
-  const canEdit = user && ['manager', 'admin', 'super_admin'].includes(user.profile.role)
+  const canEdit = user && ['manager', 'admin', 'super_admin'].includes(user.profile.role) && !hasLimitedAccess
 
   const originalBudget = poData.original_po_amount ?? 0
   const coTotal = changeOrders.reduce((s: number, co: any) => s + (co.amount || 0), 0)
@@ -203,6 +228,14 @@ export default function BasicBudgetView({
   const columnTotals = billableData?.columnTotals || {}
   const grandTotalFromTimesheets = billableData?.grandTotal || 0
   const grandTotal = grandTotalFromTimesheets + priorHoursBilled
+  const displayColumnTotals = hasLimitedAccess && user
+    ? Object.fromEntries(
+        Object.entries(columnTotals).map(([we, tot]) => [we, rows.find((r: any) => r.userId === user.id)?.weekData?.[we]?.hours ?? 0])
+      )
+    : columnTotals
+  const displayGrandTotal = hasLimitedAccess && user
+    ? (rows.find((r: any) => r.userId === user.id)?.rowTotal ?? 0)
+    : grandTotal
 
   const handleBillableSort = (col: string) => {
     if (billableSortColumn === col) {
@@ -216,7 +249,8 @@ export default function BasicBudgetView({
     if (billableSortColumn !== col) return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-50" />
     return billableSortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1 inline" /> : <ArrowDown className="h-3 w-3 ml-1 inline" />
   }
-  const sortedRows = [...rows].sort((a: any, b: any) => {
+  const filteredRows = hasLimitedAccess && user ? rows.filter((r: any) => r.userId === user.id) : rows
+  const sortedRows = [...filteredRows].sort((a: any, b: any) => {
     const mult = billableSortDir === 'asc' ? 1 : -1
     let aVal: string | number, bVal: string | number
     if (billableSortColumn === 'employee') {
@@ -241,6 +275,7 @@ export default function BasicBudgetView({
       project_name: poData.description ?? poData.project_name ?? '',
       po_issue_date: poData.po_issue_date ? String(poData.po_issue_date).slice(0, 10) : '',
       proposal_number: poData.proposal_number || '',
+      client_contact_name: poData.client_contact_name || '',
       budget_type: (poData.budget_type || 'basic') as 'basic' | 'project',
     })
     setEditingClientPO(true)
@@ -456,6 +491,10 @@ export default function BasicBudgetView({
                 <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Proposal #</label>
                 <input type="text" value={clientPOForm.proposal_number} onChange={(e) => setClientPOForm((f) => ({ ...f, proposal_number: e.target.value }))} className={inputClass} placeholder="—" />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Client Contact Name</label>
+                <input type="text" value={clientPOForm.client_contact_name} onChange={(e) => setClientPOForm((f) => ({ ...f, client_contact_name: e.target.value }))} className={inputClass} placeholder="—" />
+              </div>
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={saveClientPO} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
                   {saving ? 'Saving…' : 'Save'}
@@ -482,12 +521,112 @@ export default function BasicBudgetView({
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Project:</span> {poData.description ?? poData.project_name ?? '—'}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">PO Issue Date:</span> {poData.po_issue_date ? formatDate(poData.po_issue_date) : '—'}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Proposal #:</span> {poData.proposal_number || '—'}</p>
+              <p><span className="font-medium text-gray-500 dark:text-gray-400">Client Contact:</span> {poData.client_contact_name || '—'}</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* 2. Budget table (original + change orders) */}
+      {/* 1b. Budget Access (admin only) */}
+      {isAdmin && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Budget Access</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Grant access to this PO budget for users with a profile.</p>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                setBudgetAccessModal('add')
+                try {
+                  const res = await fetch(`/api/budget/${po.id}/budget-access?available=1`, fetchOpts)
+                  if (res.ok) {
+                    const json = await res.json()
+                    setAvailableUsers(json.users || [])
+                  }
+                } catch { setAvailableUsers([]) }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" /> Grant Access
+            </button>
+          </div>
+          <div className="space-y-2">
+            {budgetAccessUsers.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400 py-2">No users granted access yet.</p>
+            ) : (
+              <ul className="divide-y divide-gray-200 dark:divide-gray-600">
+                {budgetAccessUsers.map((u) => (
+                  <li key={u.id} className="flex items-center justify-between py-2">
+                    <span className="text-gray-900 dark:text-gray-100">{u.name}</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm(`Revoke budget access for ${u.name}?`)) return
+                        await fetch(`/api/budget/${po.id}/budget-access?userId=${u.id}`, { method: 'DELETE', ...fetchOpts })
+                        loadBudgetAccess()
+                      }}
+                      className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                      title="Revoke access"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {budgetAccessModal === 'add' && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setBudgetAccessModal(null)}>
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Grant Budget Access</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Select a user to grant access to this PO budget:</p>
+                <select
+                  id="budget-access-user-select"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-4"
+                >
+                  <option value="">— Select user —</option>
+                  {availableUsers
+                    .filter((u) => !budgetAccessUsers.some((a) => a.id === u.id))
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                </select>
+                <div className="flex gap-2 justify-end">
+                  <button type="button" onClick={() => setBudgetAccessModal(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700">
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const sel = document.getElementById('budget-access-user-select') as HTMLSelectElement
+                      const userId = sel?.value
+                      if (!userId) return
+                      const res = await fetch(`/api/budget/${po.id}/budget-access`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId }),
+                        ...fetchOpts,
+                      })
+                      if (res.ok) {
+                        setBudgetAccessModal(null)
+                        loadBudgetAccess()
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+                  >
+                    Grant Access
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2. Budget table (original + change orders) — hidden for limited access */}
+      {!hasLimitedAccess && (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Budget Summary</h2>
@@ -578,8 +717,11 @@ export default function BasicBudgetView({
           </table>
         )}
       </div>
+      )}
 
-      {/* 3. Invoice history */}
+      {/* 3. Invoice history — hidden for limited access */}
+      {!hasLimitedAccess && (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
@@ -642,8 +784,10 @@ export default function BasicBudgetView({
           </tbody>
         </table>
       </div>
+      )}
 
-      {/* 4. Budget Balance */}
+      {/* 4. Budget Balance — hidden for limited access */}
+      {!hasLimitedAccess && (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Budget Balance</h2>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
@@ -672,6 +816,7 @@ export default function BasicBudgetView({
           </tbody>
         </table>
       </div>
+      )}
 
       {/* 5. Billable activities table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -737,7 +882,7 @@ export default function BasicBudgetView({
               </tr>
             </thead>
             <tbody>
-              {priorHoursBilled > 0 && (
+              {priorHoursBilled > 0 && !hasLimitedAccess && (
                 <tr className="border-b border-gray-100 dark:border-gray-700 bg-amber-50/50 dark:bg-amber-900/10">
                   <td className="py-2 sticky left-0 bg-amber-50/50 dark:bg-amber-900/10">
                     <span className="font-medium text-amber-800 dark:text-amber-200">Prior period (manual)</span>
@@ -748,10 +893,10 @@ export default function BasicBudgetView({
                   {weekEndings.map((we: string) => (
                     <td key={we} className="text-right py-2 text-amber-700 dark:text-amber-300">—</td>
                   ))}
-                  <td className="text-right py-2 font-medium text-amber-700 dark:text-amber-300">{priorHoursBilled.toFixed(1)}</td>
+                  <td className="text-right py-2 font-medium text-amber-700 dark:text-amber-300">{priorHoursBilled.toFixed(2)}</td>
                 </tr>
               )}
-              {rows.length === 0 && priorHoursBilled === 0 ? (
+              {(rows.length === 0 && priorHoursBilled === 0) || (hasLimitedAccess && sortedRows.length === 0) ? (
                 <tr><td colSpan={weekEndings.length + 2} className="py-4 text-center text-gray-500">No billable hours for this period</td></tr>
               ) : sortedRows.length > 0 ? (
                 sortedRows.map((r: any) => (
@@ -775,11 +920,11 @@ export default function BasicBudgetView({
                           onClick={() => setEmployeePopup(r)}
                           className="text-blue-600 dark:text-blue-400 hover:underline"
                         >
-                          {(r.weekData[we]?.hours || 0).toFixed(1)}
+                          {(r.weekData[we]?.hours || 0).toFixed(2)}
                         </button>
                       </td>
                     ))}
-                    <td className="text-right py-2 font-medium">{r.rowTotal.toFixed(1)}</td>
+                    <td className="text-right py-2 font-medium">{r.rowTotal.toFixed(2)}</td>
                   </tr>
                 ))
               ) : null}
@@ -787,9 +932,9 @@ export default function BasicBudgetView({
                 <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
                   <td className="py-2 sticky left-0 bg-gray-50 dark:bg-gray-700/50">Total</td>
                   {weekEndings.map((we: string) => (
-                    <td key={we} className="text-right py-2">{columnTotals[we]?.toFixed(1) || '0.0'}</td>
+                    <td key={we} className="text-right py-2">{displayColumnTotals[we]?.toFixed(2) || '0.00'}</td>
                   ))}
-                  <td className="text-right py-2">{grandTotal.toFixed(1)}</td>
+                  <td className="text-right py-2">{displayGrandTotal.toFixed(2)}</td>
                 </tr>
               )}
             </tbody>
@@ -797,7 +942,132 @@ export default function BasicBudgetView({
         </div>
       </div>
 
-      {/* 6. Additional expenses */}
+      {/* 5b. Billable cost table (hours × rate) */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Cost (from Timesheets)</h2>
+        <div className="flex flex-wrap gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">Month:</label>
+            <select
+              value={selectedMonth.split('-')[1]}
+              onChange={(e) => setSelectedMonth(`${selectedMonth.split('-')[0]}-${e.target.value}`)}
+              disabled={showAllMonths}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            >
+              {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
+                <option key={m} value={String(m).padStart(2, '0')}>
+                  {new Date(2000, m - 1).toLocaleString('default', { month: 'long' })}
+                </option>
+              ))}
+            </select>
+            <label className="text-sm font-medium">Year:</label>
+            <select
+              value={selectedMonth.split('-')[0]}
+              onChange={(e) => setSelectedMonth(`${e.target.value}-${selectedMonth.split('-')[1]}`)}
+              disabled={showAllMonths}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            >
+              {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showAllMonths}
+              onChange={(e) => setShowAllMonths(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-sm">View all months</span>
+          </label>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[500px]">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-600">
+                <th className="text-left py-2 font-medium sticky left-0 bg-white dark:bg-gray-800">Employee</th>
+                {weekEndings.map((we: string) => (
+                  <th key={we} className="text-right py-2 font-medium whitespace-nowrap">{formatDateShort(we)}</th>
+                ))}
+                <th className="text-right py-2 font-medium">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {priorHoursBilled > 0 && !hasLimitedAccess && (
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-amber-50/50 dark:bg-amber-900/10">
+                  <td className="py-2 sticky left-0 bg-amber-50/50 dark:bg-amber-900/10">
+                    <span className="font-medium text-amber-800 dark:text-amber-200">Prior period (manual)</span>
+                    {poData.prior_period_notes && (
+                      <span className="block text-xs text-amber-600 dark:text-amber-300 mt-0.5">{poData.prior_period_notes}</span>
+                    )}
+                  </td>
+                  {weekEndings.map((we: string) => (
+                    <td key={we} className="text-right py-2 text-amber-700 dark:text-amber-300">—</td>
+                  ))}
+                  <td className="text-right py-2 font-medium text-amber-700 dark:text-amber-300">—</td>
+                </tr>
+              )}
+              {rows.length === 0 && priorHoursBilled === 0 ? (
+                <tr><td colSpan={weekEndings.length + 2} className="py-4 text-center text-gray-500">No billable cost for this period</td></tr>
+              ) : sortedRows.length > 0 ? (
+                sortedRows.map((r: any) => {
+                  let rowCostTotal = 0
+                  const costCells = weekEndings.map((we: string) => {
+                    const hours = r.weekData?.[we]?.hours ?? 0
+                    const rate = getEffectiveRate(r.userId, we)
+                    const cost = hours * rate
+                    rowCostTotal += cost
+                    return cost
+                  })
+                  return (
+                    <tr key={r.userId} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                      <td className="py-2 sticky left-0 bg-white dark:bg-gray-800">
+                        <button
+                          type="button"
+                          onClick={() => setEmployeePopup(r)}
+                          className="text-left font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          {r.userName}
+                        </button>
+                      </td>
+                      {costCells.map((cost: number, i: number) => (
+                        <td key={weekEndings[i]} className="text-right py-2">
+                          ${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      ))}
+                      <td className="text-right py-2 font-medium">${rowCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  )
+                })
+              ) : null}
+              {(rows.length > 0 || priorHoursBilled > 0) && (() => {
+                const costColumnTotals: Record<string, number> = {}
+                for (const we of weekEndings) {
+                  costColumnTotals[we] = sortedRows.reduce((sum: number, r: any) => {
+                    const hours = r.weekData?.[we]?.hours ?? 0
+                    const rate = getEffectiveRate(r.userId, we)
+                    return sum + hours * rate
+                  }, 0)
+                }
+                const costGrandTotal = Object.values(costColumnTotals).reduce((a, b) => a + b, 0)
+                return (
+                  <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
+                    <td className="py-2 sticky left-0 bg-gray-50 dark:bg-gray-700/50">Total</td>
+                    {weekEndings.map((we: string) => (
+                      <td key={we} className="text-right py-2">${(costColumnTotals[we] || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    ))}
+                    <td className="text-right py-2">${costGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                )
+              })()}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 6. Additional expenses — hidden for limited access */}
+      {!hasLimitedAccess && (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
@@ -840,8 +1110,10 @@ export default function BasicBudgetView({
           </tbody>
         </table>
       </div>
+      )}
 
-      {/* 7. Bill rates */}
+      {/* 7. Bill rates — hidden for limited access */}
+      {!hasLimitedAccess && (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
@@ -882,6 +1154,7 @@ export default function BasicBudgetView({
           </tbody>
         </table>
       </div>
+      )}
 
       {invoiceModal && (
         <InvoiceFormModal
@@ -928,7 +1201,7 @@ export default function BasicBudgetView({
                 .map(([we, d]) => (
                   <div key={we} className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-gray-100 dark:border-gray-700">
                     <span>{formatDate(we)}</span>
-                    <span className="font-medium">{d.hours.toFixed(1)} hrs</span>
+                    <span className="font-medium">{d.hours.toFixed(2)} hrs</span>
                     {d.timesheetId && (
                       <Link
                         href={`/dashboard/timesheets/${d.timesheetId}`}

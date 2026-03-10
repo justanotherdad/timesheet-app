@@ -13,13 +13,13 @@ export async function GET(
 ) {
   const { poId } = await params
   const user = await getCurrentUser()
-  if (!user || !['manager', 'admin', 'super_admin'].includes(user.profile.role)) {
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const supabase = await createClient()
-  const role = user.profile.role as 'manager' | 'admin' | 'super_admin'
-  const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role)
+  const role = user.profile.role as string
+  const isManagerOrAbove = ['manager', 'admin', 'super_admin'].includes(role)
 
   const { data: po, error: poError } = await supabase
     .from('purchase_orders')
@@ -31,8 +31,22 @@ export async function GET(
     return NextResponse.json({ error: 'PO not found' }, { status: 404 })
   }
 
-  if (accessibleSiteIds !== null && !accessibleSiteIds.includes(po.site_id)) {
-    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  if (isManagerOrAbove) {
+    const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role as any)
+    if (accessibleSiteIds !== null && !accessibleSiteIds.includes(po.site_id)) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+  } else {
+    // Supervisor/employee: must have po_budget_access
+    const { data: accessRow } = await supabase
+      .from('po_budget_access')
+      .select('user_id')
+      .eq('purchase_order_id', poId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!accessRow) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
   }
 
   let adminSupabase: ReturnType<typeof createAdminClient> | null = null
@@ -163,6 +177,7 @@ export async function PATCH(
     project_name,
     department_id,
     budget_type,
+    client_contact_name,
     prior_hours_billed,
     prior_amount_spent,
     prior_period_notes,
@@ -179,7 +194,7 @@ export async function PATCH(
   try {
     if (po_number !== undefined || original_po_amount !== undefined || po_issue_date !== undefined ||
         proposal_number !== undefined || project_name !== undefined || department_id !== undefined ||
-        budget_type !== undefined || prior_hours_billed !== undefined || prior_amount_spent !== undefined || prior_period_notes !== undefined) {
+        budget_type !== undefined || client_contact_name !== undefined || prior_hours_billed !== undefined || prior_amount_spent !== undefined || prior_period_notes !== undefined) {
       const updateData: Record<string, unknown> = {}
       if (po_number !== undefined) updateData.po_number = po_number
       if (original_po_amount !== undefined) updateData.original_po_amount = original_po_amount === '' || original_po_amount == null ? null : parseFloat(String(original_po_amount))
@@ -191,6 +206,7 @@ export async function PATCH(
       }
       if (department_id !== undefined) updateData.department_id = department_id || null
       if (budget_type !== undefined) updateData.budget_type = budget_type || 'basic'
+      if (client_contact_name !== undefined) updateData.client_contact_name = client_contact_name || null
       if (prior_hours_billed !== undefined) updateData.prior_hours_billed = prior_hours_billed === '' || prior_hours_billed == null ? null : parseFloat(String(prior_hours_billed))
       if (prior_amount_spent !== undefined) updateData.prior_amount_spent = prior_amount_spent === '' || prior_amount_spent == null ? null : parseFloat(String(prior_amount_spent))
       if (prior_period_notes !== undefined) updateData.prior_period_notes = prior_period_notes || null
