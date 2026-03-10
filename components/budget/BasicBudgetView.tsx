@@ -22,6 +22,7 @@ interface BasicBudgetViewProps {
   onSelectPo?: (poId: string) => void
   onPrev?: () => void
   onNext?: () => void
+  onSave?: () => void
 }
 
 export default function BasicBudgetView({
@@ -37,9 +38,9 @@ export default function BasicBudgetView({
   onSelectPo,
   onPrev,
   onNext,
+  onSave,
 }: BasicBudgetViewProps) {
   const [data, setData] = useState<any>(null)
-  const [refreshKey, setRefreshKey] = useState(0)
   const [changeOrdersOverride, setChangeOrdersOverride] = useState<any[] | null>(null)
   const [billRatesOverride, setBillRatesOverride] = useState<any[] | null>(null)
   const [billableData, setBillableData] = useState<any>(null)
@@ -132,7 +133,7 @@ export default function BasicBudgetView({
       }
     }
     load()
-  }, [po.id, selectedMonth, showAllMonths, refreshKey])
+  }, [po.id, selectedMonth, showAllMonths])
 
   if (loading && !data) {
     return (
@@ -255,8 +256,8 @@ export default function BasicBudgetView({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to save')
-      setRefreshKey((k) => k + 1)
       setEditingClientPO(false)
+      onSave?.()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
@@ -298,8 +299,8 @@ export default function BasicBudgetView({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to save')
-      setRefreshKey((k) => k + 1)
       setEditingBudget(false)
+      onSave?.()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
     } finally {

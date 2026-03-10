@@ -45,6 +45,7 @@ export default function BudgetPageClient({
   user,
 }: BudgetPageClientProps) {
   const router = useRouter()
+  const [budgetRefreshKey, setBudgetRefreshKey] = useState(0)
   const [selectedSiteId, setSelectedSiteId] = useState<string>(() => {
     if (initialPoId) {
       const po = purchaseOrders.find((p) => p.id === initialPoId)
@@ -87,9 +88,11 @@ export default function BudgetPageClient({
           />
         ) : (
           <BasicBudgetView
+            key={budgetRefreshKey}
             po={selectedPO}
             sites={sites}
             onBack={handleBackToSelector}
+            onSave={() => setBudgetRefreshKey((k) => k + 1)}
             user={user}
             allSites={sites}
             sitePOs={sitePOs}
