@@ -27,6 +27,29 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
 
   const initialPaymentReceivedDate = invoice?.payment_received_date ? formatDateForInput(invoice.payment_received_date) : ''
 
+  const handleClearPaymentReceivedDate = async () => {
+    if (!isEdit || !invoice?.id) return
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/budget/${poId}/invoices/${invoice.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_received_date: null }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to clear')
+      }
+      if (paymentReceivedDateRef.current) paymentReceivedDateRef.current.value = ''
+      onSave()
+    } catch (e: any) {
+      setError(e.message || 'Failed to clear')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -99,7 +122,14 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Payment Received Date</label>
-            <input type="date" ref={paymentReceivedDateRef} defaultValue={initialPaymentReceivedDate} className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+            <div className="flex gap-2">
+              <input type="date" ref={paymentReceivedDateRef} defaultValue={initialPaymentReceivedDate} className="flex-1 h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+              {isEdit && (
+                <button type="button" onClick={handleClearPaymentReceivedDate} disabled={loading} className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg border border-gray-300 dark:border-gray-600 disabled:opacity-50">
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Notes</label>

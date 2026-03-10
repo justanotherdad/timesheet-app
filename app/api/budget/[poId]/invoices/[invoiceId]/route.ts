@@ -36,12 +36,12 @@ export async function PATCH(
   const body = await req.json()
   const updates: Record<string, any> = {}
   if (body.invoice_date != null) updates.invoice_date = body.invoice_date
-  if (body.invoice_number != null) updates.invoice_number = body.invoice_number
+  if ('invoice_number' in body) updates.invoice_number = body.invoice_number
   if (body.period_month != null) updates.period_month = parseInt(String(body.period_month), 10)
   if (body.period_year != null) updates.period_year = parseInt(String(body.period_year), 10)
   if (body.amount != null) updates.amount = parseFloat(String(body.amount))
-  if (body.payment_received_date != null) updates.payment_received_date = body.payment_received_date
-  if (body.notes != null) updates.notes = body.notes
+  if ('payment_received_date' in body) updates.payment_received_date = body.payment_received_date
+  if ('notes' in body) updates.notes = body.notes
 
   const { data, error } = await supabase
     .from('po_invoices')
