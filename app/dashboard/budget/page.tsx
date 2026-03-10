@@ -25,10 +25,11 @@ export default async function BudgetPage({
 
   let budgetAccessPoIds: string[] = []
   if (!isManagerOrAbove) {
-    const { data: accessRows } = await withQueryTimeout(() =>
+    const result = await withQueryTimeout(() =>
       supabase.from('po_budget_access').select('purchase_order_id').eq('user_id', user.id)
     )
-    budgetAccessPoIds = (accessRows || []).map((r: any) => r.purchase_order_id).filter(Boolean)
+    const accessRows = Array.isArray(result?.data) ? result.data : []
+    budgetAccessPoIds = accessRows.map((r: { purchase_order_id?: string }) => r.purchase_order_id).filter(Boolean) as string[]
   }
 
   const [sitesResult, purchaseOrdersResult] = await Promise.all([
