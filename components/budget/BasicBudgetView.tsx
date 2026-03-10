@@ -722,7 +722,6 @@ export default function BasicBudgetView({
       {/* 3. Invoice history — hidden for limited access */}
       {!hasLimitedAccess && (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Invoice History</h2>
