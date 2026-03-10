@@ -259,8 +259,7 @@ export default function BasicBudgetView({
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to save')
       setEditingClientPO(false)
-      await new Promise((r) => setTimeout(r, 150))
-      onSave?.()
+      await refetch()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
@@ -303,8 +302,7 @@ export default function BasicBudgetView({
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to save')
       setEditingBudget(false)
-      await new Promise((r) => setTimeout(r, 150))
-      onSave?.()
+      await refetch()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
