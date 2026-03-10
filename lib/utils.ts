@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { startOfWeek, endOfWeek, format, parseISO, addWeeks } from "date-fns"
+import { startOfWeek, endOfWeek, format, parseISO, addWeeks, subWeeks } from "date-fns"
 import { toZonedTime } from "date-fns-tz"
 
 const APP_TIMEZONE = 'America/New_York' // EST/EDT
@@ -22,6 +22,12 @@ export function getWeekEnding(date?: Date, weekStartsOn: number = 1): Date {
 export function getWeekStarting(date?: Date, weekStartsOn: number = 1): Date {
   const ref = date ?? getNowInAppTz()
   return startOfWeek(ref, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })
+}
+
+/** Get the previous week's ending date (the week that just ended, typically the one to submit) */
+export function getPreviousWeekEnding(date?: Date, weekStartsOn: number = 1): Date {
+  const current = getWeekEnding(date, weekStartsOn)
+  return subWeeks(current, 1)
 }
 
 /** Get all week-ending dates (YYYY-MM-DD) that fall within a month. weekStartsOn: 0=Sun, 1=Mon, etc. */

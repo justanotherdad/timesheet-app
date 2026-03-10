@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import Link from 'next/link'
 import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3 } from 'lucide-react'
-import { formatWeekEnding, getWeekEnding, formatDateForInput } from '@/lib/utils'
+import { formatWeekEnding, getPreviousWeekEnding, formatDateForInput } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 
@@ -20,10 +20,10 @@ export default async function DashboardPage() {
   }
 
   const supabase = await createClient()
-  const weekEnding = getWeekEnding()
+  const weekEnding = getPreviousWeekEnding()
   const weekEndingStr = formatDateForInput(weekEnding)
 
-  // Get user's most recent timesheet for current week (handles multiple per week, e.g. after rejection/resubmit)
+  // Get user's most recent timesheet for previous week (the week that just ended, typically the one to submit)
   const timesheetResult = await withQueryTimeout(() =>
     supabase
       .from('weekly_timesheets')
@@ -37,7 +37,7 @@ export default async function DashboardPage() {
 
   let timesheet = timesheetResult.data as any
 
-  // Auto-approve current week timesheet if user is final approver with no one above
+  // Auto-approve submitted timesheet if user is final approver with no one above
   if (timesheet?.status === 'submitted') {
     const didApprove = await checkAndAutoApproveIfFinal(timesheet.id)
     if (didApprove) {
@@ -293,7 +293,7 @@ export default async function DashboardPage() {
         <div className={`grid grid-cols-1 gap-4 sm:gap-6 ${['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Current Week ({formatWeekEnding(weekEnding)})
+              Timesheet to Submit ({formatWeekEnding(weekEnding)})
             </h2>
             {timesheet ? (
               <div className={`border rounded p-3 ${
