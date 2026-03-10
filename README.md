@@ -34,6 +34,13 @@ A comprehensive timesheet management system built with Next.js, TypeScript, and 
 - Export weekly hours for their reports
 - Export timesheets for POs assigned to them
 
+### Budget Detail (PO Budgets)
+- PO-level budget view: Client & PO Information (including client contact per PO), budget summary, invoices, billable hours and cost, expenses, bill rates
+- **Billable Activities** – Hours from approved timesheets by employee/week (to hundredths place)
+- **Billable Cost** – Cost (hours × rate) by employee/week
+- **Budget Access** – Admins can grant budget access to any user with a profile; supervisors/employees with access see a limited view (own hours/cost only)
+- **Bill Rates** – Add rates for any user with a profile (not only those who have logged time to the PO yet)
+
 ## Setup Instructions
 
 ### 1. Install Dependencies

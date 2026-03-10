@@ -13,8 +13,9 @@ This job aid explains how to use the CTG Timesheet Management site for all roles
 4. [Approvals (Supervisors, Managers, Admins)](#4-approvals-supervisors-managers-admins)
 5. [Manage Users](#5-manage-users)
 6. [Organization, Systems, Activities, Deliverables](#6-organization-systems-activities-deliverables)
-7. [View Timesheet Data & Export](#7-view-timesheet-data--export)
-8. [Quick Reference by Role](#8-quick-reference-by-role)
+7. [Budget Detail](#7-budget-detail)
+8. [View Timesheet Data & Export](#8-view-timesheet-data--export)
+9. [Quick Reference by Role](#9-quick-reference-by-role)
 
 ---
 
@@ -66,10 +67,13 @@ After login, you see the **Timesheet Dashboard**. The cards and links you see de
 
 ### Managers, Admins, and Super Admins also see
 
+- **Budget Detail** – View PO budgets, invoices, billable hours and cost, expenses, and bill rates.
 - **View Timesheet Data** – View and filter all timesheet entries.
 - **Export Timesheets** – Export timesheets for any week.
 
-**Employees** see only **New Timesheet**, **My Timesheets**, and the **Current Week** section.
+**Supervisors and Employees** may see **Budget Detail** only for POs where an Admin has granted them explicit access (see [Budget Detail](#7-budget-detail)).
+
+**Employees** (without budget access) see only **New Timesheet**, **My Timesheets**, and the **Current Week** section.
 
 ---
 
@@ -244,23 +248,80 @@ Use this to define **Deliverable** options for timesheet rows.
 
 ---
 
-## 7. View Timesheet Data & Export
+## 7. Budget Detail
+
+The **Budget Detail** page shows PO-level budgets: client and PO information, budget summary, invoices, billable hours and cost, expenses, and bill rates.
+
+### 7.1 Who can access Budget Detail
+
+- **Managers:** POs for sites assigned to them or their subordinates. Full view; can edit budget info, add invoices, expenses, and bill rates.
+- **Admins and Super Admins:** All POs. Full view and full edit. Admins can also grant or revoke budget access for other users.
+- **Supervisors and Employees:** Only POs where an Admin or Super Admin has **granted them budget access**. They see a **limited view** (see below).
+
+### 7.2 Opening Budget Detail
+
+- From the **Dashboard**, click **Budget Detail** (Managers and above).
+- From **Manage Organization**, click **View Budget Detail** on a PO card (Managers and above).
+- Supervisors and Employees with granted access can go to **Budget Detail** and will see only the POs they have access to.
+
+### 7.3 What you see on a PO budget (full view)
+
+- **Client & PO Information** – Client/Site, **Client Contact** (below Client/Site, per-PO contact name), Budget Type, PO#, Department, Project, PO Issue Date, Proposal #. Managers and above can edit.
+- **Budget Access** (Admins only) – List of users granted access to this budget; **Grant Access** and revoke options.
+- **Budget Summary** – Original PO amount, change orders, total available, prior period spent.
+- **Invoice History** – Invoices entered by Admin; running balance.
+- **Budget Balance** – Based on labor cost (rates × hours from timesheets).
+- **Billable Activities (from Timesheets)** – Hours by employee and week (to hundredths place, e.g. 40.00). Filter by month/year or view all months.
+- **Billable Cost (from Timesheets)** – Same layout as hours, but shows cost ($) = hours × bill rate per employee/week.
+- **Additional Expenses** – Travel, equipment, mileage, etc.
+- **Bill Rates by Person** – Hourly rates per employee with effective dates.
+
+### 7.4 Limited view (Supervisors and Employees with granted access)
+
+If an Admin has granted you budget access for a PO, you see only:
+
+- **Client & PO Information** (read-only)
+- **Billable Activities** – Your own hours only
+- **Billable Cost** – Your own cost only
+
+You do not see Budget Summary, Invoice History, Budget Balance, Additional Expenses, or Bill Rates.
+
+### 7.5 Granting budget access (Admins only)
+
+1. Open a PO budget.
+2. Find the **Budget Access** section.
+3. Click **Grant Access**.
+4. Select a user from the dropdown (any user with a profile).
+5. Click **Grant Access** to add them.
+6. To revoke, click the trash icon next to their name.
+
+### 7.6 Adding bill rates
+
+- **Managers and Admins** can add bill rates for **any user with a profile**—not only those who have logged time to the PO yet.
+1. On a PO budget, find **Bill Rates by Person**.
+2. Click **+ Add Bill Rate**.
+3. Select the **Employee**, enter **Rate ($/hr)**, and **Effective From Date**.
+4. Click **Save**. Historical cost calculations use the rate in effect at that time.
+
+---
+
+## 8. View Timesheet Data & Export
 
 Available only to **Managers**, **Admins**, and **Super Admins**. Employees and Supervisors do not see these.
 
-### 7.1 View Timesheet Data
+### 8.1 View Timesheet Data
 
 - **Where:** Dashboard → **View Timesheet Data**.
 - Use this to **view and filter** all timesheet entries (e.g. by week, user, site, PO). Useful for checking what was entered across the organization. No role-based filtering; managers and admins see the full dataset they have access to.
 
-### 7.2 Export Timesheets
+### 8.2 Export Timesheets
 
 - **Where:** Dashboard → **Export Timesheets**.
 - Use this to **export** timesheet data for a chosen week (or range). Export format and options depend on what is implemented (e.g. Excel/CSV). Use for payroll, billing, or reporting.
 
 ---
 
-## 8. Quick Reference by Role
+## 9. Quick Reference by Role
 
 | Feature | Employee | Supervisor | Manager | Admin | Super Admin |
 |--------|----------|------------|---------|-------|-------------|
@@ -277,6 +338,7 @@ Available only to **Managers**, **Admins**, and **Super Admins**. Employees and 
 | **Password/invite link** | — | — | Reports only | Any | Any |
 | **Organization** | — | View only (assigned sites) | Edit (assigned/reports’ sites) | Full | Full |
 | **Systems / Activities / Deliverables** | — | View only (assigned sites) | Edit (assigned/reports’ sites) | Full | Full |
+| **Budget Detail** | — | ✓ (if granted access) | ✓ (site-based POs) | ✓ (all) | ✓ (all) |
 | **View Timesheet Data** | — | — | ✓ | ✓ | ✓ |
 | **Export Timesheets** | — | — | ✓ | ✓ | ✓ |
 
@@ -288,7 +350,9 @@ Available only to **Managers**, **Admins**, and **Super Admins**. Employees and 
 - **Missing options or access:** Your role or assignments (sites, reports) may need to be updated in **Manage Users** (admin/manager).
 - **Approval chain:** The structure is Employee → Supervisor → Manager → Final Approver. Each user’s profile has one **Supervisor** field plus **Manager** and **Final Approver**. If a field is “None,” the next person in the structure is used. Set these in **Manage Users**.
 - **Empty Activity/Deliverable/System dropdowns:** You only see options for sites you are assigned to. Ask an admin or manager to assign you to the right sites (and ensure those sites have systems, activities, and deliverables configured).
+- **Budget access (Supervisors/Employees):** Ask an Admin to grant you budget access for a specific PO. Go to **Budget Detail** → select the PO → **Budget Access** → **Grant Access** → select your name.
+- **Bill rate dropdown empty:** Bill rates can be added for any user with a profile. If the dropdown is empty, ensure users exist in **Manage Users** with names set.
 
 ---
 
-*Last updated to match the current CTG Timesheet Management site (employees through admins).*
+*Last updated to match the current CTG Timesheet Management site, including Budget Detail, Budget Access, Client Contact, Billable Cost, and bill rates for all users.*

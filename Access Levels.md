@@ -30,10 +30,12 @@ This document describes what each role can see and do: screens, data scope, and 
 | Manage Deliverables      | —             | ✓ (view only)     | ✓               | ✓         | ✓           |
 | View Timesheet Data      | —             | —                 | ✓               | ✓         | ✓           |
 | Export Timesheets        | —             | —                 | ✓               | ✓         | ✓           |
+| Budget Detail            | —             | ✓ (if granted)    | ✓ (site-based)  | ✓ (all)   | ✓ (all)     |
 
 - **Employee:** No “Manage” or admin cards.
 - **Supervisor:** Sees Manage Users, My Timesheets (own + reports), Pending Approvals, Approved Timesheets, and Organization/Systems/Activities/Deliverables; all except Pending Approvals are **view-only**. Can see timesheets they approved via My Timesheets and Approved Timesheets. Does not see View Timesheet Data or Export.
 - **Manager / Admin / Super Admin:** Full access to the cards they see; Manager is scoped to their team and assigned sites (see below).
+- **Budget Detail:** Managers see POs for sites they or their reports can access. Admins/Super Admins see all. Supervisors and Employees see only POs where an admin has explicitly granted them budget access (see [Budget Detail](#budget-detail) below).
 
 ---
 
@@ -116,6 +118,39 @@ Admin and Super Admin only (and not self).
 
 ---
 
+## Budget Detail
+
+PO budgets show Client & PO Information, Budget Summary, invoices, billable hours/cost, expenses, and bill rates.
+
+### Who can access
+
+- **Manager:** POs for sites assigned to them or their subordinates (`user_sites`-based).
+- **Admin / Super Admin:** All POs.
+- **Supervisor / Employee:** Only POs where an **Admin or Super Admin** has granted them explicit access via the **Budget Access** section on each PO budget.
+
+### Budget Access (Admin only)
+
+On each PO budget, Admins and Super Admins see a **Budget Access** container. They can:
+- **Grant access:** Add any user with a profile to view that PO's budget.
+- **Revoke access:** Remove a user from the access list.
+
+Users granted access (e.g. supervisors, employees) see a **limited view:** Client & PO Information, Billable Activities (their own hours only), and Billable Cost (their own cost only). They do not see Budget Summary, Invoice History, Budget Balance, Additional Expenses, or Bill Rates.
+
+### Client & PO Information
+
+Each PO can have a **Client Contact Name** (stored per PO, shown below Client / Site). Admins and Managers can edit this along with PO#, Department, Project, etc.
+
+### Billable Activities & Cost
+
+- **Billable Activities:** Hours from approved timesheets, by employee and week. Hours are shown to the hundredths place (e.g. 40.00).
+- **Billable Cost:** Same layout as hours, but shows cost ($) = hours × bill rate per employee/week.
+
+### Bill Rates
+
+Managers and Admins can add **bill rates** for any user with a profile—not only those who have already logged time to the PO. Rates have an effective date; historical cost uses the rate in effect at that time.
+
+---
+
 ## View Timesheet Data & Export
 
 - **View Timesheet Data:** Manager, Admin, Super Admin only. No per-role scoping; shows all data.
@@ -144,6 +179,7 @@ Admin and Super Admin only (and not self).
 
 4. **Employee**
    - No access to Manage Users, Organization, Systems, Activities, Deliverables, Data View, or Export. Only own timesheets and profile.
+   - **Budget Detail:** Can access only POs where an admin has granted them explicit budget access; sees limited view (own hours and cost).
 
 ---
 
@@ -157,3 +193,4 @@ Admin and Super Admin only (and not self).
 - **Purchase Orders:** Cascading from profile: Site → Departments (all at site if blank) → POs. If no POs explicitly assigned, employee sees all POs at their sites (filtered by department if departments are assigned). If POs are assigned, only those show.
 - **Read-only UI:** Organization uses `ConsolidatedManager` with `readOnly={true}` for supervisors; Systems/Activities/Deliverables use `HierarchicalItemManager` with `readOnly={true}` (hides Add, Import, Edit, Delete, bulk actions).
 - **Server actions:** create-user, update-user-assignments, and generate-password-link allow only Manager, Admin, Super Admin (not Supervisor).
+- **Budget access:** `po_budget_access` table stores explicit grants (user_id, purchase_order_id). Supervisors/employees see only POs in this table. Managers/admins use site-based access (`getAccessibleSiteIds`).
