@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { X } from 'lucide-react'
 import { formatDateForInput, isValidDateInputValue } from '@/lib/utils'
 
@@ -13,6 +13,7 @@ interface InvoiceFormModalProps {
 
 export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: InvoiceFormModalProps) {
   const isEdit = !!invoice
+  const paymentReceivedDateRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
@@ -21,9 +22,10 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
     period_month: invoice?.period_month ?? new Date().getMonth() + 1,
     period_year: invoice?.period_year ?? new Date().getFullYear(),
     amount: invoice?.amount != null ? String(invoice.amount) : '',
-    payment_received_date: invoice?.payment_received_date ? formatDateForInput(invoice.payment_received_date) : '',
     notes: invoice?.notes || '',
   })
+
+  const initialPaymentReceivedDate = invoice?.payment_received_date ? formatDateForInput(invoice.payment_received_date) : ''
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,13 +34,14 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
     try {
       const url = isEdit ? `/api/budget/${poId}/invoices/${invoice.id}` : `/api/budget/${poId}/invoices`
       const method = isEdit ? 'PATCH' : 'POST'
+      const paymentReceivedVal = paymentReceivedDateRef.current?.value?.trim()
       const body: any = {
         invoice_date: form.invoice_date,
         invoice_number: form.invoice_number || null,
         period_month: parseInt(String(form.period_month), 10),
         period_year: parseInt(String(form.period_year), 10),
         amount: parseFloat(String(form.amount)),
-        payment_received_date: form.payment_received_date || null,
+        payment_received_date: paymentReceivedVal || null,
         notes: form.notes || null,
       }
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -96,7 +99,7 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Payment Received Date</label>
-            <input type="date" value={form.payment_received_date || ''} onChange={(e) => { const v = e.target.value; if (isValidDateInputValue(v)) setForm({ ...form, payment_received_date: v }) }} className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+            <input type="date" ref={paymentReceivedDateRef} defaultValue={initialPaymentReceivedDate} className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Notes</label>
