@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getAccessibleSiteIds } from '@/lib/access'
+import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 
 async function updatePoBalance(supabase: any, poId: string) {
@@ -17,16 +17,6 @@ async function updatePoBalance(supabase: any, poId: string) {
   await supabase.from('purchase_orders').update({ po_balance: runningBalance }).eq('id', poId)
 }
 
-async function checkAccess(supabase: any, user: any, poId: string) {
-  const role = user.profile.role as 'manager' | 'admin' | 'super_admin'
-  const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role)
-  const { data: po } = await supabase.from('purchase_orders').select('site_id').eq('id', poId).single()
-  if (!po || (accessibleSiteIds !== null && !accessibleSiteIds.includes(po.site_id))) {
-    return false
-  }
-  return true
-}
-
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ poId: string; invoiceId: string }> }
@@ -38,7 +28,8 @@ export async function PATCH(
   }
 
   const supabase = await createClient()
-  if (!(await checkAccess(supabase, user, poId))) {
+  const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
+  if (!allowed) {
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 
@@ -76,7 +67,8 @@ export async function DELETE(
   }
 
   const supabase = await createClient()
-  if (!(await checkAccess(supabase, user, poId))) {
+  const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
+  if (!allowed) {
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 

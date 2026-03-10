@@ -1,14 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getAccessibleSiteIds } from '@/lib/access'
+import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
-
-async function checkAccess(supabase: any, user: any, poId: string) {
-  const role = user.profile.role as 'manager' | 'admin' | 'super_admin'
-  const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role)
-  const { data: po } = await supabase.from('purchase_orders').select('site_id').eq('id', poId).single()
-  return !!po && (accessibleSiteIds === null || accessibleSiteIds.includes(po.site_id))
-}
 
 export async function PATCH(
   req: Request,
@@ -21,7 +14,8 @@ export async function PATCH(
   }
 
   const supabase = await createClient()
-  if (!(await checkAccess(supabase, user, poId))) {
+  const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
+  if (!allowed) {
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 
@@ -56,7 +50,8 @@ export async function DELETE(
   }
 
   const supabase = await createClient()
-  if (!(await checkAccess(supabase, user, poId))) {
+  const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
+  if (!allowed) {
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getAccessibleSiteIds } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -19,7 +18,7 @@ export async function GET(
 
   const supabase = await createClient()
   const role = user.profile.role as string
-  const isManagerOrAbove = ['manager', 'admin', 'super_admin'].includes(role)
+  const isAdminOrAbove = ['admin', 'super_admin'].includes(role)
 
   const { data: po, error: poError } = await supabase
     .from('purchase_orders')
@@ -31,13 +30,10 @@ export async function GET(
     return NextResponse.json({ error: 'PO not found' }, { status: 404 })
   }
 
-  if (isManagerOrAbove) {
-    const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role as any)
-    if (accessibleSiteIds !== null && !accessibleSiteIds.includes(po.site_id)) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-    }
+  if (isAdminOrAbove) {
+    // Admin/Super Admin: full access to all POs
   } else {
-    // Supervisor/employee: must have po_budget_access
+    // Manager, Supervisor, Employee: must have po_budget_access grant
     const { data: accessRow } = await supabase
       .from('po_budget_access')
       .select('user_id')
@@ -140,8 +136,8 @@ export async function PATCH(
   }
 
   const supabase = await createClient()
-  const role = user.profile.role as 'manager' | 'admin' | 'super_admin'
-  const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role)
+  const role = user.profile.role as string
+  const isAdminOrAbove = ['admin', 'super_admin'].includes(role)
 
   const { data: po } = await supabase
     .from('purchase_orders')
@@ -149,8 +145,20 @@ export async function PATCH(
     .eq('id', poId)
     .single()
 
-  if (!po || (accessibleSiteIds !== null && !accessibleSiteIds.includes(po.site_id))) {
-    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  if (!po) {
+    return NextResponse.json({ error: 'PO not found' }, { status: 404 })
+  }
+
+  if (!isAdminOrAbove) {
+    const { data: accessRow } = await supabase
+      .from('po_budget_access')
+      .select('user_id')
+      .eq('purchase_order_id', poId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!accessRow) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
   }
 
   const body = await req.json()

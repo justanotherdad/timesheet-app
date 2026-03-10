@@ -49,3 +49,23 @@ export async function getAccessibleSiteIds(
   const siteIds = [...new Set((data as { site_id: string }[]).map((r) => r.site_id))]
   return siteIds
 }
+
+/**
+ * Check if user can access a PO budget. Only Admin/Super Admin get automatic access.
+ * Managers, Supervisors, and Employees must have explicit po_budget_access grant.
+ */
+export async function canAccessPoBudget(
+  supabase: SupabaseClient,
+  userId: string,
+  role: string,
+  poId: string
+): Promise<boolean> {
+  if (role === 'admin' || role === 'super_admin') return true
+  const { data } = await supabase
+    .from('po_budget_access')
+    .select('user_id')
+    .eq('purchase_order_id', poId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  return !!data
+}

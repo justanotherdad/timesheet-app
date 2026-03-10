@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getAccessibleSiteIds } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 import { getWeekEndingsForMonth } from '@/lib/utils'
 
@@ -21,7 +20,7 @@ export async function GET(
 
   const supabase = await createClient()
   const role = user.profile.role as string
-  const isManagerOrAbove = ['manager', 'admin', 'super_admin'].includes(role)
+  const isAdminOrAbove = ['admin', 'super_admin'].includes(role)
 
   const { data: po } = await supabase
     .from('purchase_orders')
@@ -33,12 +32,7 @@ export async function GET(
     return NextResponse.json({ error: 'PO not found' }, { status: 404 })
   }
 
-  if (isManagerOrAbove) {
-    const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role as any)
-    if (accessibleSiteIds !== null && !accessibleSiteIds.includes(po.site_id)) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-    }
-  } else {
+  if (!isAdminOrAbove) {
     const { data: accessRow } = await supabase
       .from('po_budget_access')
       .select('user_id')

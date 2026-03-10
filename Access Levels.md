@@ -30,12 +30,12 @@ This document describes what each role can see and do: screens, data scope, and 
 | Manage Deliverables      | —             | ✓ (view only)     | ✓               | ✓         | ✓           |
 | View Timesheet Data      | —             | —                 | ✓               | ✓         | ✓           |
 | Export Timesheets        | —             | —                 | ✓               | ✓         | ✓           |
-| Budget Detail            | —             | ✓ (if granted)    | ✓ (site-based)  | ✓ (all)   | ✓ (all)     |
+| Budget Detail            | —             | ✓ (if granted)    | ✓ (if granted)  | ✓ (all)   | ✓ (all)     |
 
 - **Employee:** No “Manage” or admin cards.
 - **Supervisor:** Sees Manage Users, My Timesheets (own + reports), Pending Approvals, Approved Timesheets, and Organization/Systems/Activities/Deliverables; all except Pending Approvals are **view-only**. Can see timesheets they approved via My Timesheets and Approved Timesheets. Does not see View Timesheet Data or Export.
 - **Manager / Admin / Super Admin:** Full access to the cards they see; Manager is scoped to their team and assigned sites (see below).
-- **Budget Detail:** Managers see POs for sites they or their reports can access. Admins/Super Admins see all. Supervisors and Employees see only POs where an admin has explicitly granted them budget access (see [Budget Detail](#budget-detail) below).
+- **Budget Detail:** Only Admin and Super Admin see all POs automatically. Managers, Supervisors, and Employees see only POs where an Admin has explicitly granted them budget access (see [Budget Detail](#budget-detail) below).
 
 ---
 
@@ -124,9 +124,8 @@ PO budgets show Client & PO Information, Budget Summary, invoices, billable hour
 
 ### Who can access
 
-- **Manager:** POs for sites assigned to them or their subordinates (`user_sites`-based).
-- **Admin / Super Admin:** All POs.
-- **Supervisor / Employee:** Only POs where an **Admin or Super Admin** has granted them explicit access via the **Budget Access** section on each PO budget.
+- **Admin / Super Admin:** All POs (full access to view, edit, and grant budget access).
+- **Manager / Supervisor / Employee:** Only POs where an **Admin or Super Admin** has granted them explicit access via the **Budget Access** section on each PO budget. No automatic access based on role or site.
 
 ### Budget Access (Admin only)
 
@@ -179,7 +178,7 @@ Managers and Admins can add **bill rates** for any user with a profile—not onl
 
 4. **Employee**
    - No access to Manage Users, Organization, Systems, Activities, Deliverables, Data View, or Export. Only own timesheets and profile.
-   - **Budget Detail:** Can access only POs where an admin has granted them explicit budget access; sees limited view (own hours and cost).
+   - **Budget Detail:** Can access only POs where an admin has granted them explicit budget access. Supervisors/Employees see limited view (own hours and cost); Managers see full view when granted.
 
 ---
 
@@ -193,4 +192,4 @@ Managers and Admins can add **bill rates** for any user with a profile—not onl
 - **Purchase Orders:** Cascading from profile: Site → Departments (all at site if blank) → POs. If no POs explicitly assigned, employee sees all POs at their sites (filtered by department if departments are assigned). If POs are assigned, only those show.
 - **Read-only UI:** Organization uses `ConsolidatedManager` with `readOnly={true}` for supervisors; Systems/Activities/Deliverables use `HierarchicalItemManager` with `readOnly={true}` (hides Add, Import, Edit, Delete, bulk actions).
 - **Server actions:** create-user, update-user-assignments, and generate-password-link allow only Manager, Admin, Super Admin (not Supervisor).
-- **Budget access:** `po_budget_access` table stores explicit grants (user_id, purchase_order_id). Supervisors/employees see only POs in this table. Managers/admins use site-based access (`getAccessibleSiteIds`).
+- **Budget access:** `po_budget_access` table stores explicit grants (user_id, purchase_order_id). Only Admin/Super Admin have automatic access to all POs. Managers, Supervisors, and Employees must be explicitly granted per PO via the Budget Access section.

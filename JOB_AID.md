@@ -71,7 +71,7 @@ After login, you see the **Timesheet Dashboard**. The cards and links you see de
 - **View Timesheet Data** – View and filter all timesheet entries.
 - **Export Timesheets** – Export timesheets for any week.
 
-**Supervisors and Employees** may see **Budget Detail** only for POs where an Admin has granted them explicit access (see [Budget Detail](#7-budget-detail)).
+**Managers, Supervisors, and Employees** may see **Budget Detail** only for POs where an Admin has granted them explicit access (see [Budget Detail](#7-budget-detail)). Admins and Super Admins see all POs.
 
 **Employees** (without budget access) see only **New Timesheet**, **My Timesheets**, and the **Current Week** section.
 
@@ -254,15 +254,13 @@ The **Budget Detail** page shows PO-level budgets: client and PO information, bu
 
 ### 7.1 Who can access Budget Detail
 
-- **Managers:** POs for sites assigned to them or their subordinates. Full view; can edit budget info, add invoices, expenses, and bill rates.
-- **Admins and Super Admins:** All POs. Full view and full edit. Admins can also grant or revoke budget access for other users.
-- **Supervisors and Employees:** Only POs where an Admin or Super Admin has **granted them budget access**. They see a **limited view** (see below).
+- **Admins and Super Admins:** All POs. Full view and full edit. Can grant or revoke budget access for any user.
+- **Managers, Supervisors, and Employees:** Only POs where an Admin or Super Admin has **granted them budget access**. Managers see the full view; Supervisors and Employees see a **limited view** (see below).
 
 ### 7.2 Opening Budget Detail
 
-- From the **Dashboard**, click **Budget Detail** (Managers and above).
-- From **Manage Organization**, click **View Budget Detail** on a PO card (Managers and above).
-- Supervisors and Employees with granted access can go to **Budget Detail** and will see only the POs they have access to.
+- From the **Dashboard**, click **Budget Detail** (Admins and Super Admins see all POs; Managers, Supervisors, and Employees see only POs they have been granted access to).
+- From **Manage Organization**, click **View Budget Detail** on a PO card (if you have access to that PO).
 
 ### 7.3 What you see on a PO budget (full view)
 
@@ -338,7 +336,7 @@ Available only to **Managers**, **Admins**, and **Super Admins**. Employees and 
 | **Password/invite link** | — | — | Reports only | Any | Any |
 | **Organization** | — | View only (assigned sites) | Edit (assigned/reports’ sites) | Full | Full |
 | **Systems / Activities / Deliverables** | — | View only (assigned sites) | Edit (assigned/reports’ sites) | Full | Full |
-| **Budget Detail** | — | ✓ (if granted access) | ✓ (site-based POs) | ✓ (all) | ✓ (all) |
+| **Budget Detail** | — | ✓ (if granted) | ✓ (if granted) | ✓ (all) | ✓ (all) |
 | **View Timesheet Data** | — | — | ✓ | ✓ | ✓ |
 | **Export Timesheets** | — | — | ✓ | ✓ | ✓ |
 
@@ -350,7 +348,7 @@ Available only to **Managers**, **Admins**, and **Super Admins**. Employees and 
 - **Missing options or access:** Your role or assignments (sites, reports) may need to be updated in **Manage Users** (admin/manager).
 - **Approval chain:** The structure is Employee → Supervisor → Manager → Final Approver. Each user’s profile has one **Supervisor** field plus **Manager** and **Final Approver**. If a field is “None,” the next person in the structure is used. Set these in **Manage Users**.
 - **Empty Activity/Deliverable/System dropdowns:** You only see options for sites you are assigned to. Ask an admin or manager to assign you to the right sites (and ensure those sites have systems, activities, and deliverables configured).
-- **Budget access (Supervisors/Employees):** Ask an Admin to grant you budget access for a specific PO. Go to **Budget Detail** → select the PO → **Budget Access** → **Grant Access** → select your name.
+- **Budget access (Managers/Supervisors/Employees):** Only Admins can grant budget access. Ask an Admin to grant you access for a specific PO. They go to **Budget Detail** → select the PO → **Budget Access** → **Grant Access** → select your name.
 - **Bill rate dropdown empty:** Bill rates can be added for any user with a profile. If the dropdown is empty, ensure users exist in **Manage Users** with names set.
 
 ---

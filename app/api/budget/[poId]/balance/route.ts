@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getAccessibleSiteIds } from '@/lib/access'
+import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 
 /** Syncs po_balance from running balance and returns balance + budget_balance */
@@ -15,8 +15,10 @@ export async function GET(
   }
 
   const supabase = await createClient()
-  const role = user.profile.role as 'manager' | 'admin' | 'super_admin'
-  const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role)
+  const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
+  if (!allowed) {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
 
   const { data: po } = await supabase
     .from('purchase_orders')
@@ -24,8 +26,8 @@ export async function GET(
     .eq('id', poId)
     .single()
 
-  if (!po || (accessibleSiteIds !== null && !accessibleSiteIds.includes(po.site_id))) {
-    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  if (!po) {
+    return NextResponse.json({ error: 'PO not found' }, { status: 404 })
   }
 
   const { data: cos } = await supabase.from('po_change_orders').select('amount').eq('po_id', poId)

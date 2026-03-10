@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getAccessibleSiteIds } from '@/lib/access'
+import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -17,16 +17,8 @@ export async function GET(
   }
 
   const supabase = await createClient()
-  const role = user.profile.role as 'manager' | 'admin' | 'super_admin'
-  const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role)
-
-  const { data: po } = await supabase
-    .from('purchase_orders')
-    .select('site_id')
-    .eq('id', poId)
-    .single()
-
-  if (!po || (accessibleSiteIds !== null && !accessibleSiteIds.includes(po.site_id))) {
+  const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
+  if (!allowed) {
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 
