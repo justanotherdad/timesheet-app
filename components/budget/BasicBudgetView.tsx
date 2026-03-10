@@ -82,11 +82,12 @@ export default function BasicBudgetView({
   })
 
   const refetch = useCallback(async () => {
+    const t = `t=${Date.now()}`
     const [res, coRes, brRes, laborRes] = await Promise.all([
-      fetch(`/api/budget/${po.id}`),
-      fetch(`/api/budget/${po.id}/change-orders`),
-      fetch(`/api/budget/${po.id}/bill-rates`),
-      fetch(`/api/budget/${po.id}/billable-hours?all=true`),
+      fetch(`/api/budget/${po.id}?${t}`, { cache: 'no-store' }),
+      fetch(`/api/budget/${po.id}/change-orders?${t}`, { cache: 'no-store' }),
+      fetch(`/api/budget/${po.id}/bill-rates?${t}`, { cache: 'no-store' }),
+      fetch(`/api/budget/${po.id}/billable-hours?all=true&${t}`, { cache: 'no-store' }),
     ])
     if (res.ok) setData(await res.json())
     if (coRes.ok) {

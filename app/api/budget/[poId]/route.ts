@@ -158,6 +158,13 @@ export async function PATCH(
     changeOrders: changeOrdersPayload,
   } = body
 
+  let adminSupabase: ReturnType<typeof createAdminClient>
+  try {
+    adminSupabase = createAdminClient()
+  } catch {
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+  }
+
   try {
     if (po_number !== undefined || original_po_amount !== undefined || po_issue_date !== undefined ||
         proposal_number !== undefined || project_name !== undefined || department_id !== undefined ||
@@ -177,7 +184,7 @@ export async function PATCH(
       if (prior_amount_spent !== undefined) updateData.prior_amount_spent = prior_amount_spent === '' || prior_amount_spent == null ? null : parseFloat(String(prior_amount_spent))
       if (prior_period_notes !== undefined) updateData.prior_period_notes = prior_period_notes || null
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await adminSupabase
         .from('purchase_orders')
         .update(updateData)
         .eq('id', poId)
@@ -185,16 +192,16 @@ export async function PATCH(
     }
 
     if (Array.isArray(changeOrdersPayload)) {
-      const { data: existing } = await supabase.from('po_change_orders').select('id').eq('po_id', poId)
+      const { data: existing } = await adminSupabase.from('po_change_orders').select('id').eq('po_id', poId)
       const payloadIds = new Set(changeOrdersPayload.filter((c: { id?: string }) => c.id).map((c: { id: string }) => c.id))
       for (const row of existing || []) {
         if (!payloadIds.has(row.id)) {
-          await supabase.from('po_change_orders').delete().eq('id', row.id)
+          await adminSupabase.from('po_change_orders').delete().eq('id', row.id)
         }
       }
       for (const co of changeOrdersPayload) {
         if (co.id) {
-          await supabase
+          const { error: coErr } = await adminSupabase
             .from('po_change_orders')
             .update({
               co_number: co.co_number ?? null,
@@ -202,13 +209,15 @@ export async function PATCH(
               amount: co.amount === '' || co.amount == null ? null : parseFloat(String(co.amount)),
             })
             .eq('id', co.id)
+          if (coErr) throw coErr
         } else if (co.co_number || co.co_date || co.amount) {
-          await supabase.from('po_change_orders').insert({
+          const { error: insertErr } = await adminSupabase.from('po_change_orders').insert({
             po_id: poId,
             co_number: co.co_number ?? null,
             co_date: co.co_date || null,
             amount: co.amount === '' || co.amount == null ? null : parseFloat(String(co.amount)),
           })
+          if (insertErr) throw insertErr
         }
       }
     }
