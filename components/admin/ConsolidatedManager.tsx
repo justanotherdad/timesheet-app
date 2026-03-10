@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, FileText, X } from 'lucide-react'
 import SiteDetailView from './SiteDetailView'
@@ -52,6 +53,7 @@ export default function ConsolidatedManager({
   purchaseOrders: initialPOs,
   readOnly = false,
 }: ConsolidatedManagerProps) {
+  const router = useRouter()
   const [sites, setSites] = useState(initialSites)
   const [departments, setDepartments] = useState(initialDepartments)
   const [purchaseOrders, setPurchaseOrders] = useState(initialPOs)
@@ -272,6 +274,10 @@ export default function ConsolidatedManager({
       if (e.currentTarget) e.currentTarget.reset()
       setSelectedDepartment('')
       setShowAddForm(false)
+      const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | undefined
+      if (submitter?.name === 'saveAndView' && data?.id) {
+        router.push(`/dashboard/budget?poId=${data.id}`)
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {
@@ -648,7 +654,10 @@ export default function ConsolidatedManager({
                     </select>
                   </div>
                   <div className="flex gap-2">
-                    <button type="submit" disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
+                    <button type="submit" name="saveAndView" disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
+                      {loading ? 'Saving...' : 'Save and View Details'}
+                    </button>
+                    <button type="submit" disabled={loading} className="bg-gray-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-600 disabled:opacity-50">
                       {loading ? 'Adding...' : 'Add'}
                     </button>
                     <button type="button" onClick={() => setShowAddForm(false)} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-500">

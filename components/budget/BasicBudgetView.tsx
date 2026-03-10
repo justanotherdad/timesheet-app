@@ -39,6 +39,7 @@ export default function BasicBudgetView({
   onNext,
 }: BasicBudgetViewProps) {
   const [data, setData] = useState<any>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
   const [changeOrdersOverride, setChangeOrdersOverride] = useState<any[] | null>(null)
   const [billRatesOverride, setBillRatesOverride] = useState<any[] | null>(null)
   const [billableData, setBillableData] = useState<any>(null)
@@ -104,13 +105,14 @@ export default function BasicBudgetView({
   useEffect(() => {
     const load = async () => {
       setLoading(true)
+      const t = `t=${Date.now()}`
       try {
         const [res, bhRes, coRes, brRes, laborRes] = await Promise.all([
-          fetch(`/api/budget/${po.id}`),
-          fetch(`/api/budget/${po.id}/billable-hours?${showAllMonths ? 'all=true' : `month=${selectedMonth.split('-')[1]}&year=${selectedMonth.split('-')[0]}`}`),
-          fetch(`/api/budget/${po.id}/change-orders`),
-          fetch(`/api/budget/${po.id}/bill-rates`),
-          fetch(`/api/budget/${po.id}/billable-hours?all=true`),
+          fetch(`/api/budget/${po.id}?${t}`, { cache: 'no-store' }),
+          fetch(`/api/budget/${po.id}/billable-hours?${showAllMonths ? 'all=true' : `month=${selectedMonth.split('-')[1]}&year=${selectedMonth.split('-')[0]}`}&${t}`, { cache: 'no-store' }),
+          fetch(`/api/budget/${po.id}/change-orders?${t}`, { cache: 'no-store' }),
+          fetch(`/api/budget/${po.id}/bill-rates?${t}`, { cache: 'no-store' }),
+          fetch(`/api/budget/${po.id}/billable-hours?all=true&${t}`, { cache: 'no-store' }),
         ])
         if (res.ok) setData(await res.json())
         if (bhRes.ok) setBillableData(await bhRes.json())
@@ -130,7 +132,7 @@ export default function BasicBudgetView({
       }
     }
     load()
-  }, [po.id, selectedMonth, showAllMonths])
+  }, [po.id, selectedMonth, showAllMonths, refreshKey])
 
   if (loading && !data) {
     return (
@@ -253,7 +255,7 @@ export default function BasicBudgetView({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to save')
-      await refetch()
+      setRefreshKey((k) => k + 1)
       setEditingClientPO(false)
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
@@ -296,7 +298,7 @@ export default function BasicBudgetView({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to save')
-      await refetch()
+      setRefreshKey((k) => k + 1)
       setEditingBudget(false)
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
