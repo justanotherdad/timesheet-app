@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { X } from 'lucide-react'
-import { formatDateForInput } from '@/lib/utils'
+import { formatDateForInput, isValidDateInputValue } from '@/lib/utils'
 
 interface InvoiceFormModalProps {
   poId: string
@@ -70,7 +70,7 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Invoice Date *</label>
-            <input type="date" value={form.invoice_date} onChange={(e) => setForm({ ...form, invoice_date: e.target.value })} required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+            <input type="date" value={form.invoice_date} onChange={(e) => { const v = e.target.value; if (isValidDateInputValue(v)) setForm({ ...form, invoice_date: v }) }} required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Invoice #</label>
@@ -96,7 +96,7 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Payment Received Date</label>
-            <input type="date" value={form.payment_received_date} onChange={(e) => setForm({ ...form, payment_received_date: e.target.value })} className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+            <input type="date" value={form.payment_received_date || ''} onChange={(e) => { const v = e.target.value; if (isValidDateInputValue(v)) setForm({ ...form, payment_received_date: v }) }} className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Notes</label>

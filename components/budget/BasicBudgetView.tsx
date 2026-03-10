@@ -1181,6 +1181,7 @@ export default function BasicBudgetView({
 
       {invoiceModal && (
         <InvoiceFormModal
+          key={invoiceModal?.id ?? 'new'}
           poId={po.id}
           invoice={invoiceModal.id ? invoiceModal : undefined}
           onSave={refetch}

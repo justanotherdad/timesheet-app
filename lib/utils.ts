@@ -81,9 +81,25 @@ export function formatPeriodMonthYear(month: number, year: number): string {
   return format(d, 'MMM-yyyy')
 }
 
-export function formatDateForInput(date: Date | string): string {
-  const d = typeof date === 'string' ? parseISO(date) : date
-  return format(d, 'yyyy-MM-dd')
+/** Format date for HTML date input (yyyy-MM-dd). Returns '' for invalid/empty. */
+export function formatDateForInput(date: Date | string | null | undefined): string {
+  if (date == null || date === '') return ''
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date
+  try {
+    const d = typeof date === 'string' ? parseISO(date) : date
+    if (isNaN(d.getTime())) return ''
+    return format(d, 'yyyy-MM-dd')
+  } catch {
+    return ''
+  }
+}
+
+/** Returns true if value is valid for HTML date input (empty or yyyy-MM-dd that parses to valid date). */
+export function isValidDateInputValue(value: string): boolean {
+  if (value === '') return true
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const d = parseISO(value)
+  return !isNaN(d.getTime())
 }
 
 /** Format date in Eastern time for display (e.g. signatures, exports) */
