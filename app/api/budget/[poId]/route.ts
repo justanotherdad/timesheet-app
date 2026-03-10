@@ -88,13 +88,13 @@ export async function GET(
 
   const billRateUserIds = [...new Set((billRatesRaw || []).map((r: any) => r.user_id).filter(Boolean))]
 
-  // Fetch all user profiles for the bill rate dropdown (so admins can add rates for anyone, including those who haven't logged time to this PO yet)
-  const { data: profiles } = await supabase
+  // Fetch all user profiles for the bill rate dropdown. Use admin client to bypass RLS so managers/admins can see all profiles.
+  const profilesClient = adminSupabase || supabase
+  const { data: profiles } = await profilesClient
     .from('user_profiles')
     .select('id, name')
-    .not('name', 'is', null)
     .order('name')
-  const profilesList = profiles || []
+  const profilesList = (profiles || []).filter((p: any) => p?.name)
   const users: Array<{ id: string; name: string }> = profilesList.map((p: any) => ({ id: p.id, name: p.name || 'Unknown' }))
   const profilesMap: Record<string, { id: string; name: string }> = Object.fromEntries(profilesList.map((p: any) => [p.id, { id: p.id, name: p.name || 'Unknown' }]))
 
