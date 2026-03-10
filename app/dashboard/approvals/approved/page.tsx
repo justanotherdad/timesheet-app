@@ -17,7 +17,7 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
   const filterUser = params.user || ''
   const filterStart = params.start || ''
   const filterEnd = params.end || ''
-  const sortBy = params.sort || 'approved_at'
+  const sortBy = params.sort || 'week_ending'
   const sortDir = (params.dir || 'desc') as 'asc' | 'desc'
 
   const adminSupabase = createAdminClient()
@@ -170,6 +170,10 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
     let cmp = 0
     if (sortBy === 'week_ending') {
       cmp = (a.week_ending || '').localeCompare(b.week_ending || '')
+      if (cmp === 0) {
+        cmp = (a.user_profiles?.name || '').toLowerCase().localeCompare((b.user_profiles?.name || '').toLowerCase())
+        return cmp
+      }
     } else if (sortBy === 'week_starting') {
       cmp = (a.week_starting || '').localeCompare(b.week_starting || '')
     } else if (sortBy === 'created_at') {
