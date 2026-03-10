@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { formatDateForInput } from '@/lib/utils'
 
@@ -12,9 +12,21 @@ interface BillRateFormModalProps {
   onClose: () => void
 }
 
-export default function BillRateFormModal({ poId, rate, users, onSave, onClose }: BillRateFormModalProps) {
+export default function BillRateFormModal({ poId, rate, users: usersProp, onSave, onClose }: BillRateFormModalProps) {
   const isEdit = !!rate
+  const [users, setUsers] = useState<Array<{ id: string; name: string }>>(usersProp)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!isEdit) {
+      fetch(`/api/budget/${poId}/users`, { cache: 'no-store' })
+        .then((r) => r.ok ? r.json() : null)
+        .then((json) => {
+          if (json?.users?.length) setUsers(json.users)
+        })
+        .catch(() => {})
+    }
+  }, [poId, isEdit])
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
     user_id: rate?.user_id || '',
