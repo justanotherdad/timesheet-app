@@ -452,6 +452,10 @@ export default function BasicBudgetView({
                 {site.contact && <p className="text-gray-600 dark:text-gray-300 text-sm">{site.contact}</p>}
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Client Contact Name</label>
+                <input type="text" value={clientPOForm.client_contact_name} onChange={(e) => setClientPOForm((f) => ({ ...f, client_contact_name: e.target.value }))} className={inputClass} placeholder="—" />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Budget Type</label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -491,10 +495,6 @@ export default function BasicBudgetView({
                 <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Proposal #</label>
                 <input type="text" value={clientPOForm.proposal_number} onChange={(e) => setClientPOForm((f) => ({ ...f, proposal_number: e.target.value }))} className={inputClass} placeholder="—" />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Client Contact Name</label>
-                <input type="text" value={clientPOForm.client_contact_name} onChange={(e) => setClientPOForm((f) => ({ ...f, client_contact_name: e.target.value }))} className={inputClass} placeholder="—" />
-              </div>
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={saveClientPO} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
                   {saving ? 'Saving…' : 'Save'}
@@ -512,6 +512,8 @@ export default function BasicBudgetView({
               <p className="text-gray-900 dark:text-gray-100">{site.name}</p>
               {addressParts.length > 0 && <p className="text-gray-600 dark:text-gray-300 mt-1">{addressParts.join(', ')}</p>}
               {site.contact && <p className="text-gray-600 dark:text-gray-300">{site.contact}</p>}
+              <p className="font-medium text-gray-500 dark:text-gray-400 mt-4">Client Contact</p>
+              <p className="text-gray-900 dark:text-gray-100">{poData.client_contact_name || '—'}</p>
               <p className="font-medium text-gray-500 dark:text-gray-400 mt-4">Budget Type</p>
               <p className="text-gray-900 dark:text-gray-100 capitalize">{poData.budget_type || 'basic'}</p>
             </div>
@@ -521,7 +523,6 @@ export default function BasicBudgetView({
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Project:</span> {poData.description ?? poData.project_name ?? '—'}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">PO Issue Date:</span> {poData.po_issue_date ? formatDate(poData.po_issue_date) : '—'}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Proposal #:</span> {poData.proposal_number || '—'}</p>
-              <p><span className="font-medium text-gray-500 dark:text-gray-400">Client Contact:</span> {poData.client_contact_name || '—'}</p>
             </div>
           </div>
         )}
