@@ -50,8 +50,9 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
   }, [menuOpen])
 
   const userRole = user?.profile.role || ''
-  const isAdmin = ['admin', 'super_admin'].includes(userRole)
   const canApprove = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
+  const canManageOrg = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
+  const canManageBudget = ['manager', 'admin', 'super_admin'].includes(userRole)
 
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm print:hidden">
@@ -154,49 +155,61 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                 {menuOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
                     <div className="py-1">
-                      <button
-                        type="button"
-                        onClick={() => { setGuideOpen(true); setMenuOpen(false) }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                      >
-                        Site Guide
-                      </button>
-                      <Link
-                        href="/dashboard"
-                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        onClick={() => setMenuOpen(false)}
-                      >
+                      {canApprove && (
+                        <Link href="/dashboard/approvals/approved" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                          Approved Timesheets
+                        </Link>
+                      )}
+                      {canManageBudget && (
+                        <Link href="/dashboard/budget" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                          Budget Detail
+                        </Link>
+                      )}
+                      <Link href="/dashboard" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                         Dashboard
                       </Link>
-                      <Link
-                        href="/dashboard/timesheets"
-                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        onClick={() => setMenuOpen(false)}
-                      >
+                      {canManageBudget && (
+                        <Link href="/dashboard/admin/export" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                          Export Timesheets
+                        </Link>
+                      )}
+                      {canManageOrg && (
+                        <Link href="/dashboard/admin/organization" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                          Manage Organization
+                        </Link>
+                      )}
+                      {canManageOrg && (
+                        <Link href="/dashboard/admin/timesheet-options" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                          Manage Timesheet Options
+                        </Link>
+                      )}
+                      {canManageOrg && (
+                        <Link href="/dashboard/admin/users" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                          Manage Users
+                        </Link>
+                      )}
+                      <Link href="/dashboard/timesheets" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                         My Timesheets
                       </Link>
                       {canApprove && (
-                        <Link
-                          href="/dashboard/approvals"
-                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                          onClick={() => setMenuOpen(false)}
-                        >
+                        <Link href="/dashboard/approvals" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Pending Approvals
                         </Link>
                       )}
+                      <button type="button" onClick={() => { setGuideOpen(true); setMenuOpen(false) }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        Site Guide
+                      </button>
+                      {canManageBudget && (
+                        <Link href="/dashboard/admin/data-view" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                          View Timesheet Data
+                        </Link>
+                      )}
                       <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
-                      <Link
-                        href="/dashboard/change-password"
-                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        onClick={() => setMenuOpen(false)}
-                      >
+                      <Link href="/dashboard/change-password" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                         Change Password
                       </Link>
                       <form action="/auth/logout" method="post" className="block">
-                        <button
-                          type="submit"
-                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        >
+                        <button type="submit" className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
                           Sign Out
                         </button>
                       </form>
