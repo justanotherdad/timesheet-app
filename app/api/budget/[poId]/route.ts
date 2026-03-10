@@ -56,13 +56,17 @@ export async function GET(
     ? adminSupabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: false })
     : supabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: false })
 
+  const invoicesQuery = adminSupabase
+    ? adminSupabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: false })
+    : supabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: false })
+
   const billRatesQuery = adminSupabase
     ? adminSupabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })
     : supabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })
 
   const [changeOrdersRes, invoicesRes, billRatesRes, expensesRes, expenseTypesRes] = await Promise.all([
     changeOrdersQuery,
-    supabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: false }),
+    invoicesQuery,
     billRatesQuery,
     supabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false }),
     supabase.from('po_expense_types').select('*').order('name'),
@@ -73,7 +77,11 @@ export async function GET(
     const { data: fallback } = await supabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: false })
     changeOrders = fallback || []
   }
-  const invoices = invoicesRes.data || []
+  let invoices = invoicesRes.data || []
+  if (invoicesRes.error && adminSupabase) {
+    const { data: fallback } = await supabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: false })
+    invoices = fallback || []
+  }
   let billRatesRaw = billRatesRes.data || []
   if (billRatesRes.error && adminSupabase) {
     const { data: fallback } = await supabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })

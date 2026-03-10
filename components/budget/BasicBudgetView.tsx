@@ -182,10 +182,12 @@ export default function BasicBudgetView({
   usersFromBillable.forEach((u: { id: string; name: string }) => usersMap.set(u.id, u))
   const users = Array.from(usersMap.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
   const billRatesRaw = billRatesOverride !== null ? billRatesOverride : (data?.billRates || [])
-  const billRates = billRatesRaw.map((br: any) => ({
-    ...br,
-    user_profiles: br.user_profiles ?? (br.user_id ? { id: br.user_id, name: users.find((u: any) => u.id === br.user_id)?.name || 'Unknown' } : null),
-  }))
+  const billRates = billRatesRaw
+    .map((br: any) => ({
+      ...br,
+      user_profiles: br.user_profiles ?? (br.user_id ? { id: br.user_id, name: users.find((u: any) => u.id === br.user_id)?.name || 'Unknown' } : null),
+    }))
+    .sort((a: any, b: any) => (a.user_profiles?.name || 'Unknown').localeCompare(b.user_profiles?.name || 'Unknown'))
   const expenses = data?.expenses || []
   const expenseTypes = data?.expenseTypes || []
   const siteDepartmentsRaw = (data?.siteDepartments || []) as Array<{ id: string; name: string }>
@@ -372,21 +374,21 @@ export default function BasicBudgetView({
         Back to budget list
       </button>
 
-      {/* Navigation: prev | Client + PO dropdowns | next — above container */}
+      {/* Navigation: prev | Client + PO dropdowns | next — above container. On mobile, dropdowns stack so arrows fit properly. */}
       {(allSites.length > 0 || sitePOs.length > 0) && (
-        <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center justify-between gap-2 sm:gap-4 mb-4">
           <button
             type="button"
             onClick={onPrev}
             disabled={!onPrev}
-            className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent shrink-0"
             title="Previous PO"
           >
             <ChevronLeft className="h-6 w-6" />
           </button>
-          <div className="flex flex-1 justify-center gap-2 flex-nowrap items-end shrink-0">
+          <div className="flex flex-1 flex-col sm:flex-row justify-center gap-2 sm:gap-2 items-stretch sm:items-end min-w-0">
             {allSites.length > 0 && onSelectSite && (
-              <div className="min-w-[140px]">
+              <div className="w-full sm:min-w-[140px] sm:flex-1">
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Client</label>
                 <select
                   value={selectedSiteId || poData.site_id || ''}
@@ -401,7 +403,7 @@ export default function BasicBudgetView({
               </div>
             )}
             {sitePOs.length > 0 && onSelectPo && (
-              <div className="min-w-[200px]">
+              <div className="w-full sm:min-w-[200px] sm:flex-1">
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">PO</label>
                 <select
                   value={selectedPoId || po.id}
@@ -421,7 +423,7 @@ export default function BasicBudgetView({
             type="button"
             onClick={onNext}
             disabled={!onNext}
-            className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent shrink-0"
             title="Next PO"
           >
             <ChevronRight className="h-6 w-6" />
