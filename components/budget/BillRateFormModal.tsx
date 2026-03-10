@@ -77,7 +77,7 @@ export default function BillRateFormModal({ poId, rate, users: usersProp, onSave
           {!isEdit && (
             <div>
               <label className="block text-sm font-medium mb-1">Employee *</label>
-              <select value={form.user_id} onChange={(e) => setForm({ ...form, user_id: e.target.value })} required className="w-full px-3 py-2 border rounded-lg">
+              <select value={form.user_id} onChange={(e) => setForm({ ...form, user_id: e.target.value })} required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
                 <option value="">-- Select employee --</option>
                 {users.map(u => (
                   <option key={u.id} value={u.id}>{u.name}</option>
@@ -90,11 +90,11 @@ export default function BillRateFormModal({ poId, rate, users: usersProp, onSave
           )}
           <div>
             <label className="block text-sm font-medium mb-1">Rate ($/hr) *</label>
-            <input type="number" step="0.01" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} required className="w-full px-3 py-2 border rounded-lg" />
+            <input type="number" step="0.01" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Effective From Date *</label>
-            <input type="date" value={form.effective_from_date} onChange={(e) => setForm({ ...form, effective_from_date: e.target.value })} required className="w-full px-3 py-2 border rounded-lg" />
+            <input type="date" value={form.effective_from_date} onChange={(e) => setForm({ ...form, effective_from_date: e.target.value })} required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
             <p className="text-xs text-gray-500 mt-1">Historical data uses the rate that was effective at that time.</p>
           </div>
           <div className="flex gap-2 pt-2">

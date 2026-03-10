@@ -70,16 +70,16 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Invoice Date *</label>
-            <input type="date" value={form.invoice_date} onChange={(e) => setForm({ ...form, invoice_date: e.target.value })} required className="w-full px-3 py-2 border rounded-lg" />
+            <input type="date" value={form.invoice_date} onChange={(e) => setForm({ ...form, invoice_date: e.target.value })} required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Invoice #</label>
-            <input type="text" value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} className="w-full px-3 py-2 border rounded-lg" />
+            <input type="text" value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Period Month *</label>
-              <select value={form.period_month} onChange={(e) => setForm({ ...form, period_month: e.target.value })} required className="w-full px-3 py-2 border rounded-lg">
+              <select value={form.period_month} onChange={(e) => setForm({ ...form, period_month: e.target.value })} required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
                 {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
                   <option key={m} value={m}>{new Date(2000, m-1).toLocaleString('default', { month: 'long' })}</option>
                 ))}
@@ -87,20 +87,20 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Period Year *</label>
-              <input type="number" value={form.period_year} onChange={(e) => setForm({ ...form, period_year: e.target.value })} min="2020" max="2030" required className="w-full px-3 py-2 border rounded-lg" />
+              <input type="number" value={form.period_year} onChange={(e) => setForm({ ...form, period_year: e.target.value })} min="2020" max="2030" required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Amount *</label>
-            <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required className="w-full px-3 py-2 border rounded-lg" />
+            <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Payment Received Date</label>
-            <input type="date" value={form.payment_received_date} onChange={(e) => setForm({ ...form, payment_received_date: e.target.value })} className="w-full px-3 py-2 border rounded-lg" />
+            <input type="date" value={form.payment_received_date} onChange={(e) => setForm({ ...form, payment_received_date: e.target.value })} className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Notes</label>
-            <input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full px-3 py-2 border rounded-lg" />
+            <input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={loading} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">

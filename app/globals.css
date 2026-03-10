@@ -23,6 +23,16 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Consistent form input/select height across site */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="email"],
+input[type="password"],
+select {
+  min-height: 2.5rem;
+}
+
 /* Hide header in print */
 @media print {
   header {

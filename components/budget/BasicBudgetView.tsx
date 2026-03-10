@@ -734,12 +734,6 @@ export default function BasicBudgetView({
                 <td className="py-2">Total Available</td>
                 <td className="text-right py-2">${totalBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
               </tr>
-              {(priorAmountSpent > 0 || priorCostFromHours > 0) && (
-                <tr className="border-b border-gray-100 dark:border-gray-700">
-                  <td className="py-2 text-amber-700 dark:text-amber-300">Prior period (before this system)</td>
-                  <td className="text-right py-2 text-amber-700 dark:text-amber-300">-${(priorAmountSpent + priorCostFromHours).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                </tr>
-              )}
             </tbody>
           </table>
         )}
@@ -824,9 +818,15 @@ export default function BasicBudgetView({
           </thead>
           <tbody>
             <tr className="border-b border-gray-100 dark:border-gray-700">
-              <td className="py-2">Total Available</td>
-              <td className="text-right py-2">${(totalBudget - priorAmountSpent - priorCostFromHours).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              <td className="py-2">Total Available (from PO + change orders)</td>
+              <td className="text-right py-2">${totalBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
             </tr>
+            {(priorAmountSpent > 0 || priorCostFromHours > 0) && (
+              <tr className="border-b border-gray-100 dark:border-gray-700">
+                <td className="py-2 text-amber-700 dark:text-amber-300">Prior period (before this system)</td>
+                <td className="text-right py-2 text-amber-700 dark:text-amber-300">-${(priorAmountSpent + priorCostFromHours).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              </tr>
+            )}
             <tr className="border-b border-gray-100 dark:border-gray-700">
               <td className="py-2">Labor cost (rates × hours from timesheets)</td>
               <td className="text-right py-2">-${laborCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
