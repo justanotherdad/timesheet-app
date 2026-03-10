@@ -10,6 +10,7 @@ const SECTIONS: { id: string; title: string }[] = [
   { id: 'approvals', title: 'Approvals' },
   { id: 'manage-users', title: 'Manage Users' },
   { id: 'organization', title: 'Organization & Timesheet Options' },
+  { id: 'budget-detail', title: 'Budget Detail' },
   { id: 'data-export', title: 'View Timesheet Data & Export' },
   { id: 'quick-reference', title: 'Quick Reference by Role' },
   { id: 'need-help', title: 'Need Help?' },
@@ -179,11 +180,12 @@ function GuideContent() {
         </ul>
         <h4 className="text-sm font-semibold mt-3 mb-1">Managers, Admins, and Super Admins also see</h4>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
+          <li><strong>Budget Detail</strong> – View PO budgets, invoices, billable hours and cost, expenses, and bill rates.</li>
           <li><strong>View Timesheet Data</strong> – View and filter all timesheet entries.</li>
           <li><strong>Export Timesheets</strong> – Export timesheets for any week.</li>
         </ul>
         <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
-          <strong>Employees</strong> see only <strong>New Timesheet</strong>, <strong>My Timesheets</strong>, and the <strong>Current Week</strong> section.
+          <strong>Managers, Supervisors, and Employees</strong> may see <strong>Budget Detail</strong> only for POs where an Admin has granted them explicit access. <strong>Admins and Super Admins</strong> see all POs. <strong>Employees</strong> (without budget access) see only <strong>New Timesheet</strong>, <strong>My Timesheets</strong>, and the <strong>Current Week</strong> section.
         </p>
       </section>
 
@@ -338,18 +340,42 @@ function GuideContent() {
         </p>
       </section>
 
+      <section data-section="budget-detail" className="scroll-mt-4">
+        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">
+          7. Budget Detail
+        </h3>
+        <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+          The <strong>Budget Detail</strong> page shows PO-level budgets: client and PO information, budget summary, invoices, billable hours and cost, expenses, and bill rates.
+        </p>
+        <h4 className="text-sm font-semibold mt-3 mb-1">7.1 Who can access Budget Detail</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+          <strong>Admins and Super Admins:</strong> All POs. Full view and full edit. Can grant or revoke budget access for any user.
+        </p>
+        <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+          <strong>Managers, Supervisors, and Employees:</strong> Only POs where an Admin or Super Admin has <strong>granted them budget access</strong>. Managers see the full view; Supervisors and Employees see a limited view (own hours and cost).
+        </p>
+        <h4 className="text-sm font-semibold mt-3 mb-1">7.2 Opening Budget Detail</h4>
+        <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
+          <li>From the <strong>Dashboard</strong>, click <strong>Budget Detail</strong>.</li>
+          <li>From <strong>Manage Organization</strong>, click <strong>View Budget Detail</strong> on a PO card (if you have access to that PO).</li>
+        </ul>
+        <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
+          <strong>Budget access:</strong> Only Admins can grant access. Ask an Admin to go to Budget Detail → select the PO → <strong>Budget Access</strong> → <strong>Grant Access</strong> → select your name.
+        </p>
+      </section>
+
       <section data-section="data-export" className="scroll-mt-4">
         <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">
-          7. View Timesheet Data & Export
+          8. View Timesheet Data & Export
         </h3>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
           Available only to <strong>Managers</strong>, <strong>Admins</strong>, and <strong>Super Admins</strong>. Employees and Supervisors do not see these.
         </p>
-        <h4 className="text-sm font-semibold mt-3 mb-1">7.1 View Timesheet Data</h4>
+        <h4 className="text-sm font-semibold mt-3 mb-1">8.1 View Timesheet Data</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
           <strong>Where:</strong> Dashboard → <strong>View Timesheet Data</strong>. View and filter all timesheet entries (e.g. by week, user, site, PO). No role-based filtering; managers and admins see the full dataset they have access to.
         </p>
-        <h4 className="text-sm font-semibold mt-3 mb-1">7.2 Export Timesheets</h4>
+        <h4 className="text-sm font-semibold mt-3 mb-1">8.2 Export Timesheets</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
           <strong>Where:</strong> Dashboard → <strong>Export Timesheets</strong>. Export timesheet data for a chosen week (or range). Format and options depend on what is implemented (e.g. Excel/CSV). Use for payroll, billing, or reporting.
         </p>
@@ -357,7 +383,7 @@ function GuideContent() {
 
       <section data-section="quick-reference" className="scroll-mt-4">
         <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">
-          8. Quick Reference by Role
+          9. Quick Reference by Role
         </h3>
         <div className="overflow-x-auto -mx-2">
           <table className="w-full text-xs border border-gray-300 dark:border-gray-600 border-collapse">
@@ -386,6 +412,7 @@ function GuideContent() {
               <tr><td className="border px-2 py-1">Password/invite link</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">Reports only</td><td className="border px-2 py-1">Any</td><td className="border px-2 py-1">Any</td></tr>
               <tr><td className="border px-2 py-1">Organization</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">View only</td><td className="border px-2 py-1">Edit (assigned)</td><td className="border px-2 py-1">Full</td><td className="border px-2 py-1">Full</td></tr>
               <tr><td className="border px-2 py-1">Timesheet Options (Systems/Activities/Deliverables)</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">View only</td><td className="border px-2 py-1">Edit (assigned)</td><td className="border px-2 py-1">Full</td><td className="border px-2 py-1">Full</td></tr>
+              <tr><td className="border px-2 py-1">Budget Detail</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓ (if granted)</td><td className="border px-2 py-1">✓ (if granted)</td><td className="border px-2 py-1">✓ (all)</td><td className="border px-2 py-1">✓ (all)</td></tr>
               <tr><td className="border px-2 py-1">View Timesheet Data</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
               <tr><td className="border px-2 py-1">Export Timesheets</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
             </tbody>
@@ -402,9 +429,10 @@ function GuideContent() {
           <li><strong>Missing options or access:</strong> Your role or assignments (sites, reports) may need to be updated in <strong>Manage Users</strong> (admin/manager).</li>
           <li><strong>Approval chain:</strong> The structure is Employee → Supervisor → Manager → Final Approver. Each user’s profile has one <strong>Supervisor</strong> field plus <strong>Manager</strong> and <strong>Final Approver</strong>. If a field is “None,” the next person in the structure is used. Set these in <strong>Manage Users</strong>.</li>
           <li><strong>Empty Activity/Deliverable/System dropdowns:</strong> Options are filtered by your assigned sites and departments/POs. Ask an admin or manager to assign you to the right sites (and departments/POs if needed) in <strong>Manage Users</strong>, and ensure those sites have systems, activities, and deliverables configured.</li>
+          <li><strong>Budget access:</strong> Only Admins can grant budget access. Ask an Admin to go to <strong>Budget Detail</strong> → select the PO → <strong>Budget Access</strong> → <strong>Grant Access</strong> → select your name.</li>
         </ul>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-6 italic">
-          Last updated to match the current CTG Timesheet Management site (employees through admins). Supervisors can see timesheets they approved via My Timesheets and Approved Timesheets.
+          Last updated to match the current CTG Timesheet Management site, including Budget Detail and grant-based budget access.
         </p>
       </section>
     </div>
