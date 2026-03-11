@@ -66,6 +66,7 @@ export default function BasicBudgetView({
   const [budgetAccessModal, setBudgetAccessModal] = useState<'add' | null>(null)
   const [balanceData, setBalanceData] = useState<{ budgetBalance: number; lastTimesheetWe: string | null } | null>(null)
   const [budgetHealthForm, setBudgetHealthForm] = useState({ weekly_burn: '', target_end_date: '' })
+  const [weeklyBurnFocused, setWeeklyBurnFocused] = useState(false)
   const [availableUsers, setAvailableUsers] = useState<Array<{ id: string; name: string }>>([])
   const [editingClientPO, setEditingClientPO] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
@@ -771,29 +772,41 @@ export default function BasicBudgetView({
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Weekly burn ($/week)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={budgetHealthForm.weekly_burn}
-                  onChange={(e) => setBudgetHealthForm((f) => ({ ...f, weekly_burn: e.target.value }))}
-                  onBlur={async () => {
-                    if (!canEdit) return
-                    const val = budgetHealthForm.weekly_burn === '' ? null : parseFloat(budgetHealthForm.weekly_burn)
-                    if (val === (poData.weekly_burn ?? null) || (val != null && isNaN(val))) return
-                    try {
-                      const res = await fetch(`/api/budget/${po.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ weekly_burn: val }),
-                        ...fetchOpts,
-                      })
-                      if (res.ok) refetch()
-                    } catch { /* ignore */ }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  placeholder="e.g. 1000"
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm">$</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={weeklyBurnFocused ? budgetHealthForm.weekly_burn : (() => {
+                      const num = parseFloat(budgetHealthForm.weekly_burn)
+                      return !isNaN(num) ? num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : budgetHealthForm.weekly_burn
+                    })()}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9.]/g, '')
+                      const parts = raw.split('.')
+                      const sanitized = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw
+                      setBudgetHealthForm((f) => ({ ...f, weekly_burn: sanitized }))
+                    }}
+                    onFocus={() => setWeeklyBurnFocused(true)}
+                    onBlur={async () => {
+                      setWeeklyBurnFocused(false)
+                      if (!canEdit) return
+                      const val = budgetHealthForm.weekly_burn === '' ? null : parseFloat(budgetHealthForm.weekly_burn)
+                      if (val === (poData.weekly_burn ?? null) || (val != null && isNaN(val))) return
+                      try {
+                        const res = await fetch(`/api/budget/${po.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ weekly_burn: val }),
+                          ...fetchOpts,
+                        })
+                        if (res.ok) refetch()
+                      } catch { /* ignore */ }
+                    }}
+                    className="w-full pl-7 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    placeholder="0.00"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Last Timesheet WE</label>
