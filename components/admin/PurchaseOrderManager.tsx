@@ -297,7 +297,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
-                <select name="department_id" value={selectedDepartment} onChange={(e) => setSelectedDepartment(e.target.value)} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white">
+                <select name="department_id" value={selectedDepartment} onChange={(e) => setSelectedDepartment(e.target.value)} className="w-full h-10 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white">
                   <option value="">-- Select Department --</option>
                   {departments.map(dept => (
                     <option key={dept.id} value={dept.id}>{dept.name}</option>
@@ -311,7 +311,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
-                  <select name="budget_type" defaultValue="basic" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white">
+                  <select name="budget_type" defaultValue="basic" className="w-full h-10 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white">
                     <option value="basic">Basic</option>
                     <option value="project">Project</option>
                   </select>
