@@ -123,25 +123,49 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
     const formData = new FormData(e.currentTarget)
     const poNumber = formData.get('po_number') as string
     const description = formData.get('description') as string || null
+    const departmentId = formData.get('department_id') as string || null
+    const clientContactName = formData.get('client_contact_name') as string || null
+    const budgetType = (formData.get('budget_type') as string) || 'basic'
+    const netTerms = formData.get('net_terms') as string || null
+    const howToBill = formData.get('how_to_bill') as string || null
+    const originalAmount = formData.get('original_po_amount') as string
+    const poIssueDate = formData.get('po_issue_date') as string || null
+    const attachmentFiles = formData.getAll('attachments') as File[]
 
     try {
       const { data, error: insertError } = await supabase
         .from('purchase_orders')
         .insert({
           site_id: selectedSite,
-          department_id: selectedDepartment || null,
+          department_id: departmentId || selectedDepartment || null,
           po_number: poNumber,
-          description,
+          description: description || undefined,
+          project_name: description || undefined,
+          client_contact_name: clientContactName || null,
+          budget_type: budgetType,
+          net_terms: netTerms || null,
+          how_to_bill: howToBill || null,
+          original_po_amount: originalAmount ? parseFloat(originalAmount) : null,
+          po_issue_date: poIssueDate || null,
         })
         .select()
         .single()
 
       if (insertError) throw insertError
 
-      setPurchaseOrders([...purchaseOrders, data])
-      if (e.currentTarget) {
-        e.currentTarget.reset()
+      if (data?.id && attachmentFiles?.length) {
+        const validFiles = attachmentFiles.filter((f) => f?.name)
+        for (const file of validFiles) {
+          const fd = new FormData()
+          fd.append('file', file)
+          try {
+            await fetch(`/api/budget/${data.id}/attachments`, { method: 'POST', body: fd })
+          } catch { /* skip failed uploads */ }
+        }
       }
+
+      setPurchaseOrders([...purchaseOrders, data])
+      if (e.currentTarget) e.currentTarget.reset()
       setShowAddForm(false)
     } catch (err: any) {
       setError(err.message || 'An error occurred')
@@ -262,19 +286,60 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
             <form onSubmit={handleAdd} className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-4">
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">Add New Purchase Order</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  name="po_number"
-                  placeholder="PO Number *"
-                  required
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
-                />
-                <input
-                  type="text"
-                  name="description"
-                  placeholder="Description"
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">PO Number *</label>
+                  <input type="text" name="po_number" placeholder="PO Number" required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                  <input type="text" name="description" placeholder="Description" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
+                <select name="department_id" value={selectedDepartment} onChange={(e) => setSelectedDepartment(e.target.value)} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white">
+                  <option value="">-- Select Department --</option>
+                  {departments.map(dept => (
+                    <option key={dept.id} value={dept.id}>{dept.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contact</label>
+                  <input type="text" name="client_contact_name" placeholder="Client contact" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
+                  <select name="budget_type" defaultValue="basic" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white">
+                    <option value="basic">Basic</option>
+                    <option value="project">Project</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Net Terms</label>
+                  <input type="text" name="net_terms" placeholder="e.g. Net 30, Net 60" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">How to Bill</label>
+                  <input type="text" name="how_to_bill" placeholder="e.g. Ariba, Fieldglass, Email" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Original Amount ($) *</label>
+                  <input type="number" name="original_po_amount" step="0.01" min="0" placeholder="0.00" required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date Issued *</label>
+                  <input type="date" name="po_issue_date" required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Attachments (PO / Proposal)</label>
+                <input type="file" name="attachments" multiple accept=".pdf,.doc,.docx,.xls,.xlsx" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-600 file:text-white file:cursor-pointer" />
               </div>
               <div className="flex gap-2">
                 <button
@@ -317,7 +382,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
                         <Link
                           href={`/dashboard/budget?poId=${po.id}`}
                           className="text-gray-600 hover:text-blue-600 mr-4 inline-flex items-center gap-1"
-                          title="View budget details"
+                          title="View Budget Details"
                         >
                           <FileText className="h-4 w-4" />
                           View Details
@@ -325,12 +390,14 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
                         <button
                           onClick={() => setEditingPO(po)}
                           className="text-blue-600 hover:text-blue-900 mr-4"
+                          title="Edit PO"
                         >
                           <Edit className="h-4 w-4 inline" />
                         </button>
                         <button
                           onClick={() => handleDelete(po.id)}
                           className="text-red-600 hover:text-red-900"
+                          title="Delete PO"
                         >
                           <Trash2 className="h-4 w-4 inline" />
                         </button>

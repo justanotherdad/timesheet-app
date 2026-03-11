@@ -82,6 +82,8 @@ export default function BasicBudgetView({
     proposal_number: '',
     client_contact_name: '',
     budget_type: 'basic' as 'basic' | 'project',
+    net_terms: '',
+    how_to_bill: '',
   })
   const [budgetForm, setBudgetForm] = useState<{
     original_po_amount: string
@@ -332,6 +334,8 @@ export default function BasicBudgetView({
       proposal_number: poData.proposal_number || '',
       client_contact_name: poData.client_contact_name || '',
       budget_type: (poData.budget_type || 'basic') as 'basic' | 'project',
+      net_terms: poData.net_terms || '',
+      how_to_bill: poData.how_to_bill || '',
     })
     setEditingClientPO(true)
     setSaveError(null)
@@ -552,6 +556,14 @@ export default function BasicBudgetView({
                 <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Proposal #</label>
                 <input type="text" value={clientPOForm.proposal_number} onChange={(e) => setClientPOForm((f) => ({ ...f, proposal_number: e.target.value }))} className={inputClass} placeholder="—" />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Net Terms</label>
+                <input type="text" value={clientPOForm.net_terms} onChange={(e) => setClientPOForm((f) => ({ ...f, net_terms: e.target.value }))} className={inputClass} placeholder="e.g. Net 30" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">How to Bill</label>
+                <input type="text" value={clientPOForm.how_to_bill} onChange={(e) => setClientPOForm((f) => ({ ...f, how_to_bill: e.target.value }))} className={inputClass} placeholder="e.g. Ariba, Fieldglass, Email" />
+              </div>
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={saveClientPO} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
                   {saving ? 'Saving…' : 'Save'}
@@ -580,6 +592,8 @@ export default function BasicBudgetView({
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Project:</span> {poData.description ?? poData.project_name ?? '—'}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">PO Issue Date:</span> {poData.po_issue_date ? formatDate(poData.po_issue_date) : '—'}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Proposal #:</span> {poData.proposal_number || '—'}</p>
+              <p><span className="font-medium text-gray-500 dark:text-gray-400">Net Terms:</span> {poData.net_terms || '—'}</p>
+              <p><span className="font-medium text-gray-500 dark:text-gray-400">How to Bill:</span> {poData.how_to_bill || '—'}</p>
             </div>
           </div>
         )}
@@ -656,6 +670,7 @@ export default function BasicBudgetView({
                         else setAttachmentError('Delete failed')
                       }}
                       className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded shrink-0"
+                      title="Delete attachment"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -1148,7 +1163,7 @@ export default function BasicBudgetView({
               ) : sortedRows.map((r: any) => (
                 <tr key={r.userId} className="border-b border-gray-100 dark:border-gray-700">
                   <td className="py-2 px-2 break-words"><span className="font-medium">{r.userName}</span></td>
-                  <td className="py-2 px-1"><button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'hours' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"><Eye className="h-4 w-4" /></button></td>
+                  <td className="py-2 px-1"><button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'hours' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="View hours by week"><Eye className="h-4 w-4" /></button></td>
                   <td className="text-right py-2 px-2 font-medium">{r.rowTotal.toFixed(2)}</td>
                 </tr>
               ))}
@@ -1315,7 +1330,7 @@ export default function BasicBudgetView({
                 return (
                   <tr key={r.userId} className="border-b border-gray-100 dark:border-gray-700">
                     <td className="py-2 px-2 break-words"><span className="font-medium">{r.userName}</span></td>
-                    <td className="py-2 px-1"><button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'cost' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"><Eye className="h-4 w-4" /></button></td>
+                    <td className="py-2 px-1"><button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'cost' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="View cost by week"><Eye className="h-4 w-4" /></button></td>
                     <td className="text-right py-2 px-2 font-medium">${rowCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   </tr>
                 )
