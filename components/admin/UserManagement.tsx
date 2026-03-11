@@ -516,7 +516,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 w-full">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 w-full flex flex-col min-h-0 flex-1">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Users</h2>
         {canAddUser && (
@@ -811,10 +811,10 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         </form>
       )}
 
-      <div className="flex flex-col md:flex-row gap-4">
+      <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0">
         {/* Left: Filter / Search */}
-        <div className="md:w-56 shrink-0 space-y-4">
-          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600 max-h-[calc(100vh-12rem)] overflow-y-auto">
+        <div className="md:w-56 shrink-0 space-y-4 md:overflow-y-auto md:max-h-full">
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600 md:max-h-[calc(100vh-14rem)] overflow-y-auto">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
               <Search className="h-4 w-4" />
               Filter & Search
@@ -965,8 +965,8 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
           })}
         </div>
 
-        {/* Desktop: Table (scrollable on small if table shown) */}
-        <div className="flex-1 min-w-0 overflow-x-auto -mx-2 md:mx-0 hidden md:block">
+        {/* Desktop: Table — horizontal scroll fixed at bottom of viewport, vertical scroll within */}
+        <div className="flex-1 min-w-0 min-h-0 overflow-auto -mx-2 md:mx-0 hidden md:block">
         <table className="min-w-[800px] md:min-w-full w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
