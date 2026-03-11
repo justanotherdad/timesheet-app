@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText } from 'lucide-react'
 import { formatDate, formatDateShort, formatPeriodsList } from '@/lib/utils'
 import InvoiceFormModal from './InvoiceFormModal'
 import ExpenseFormModal from './ExpenseFormModal'
@@ -64,6 +64,8 @@ export default function BasicBudgetView({
   const [budgetAccessModal, setBudgetAccessModal] = useState<'add' | null>(null)
   const [availableUsers, setAvailableUsers] = useState<Array<{ id: string; name: string }>>([])
   const [editingClientPO, setEditingClientPO] = useState(false)
+  const [uploadingAttachment, setUploadingAttachment] = useState(false)
+  const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const [editingBudget, setEditingBudget] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -202,6 +204,7 @@ export default function BasicBudgetView({
     }))
     .sort((a: any, b: any) => (a.user_profiles?.name || 'Unknown').localeCompare(b.user_profiles?.name || 'Unknown'))
   const expenses = data?.expenses || []
+  const attachments = data?.attachments || []
   const expenseTypes = data?.expenseTypes || []
   const siteDepartmentsRaw = (data?.siteDepartments || []) as Array<{ id: string; name: string }>
   const siteDepartments = poData.department_id && poData.departments && !siteDepartmentsRaw.some((d) => d.id === poData.department_id)
@@ -546,6 +549,88 @@ export default function BasicBudgetView({
             </div>
           </div>
         )}
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+          <p className="font-medium text-gray-500 dark:text-gray-400 mb-1">Attachments</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Word, Excel, or PDF files</p>
+          {attachmentError && (
+            <div className="mb-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">{attachmentError}</div>
+          )}
+          {canEdit && (
+            <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 text-sm mb-3">
+              <Upload className="h-4 w-4" />
+              {uploadingAttachment ? 'Uploading...' : '+ PO / + Proposal'}
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                multiple
+                className="hidden"
+                disabled={uploadingAttachment}
+                onChange={async (e) => {
+                  const files = e.target.files
+                  if (!files?.length) return
+                  setAttachmentError(null)
+                  setUploadingAttachment(true)
+                  try {
+                    for (const file of Array.from(files)) {
+                      const formData = new FormData()
+                      formData.append('file', file)
+                      const res = await fetch(`/api/budget/${po.id}/attachments`, { method: 'POST', body: formData })
+                      if (!res.ok) {
+                        const err = await res.json()
+                        throw new Error(err.error || 'Upload failed')
+                      }
+                    }
+                    refetch()
+                  } catch (err: any) {
+                    setAttachmentError(err.message || 'Upload failed')
+                  } finally {
+                    setUploadingAttachment(false)
+                    e.target.value = ''
+                  }
+                }}
+              />
+            </label>
+          )}
+          <div className="space-y-2">
+            {attachments.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No attachments</p>
+            ) : (
+              attachments.map((att: any) => (
+                <div key={att.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const res = await fetch(`/api/budget/${po.id}/attachments/${att.id}/download`, fetchOpts)
+                      if (res.ok) {
+                        const { url } = await res.json()
+                        window.open(url)
+                      }
+                    }}
+                    className="flex items-center gap-2 text-left hover:text-blue-600 dark:hover:text-blue-400 min-w-0 flex-1"
+                  >
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{att.file_name}</span>
+                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm('Delete this attachment?')) return
+                        setAttachmentError(null)
+                        const res = await fetch(`/api/budget/${po.id}/attachments/${att.id}`, { method: 'DELETE' })
+                        if (res.ok) refetch()
+                        else setAttachmentError('Delete failed')
+                      }}
+                      className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded shrink-0"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       {/* 1b. Budget Access (admin only) */}

@@ -64,12 +64,17 @@ export async function GET(
     ? adminSupabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })
     : supabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })
 
-  const [changeOrdersRes, invoicesRes, billRatesRes, expensesRes, expenseTypesRes] = await Promise.all([
+  const attachmentsQuery = adminSupabase
+    ? adminSupabase.from('po_attachments').select('id, file_name, storage_path, file_type').eq('po_id', poId)
+    : supabase.from('po_attachments').select('id, file_name, storage_path, file_type').eq('po_id', poId)
+
+  const [changeOrdersRes, invoicesRes, billRatesRes, expensesRes, expenseTypesRes, attachmentsRes] = await Promise.all([
     changeOrdersQuery,
     invoicesQuery,
     billRatesQuery,
     supabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false }),
     supabase.from('po_expense_types').select('*').order('name'),
+    attachmentsQuery,
   ])
 
   let changeOrders = changeOrdersRes.data || []
@@ -89,6 +94,7 @@ export async function GET(
   }
   const expenses = expensesRes.data || []
   const expenseTypes = expenseTypesRes.data || []
+  const attachments = attachmentsRes.data || []
 
   const billRateUserIds = [...new Set((billRatesRaw || []).map((r: any) => r.user_id).filter(Boolean))]
 
@@ -121,6 +127,7 @@ export async function GET(
       billRates,
       expenses,
       expenseTypes,
+      attachments,
       users,
       siteDepartments: siteDepartments || [],
     },
