@@ -114,16 +114,8 @@ export default function ConsolidatedManager({
 
   // Sort sites
   const sortedSites = [...sites].sort((a, b) => {
-    let aVal: any, bVal: any
-    if (sitesSortColumn === 'name') {
-      aVal = a.name.toLowerCase()
-      bVal = b.name.toLowerCase()
-    } else if (sitesSortColumn === 'week_starting_day') {
-      aVal = a.week_starting_day || 1
-      bVal = b.week_starting_day || 1
-    } else {
-      return 0
-    }
+    const aVal = a.name.toLowerCase()
+    const bVal = b.name.toLowerCase()
     
     if (aVal < bVal) return sitesSortDirection === 'asc' ? -1 : 1
     if (aVal > bVal) return sitesSortDirection === 'asc' ? 1 : -1
@@ -193,12 +185,11 @@ export default function ConsolidatedManager({
 
     const formData = new FormData(e.currentTarget)
     const name = formData.get('name') as string
-    const weekStartingDay = parseInt(formData.get('week_starting_day') as string) || 1
 
     try {
       const { data, error: insertError } = await supabase
         .from('sites')
-        .insert({ name, week_starting_day: weekStartingDay })
+        .insert({ name, week_starting_day: 1 })
         .select()
         .single()
 
@@ -404,23 +395,14 @@ export default function ConsolidatedManager({
           {!readOnly && showAddForm && (
             <form onSubmit={handleAddSite} className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-4">
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">Add New Site</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Site Name *</label>
                 <input
                   type="text"
                   name="name"
-                  placeholder="Site Name *"
+                  placeholder="Site Name"
                   required
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
-                />
-                <input
-                  type="number"
-                  name="week_starting_day"
-                  placeholder="Week Starts On (0=Sun, 1=Mon, etc.) *"
-                  defaultValue={1}
-                  required
-                  min="0"
-                  max="6"
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                 />
               </div>
               <div className="flex gap-2">
@@ -444,12 +426,6 @@ export default function ConsolidatedManager({
                   >
                     Name {getSortIcon('sites', 'name')}
                   </th>
-                  <th 
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
-                    onClick={() => handleSort('sites', 'week_starting_day')}
-                  >
-                    Week Starts {getSortIcon('sites', 'week_starting_day')}
-                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
@@ -457,9 +433,6 @@ export default function ConsolidatedManager({
                 {sortedSites.map((site) => (
                   <tr key={site.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{site.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][site.week_starting_day || 1]}
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
                         onClick={() => setSiteInfoCard(site)}
@@ -876,14 +849,13 @@ export default function ConsolidatedManager({
                   setLoading(true)
                   const formData = new FormData(e.currentTarget)
                   const name = formData.get('name') as string
-                  const weekStartingDay = parseInt(formData.get('week_starting_day') as string) || 1
                   try {
                     const { error: updateError } = await supabase
                       .from('sites')
-                      .update({ name, week_starting_day: weekStartingDay })
+                      .update({ name })
                       .eq('id', editingItem.id)
                     if (updateError) throw updateError
-                    setSites(sites.map(s => s.id === editingItem.id ? { ...s, name, week_starting_day: weekStartingDay } : s))
+                    setSites(sites.map(s => s.id === editingItem.id ? { ...s, name } : s))
                     setEditingItem(null)
                   } catch (err: any) {
                     setError(err.message || 'An error occurred')
@@ -894,18 +866,6 @@ export default function ConsolidatedManager({
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
                     <input type="text" name="name" defaultValue={editingItem.name} required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Week Starts On *</label>
-                    <select name="week_starting_day" defaultValue={editingItem.week_starting_day || 1} required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white">
-                      <option value="0">Sunday</option>
-                      <option value="1">Monday</option>
-                      <option value="2">Tuesday</option>
-                      <option value="3">Wednesday</option>
-                      <option value="4">Thursday</option>
-                      <option value="5">Friday</option>
-                      <option value="6">Saturday</option>
-                    </select>
                   </div>
                   <div className="flex gap-2">
                     <button type="submit" disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">

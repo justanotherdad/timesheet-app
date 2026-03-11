@@ -24,7 +24,7 @@ export default async function SitesAdminPage() {
         <div className="max-w-6xl mx-auto">
           <div className="mb-6">
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              Configure sites (clients) and set their week starting day. Week starting day: 0=Sunday, 1=Monday, 2=Tuesday, etc.
+              Configure sites (clients).
             </p>
           </div>
           <OptionsManager
@@ -33,7 +33,6 @@ export default async function SitesAdminPage() {
             title="Sites"
             fields={[
               { name: 'name', label: 'Site Name', type: 'text', required: true },
-              { name: 'week_starting_day', label: 'Week Starts On (0=Sun, 1=Mon, etc.)', type: 'number', required: true },
             ]}
           />
         </div>
