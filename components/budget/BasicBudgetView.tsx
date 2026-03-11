@@ -1578,7 +1578,7 @@ export default function BasicBudgetView({
                   const cost = employeePopup.userId && employeePopup.userId !== '_prior' ? hours * getEffectiveRate(employeePopup.userId, we) : 0
                   return { we, hours, cost, timesheetId: d?.timesheetId }
                 })
-                .map(({ we, hours, cost, timesheetId }) => (
+                .map(({ we, hours, cost, timesheetId }: { we: string; hours: number; cost: number; timesheetId?: string }) => (
                   <div key={we} className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-gray-100 dark:border-gray-700">
                     <span>{formatDate(we)}</span>
                     <span className="font-medium">
