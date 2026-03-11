@@ -190,6 +190,8 @@ export async function PATCH(
     prior_hours_billed_rate,
     prior_amount_spent,
     prior_period_notes,
+    weekly_burn,
+    target_end_date,
     changeOrders: changeOrdersPayload,
   } = body
 
@@ -203,7 +205,7 @@ export async function PATCH(
   try {
     if (po_number !== undefined || original_po_amount !== undefined || po_issue_date !== undefined ||
         proposal_number !== undefined || project_name !== undefined || department_id !== undefined ||
-        budget_type !== undefined || client_contact_name !== undefined || prior_hours_billed !== undefined || prior_hours_billed_rate !== undefined || prior_amount_spent !== undefined || prior_period_notes !== undefined) {
+        budget_type !== undefined || client_contact_name !== undefined || prior_hours_billed !== undefined || prior_hours_billed_rate !== undefined || prior_amount_spent !== undefined || prior_period_notes !== undefined || weekly_burn !== undefined || target_end_date !== undefined) {
       const updateData: Record<string, unknown> = {}
       if (po_number !== undefined) updateData.po_number = po_number
       if (original_po_amount !== undefined) updateData.original_po_amount = original_po_amount === '' || original_po_amount == null ? null : parseFloat(String(original_po_amount))
@@ -220,6 +222,8 @@ export async function PATCH(
       if (prior_hours_billed_rate !== undefined) updateData.prior_hours_billed_rate = prior_hours_billed_rate === '' || prior_hours_billed_rate == null ? null : parseFloat(String(prior_hours_billed_rate))
       if (prior_amount_spent !== undefined) updateData.prior_amount_spent = prior_amount_spent === '' || prior_amount_spent == null ? null : parseFloat(String(prior_amount_spent))
       if (prior_period_notes !== undefined) updateData.prior_period_notes = prior_period_notes || null
+      if (weekly_burn !== undefined) updateData.weekly_burn = weekly_burn === '' || weekly_burn == null ? null : parseFloat(String(weekly_burn))
+      if (target_end_date !== undefined) updateData.target_end_date = target_end_date || null
 
       const { error: updateError } = await adminSupabase
         .from('purchase_orders')

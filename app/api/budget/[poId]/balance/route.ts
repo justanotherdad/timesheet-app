@@ -61,6 +61,7 @@ export async function GET(
     : { data: [] }
 
   const hoursByUserWeek: Record<string, Record<string, number>> = {}
+  let lastTimesheetWe: string | null = null
   for (const ts of timesheets || []) {
     const tsEntries = (entries || []).filter((e: any) => e.timesheet_id === ts.id)
     const totalHours = tsEntries.reduce((sum: number, e: any) => {
@@ -72,6 +73,7 @@ export async function GET(
       const we = ts.week_ending
       if (!hoursByUserWeek[uid]) hoursByUserWeek[uid] = {}
       hoursByUserWeek[uid][we] = (hoursByUserWeek[uid][we] || 0) + totalHours
+      if (we && (!lastTimesheetWe || we > lastTimesheetWe)) lastTimesheetWe = we
     }
   }
 
@@ -96,5 +98,5 @@ export async function GET(
   const totalAvailable = original + coTotal
   const budgetBalance = totalAvailable - priorAmountSpent - priorCostFromHours - laborCost
 
-  return NextResponse.json({ balance: runningBalance, budgetBalance })
+  return NextResponse.json({ balance: runningBalance, budgetBalance, lastTimesheetWe })
 }

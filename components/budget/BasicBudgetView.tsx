@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText } from 'lucide-react'
-import { formatDate, formatDateShort, formatPeriodsList } from '@/lib/utils'
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText, Eye } from 'lucide-react'
+import { formatDate, formatDateShort, formatPeriodsList, formatDateForInput } from '@/lib/utils'
+import { addWeeks, parseISO } from 'date-fns'
 import InvoiceFormModal from './InvoiceFormModal'
 import ExpenseFormModal from './ExpenseFormModal'
 import BillRateFormModal from './BillRateFormModal'
@@ -53,7 +54,8 @@ export default function BasicBudgetView({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
   const [showAllMonths, setShowAllMonths] = useState(false)
-  const [employeePopup, setEmployeePopup] = useState<{ userId: string; userName: string; weekData: Record<string, { hours: number; timesheetId: string }> } | null>(null)
+  const [employeePopup, setEmployeePopup] = useState<{ userId: string; userName: string; weekData: Record<string, { hours: number; timesheetId: string }>; mode: 'hours' | 'cost' } | null>(null)
+  const [invoiceDetailPopup, setInvoiceDetailPopup] = useState<any>(null)
   const [invoiceModal, setInvoiceModal] = useState<any>(null)
   const [expenseModal, setExpenseModal] = useState<any>(null)
   const [billRateModal, setBillRateModal] = useState<any>(null)
@@ -62,6 +64,8 @@ export default function BasicBudgetView({
   const [laborCostData, setLaborCostData] = useState<any>(null)
   const [budgetAccessUsers, setBudgetAccessUsers] = useState<Array<{ id: string; name: string }>>([])
   const [budgetAccessModal, setBudgetAccessModal] = useState<'add' | null>(null)
+  const [balanceData, setBalanceData] = useState<{ budgetBalance: number; lastTimesheetWe: string | null } | null>(null)
+  const [budgetHealthForm, setBudgetHealthForm] = useState({ weekly_burn: '', target_end_date: '' })
   const [availableUsers, setAvailableUsers] = useState<Array<{ id: string; name: string }>>([])
   const [editingClientPO, setEditingClientPO] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
@@ -107,6 +111,17 @@ export default function BasicBudgetView({
     } catch { /* ignore */ }
   }, [po.id, user])
 
+  const loadBalance = useCallback(async () => {
+    if (!user || !['manager', 'admin', 'super_admin'].includes(user.profile.role)) return
+    try {
+      const res = await fetch(`/api/budget/${po.id}/balance`, fetchOpts)
+      if (res.ok) {
+        const json = await res.json()
+        setBalanceData({ budgetBalance: json.budgetBalance ?? 0, lastTimesheetWe: json.lastTimesheetWe ?? null })
+      }
+    } catch { /* ignore */ }
+  }, [po.id, user])
+
   const refetch = useCallback(async () => {
     const t = `t=${Date.now()}`
     const [res, coRes, invRes, brRes, laborRes] = await Promise.all([
@@ -131,7 +146,8 @@ export default function BasicBudgetView({
     } else setBillRatesOverride(null)
     if (laborRes.ok) setLaborCostData(await laborRes.json())
     loadBudgetAccess()
-  }, [po.id, loadBudgetAccess])
+    if (user && ['manager', 'admin', 'super_admin'].includes(user.profile.role)) loadBalance()
+  }, [po.id, loadBudgetAccess, loadBalance, user])
 
   useEffect(() => {
     const load = async () => {
@@ -162,10 +178,17 @@ export default function BasicBudgetView({
         } else setBillRatesOverride(null)
         if (laborRes.ok) setLaborCostData(await laborRes.json())
         if (user && ['admin', 'super_admin'].includes(user.profile.role)) {
-          const accRes = await fetch(`/api/budget/${po.id}/budget-access`, fetchOpts)
+          const [accRes, balRes] = await Promise.all([
+            fetch(`/api/budget/${po.id}/budget-access`, fetchOpts),
+            fetch(`/api/budget/${po.id}/balance`, fetchOpts),
+          ])
           if (accRes.ok) {
             const accJson = await accRes.json()
             setBudgetAccessUsers(accJson.users || [])
+          }
+          if (balRes.ok) {
+            const balJson = await balRes.json()
+            setBalanceData({ budgetBalance: balJson.budgetBalance ?? 0, lastTimesheetWe: balJson.lastTimesheetWe ?? null })
           }
         }
       } catch (e) {
@@ -176,6 +199,16 @@ export default function BasicBudgetView({
     }
     load()
   }, [po.id, selectedMonth, showAllMonths, user])
+
+  useEffect(() => {
+    const p = data?.po ?? po
+    if (p) {
+      setBudgetHealthForm({
+        weekly_burn: p.weekly_burn != null ? String(p.weekly_burn) : '',
+        target_end_date: p.target_end_date ? formatDateForInput(p.target_end_date) : '',
+      })
+    }
+  }, [data?.po, po])
 
   if (loading && !data) {
     return (
@@ -633,101 +666,182 @@ export default function BasicBudgetView({
         </div>
       </div>
 
-      {/* 1b. Budget Access (admin only) */}
+      {/* 1b. Budget Access (left) + Budget Health (right) — 2-column row, admin only */}
       {isAdmin && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Budget Access</h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Grant access to this PO budget for users with a profile.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Budget Access — left */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Budget Access</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Grant access to this PO budget for users with a profile.</p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  setBudgetAccessModal('add')
+                  try {
+                    const res = await fetch(`/api/budget/${po.id}/budget-access?available=1`, fetchOpts)
+                    if (res.ok) {
+                      const json = await res.json()
+                      setAvailableUsers(json.users || [])
+                    }
+                  } catch { setAvailableUsers([]) }
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+              >
+                <Plus className="h-4 w-4" /> Grant Access
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={async () => {
-                setBudgetAccessModal('add')
-                try {
-                  const res = await fetch(`/api/budget/${po.id}/budget-access?available=1`, fetchOpts)
-                  if (res.ok) {
-                    const json = await res.json()
-                    setAvailableUsers(json.users || [])
-                  }
-                } catch { setAvailableUsers([]) }
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
-            >
-              <Plus className="h-4 w-4" /> Grant Access
-            </button>
-          </div>
-          <div className="space-y-2">
-            {budgetAccessUsers.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400 py-2">No users granted access yet.</p>
-            ) : (
-              <ul className="divide-y divide-gray-200 dark:divide-gray-600">
-                {budgetAccessUsers.map((u) => (
-                  <li key={u.id} className="flex items-center justify-between py-2">
-                    <span className="text-gray-900 dark:text-gray-100">{u.name}</span>
+            <div className="space-y-2">
+              {budgetAccessUsers.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400 py-2">No users granted access yet.</p>
+              ) : (
+                <ul className="divide-y divide-gray-200 dark:divide-gray-600">
+                  {budgetAccessUsers.map((u) => (
+                    <li key={u.id} className="flex items-center justify-between py-2">
+                      <span className="text-gray-900 dark:text-gray-100">{u.name}</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!confirm(`Revoke budget access for ${u.name}?`)) return
+                          await fetch(`/api/budget/${po.id}/budget-access?userId=${u.id}`, { method: 'DELETE', ...fetchOpts })
+                          loadBudgetAccess()
+                        }}
+                        className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                        title="Revoke access"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {budgetAccessModal === 'add' && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setBudgetAccessModal(null)}>
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Grant Budget Access</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Select a user to grant access to this PO budget:</p>
+                  <select
+                    id="budget-access-user-select"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-4"
+                  >
+                    <option value="">— Select user —</option>
+                    {availableUsers
+                      .filter((u) => !budgetAccessUsers.some((a) => a.id === u.id))
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                  </select>
+                  <div className="flex gap-2 justify-end">
+                    <button type="button" onClick={() => setBudgetAccessModal(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700">
+                      Cancel
+                    </button>
                     <button
                       type="button"
                       onClick={async () => {
-                        if (!confirm(`Revoke budget access for ${u.name}?`)) return
-                        await fetch(`/api/budget/${po.id}/budget-access?userId=${u.id}`, { method: 'DELETE', ...fetchOpts })
-                        loadBudgetAccess()
+                        const sel = document.getElementById('budget-access-user-select') as HTMLSelectElement
+                        const userId = sel?.value
+                        if (!userId) return
+                        const res = await fetch(`/api/budget/${po.id}/budget-access`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ userId }),
+                          ...fetchOpts,
+                        })
+                        if (res.ok) {
+                          setBudgetAccessModal(null)
+                          loadBudgetAccess()
+                        }
                       }}
-                      className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                      title="Revoke access"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      Grant Access
                     </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {budgetAccessModal === 'add' && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setBudgetAccessModal(null)}>
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Grant Budget Access</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Select a user to grant access to this PO budget:</p>
-                <select
-                  id="budget-access-user-select"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-4"
-                >
-                  <option value="">— Select user —</option>
-                  {availableUsers
-                    .filter((u) => !budgetAccessUsers.some((a) => a.id === u.id))
-                    .map((u) => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                </select>
-                <div className="flex gap-2 justify-end">
-                  <button type="button" onClick={() => setBudgetAccessModal(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700">
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const sel = document.getElementById('budget-access-user-select') as HTMLSelectElement
-                      const userId = sel?.value
-                      if (!userId) return
-                      const res = await fetch(`/api/budget/${po.id}/budget-access`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId }),
-                        ...fetchOpts,
-                      })
-                      if (res.ok) {
-                        setBudgetAccessModal(null)
-                        loadBudgetAccess()
-                      }
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
-                  >
-                    Grant Access
-                  </button>
+                  </div>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Budget Health — right */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Budget Health</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Weekly burn ($/week)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={budgetHealthForm.weekly_burn}
+                  onChange={(e) => setBudgetHealthForm((f) => ({ ...f, weekly_burn: e.target.value }))}
+                  onBlur={async () => {
+                    if (!canEdit) return
+                    const val = budgetHealthForm.weekly_burn === '' ? null : parseFloat(budgetHealthForm.weekly_burn)
+                    if (val === (poData.weekly_burn ?? null) || (val != null && isNaN(val))) return
+                    try {
+                      const res = await fetch(`/api/budget/${po.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ weekly_burn: val }),
+                        ...fetchOpts,
+                      })
+                      if (res.ok) refetch()
+                    } catch { /* ignore */ }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  placeholder="e.g. 1000"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Last Timesheet WE</label>
+                <p className="text-sm text-gray-900 dark:text-gray-100 py-2">
+                  {balanceData?.lastTimesheetWe ? formatDate(balanceData.lastTimesheetWe) : '—'}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Auto: most recent approved timesheet week ending for this PO.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Target End Date</label>
+                <input
+                  type="date"
+                  value={budgetHealthForm.target_end_date}
+                  onChange={(e) => setBudgetHealthForm((f) => ({ ...f, target_end_date: e.target.value }))}
+                  onBlur={async () => {
+                    if (!canEdit) return
+                    const val = budgetHealthForm.target_end_date || null
+                    if (val === (poData.target_end_date ? formatDateForInput(poData.target_end_date) : null)) return
+                    try {
+                      const res = await fetch(`/api/budget/${po.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ target_end_date: val }),
+                        ...fetchOpts,
+                      })
+                      if (res.ok) refetch()
+                    } catch { /* ignore */ }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Estimated Budget End Date</label>
+                {(() => {
+                  const bb = balanceData?.budgetBalance ?? budgetBalance
+                  const burn = parseFloat(budgetHealthForm.weekly_burn)
+                  const lastWe = balanceData?.lastTimesheetWe
+                  if (!lastWe || !(burn > 0) || bb <= 0) {
+                    return <p className="text-sm text-gray-900 dark:text-gray-100 py-2">—</p>
+                  }
+                  const weeksRemaining = bb / burn
+                  const estDate = addWeeks(parseISO(lastWe), weeksRemaining)
+                  return <p className="text-sm text-gray-900 dark:text-gray-100 py-2">{formatDate(estDate)}</p>
+                })()}
+                <p className="text-xs text-gray-500 dark:text-gray-400">Auto: Last Timesheet WE + (Budget Balance ÷ Weekly burn) weeks.</p>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -840,51 +954,83 @@ export default function BasicBudgetView({
             </button>
           )}
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 dark:border-gray-600">
-              <th className="text-left py-2 px-3 font-medium min-w-[110px]">Date</th>
-              <th className="text-left py-2 px-3 font-medium min-w-[120px]">Invoice #</th>
-              <th className="text-left py-2 px-3 font-medium min-w-[95px]">Period</th>
-              <th className="text-left py-2 px-3 font-medium min-w-[130px]">Payment Received</th>
-              <th className="text-right py-2 px-3 font-medium min-w-[100px]">Amount</th>
-              {hasAnyNotes && <th className="text-left py-2 px-3 font-medium min-w-[140px]">Notes</th>}
-              {isAdmin && <th className="w-20 py-2 px-2"></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.length === 0 ? (
-              <tr><td colSpan={(isAdmin ? 1 : 0) + (hasAnyNotes ? 6 : 5)} className="py-4 text-center text-gray-500">No invoices yet</td></tr>
-            ) : (
-              invoices.map((inv: any) => (
-                <tr key={inv.id} className="border-b border-gray-100 dark:border-gray-700">
-                  <td className="py-2 px-3">{inv.invoice_date ? formatDate(inv.invoice_date) : '—'}</td>
-                  <td className="py-2 px-3">{inv.invoice_number || '—'}</td>
-                  <td className="py-2 px-3">{formatPeriodsList(inv.periods?.length ? inv.periods : (inv.period_month != null && inv.period_year != null ? [{ month: inv.period_month, year: inv.period_year }] : []))}</td>
-                  <td className="py-2 px-3">{inv.payment_received_date ? formatDate(inv.payment_received_date) : '—'}</td>
-                  <td className="text-right py-2 px-3">${(inv.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                  {hasAnyNotes && <td className="py-2 px-3 min-w-0 break-words align-top">{inv.notes || '—'}</td>}
-                  {isAdmin && (
-                    <td className="py-2 px-2">
-                      <div className="flex gap-1">
-                        <button type="button" onClick={() => setInvoiceModal(inv)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Edit"><Pencil className="h-4 w-4" /></button>
-                        <button type="button" onClick={async () => { if (confirm('Delete this invoice?')) { await fetch(`/api/budget/${po.id}/invoices/${inv.id}`, { method: 'DELETE' }); refetch() } }} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Delete"><Trash2 className="h-4 w-4" /></button>
-                      </div>
+        {/* Mobile: condensed table */}
+        <div className="md:hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-600">
+                <th className="text-left py-2 px-2 font-medium">Date</th>
+                <th className="text-left py-2 px-2 font-medium">Invoice #</th>
+                <th className="w-14 py-2 px-1"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.length === 0 ? (
+                <tr><td colSpan={3} className="py-4 text-center text-gray-500">No invoices yet</td></tr>
+              ) : (
+                invoices.map((inv: any) => (
+                  <tr key={inv.id} className="border-b border-gray-100 dark:border-gray-700">
+                    <td className="py-2 px-2">{inv.invoice_date ? formatDate(inv.invoice_date) : '—'}</td>
+                    <td className="py-2 px-2 break-words">{inv.invoice_number || '—'}</td>
+                    <td className="py-2 px-1">
+                      <button type="button" onClick={() => setInvoiceDetailPopup(inv)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="View details"><Eye className="h-4 w-4" /></button>
                     </td>
-                  )}
-                </tr>
-              ))
-            )}
-            <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
-              <td colSpan={(hasAnyNotes ? 5 : 4) + (isAdmin ? 1 : 0)} className="py-2 px-3">Total Invoiced</td>
-              <td className="text-right py-2 px-3">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-            </tr>
-            <tr className="font-semibold bg-green-50 dark:bg-green-900/20">
-              <td colSpan={(hasAnyNotes ? 5 : 4) + (isAdmin ? 1 : 0)} className="py-2 px-3">Running Balance (PO Balance)</td>
-              <td className="text-right py-2 px-3">${runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-            </tr>
-          </tbody>
-        </table>
+                  </tr>
+                ))
+              )}
+              <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50"><td colSpan={2} className="py-2 px-2">Total Invoiced</td><td className="text-right py-2 px-2 font-medium">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td></tr>
+              <tr className="font-semibold bg-green-50 dark:bg-green-900/20"><td colSpan={2} className="py-2 px-2">Running Balance</td><td className="text-right py-2 px-2 font-medium">${runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        {/* Desktop: full table */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-600">
+                <th className="text-left py-2 px-3 font-medium min-w-[110px]">Date</th>
+                <th className="text-left py-2 px-3 font-medium min-w-[120px]">Invoice #</th>
+                <th className="text-left py-2 px-3 font-medium min-w-[95px]">Period</th>
+                <th className="text-left py-2 px-3 font-medium min-w-[130px]">Payment Received</th>
+                <th className="text-right py-2 px-3 font-medium min-w-[100px]">Amount</th>
+                {hasAnyNotes && <th className="text-left py-2 px-3 font-medium min-w-[140px]">Notes</th>}
+                {isAdmin && <th className="w-20 py-2 px-2"></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.length === 0 ? (
+                <tr><td colSpan={(isAdmin ? 1 : 0) + (hasAnyNotes ? 6 : 5)} className="py-4 text-center text-gray-500">No invoices yet</td></tr>
+              ) : (
+                invoices.map((inv: any) => (
+                  <tr key={inv.id} className="border-b border-gray-100 dark:border-gray-700">
+                    <td className="py-2 px-3">{inv.invoice_date ? formatDate(inv.invoice_date) : '—'}</td>
+                    <td className="py-2 px-3">{inv.invoice_number || '—'}</td>
+                    <td className="py-2 px-3">{formatPeriodsList(inv.periods?.length ? inv.periods : (inv.period_month != null && inv.period_year != null ? [{ month: inv.period_month, year: inv.period_year }] : []))}</td>
+                    <td className="py-2 px-3">{inv.payment_received_date ? formatDate(inv.payment_received_date) : '—'}</td>
+                    <td className="text-right py-2 px-3">${(inv.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                    {hasAnyNotes && <td className="py-2 px-3 min-w-0 break-words align-top">{inv.notes || '—'}</td>}
+                    {isAdmin && (
+                      <td className="py-2 px-2">
+                        <div className="flex gap-1">
+                          <button type="button" onClick={() => setInvoiceModal(inv)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Edit"><Pencil className="h-4 w-4" /></button>
+                          <button type="button" onClick={async () => { if (confirm('Delete this invoice?')) { await fetch(`/api/budget/${po.id}/invoices/${inv.id}`, { method: 'DELETE' }); refetch() } }} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+              <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
+                <td colSpan={(hasAnyNotes ? 5 : 4) + (isAdmin ? 1 : 0)} className="py-2 px-3">Total Invoiced</td>
+                <td className="text-right py-2 px-3">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              </tr>
+              <tr className="font-semibold bg-green-50 dark:bg-green-900/20">
+                <td colSpan={(hasAnyNotes ? 5 : 4) + (isAdmin ? 1 : 0)} className="py-2 px-3">Running Balance (PO Balance)</td>
+                <td className="text-right py-2 px-3">${runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
       )}
 
@@ -966,7 +1112,45 @@ export default function BasicBudgetView({
             <span className="text-sm">View all months</span>
           </label>
         </div>
-        <div className="overflow-x-auto">
+        {/* Mobile: condensed table */}
+        <div className="md:hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-600">
+                <th className="text-left py-2 px-2 font-medium">Employee</th>
+                <th className="w-14 py-2 px-1"></th>
+                <th className="text-right py-2 px-2 font-medium">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {priorHoursBilled > 0 && !hasLimitedAccess && (
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-amber-50/50 dark:bg-amber-900/10">
+                  <td className="py-2 px-2 break-words"><span className="font-medium text-amber-800 dark:text-amber-200">Prior period (manual)</span></td>
+                  <td className="py-2 px-1"></td>
+                  <td className="text-right py-2 px-2 font-medium text-amber-700 dark:text-amber-300">{priorHoursBilled.toFixed(2)}</td>
+                </tr>
+              )}
+              {sortedRows.length === 0 && priorHoursBilled === 0 ? (
+                <tr><td colSpan={3} className="py-4 text-center text-gray-500">No billable hours for this period</td></tr>
+              ) : sortedRows.map((r: any) => (
+                <tr key={r.userId} className="border-b border-gray-100 dark:border-gray-700">
+                  <td className="py-2 px-2 break-words"><span className="font-medium">{r.userName}</span></td>
+                  <td className="py-2 px-1"><button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'hours' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"><Eye className="h-4 w-4" /></button></td>
+                  <td className="text-right py-2 px-2 font-medium">{r.rowTotal.toFixed(2)}</td>
+                </tr>
+              ))}
+              {(rows.length > 0 || priorHoursBilled > 0) && (
+                <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
+                  <td className="py-2 px-2">Total</td>
+                  <td className="py-2 px-1"></td>
+                  <td className="text-right py-2 px-2">{displayGrandTotal.toFixed(2)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {/* Desktop: full table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm min-w-[500px]">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-600">
@@ -1015,7 +1199,7 @@ export default function BasicBudgetView({
                     <td className="py-2 sticky left-0 bg-white dark:bg-gray-800">
                       <button
                         type="button"
-                        onClick={() => setEmployeePopup(r)}
+                        onClick={() => setEmployeePopup({ ...r, mode: 'hours' })}
                         className="text-left font-medium text-blue-600 dark:text-blue-400 hover:underline"
                       >
                         {r.userName}
@@ -1025,7 +1209,7 @@ export default function BasicBudgetView({
                       <td key={we} className="text-right py-2">
                         <button
                           type="button"
-                          onClick={() => setEmployeePopup(r)}
+                          onClick={() => setEmployeePopup({ ...r, mode: 'hours' })}
                           className="text-blue-600 dark:text-blue-400 hover:underline"
                         >
                           {(r.weekData[we]?.hours || 0).toFixed(2)}
@@ -1090,7 +1274,61 @@ export default function BasicBudgetView({
             <span className="text-sm">View all months</span>
           </label>
         </div>
-        <div className="overflow-x-auto">
+        {/* Mobile: condensed table */}
+        <div className="md:hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-600">
+                <th className="text-left py-2 px-2 font-medium">Employee</th>
+                <th className="w-14 py-2 px-1"></th>
+                <th className="text-right py-2 px-2 font-medium">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {priorHoursBilled > 0 && !hasLimitedAccess && (
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-amber-50/50 dark:bg-amber-900/10">
+                  <td className="py-2 px-2 break-words"><span className="font-medium text-amber-800 dark:text-amber-200">Prior period (manual)</span></td>
+                  <td className="py-2 px-1"></td>
+                  <td className="text-right py-2 px-2 font-medium text-amber-700 dark:text-amber-300">${(priorHoursBilled * priorHoursBilledRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                </tr>
+              )}
+              {sortedRows.length === 0 && priorHoursBilled === 0 ? (
+                <tr><td colSpan={3} className="py-4 text-center text-gray-500">No billable cost for this period</td></tr>
+              ) : sortedRows.map((r: any) => {
+                const rowCostTotal = weekEndings.reduce((sum: number, we: string) => {
+                  const hours = r.weekData?.[we]?.hours ?? 0
+                  return sum + hours * getEffectiveRate(r.userId, we)
+                }, 0)
+                return (
+                  <tr key={r.userId} className="border-b border-gray-100 dark:border-gray-700">
+                    <td className="py-2 px-2 break-words"><span className="font-medium">{r.userName}</span></td>
+                    <td className="py-2 px-1"><button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'cost' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"><Eye className="h-4 w-4" /></button></td>
+                    <td className="text-right py-2 px-2 font-medium">${rowCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                )
+              })}
+              {(rows.length > 0 || priorHoursBilled > 0) && (
+                <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
+                  <td className="py-2 px-2">Total</td>
+                  <td className="py-2 px-1"></td>
+                  <td className="text-right py-2 px-2">{(() => {
+                    const costColumnTotals: Record<string, number> = {}
+                    for (const we of weekEndings) {
+                      costColumnTotals[we] = sortedRows.reduce((sum: number, r: any) => {
+                        const hours = r.weekData?.[we]?.hours ?? 0
+                        const rate = getEffectiveRate(r.userId, we)
+                        return sum + hours * rate
+                      }, 0)
+                    }
+                    return (Object.values(costColumnTotals).reduce((a, b) => a + b, 0) + priorCostFromHours).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  })()}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {/* Desktop: full table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm min-w-[500px]">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-600">
@@ -1135,7 +1373,7 @@ export default function BasicBudgetView({
                       <td className="py-2 sticky left-0 bg-white dark:bg-gray-800">
                         <button
                           type="button"
-                          onClick={() => setEmployeePopup(r)}
+                          onClick={() => setEmployeePopup({ ...r, mode: 'cost' })}
                           className="text-left font-medium text-blue-600 dark:text-blue-400 hover:underline"
                         >
                           {r.userName}
@@ -1294,28 +1532,61 @@ export default function BasicBudgetView({
         />
       )}
 
+      {/* Invoice detail popup (mobile) */}
+      {invoiceDetailPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setInvoiceDetailPopup(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Invoice Details</h3>
+              <button type="button" onClick={() => setInvoiceDetailPopup(null)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div><span className="text-gray-500 dark:text-gray-400">Date:</span> {invoiceDetailPopup.invoice_date ? formatDate(invoiceDetailPopup.invoice_date) : '—'}</div>
+              <div><span className="text-gray-500 dark:text-gray-400">Invoice #:</span> {invoiceDetailPopup.invoice_number || '—'}</div>
+              <div><span className="text-gray-500 dark:text-gray-400">Period:</span> {formatPeriodsList(invoiceDetailPopup.periods?.length ? invoiceDetailPopup.periods : (invoiceDetailPopup.period_month != null && invoiceDetailPopup.period_year != null ? [{ month: invoiceDetailPopup.period_month, year: invoiceDetailPopup.period_year }] : []))}</div>
+              <div><span className="text-gray-500 dark:text-gray-400">Payment Received:</span> {invoiceDetailPopup.payment_received_date ? formatDate(invoiceDetailPopup.payment_received_date) : '—'}</div>
+              <div><span className="text-gray-500 dark:text-gray-400">Amount:</span> ${(invoiceDetailPopup.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+              {hasAnyNotes && <div><span className="text-gray-500 dark:text-gray-400">Notes:</span> {invoiceDetailPopup.notes || '—'}</div>}
+            </div>
+            {isAdmin && (
+              <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                <button type="button" onClick={() => { setInvoiceModal(invoiceDetailPopup); setInvoiceDetailPopup(null) }} className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-medium">Edit</button>
+                <button type="button" onClick={async () => { if (confirm('Delete this invoice?')) { await fetch(`/api/budget/${po.id}/invoices/${invoiceDetailPopup.id}`, { method: 'DELETE' }); refetch(); setInvoiceDetailPopup(null) } }} className="py-2 px-4 text-red-600 border border-red-300 dark:border-red-700 rounded-lg font-medium">Delete</button>
+              </div>
+            )}
+            <button type="button" onClick={() => setInvoiceDetailPopup(null)} className="mt-4 w-full py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-medium">Close</button>
+          </div>
+        </div>
+      )}
+
       {/* Employee drill-down popup */}
       {employeePopup && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEmployeePopup(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-sm w-full p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{employeePopup.userName}</h3>
               <button type="button" onClick={() => setEmployeePopup(null)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Week endings with hours billed to this PO:</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{(employeePopup.mode || 'hours') === 'cost' ? 'Week endings with cost:' : 'Week endings with hours:'}</p>
             <div className="space-y-2 max-h-60 overflow-y-auto">
-              {Object.entries(employeePopup.weekData)
-                .filter(([, d]) => d.hours > 0)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([we, d]) => (
+              {weekEndings
+                .map((we: string) => {
+                  const d = employeePopup.weekData?.[we]
+                  const hours = d?.hours ?? 0
+                  const cost = employeePopup.userId && employeePopup.userId !== '_prior' ? hours * getEffectiveRate(employeePopup.userId, we) : 0
+                  return { we, hours, cost, timesheetId: d?.timesheetId }
+                })
+                .map(({ we, hours, cost, timesheetId }) => (
                   <div key={we} className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-gray-100 dark:border-gray-700">
                     <span>{formatDate(we)}</span>
-                    <span className="font-medium">{d.hours.toFixed(2)} hrs</span>
-                    {d.timesheetId && (
+                    <span className="font-medium">
+                      {(employeePopup.mode || 'hours') === 'cost' ? `$${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${hours.toFixed(2)} hrs`}
+                    </span>
+                    {timesheetId && (employeePopup.mode || 'hours') === 'hours' && (
                       <Link
-                        href={`/dashboard/timesheets/${d.timesheetId}`}
+                        href={`/dashboard/timesheets/${timesheetId}`}
                         className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 text-sm shrink-0"
                       >
                         View timesheet <ExternalLink className="h-3 w-3" />
