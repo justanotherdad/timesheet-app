@@ -70,10 +70,10 @@ export default async function UsersAdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
       <Header title="Manage Users" showBack backUrl="/dashboard" user={user} />
-      <div className="flex-1 min-h-0 w-full px-4 py-4 md:px-6 lg:px-8 overflow-hidden">
-        <div className="w-full max-w-[1920px] mx-auto h-full flex flex-col min-h-0">
+      <div className="flex-1 min-h-0 w-full px-4 py-4 md:px-6 lg:px-8 flex flex-col overflow-hidden">
+        <div className="w-full max-w-[1920px] mx-auto flex-1 flex flex-col min-h-0 overflow-hidden">
           <UserManagement 
             users={users} 
             lookupUsers={allUsers}

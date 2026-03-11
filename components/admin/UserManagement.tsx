@@ -516,7 +516,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 w-full flex flex-col min-h-0 flex-1">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 w-full flex flex-col min-h-0 flex-1 overflow-hidden">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Users</h2>
         {canAddUser && (
@@ -811,7 +811,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         </form>
       )}
 
-      <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0 overflow-hidden">
         {/* Left: Filter / Search */}
         <div className="md:w-56 shrink-0 space-y-4 md:overflow-y-auto md:max-h-full">
           <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600 md:max-h-[calc(100vh-14rem)] overflow-y-auto">
