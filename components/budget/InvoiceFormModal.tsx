@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { X, Plus, Minus } from 'lucide-react'
 import { formatDateForInput, isValidDateInputValue } from '@/lib/utils'
+import { format, parseISO } from 'date-fns'
 
 type PeriodEntry = { month: number; year: number }
 
@@ -15,6 +16,30 @@ function getInitialPeriods(invoice?: any): PeriodEntry[] {
   return [{ month: m, year: y }]
 }
 
+type PaymentReceivedDate = { month: number; day: number; year: number } | null
+
+function parsePaymentReceivedDate(val: string | null | undefined): PaymentReceivedDate {
+  if (!val || typeof val !== 'string') return null
+  try {
+    const d = parseISO(val)
+    if (isNaN(d.getTime())) return null
+    return { month: d.getMonth() + 1, day: d.getDate(), year: d.getFullYear() }
+  } catch {
+    return null
+  }
+}
+
+function toYyyyMmDd(d: PaymentReceivedDate): string | null {
+  if (!d || !d.month || !d.day || !d.year) return null
+  const dt = new Date(d.year, d.month - 1, d.day)
+  if (isNaN(dt.getTime())) return null
+  return format(dt, 'yyyy-MM-dd')
+}
+
+const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+const YEARS = Array.from({ length: 11 }, (_, i) => 2020 + i)
+
 interface InvoiceFormModalProps {
   poId: string
   invoice?: any
@@ -24,7 +49,6 @@ interface InvoiceFormModalProps {
 
 export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: InvoiceFormModalProps) {
   const isEdit = !!invoice
-  const paymentReceivedDateRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
@@ -32,10 +56,9 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
     invoice_number: invoice?.invoice_number || '',
     periods: getInitialPeriods(invoice),
     amount: invoice?.amount != null ? String(invoice.amount) : '',
+    payment_received_date: parsePaymentReceivedDate(invoice?.payment_received_date),
     notes: invoice?.notes || '',
   })
-
-  const initialPaymentReceivedDate = invoice?.payment_received_date ? formatDateForInput(invoice.payment_received_date) : ''
 
   const handleClearPaymentReceivedDate = async () => {
     if (!isEdit || !invoice?.id) return
@@ -51,7 +74,7 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
         const err = await res.json()
         throw new Error(err.error || 'Failed to clear')
       }
-      if (paymentReceivedDateRef.current) paymentReceivedDateRef.current.value = ''
+      setForm((f) => ({ ...f, payment_received_date: null }))
       onSave()
     } catch (e: any) {
       setError(e.message || 'Failed to clear')
@@ -67,13 +90,12 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
     try {
       const url = isEdit ? `/api/budget/${poId}/invoices/${invoice.id}` : `/api/budget/${poId}/invoices`
       const method = isEdit ? 'PATCH' : 'POST'
-      const paymentReceivedVal = paymentReceivedDateRef.current?.value?.trim()
       const body: any = {
         invoice_date: form.invoice_date,
         invoice_number: form.invoice_number || null,
         periods: form.periods.map((p) => ({ month: parseInt(String(p.month), 10), year: parseInt(String(p.year), 10) })),
         amount: parseFloat(String(form.amount)),
-        payment_received_date: paymentReceivedVal || null,
+        payment_received_date: toYyyyMmDd(form.payment_received_date),
         notes: form.notes || null,
       }
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -137,8 +159,25 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Payment Received Date</label>
-            <div className="flex gap-2">
-              <input type="date" ref={paymentReceivedDateRef} defaultValue={initialPaymentReceivedDate} className="flex-1 h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+            <div className="flex gap-2 items-center flex-wrap">
+              <select value={form.payment_received_date?.month ?? ''} onChange={(e) => { const v = e.target.value; const m = v ? parseInt(v, 10) : 0; setForm((f) => ({ ...f, payment_received_date: f.payment_received_date ? { ...f.payment_received_date, month: m || f.payment_received_date.month } : m ? { month: m, day: 1, year: new Date().getFullYear() } : null })) }} className="h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 min-w-[100px]">
+                <option value="">Month</option>
+                {MONTHS.map((m) => (
+                  <option key={m} value={m}>{format(new Date(2000, m - 1), 'MMMM')}</option>
+                ))}
+              </select>
+              <select value={form.payment_received_date?.day ?? ''} onChange={(e) => { const v = e.target.value; const d = v ? parseInt(v, 10) : 0; setForm((f) => ({ ...f, payment_received_date: f.payment_received_date ? { ...f.payment_received_date, day: d || f.payment_received_date.day } : d ? { month: new Date().getMonth() + 1, day: d, year: new Date().getFullYear() } : null })) }} className="h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 w-20">
+                <option value="">Day</option>
+                {DAYS.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+              <select value={form.payment_received_date?.year ?? ''} onChange={(e) => { const v = e.target.value; const y = v ? parseInt(v, 10) : 0; setForm((f) => ({ ...f, payment_received_date: f.payment_received_date ? { ...f.payment_received_date, year: y || f.payment_received_date.year } : y ? { month: new Date().getMonth() + 1, day: 1, year: y } : null })) }} className="h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 w-24">
+                <option value="">Year</option>
+                {YEARS.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
               {isEdit && (
                 <button type="button" onClick={handleClearPaymentReceivedDate} disabled={loading} className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg border border-gray-300 dark:border-gray-600 disabled:opacity-50">
                   Clear

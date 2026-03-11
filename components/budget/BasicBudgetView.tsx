@@ -1028,7 +1028,9 @@ export default function BasicBudgetView({
                   {weekEndings.map((we: string) => (
                     <td key={we} className="text-right py-2 text-amber-700 dark:text-amber-300">—</td>
                   ))}
-                  <td className="text-right py-2 font-medium text-amber-700 dark:text-amber-300">—</td>
+                  <td className="text-right py-2 font-medium text-amber-700 dark:text-amber-300">
+                    ${(priorHoursBilled * priorHoursBilledRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
                 </tr>
               )}
               {rows.length === 0 && priorHoursBilled === 0 ? (
@@ -1073,7 +1075,7 @@ export default function BasicBudgetView({
                     return sum + hours * rate
                   }, 0)
                 }
-                const costGrandTotal = Object.values(costColumnTotals).reduce((a, b) => a + b, 0)
+                const costGrandTotal = Object.values(costColumnTotals).reduce((a, b) => a + b, 0) + priorCostFromHours
                 return (
                   <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
                     <td className="py-2 sticky left-0 bg-gray-50 dark:bg-gray-700/50">Total</td>
