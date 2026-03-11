@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import Link from 'next/link'
 import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3 } from 'lucide-react'
-import { formatWeekEnding, getPreviousWeekEnding, formatDateForInput } from '@/lib/utils'
+import { formatWeekEnding } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 
@@ -20,33 +20,32 @@ export default async function DashboardPage() {
   }
 
   const supabase = await createClient()
-  const weekEnding = getPreviousWeekEnding()
-  const weekEndingStr = formatDateForInput(weekEnding)
 
-  // Get user's most recent timesheet for previous week (the week that just ended, typically the one to submit)
-  const timesheetResult = await withQueryTimeout(() =>
+  // Get user's 5 most recent timesheets (all statuses including draft), newest first
+  const recentTimesheetsResult = await withQueryTimeout(() =>
     supabase
       .from('weekly_timesheets')
       .select('*')
       .eq('user_id', user.id)
-      .eq('week_ending', weekEndingStr)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .limit(5)
   )
 
-  let timesheet = timesheetResult.data as any
+  let recentTimesheets = (recentTimesheetsResult.data || []) as any[]
 
-  // Auto-approve submitted timesheet if user is final approver with no one above
-  if (timesheet?.status === 'submitted') {
-    const didApprove = await checkAndAutoApproveIfFinal(timesheet.id)
-    if (didApprove) {
-      const { data: refetched } = await supabase
-        .from('weekly_timesheets')
-        .select('*')
-        .eq('id', timesheet.id)
-        .single()
-      timesheet = refetched || timesheet
+  // Auto-approve any submitted timesheet if user is final approver with no one above
+  for (let i = 0; i < recentTimesheets.length; i++) {
+    const ts = recentTimesheets[i]
+    if (ts?.status === 'submitted') {
+      const didApprove = await checkAndAutoApproveIfFinal(ts.id)
+      if (didApprove) {
+        const { data: refetched } = await supabase
+          .from('weekly_timesheets')
+          .select('*')
+          .eq('id', ts.id)
+          .single()
+        recentTimesheets[i] = refetched || ts
+      }
     }
   }
 
@@ -293,45 +292,53 @@ export default async function DashboardPage() {
         <div className={`grid grid-cols-1 gap-4 sm:gap-6 ${['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Timesheet to Submit ({formatWeekEnding(weekEnding)})
+              Most Recent Timesheets
             </h2>
-            {timesheet ? (
-              <div className={`border rounded p-3 ${
-                timesheet.status === 'rejected' ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20' :
-                timesheet.status === 'approved' ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20' :
-                timesheet.status === 'submitted' ? 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20' :
-                'border-gray-200 dark:border-gray-700'
-              }`}>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      {timesheet.status === 'approved' && <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />}
-                      {timesheet.status === 'rejected' && <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />}
-                      {timesheet.status === 'submitted' && <Clock className="h-5 w-5 text-orange-600 flex-shrink-0" />}
-                      <span className={`font-medium capitalize ${
-                        timesheet.status === 'rejected' ? 'text-red-800 dark:text-red-300' :
-                        timesheet.status === 'approved' ? 'text-green-800 dark:text-green-300' :
-                        timesheet.status === 'submitted' ? 'text-orange-800 dark:text-orange-300' :
-                        'text-gray-900 dark:text-gray-100'
-                      }`}>
-                        {timesheet.status}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-0.5">
-                      Created {new Date(timesheet.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <Link
-                    href={`/dashboard/timesheets/${timesheet.id}?returnTo=${encodeURIComponent('/dashboard')}`}
-                    className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+            {recentTimesheets.length > 0 ? (
+              <div className="space-y-2">
+                {recentTimesheets.map((ts: any) => (
+                  <div
+                    key={ts.id}
+                    className={`border rounded p-3 ${
+                      ts.status === 'rejected' ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20' :
+                      ts.status === 'approved' ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20' :
+                      ts.status === 'submitted' ? 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20' :
+                      'border-gray-200 dark:border-gray-700'
+                    }`}
                   >
-                    View →
-                  </Link>
-                </div>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          {ts.status === 'approved' && <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />}
+                          {ts.status === 'rejected' && <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />}
+                          {ts.status === 'submitted' && <Clock className="h-5 w-5 text-orange-600 flex-shrink-0" />}
+                          {ts.status === 'draft' && <FileText className="h-5 w-5 text-gray-500 flex-shrink-0" />}
+                          <span className={`font-medium capitalize ${
+                            ts.status === 'rejected' ? 'text-red-800 dark:text-red-300' :
+                            ts.status === 'approved' ? 'text-green-800 dark:text-green-300' :
+                            ts.status === 'submitted' ? 'text-orange-800 dark:text-orange-300' :
+                            'text-gray-900 dark:text-gray-100'
+                          }`}>
+                            {ts.status}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-0.5">
+                          Week Ending {formatWeekEnding(ts.week_ending)} · Created {new Date(ts.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard')}`}
+                        className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                      >
+                        View →
+                      </Link>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <div>
-                <p className="text-gray-500 dark:text-gray-400 mb-2">No timesheet for this week yet.</p>
+                <p className="text-gray-500 dark:text-gray-400 mb-2">No timesheets yet.</p>
                 <Link
                   href="/dashboard/timesheets/new"
                   className="text-blue-600 hover:text-blue-700 text-sm font-medium"

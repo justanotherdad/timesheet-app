@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import SearchableSelect from './SearchableSelect'
 import SystemInput from './SystemInput'
 import DeleteTimesheetButton from './DeleteTimesheetButton'
-import { getWeekDates, formatDate, formatDateShort, formatDateForInput } from '@/lib/utils'
+import { getWeekDates, formatDate, formatDateShort, formatDateForInput, formatHours } from '@/lib/utils'
 import { format } from 'date-fns'
 import { Plus, Trash2, Edit2, X } from 'lucide-react'
 
@@ -656,11 +656,11 @@ export default function WeeklyTimesheetForm({
                     </td>
                     {days.map((day) => (
                       <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm text-gray-900 dark:text-gray-100">
-                        {(entry[`${day}_hours`] || 0).toFixed(2)}
+                        {formatHours(entry[`${day}_hours`])}
                       </td>
                     ))}
                     <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center font-medium text-sm text-gray-900 dark:text-gray-100">
-                      {calculateTotal(entry).toFixed(2)}
+                      {formatHours(calculateTotal(entry))}
                     </td>
                     <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center">
                       <button
@@ -680,11 +680,11 @@ export default function WeeklyTimesheetForm({
                   <td colSpan={7} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
                   {days.map((day) => (
                     <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-gray-900 dark:text-gray-100">
-                      {getBillableSubtotal(day).toFixed(2)}
+                      {formatHours(getBillableSubtotal(day))}
                     </td>
                   ))}
                   <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-gray-900 dark:text-gray-100">
-                    {billableEntries.reduce((sum, e) => sum + calculateTotal(e), 0).toFixed(2)}
+                    {formatHours(billableEntries.reduce((sum, e) => sum + calculateTotal(e), 0))}
                   </td>
                   <td className="border border-gray-300 dark:border-gray-600 px-2 py-2"></td>
                 </tr>
@@ -729,7 +729,7 @@ export default function WeeklyTimesheetForm({
                       <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2">
                         <input
                           type="number"
-                          step="0.01"
+                          step="0.25"
                           min="0"
                           max="24"
                           value={entry[`${day}_hours`] || ''}
@@ -739,7 +739,7 @@ export default function WeeklyTimesheetForm({
                       </td>
                     ))}
                     <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center font-medium text-gray-900 dark:text-gray-100">
-                      {calculateTotal(entry).toFixed(2)}
+                      {formatHours(calculateTotal(entry))}
                     </td>
                   </tr>
                 ))}
@@ -749,11 +749,11 @@ export default function WeeklyTimesheetForm({
                   <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
                   {days.map((day) => (
                     <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-gray-900 dark:text-gray-100">
-                      {getUnbillableSubtotal(day).toFixed(2)}
+                      {formatHours(getUnbillableSubtotal(day))}
                     </td>
                   ))}
                   <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-gray-900 dark:text-gray-100">
-                    {unbillableEntries.reduce((sum, e) => sum + calculateTotal(e), 0).toFixed(2)}
+                    {formatHours(unbillableEntries.reduce((sum, e) => sum + calculateTotal(e), 0))}
                   </td>
                 </tr>
               </tbody>
@@ -765,7 +765,7 @@ export default function WeeklyTimesheetForm({
         <div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-lg">
           <div className="flex justify-between items-center">
             <span className="text-lg font-bold text-gray-900 dark:text-gray-100">GRAND TOTAL</span>
-            <span className="text-lg font-bold text-gray-900 dark:text-gray-100">{getGrandTotal().toFixed(2)}</span>
+            <span className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatHours(getGrandTotal())}</span>
           </div>
         </div>
 
@@ -984,7 +984,7 @@ export default function WeeklyTimesheetForm({
                       </label>
                       <input
                         type="number"
-                        step="0.01"
+                        step="0.25"
                         min="0"
                         max="24"
                         value={editingEntry[`${day}_hours`] || ''}

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText, Eye } from 'lucide-react'
-import { formatDate, formatDateShort, formatPeriodsList, formatDateForInput } from '@/lib/utils'
+import { formatDate, formatDateShort, formatPeriodsList, formatDateForInput, formatHours } from '@/lib/utils'
 import { addWeeks, parseISO } from 'date-fns'
 import InvoiceFormModal from './InvoiceFormModal'
 import ExpenseFormModal from './ExpenseFormModal'
@@ -1155,7 +1155,7 @@ export default function BasicBudgetView({
                 <tr className="border-b border-gray-100 dark:border-gray-700 bg-amber-50/50 dark:bg-amber-900/10">
                   <td className="py-2 px-2 break-words"><span className="font-medium text-amber-800 dark:text-amber-200">Prior period (manual)</span></td>
                   <td className="py-2 px-1"></td>
-                  <td className="text-right py-2 px-2 font-medium text-amber-700 dark:text-amber-300">{priorHoursBilled.toFixed(2)}</td>
+                  <td className="text-right py-2 px-2 font-medium text-amber-700 dark:text-amber-300">{formatHours(priorHoursBilled)}</td>
                 </tr>
               )}
               {sortedRows.length === 0 && priorHoursBilled === 0 ? (
@@ -1164,14 +1164,14 @@ export default function BasicBudgetView({
                 <tr key={r.userId} className="border-b border-gray-100 dark:border-gray-700">
                   <td className="py-2 px-2 break-words"><span className="font-medium">{r.userName}</span></td>
                   <td className="py-2 px-1"><button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'hours' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="View hours by week"><Eye className="h-4 w-4" /></button></td>
-                  <td className="text-right py-2 px-2 font-medium">{r.rowTotal.toFixed(2)}</td>
+                  <td className="text-right py-2 px-2 font-medium">{formatHours(r.rowTotal)}</td>
                 </tr>
               ))}
               {(rows.length > 0 || priorHoursBilled > 0) && (
                 <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
                   <td className="py-2 px-2">Total</td>
                   <td className="py-2 px-1"></td>
-                  <td className="text-right py-2 px-2">{displayGrandTotal.toFixed(2)}</td>
+                  <td className="text-right py-2 px-2">{formatHours(displayGrandTotal)}</td>
                 </tr>
               )}
             </tbody>
@@ -1213,7 +1213,7 @@ export default function BasicBudgetView({
                   {weekEndings.map((we: string) => (
                     <td key={we} className="text-right py-2 text-amber-700 dark:text-amber-300">—</td>
                   ))}
-                  <td className="text-right py-2 font-medium text-amber-700 dark:text-amber-300">{priorHoursBilled.toFixed(2)}</td>
+                  <td className="text-right py-2 font-medium text-amber-700 dark:text-amber-300">{formatHours(priorHoursBilled)}</td>
                 </tr>
               )}
               {(rows.length === 0 && priorHoursBilled === 0) || (hasLimitedAccess && sortedRows.length === 0) ? (
@@ -1240,11 +1240,11 @@ export default function BasicBudgetView({
                           onClick={() => setEmployeePopup({ ...r, mode: 'hours' })}
                           className="text-blue-600 dark:text-blue-400 hover:underline"
                         >
-                          {(r.weekData[we]?.hours || 0).toFixed(2)}
+                          {formatHours(r.weekData[we]?.hours)}
                         </button>
                       </td>
                     ))}
-                    <td className="text-right py-2 font-medium">{r.rowTotal.toFixed(2)}</td>
+                    <td className="text-right py-2 font-medium">{formatHours(r.rowTotal)}</td>
                   </tr>
                 ))
               ) : null}
@@ -1252,9 +1252,9 @@ export default function BasicBudgetView({
                 <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
                   <td className="py-2 sticky left-0 bg-gray-50 dark:bg-gray-700/50">Total</td>
                   {weekEndings.map((we: string) => (
-                    <td key={we} className="text-right py-2">{displayColumnTotals[we]?.toFixed(2) || '0.00'}</td>
+                    <td key={we} className="text-right py-2">{formatHours(displayColumnTotals[we])}</td>
                   ))}
-                  <td className="text-right py-2">{displayGrandTotal.toFixed(2)}</td>
+                  <td className="text-right py-2">{formatHours(displayGrandTotal)}</td>
                 </tr>
               )}
             </tbody>
@@ -1317,7 +1317,7 @@ export default function BasicBudgetView({
                 <tr className="border-b border-gray-100 dark:border-gray-700 bg-amber-50/50 dark:bg-amber-900/10">
                   <td className="py-2 px-2 break-words"><span className="font-medium text-amber-800 dark:text-amber-200">Prior period (manual)</span></td>
                   <td className="py-2 px-1"></td>
-                  <td className="text-right py-2 px-2 font-medium text-amber-700 dark:text-amber-300">${(priorHoursBilled * priorHoursBilledRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td className="text-right py-2 px-2 font-medium text-amber-700 dark:text-amber-300">{(priorHoursBilled * priorHoursBilledRate) === 0 ? '—' : `$${(priorHoursBilled * priorHoursBilledRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</td>
                 </tr>
               )}
               {sortedRows.length === 0 && priorHoursBilled === 0 ? (
@@ -1331,7 +1331,7 @@ export default function BasicBudgetView({
                   <tr key={r.userId} className="border-b border-gray-100 dark:border-gray-700">
                     <td className="py-2 px-2 break-words"><span className="font-medium">{r.userName}</span></td>
                     <td className="py-2 px-1"><button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'cost' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="View cost by week"><Eye className="h-4 w-4" /></button></td>
-                    <td className="text-right py-2 px-2 font-medium">${rowCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="text-right py-2 px-2 font-medium">{rowCostTotal === 0 ? '—' : `$${rowCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</td>
                   </tr>
                 )
               })}
@@ -1348,7 +1348,8 @@ export default function BasicBudgetView({
                         return sum + hours * rate
                       }, 0)
                     }
-                    return (Object.values(costColumnTotals).reduce((a, b) => a + b, 0) + priorCostFromHours).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    const tot = Object.values(costColumnTotals).reduce((a, b) => a + b, 0) + priorCostFromHours
+                    return tot === 0 ? '—' : `$${tot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                   })()}</td>
                 </tr>
               )}
@@ -1380,7 +1381,7 @@ export default function BasicBudgetView({
                     <td key={we} className="text-right py-2 text-amber-700 dark:text-amber-300">—</td>
                   ))}
                   <td className="text-right py-2 font-medium text-amber-700 dark:text-amber-300">
-                    ${(priorHoursBilled * priorHoursBilledRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {(priorHoursBilled * priorHoursBilledRate) === 0 ? '—' : `$${(priorHoursBilled * priorHoursBilledRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </td>
                 </tr>
               )}
@@ -1409,10 +1410,10 @@ export default function BasicBudgetView({
                       </td>
                       {costCells.map((cost: number, i: number) => (
                         <td key={weekEndings[i]} className="text-right py-2">
-                          ${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {cost === 0 ? '—' : `$${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                         </td>
                       ))}
-                      <td className="text-right py-2 font-medium">${rowCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="text-right py-2 font-medium">{rowCostTotal === 0 ? '—' : `$${rowCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</td>
                     </tr>
                   )
                 })
@@ -1431,9 +1432,9 @@ export default function BasicBudgetView({
                   <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
                     <td className="py-2 sticky left-0 bg-gray-50 dark:bg-gray-700/50">Total</td>
                     {weekEndings.map((we: string) => (
-                      <td key={we} className="text-right py-2">${(costColumnTotals[we] || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td key={we} className="text-right py-2">{(costColumnTotals[we] || 0) === 0 ? '—' : `$${(costColumnTotals[we] || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</td>
                     ))}
-                    <td className="text-right py-2">${costGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="text-right py-2">{costGrandTotal === 0 ? '—' : `$${costGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</td>
                   </tr>
                 )
               })()}
@@ -1610,7 +1611,7 @@ export default function BasicBudgetView({
                   <div key={we} className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-gray-100 dark:border-gray-700">
                     <span>{formatDate(we)}</span>
                     <span className="font-medium">
-                      {(employeePopup.mode || 'hours') === 'cost' ? `$${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${hours.toFixed(2)} hrs`}
+                      {(employeePopup.mode || 'hours') === 'cost' ? (cost === 0 ? '—' : `$${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`) : (hours === 0 ? '—' : `${formatHours(hours)} hrs`)}
                     </span>
                     {timesheetId && (employeePopup.mode || 'hours') === 'hours' && (
                       <Link

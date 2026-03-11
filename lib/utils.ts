@@ -14,6 +14,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** Format hours for display: show "—" when 0, else "X.XX" */
+export function formatHours(val: number | null | undefined): string {
+  if (val == null || val === 0) return '—'
+  return val.toFixed(2)
+}
+
 export function getWeekEnding(date?: Date, weekStartsOn: number = 1): Date {
   const ref = date ?? getNowInAppTz()
   return endOfWeek(ref, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })
