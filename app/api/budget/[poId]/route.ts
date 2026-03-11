@@ -53,8 +53,8 @@ export async function GET(
   }
 
   const changeOrdersQuery = adminSupabase
-    ? adminSupabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: false })
-    : supabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: false })
+    ? adminSupabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: true })
+    : supabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: true })
 
   const invoicesQuery = adminSupabase
     ? adminSupabase.from('po_invoices').select('*').eq('po_id', poId).order('invoice_date', { ascending: true })
@@ -79,7 +79,7 @@ export async function GET(
 
   let changeOrders = changeOrdersRes.data || []
   if (changeOrdersRes.error && adminSupabase) {
-    const { data: fallback } = await supabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: false })
+    const { data: fallback } = await supabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: true })
     changeOrders = fallback || []
   }
   let invoices = invoicesRes.data || []

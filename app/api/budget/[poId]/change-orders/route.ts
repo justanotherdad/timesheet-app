@@ -31,7 +31,7 @@ export async function GET(
       .from('po_change_orders')
       .select('*')
       .eq('po_id', poId)
-      .order('co_date', { ascending: false })
+      .order('co_date', { ascending: true })
     data = res.data
     err = res.error
   } catch (e) {
@@ -43,7 +43,7 @@ export async function GET(
       .from('po_change_orders')
       .select('*')
       .eq('po_id', poId)
-      .order('co_date', { ascending: false })
+      .order('co_date', { ascending: true })
     return NextResponse.json(fallback || [])
   }
 
