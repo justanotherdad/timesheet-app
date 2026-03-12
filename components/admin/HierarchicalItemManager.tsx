@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -78,6 +78,13 @@ export default function HierarchicalItemManager({
   const [bulkRemovePOs, setBulkRemovePOs] = useState<string[]>([])
   const [sortColumn, setSortColumn] = useState<string>('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  // Import CSV modal state (multi-step popup)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importStep, setImportStep] = useState<1 | 2 | 3>(1)
+  const [importSelectedDepartments, setImportSelectedDepartments] = useState<string[]>([])
+  const [importSelectedPOs, setImportSelectedPOs] = useState<string[]>([])
+  const [importApplyAllDepts, setImportApplyAllDepts] = useState(false)
+  const [importApplyAllPOs, setImportApplyAllPOs] = useState(false)
   const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -716,11 +723,14 @@ export default function HierarchicalItemManager({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.map(i => i.id).join(','), selectedSite])
 
-  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+  const handleExcelImport = async (
+    file: File,
+    deptIds: string[],
+    poIds: string[]
+  ): Promise<boolean> => {
     if (!file || !selectedSite) {
       setError('Please select a site first')
-      return
+      return false
     }
 
     const text = await file.text()
@@ -777,17 +787,17 @@ export default function HierarchicalItemManager({
 
       // Then insert into junction tables if departments/POs are selected
       const junctionTables = getJunctionTableNames()
-      if (selectedDepartments.length > 0 || selectedPOs.length > 0) {
+      if (deptIds.length > 0 || poIds.length > 0) {
         const junctionInserts: any[] = []
         
         insertedItems?.forEach((item: any) => {
-          selectedDepartments.forEach(deptId => {
+          deptIds.forEach(deptId => {
             junctionInserts.push({
               [junctionTables.itemIdColumn]: item.id,
               department_id: deptId
             })
           })
-          selectedPOs.forEach(poId => {
+          poIds.forEach(poId => {
             junctionInserts.push({
               [junctionTables.itemIdColumn]: item.id,
               purchase_order_id: poId
@@ -815,9 +825,21 @@ export default function HierarchicalItemManager({
       setTimeout(() => setSuccess(null), 5000)
     } catch (err: any) {
       setError(err.message || 'Failed to import items')
+      throw err
     } finally {
       setLoading(false)
-      e.target.value = ''
+    }
+  }
+
+  const handleExcelImportFromModal = async (file: File) => {
+    const deptIds = importApplyAllDepts ? allDepartments.map(d => d.id) : importSelectedDepartments
+    const poIds = importApplyAllPOs ? allPurchaseOrders.map(p => p.id) : importSelectedPOs
+    try {
+      await handleExcelImport(file, deptIds, poIds)
+      setShowImportModal(false)
+      setImportStep(1)
+    } catch {
+      // Error already shown via setError; keep modal open so user can retry
     }
   }
 
@@ -860,93 +882,156 @@ export default function HierarchicalItemManager({
         <>
           {!readOnly && (
           <>
-            {/* CSV Import Section with Department/PO Selection */}
-            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Import CSV</h3>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mb-4 space-y-2">
-              <p><strong>CSV format:</strong> Use a .csv file (filename does not matter). First row must be a header row with column names. One required column for the {itemName.toLowerCase()} name—use a header that includes &quot;name&quot;, &quot;{itemName.toLowerCase()}&quot;, &quot;item&quot;, or &quot;title&quot; (e.g. <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Name</code> or <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Deliverable</code>). Each following row is one {itemName.toLowerCase()}. Empty rows are skipped.</p>
-              {tableName === 'systems' && (
-                <p>Optional column: <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">description</code> or <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">desc</code>.</p>
-              )}
-              <p className="pt-2">Select departments and/or purchase orders below to assign them to all imported items. This is optional—you can import without assignments and edit items later.</p>
-            </div>
-            
-            {/* Multiple Departments Selection for Import */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Departments (Select Multiple - Optional)
-              </label>
-              <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-800">
-                {allDepartments.length > 0 ? (
-                  allDepartments.map(dept => (
-                    <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedDepartments.includes(dept.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedDepartments([...selectedDepartments, dept.id])
-                          } else {
-                            setSelectedDepartments(selectedDepartments.filter(id => id !== dept.id))
-                          }
-                        }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-900 dark:text-gray-100">{dept.name}</span>
-                    </label>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No departments available for this site</p>
-                )}
-              </div>
-            </div>
-
-            {/* Multiple Purchase Orders Selection for Import */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Purchase Orders (Select Multiple - Optional)
-              </label>
-              <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-800">
-                {allPurchaseOrders.length > 0 ? (
-                  allPurchaseOrders.map(po => (
-                    <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedPOs.includes(po.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedPOs([...selectedPOs, po.id])
-                          } else {
-                            setSelectedPOs(selectedPOs.filter(id => id !== po.id))
-                          }
-                        }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-900 dark:text-gray-100">
-                        {po.po_number} {po.description ? `- ${po.description}` : ''}
-                      </span>
-                    </label>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No purchase orders available for this site</p>
-                )}
-              </div>
-            </div>
-
-            {/* Import Button */}
-            <div>
-              <label className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2 cursor-pointer inline-block">
+            {/* Import CSV Button - opens multi-step modal */}
+            <div className="mb-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportModal(true)
+                  setImportStep(1)
+                  setImportSelectedDepartments([])
+                  setImportSelectedPOs([])
+                  setImportApplyAllDepts(false)
+                  setImportApplyAllPOs(false)
+                }}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2"
+              >
                 <Upload className="h-4 w-4" />
-                Import CSV File
-                <input
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={handleExcelImport}
-                  className="hidden"
-                />
-              </label>
+                Import CSV
+              </button>
             </div>
-          </div>
+
+            {/* Import CSV Modal - Multi-step popup */}
+            {showImportModal && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowImportModal(false)}>
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                  <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Import CSV — Step {importStep} of 3</h3>
+                    <button type="button" onClick={() => setShowImportModal(false)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <div className="p-6 space-y-6">
+                    {/* Step 1: Instructions */}
+                    {importStep === 1 && (
+                      <>
+                        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-3">
+                          <p><strong>CSV format:</strong> Use a .csv file (filename does not matter). First row must be a header row with column names. One required column for the {itemName.toLowerCase()} name—use a header that includes &quot;name&quot;, &quot;{itemName.toLowerCase()}&quot;, &quot;item&quot;, or &quot;title&quot; (e.g. <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Name</code> or <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Deliverable</code>). Each following row is one {itemName.toLowerCase()}. Empty rows are skipped.</p>
+                          {tableName === 'systems' && (
+                            <p>Optional column: <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">description</code> or <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">desc</code>.</p>
+                          )}
+                          <p>In the next step, choose departments and purchase orders to assign to all imported items. You can skip to apply to all, or import without assignments and edit later.</p>
+                        </div>
+                        <div className="flex justify-end">
+                          <button type="button" onClick={() => setImportStep(2)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700">
+                            Next
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Step 2: Departments and POs */}
+                    {importStep === 2 && (
+                      <>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Departments (Select Multiple)</label>
+                            <div className="flex gap-2 mb-2">
+                              <button type="button" onClick={() => { setImportApplyAllDepts(true); setImportSelectedDepartments([]) }} className={`text-sm px-3 py-1.5 rounded-lg ${importApplyAllDepts ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}`}>
+                                Skip — Apply to all
+                              </button>
+                              <button type="button" onClick={() => { setImportApplyAllDepts(false) }} className={`text-sm px-3 py-1.5 rounded-lg ${!importApplyAllDepts ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}`}>
+                                Select specific
+                              </button>
+                            </div>
+                            {!importApplyAllDepts && (
+                              <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-800">
+                                {allDepartments.length > 0 ? (
+                                  allDepartments.map(dept => (
+                                    <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                                      <input type="checkbox" checked={importSelectedDepartments.includes(dept.id)} onChange={(e) => {
+                                        if (e.target.checked) setImportSelectedDepartments([...importSelectedDepartments, dept.id])
+                                        else setImportSelectedDepartments(importSelectedDepartments.filter(id => id !== dept.id))
+                                      }} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                      <span className="text-sm text-gray-900 dark:text-gray-100">{dept.name}</span>
+                                    </label>
+                                  ))
+                                ) : (
+                                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No departments available</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Purchase Orders (Select Multiple)</label>
+                            <div className="flex gap-2 mb-2">
+                              <button type="button" onClick={() => { setImportApplyAllPOs(true); setImportSelectedPOs([]) }} className={`text-sm px-3 py-1.5 rounded-lg ${importApplyAllPOs ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}`}>
+                                Skip — Apply to all
+                              </button>
+                              <button type="button" onClick={() => { setImportApplyAllPOs(false) }} className={`text-sm px-3 py-1.5 rounded-lg ${!importApplyAllPOs ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}`}>
+                                Select specific
+                              </button>
+                            </div>
+                            {!importApplyAllPOs && (
+                              <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-800">
+                                {allPurchaseOrders.length > 0 ? (
+                                  allPurchaseOrders.map(po => (
+                                    <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                                      <input type="checkbox" checked={importSelectedPOs.includes(po.id)} onChange={(e) => {
+                                        if (e.target.checked) setImportSelectedPOs([...importSelectedPOs, po.id])
+                                        else setImportSelectedPOs(importSelectedPOs.filter(id => id !== po.id))
+                                      }} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                      <span className="text-sm text-gray-900 dark:text-gray-100">{po.po_number}{po.description ? ` - ${po.description}` : ''}</span>
+                                    </label>
+                                  ))
+                                ) : (
+                                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">No purchase orders available</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between">
+                          <button type="button" onClick={() => setImportStep(1)} className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
+                            ← Back
+                          </button>
+                          <button type="button" onClick={() => setImportStep(3)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700">
+                            Next
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Step 3: Choose file */}
+                    {importStep === 3 && (
+                      <>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Select your CSV file to import.</p>
+                        <div className="flex justify-between items-center">
+                          <button type="button" onClick={() => setImportStep(2)} className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
+                            ← Back
+                          </button>
+                          <label className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2 cursor-pointer">
+                            <Upload className="h-4 w-4" />
+                            Import CSV File
+                            <input
+                              type="file"
+                              accept=".csv,.xlsx,.xls"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                await handleExcelImportFromModal(file)
+                                e.target.value = ''
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </>
           )}
 
