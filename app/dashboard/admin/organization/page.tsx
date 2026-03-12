@@ -9,15 +9,17 @@ export default async function OrganizationAdminPage() {
   const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
   const supabase = await createClient()
 
-  const [sitesResult, departmentsResult, purchaseOrdersResult] = await Promise.all([
+  const [sitesResult, departmentsResult, purchaseOrdersResult, expenseTypesResult] = await Promise.all([
     withQueryTimeout(() => supabase.from('sites').select('*').order('name')),
     withQueryTimeout(() => supabase.from('departments').select('*').order('name')),
     withQueryTimeout(() => supabase.from('purchase_orders').select('*').order('po_number')),
+    withQueryTimeout(() => supabase.from('po_expense_types').select('*').order('name')),
   ])
 
   let sites = (sitesResult.data || []) as any[]
   let departments = (departmentsResult.data || []) as any[]
   let purchaseOrders = (purchaseOrdersResult.data || []) as any[]
+  const expenseTypes = (expenseTypesResult.data || []) as Array<{ id: string; name: string }>
 
   const role = user.profile.role as 'supervisor' | 'manager' | 'admin' | 'super_admin'
   const accessibleSiteIds = await getAccessibleSiteIds(supabase, user.id, role)
@@ -44,6 +46,7 @@ export default async function OrganizationAdminPage() {
             sites={sites}
             departments={departments}
             purchaseOrders={purchaseOrders}
+            expenseTypes={expenseTypes}
             readOnly={readOnly}
           />
         </div>

@@ -47,8 +47,8 @@ export default async function BudgetPage({
     redirect('/dashboard/budget')
   }
 
-  // Limited view: Supervisor and Employee only (managers see full view when granted)
-  const hasLimitedAccess = ['supervisor', 'employee'].includes(role)
+  // Full view for all users with access: if granted budget access, they see all info (timesheets, hours, expenses, etc.)
+  const hasLimitedAccess = false
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

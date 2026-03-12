@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, FileText, X } from 'lucide-react'
 import SiteDetailView from './SiteDetailView'
+import OptionsManager from './OptionsManager'
 
 interface Site {
   id: string
@@ -42,15 +43,17 @@ interface ConsolidatedManagerProps {
   sites: Site[]
   departments: Department[]
   purchaseOrders: PurchaseOrder[]
+  expenseTypes?: Array<{ id: string; name: string }>
   readOnly?: boolean
 }
 
-type TabType = 'sites' | 'departments' | 'purchase-orders'
+type TabType = 'sites' | 'departments' | 'purchase-orders' | 'expense-types'
 
 export default function ConsolidatedManager({
   sites: initialSites,
   departments: initialDepartments,
   purchaseOrders: initialPOs,
+  expenseTypes: initialExpenseTypes = [],
   readOnly = false,
 }: ConsolidatedManagerProps) {
   const router = useRouter()
@@ -373,6 +376,19 @@ export default function ConsolidatedManager({
           }`}
         >
           Purchase Orders
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('expense-types')
+            setShowAddForm(false)
+          }}
+          className={`px-4 py-2 font-medium ${
+            activeTab === 'expense-types'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+          }`}
+        >
+          Expense Types
         </button>
       </div>
 
@@ -803,6 +819,20 @@ export default function ConsolidatedManager({
             </>
           )}
         </>
+      )}
+
+      {activeTab === 'expense-types' && (
+        <div className="mt-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Predefined expense types appear in the Add Expense dropdown when adding expenses to a PO budget.
+          </p>
+          <OptionsManager
+            options={initialExpenseTypes}
+            tableName="po_expense_types"
+            title="Expense Types"
+            fields={[{ name: 'name', label: 'Name', type: 'text', required: true }]}
+          />
+        </div>
       )}
 
       {/* Site Detail View (Client card + PO cards) */}

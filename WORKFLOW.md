@@ -114,7 +114,7 @@ npm run dev
 git add .
 
 # 2. Commit with a short message describing the change
-git commit -m "adding budgets"
+git commit -m "bug fixes related to budgets and expenses"
 
 # 3. Push to GitHub (triggers Vercel deployment)
 git push

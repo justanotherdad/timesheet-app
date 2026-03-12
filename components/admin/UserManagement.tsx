@@ -603,7 +603,8 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
       )}
 
       {showAddForm && (
-        <form onSubmit={handleAddUser} className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-4">
+        <div className="mb-6 max-h-[calc(100vh-14rem)] overflow-y-auto">
+        <form onSubmit={handleAddUser} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-4">
           <h3 className="font-semibold text-gray-900 dark:text-gray-100">Add New User</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <input
@@ -809,6 +810,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
             </button>
           </div>
         </form>
+        </div>
       )}
 
       <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0 overflow-y-auto md:overflow-hidden">

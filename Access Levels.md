@@ -125,7 +125,7 @@ PO budgets show Client & PO Information, Budget Summary, invoices, billable hour
 ### Who can access
 
 - **Admin / Super Admin:** All POs (full access to view, edit, and grant budget access).
-- **Manager / Supervisor / Employee:** Only POs where an **Admin or Super Admin** has granted them explicit access via the **Budget Access** section on each PO budget. No automatic access based on role or site.
+- **Manager / Supervisor / Employee:** Only POs where an **Admin or Super Admin** has granted them explicit access via the **Budget Access** section on each PO budget. No automatic access based on role or site. When granted access, they see the **full view** (all employee timesheets, hours, expenses, invoices, etc.).
 
 ### Budget Access (Admin only)
 
@@ -133,7 +133,7 @@ On each PO budget, Admins and Super Admins see a **Budget Access** container. Th
 - **Grant access:** Add any user with a profile to view that PO's budget.
 - **Revoke access:** Remove a user from the access list.
 
-Users granted access (e.g. supervisors, employees) see a **limited view:** Client & PO Information, Billable Activities (their own hours only), and Billable Cost (their own cost only). They do not see Budget Summary, Invoice History, Budget Balance, Additional Expenses, or Bill Rates.
+Users granted access see the **full view:** Client & PO Information, Budget Summary, Invoice History, Billable Activities (all employees' hours), Billable Cost, Budget Balance, Additional Expenses, and Bill Rates.
 
 ### Client & PO Information
 
@@ -178,7 +178,7 @@ Managers and Admins can add **bill rates** for any user with a profile—not onl
 
 4. **Employee**
    - No access to Manage Users, Organization, Systems, Activities, Deliverables, Data View, or Export. Only own timesheets and profile.
-   - **Budget Detail:** Can access only POs where an admin has granted them explicit budget access. Supervisors/Employees see limited view (own hours and cost); Managers see full view when granted.
+   - **Budget Detail:** Can access only POs where an admin has granted them explicit budget access. When granted, they see the full view (all timesheets, hours, expenses, invoices, etc.).
 
 ---
 

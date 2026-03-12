@@ -255,7 +255,7 @@ The **Budget Detail** page shows PO-level budgets: client and PO information, bu
 ### 7.1 Who can access Budget Detail
 
 - **Admins and Super Admins:** All POs. Full view and full edit. Can grant or revoke budget access for any user.
-- **Managers, Supervisors, and Employees:** Only POs where an Admin or Super Admin has **granted them budget access**. Managers see the full view; Supervisors and Employees see a **limited view** (see below).
+- **Managers, Supervisors, and Employees:** Only POs where an Admin or Super Admin has **granted them budget access**. When granted, they see the **full view** (all timesheets, hours, expenses, invoices, etc.).
 
 ### 7.2 Opening Budget Detail
 
@@ -274,17 +274,7 @@ The **Budget Detail** page shows PO-level budgets: client and PO information, bu
 - **Additional Expenses** – Travel, equipment, mileage, etc.
 - **Bill Rates by Person** – Hourly rates per employee with effective dates.
 
-### 7.4 Limited view (Supervisors and Employees with granted access)
-
-If an Admin has granted you budget access for a PO, you see only:
-
-- **Client & PO Information** (read-only)
-- **Billable Activities** – Your own hours only
-- **Billable Cost** – Your own cost only
-
-You do not see Budget Summary, Invoice History, Budget Balance, Additional Expenses, or Bill Rates.
-
-### 7.5 Granting budget access (Admins only)
+### 7.4 Granting budget access (Admins only)
 
 1. Open a PO budget.
 2. Find the **Budget Access** section.
@@ -293,7 +283,7 @@ You do not see Budget Summary, Invoice History, Budget Balance, Additional Expen
 5. Click **Grant Access** to add them.
 6. To revoke, click the trash icon next to their name.
 
-### 7.6 Adding bill rates
+### 7.5 Adding bill rates
 
 - **Managers and Admins** can add bill rates for **any user with a profile**—not only those who have logged time to the PO yet.
 1. On a PO budget, find **Bill Rates by Person**.

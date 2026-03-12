@@ -131,7 +131,7 @@ export default function OptionsManager({ options: initialOptions, tableName, tit
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-4">
           {error}
         </div>
       )}
@@ -228,7 +228,7 @@ export default function OptionsManager({ options: initialOptions, tableName, tit
                     name={field.name}
                     defaultValue={editingOption[field.name] || ''}
                     required={field.required}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 placeholder:text-gray-400 dark:placeholder:text-gray-500"
                   />
                 </div>
               ))}
@@ -243,7 +243,7 @@ export default function OptionsManager({ options: initialOptions, tableName, tit
                 <button
                   type="button"
                   onClick={() => setEditingOption(null)}
-                  className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300"
+                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-500"
                 >
                   Cancel
                 </button>

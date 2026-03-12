@@ -352,7 +352,7 @@ function GuideContent() {
           <strong>Admins and Super Admins:</strong> All POs. Full view and full edit. Can grant or revoke budget access for any user.
         </p>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-          <strong>Managers, Supervisors, and Employees:</strong> Only POs where an Admin or Super Admin has <strong>granted them budget access</strong>. Managers see the full view; Supervisors and Employees see a limited view (own hours and cost).
+          <strong>Managers, Supervisors, and Employees:</strong> Only POs where an Admin or Super Admin has <strong>granted them budget access</strong>. When granted, they see the full view (all timesheets, hours, expenses, invoices, etc.).
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">7.2 Opening Budget Detail</h4>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
