@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { getWeekEndingsForMonth } from '@/lib/utils'
 
@@ -44,6 +45,15 @@ export async function GET(
     }
   }
 
+  // Use admin client for timesheet queries so users with budget access see ALL employees' data.
+  // RLS on weekly_timesheets/timesheet_entries would otherwise restrict non-admins to their own rows.
+  let db = supabase
+  try {
+    db = createAdminClient()
+  } catch {
+    // Service role key may be missing; fall back to user client (may be restricted by RLS)
+  }
+
   let startDate: string
   let endDate: string
   let weekEndings: string[] = []
@@ -74,7 +84,7 @@ export async function GET(
   }
 
   if (useAllWeeksInMonth && monthNum && yearNum) {
-    const { data: site } = await supabase
+    const { data: site } = await db
       .from('sites')
       .select('week_starting_day')
       .eq('id', po.site_id)
@@ -83,7 +93,7 @@ export async function GET(
     weekEndings = getWeekEndingsForMonth(yearNum, monthNum, weekStartsOn)
   }
 
-  const { data: timesheets } = await supabase
+  const { data: timesheets } = await db
     .from('weekly_timesheets')
     .select('id, user_id, week_ending')
     .gte('week_ending', startDate)
@@ -92,7 +102,7 @@ export async function GET(
 
   const tsIds = timesheets?.length ? timesheets.map((t: any) => t.id) : []
   const { data: entries } = tsIds.length > 0
-    ? await supabase
+    ? await db
         .from('timesheet_entries')
         .select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
         .eq('po_id', poId)
@@ -129,7 +139,7 @@ export async function GET(
   const userIds = Object.keys(hoursByUserWeek)
 
   const { data: profiles } = userIds.length > 0
-    ? await supabase.from('user_profiles').select('id, name').in('id', userIds)
+    ? await db.from('user_profiles').select('id, name').in('id', userIds)
     : { data: [] }
 
   const profileMap = (profiles || []).reduce((acc: Record<string, string>, p: any) => {
