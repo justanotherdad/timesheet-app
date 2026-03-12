@@ -737,7 +737,7 @@ export default function HierarchicalItemManager({
     const lines = text.split(/\r?\n/).filter(line => line.trim())
     if (lines.length < 2) {
       setError('CSV file must have at least a header row and one data row')
-      return
+      return false
     }
     
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\r$/, ''))
@@ -774,7 +774,7 @@ export default function HierarchicalItemManager({
 
       if (itemsToAdd.length === 0) {
         setError('No valid items found in CSV file')
-        return
+        return false
       }
 
       // Insert items first
@@ -823,6 +823,7 @@ export default function HierarchicalItemManager({
       router.refresh()
       setSuccess(`Successfully imported ${itemsToAdd.length} ${itemName.toLowerCase()}s`)
       setTimeout(() => setSuccess(null), 5000)
+      return true
     } catch (err: any) {
       setError(err.message || 'Failed to import items')
       throw err
