@@ -13,12 +13,12 @@ export default async function Home() {
   try {
     const supabase = await createClient()
     // Add timeout to prevent hanging
-    const { data } = await withTimeout(
+    const result = await withTimeout(
       supabase.auth.getUser(),
       5000,
       'Auth check timed out'
-    )
-    user = data?.user || null
+    ) as { data?: { user?: unknown }; error?: unknown }
+    user = result?.data?.user || null
   } catch (error) {
     // Supabase not available during build or timed out - this is expected
     // User will be null, redirecting to login

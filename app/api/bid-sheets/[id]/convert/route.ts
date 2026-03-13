@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
-import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -159,15 +158,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   await adminSupabase.from('bid_sheets').update({ status: 'converted', converted_po_id: po.id }).eq('id', id)
-
-  logAudit({
-    actorId: user.id,
-    actorName: user.profile?.name,
-    action: 'bid_sheet.convert',
-    entityType: 'bid_sheet',
-    entityId: id,
-    newValues: { bid_sheet_id: id, po_id: po.id, po_number: po.po_number },
-  })
 
   return NextResponse.json({ po_id: po.id, po_number: po.po_number })
 }

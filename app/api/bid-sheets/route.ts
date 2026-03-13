@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { getAccessibleBidSheetIds } from '@/lib/access'
-import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,15 +64,6 @@ export async function POST(req: Request) {
 
   if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 })
   if (!sheet) return NextResponse.json({ error: 'Failed to create bid sheet' }, { status: 500 })
-
-  logAudit({
-    actorId: user.id,
-    actorName: user.profile?.name,
-    action: 'bid_sheet.create',
-    entityType: 'bid_sheet',
-    entityId: sheet.id,
-    newValues: { name: sheet.name, site_id: sheet.site_id, clone_from_id: clone_from_id || null },
-  })
 
   if (clone_from_id) {
     const { data: srcSystems } = await db.from('bid_sheet_systems').select('*').eq('bid_sheet_id', clone_from_id)

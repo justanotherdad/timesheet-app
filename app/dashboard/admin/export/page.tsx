@@ -108,11 +108,11 @@ export default async function AdminExportPage() {
   const departments = departmentsData || []
 
   // Build sites and purchaseOrders for AdminExport
-  const sites = siteIds.map((id: string) => sitesMap[id]).filter(Boolean)
-  const purchaseOrders = (poIds as string[]).map((id: string) => posMap[id]).filter(Boolean)
+  const sites = (siteIds as string[]).map((id) => sitesMap[id]).filter(Boolean)
+  const purchaseOrders = (poIds as string[]).map((id) => posMap[id]).filter(Boolean)
   const systems = [
-    ...systemIdsFromTs.map((id: string) => systemsMap[id]).filter(Boolean),
-    ...customSystemNames.map((name: string) => ({ id: `custom:${name}`, name }))
+    ...(systemIdsFromTs as string[]).map((id) => systemsMap[id]).filter(Boolean),
+    ...(customSystemNames as string[]).map((name) => ({ id: `custom:${name}`, name }))
   ]
 
   // Add site names, PO names, system names to timesheets (all unique per timesheet)

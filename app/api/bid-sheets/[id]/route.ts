@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { getAccessibleBidSheetIds } from '@/lib/access'
-import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,13 +88,5 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { data: sheet } = await db.from('bid_sheets').select('name').eq('id', id).single()
   const { error } = await db.from('bid_sheets').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  logAudit({
-    actorId: user.id,
-    actorName: user.profile?.name,
-    action: 'bid_sheet.delete',
-    entityType: 'bid_sheet',
-    entityId: id,
-    oldValues: { name: sheet?.name },
-  })
   return NextResponse.json({ ok: true })
 }

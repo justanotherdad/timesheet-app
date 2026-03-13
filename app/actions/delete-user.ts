@@ -3,7 +3,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { logAudit } from '@/lib/audit'
 
 export async function deleteUser(userId: string) {
   try {
@@ -63,15 +62,6 @@ export async function deleteUser(userId: string) {
         return { error: deleteError.message || profileError.message || 'Failed to delete user' }
       }
     }
-
-    logAudit({
-      actorId: user.id,
-      actorName: (currentUserProfile as { name?: string })?.name,
-      action: 'user.delete',
-      entityType: 'user',
-      entityId: userId,
-      oldValues: { name: (targetProfile as { name?: string })?.name, email: (targetProfile as { email?: string })?.email },
-    })
 
     revalidatePath('/dashboard/admin/users')
     

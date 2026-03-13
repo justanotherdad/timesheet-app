@@ -3,7 +3,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { logAudit } from '@/lib/audit'
 
 export async function createUser(formData: FormData) {
   try {
@@ -73,7 +72,7 @@ export async function createUser(formData: FormData) {
       return { error: 'Failed to check existing user: ' + listError.message }
     }
     
-    const existingUser = users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
+    const existingUser = users?.find((u: { email?: string | null }) => u.email?.toLowerCase() === email.toLowerCase())
 
     if (existingUser) {
       // User already exists, use their ID
@@ -176,15 +175,6 @@ export async function createUser(formData: FormData) {
     if (profileError) {
       return { error: profileError.message || 'Failed to create user profile' }
     }
-
-    logAudit({
-      actorId: user.id,
-      actorName: (currentUserProfile as { name?: string })?.name,
-      action: isNewUser ? 'user.create' : 'user.update',
-      entityType: 'user',
-      entityId: userId,
-      newValues: { email, name, role: effectiveRole },
-    })
 
     revalidatePath('/dashboard/admin/users')
     

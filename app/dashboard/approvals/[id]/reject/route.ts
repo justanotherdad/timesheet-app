@@ -1,6 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
-import { logAudit } from '@/lib/audit'
 import { NextResponse } from 'next/server'
 
 export async function POST(
@@ -82,16 +81,7 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    logAudit({
-      actorId: user.id,
-      actorName: (user.profile as { name?: string })?.name,
-      action: 'timesheet.reject',
-      entityType: 'timesheet',
-      entityId: id,
-      newValues: { rejection_reason: rejectionReason },
-    })
-
-    // Redirect to rejected page which opens default email client with pre-filled draft
+    // Redirect to rejected page which opens default email client with pre-filled draft which opens default email client with pre-filled draft
     const baseUrl = new URL(request.url).origin
     const queryParams = new URLSearchParams({
       email: ownerProfile?.email || '',

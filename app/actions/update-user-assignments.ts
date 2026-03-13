@@ -3,7 +3,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { logAudit } from '@/lib/audit'
 
 export async function updateUserAssignments(
   userId: string,
@@ -165,17 +164,6 @@ export async function updateUserProfile(
       .eq('id', userId)
 
     if (error) return { error: error.message }
-
-    const action = updates.role !== undefined ? 'user.role_change' : 'user.update'
-    logAudit({
-      actorId: user.id,
-      actorName: (currentUserProfile as { name?: string })?.name,
-      action: action as 'user.update' | 'user.role_change',
-      entityType: 'user',
-      entityId: userId,
-      oldValues: {},
-      newValues: updates,
-    })
 
     revalidatePath('/dashboard/admin/users')
     return { success: true }

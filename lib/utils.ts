@@ -5,6 +5,11 @@ import { toZonedTime } from "date-fns-tz"
 
 const APP_TIMEZONE = 'America/New_York' // EST/EDT
 
+/** Format date in Eastern using Intl (no date-fns-tz, avoids client crashes) */
+function formatInEastern(d: Date, options: Intl.DateTimeFormatOptions): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone: APP_TIMEZONE, ...options }).format(d)
+}
+
 /** Get current date in app timezone (EST) for week calculations */
 function getNowInAppTz(): Date {
   return toZonedTime(new Date(), APP_TIMEZONE)
@@ -65,24 +70,19 @@ export function getWeekDates(weekEnding: Date | string, weekStartsOn: number = 1
   return { start, end, days }
 }
 
-/** Convert date to Eastern (America/New_York) for consistent display */
-function toEastern(d: Date): Date {
-  return toZonedTime(d, APP_TIMEZONE)
-}
-
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return format(toEastern(d), 'MMM d, yyyy')
+  return format(d, 'MMM d, yyyy')
 }
 
 export function formatWeekEnding(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return format(toEastern(d), 'MMM d, yyyy')
+  return format(d, 'MMM d, yyyy')
 }
 
 export function formatDateShort(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return format(toEastern(d), 'M/d/yy')
+  return format(d, 'M/d/yy')
 }
 
 /** Format period month/year as MMM-YYYY (e.g. Jul-2024). month is 1-12. */
@@ -98,14 +98,18 @@ export function formatPeriodsList(periods: { month: number; year: number }[]): s
   return periods.map((p) => formatPeriodMonthYear(p.month, p.year)).join(', ')
 }
 
-/** Format date for HTML date input (yyyy-MM-dd). Returns '' for invalid/empty. Uses Eastern for consistency. */
+/** Format date for HTML date input (yyyy-MM-dd). Returns '' for invalid/empty. Uses Eastern. */
 export function formatDateForInput(date: Date | string | null | undefined): string {
   if (date == null || date === '') return ''
   if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date
   try {
     const d = typeof date === 'string' ? parseISO(date) : date
     if (isNaN(d.getTime())) return ''
-    return format(toEastern(d), 'yyyy-MM-dd')
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: APP_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d)
+    const y = parts.find(p => p.type === 'year')?.value
+    const m = parts.find(p => p.type === 'month')?.value
+    const day = parts.find(p => p.type === 'day')?.value
+    return y && m && day ? `${y}-${m}-${day}` : format(d, 'yyyy-MM-dd')
   } catch {
     return ''
   }
@@ -119,23 +123,19 @@ export function isValidDateInputValue(value: string): boolean {
   return !isNaN(d.getTime())
 }
 
-/** Format date in Eastern time for display (e.g. signatures, exports) */
+/** Format date for display (e.g. signatures, exports). Eastern timezone. */
 export function formatDateInEastern(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return format(toEastern(d), 'MMM d, yyyy')
+  return formatInEastern(d, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-/** Format full date+time in Eastern (e.g. audit log, signatures with time). Returns '—' for null/invalid. Uses Intl for browser compatibility. */
+/** Format full date+time for display. Returns '—' for null/invalid. Eastern timezone. */
 export function formatDateTimeInEastern(date: Date | string | null | undefined): string {
   if (date == null || date === '') return '—'
   try {
     const d = typeof date === 'string' ? parseISO(date) : date
     if (isNaN(d.getTime())) return '—'
-    return new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/New_York',
-      dateStyle: 'medium',
-      timeStyle: 'medium',
-    }).format(d)
+    return formatInEastern(d, { dateStyle: 'medium', timeStyle: 'medium' })
   } catch {
     return '—'
   }

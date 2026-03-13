@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { logAuditEvent } from '@/lib/audit-log'
 import { NextResponse } from 'next/server'
 
 // List of user agents that indicate a preview/bot request
@@ -77,14 +76,6 @@ export async function GET(request: Request) {
     console.log('Code exchange result:', { hasSession: !!data?.session, error: error?.message })
     
     if (!error && data.session) {
-      const user = data.session.user
-      await logAuditEvent(
-        { type: 'invite_accepted', userId: user.id, email: user.email ?? '' },
-        {
-          ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? undefined,
-          userAgent: request.headers.get('user-agent') ?? undefined,
-        }
-      )
       const redirectUrl = new URL(next, request.url)
       return NextResponse.redirect(redirectUrl)
     } else if (error) {

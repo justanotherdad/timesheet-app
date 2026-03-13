@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
-import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -102,14 +101,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (error.code === '23505') return NextResponse.json({ ok: true }) // already granted
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  logAudit({
-    actorId: user.id,
-    actorName: user.profile?.name,
-    action: 'bid_sheet.access.grant',
-    entityType: 'bid_sheet_access',
-    entityId: id,
-    newValues: { bid_sheet_id: id, user_id: userId },
-  })
   return NextResponse.json({ ok: true })
 }
 
@@ -137,13 +128,5 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     .eq('user_id', userId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  logAudit({
-    actorId: user.id,
-    actorName: user.profile?.name,
-    action: 'bid_sheet.access.revoke',
-    entityType: 'bid_sheet_access',
-    entityId: id,
-    oldValues: { bid_sheet_id: id, user_id: userId },
-  })
   return NextResponse.json({ ok: true })
 }

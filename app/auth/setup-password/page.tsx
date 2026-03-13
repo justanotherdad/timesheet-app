@@ -164,7 +164,7 @@ export default function SetupPasswordPage() {
     }
 
     // Listen for Supabase auth state changes (handles automatic session creation from invite links)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: unknown) => {
       console.log('Auth state change:', event, session ? 'Session exists' : 'No session')
       
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {

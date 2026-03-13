@@ -1,6 +1,6 @@
 /**
- * Utility functions for handling timeouts in async operations
- * Helps prevent Cloudflare Error 522 by ensuring operations complete within time limits
+ * Utility functions for handling timeouts in async operations.
+ * Helps prevent Cloudflare Error 522 by ensuring operations complete within time limits.
  */
 
 /**

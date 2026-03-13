@@ -48,8 +48,3 @@ This guide covers manual security configuration and app-level security features.
 - Applied automatically via `next.config.ts`
 - CSP, HSTS, X-Frame-Options, etc.
 
-### Audit Logging
-- Logs auth events to `audit_log` table in Supabase
-- Run migration: `supabase db push` or run `supabase/migrations/20260218_audit_log.sql` in SQL Editor
-- Events: login_success, login_failure, invite_accepted, password_changed
-- Admins can view logs in Supabase Table Editor

@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { logAuditEvent } from '@/lib/audit-log'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
@@ -34,14 +33,6 @@ export async function POST(request: Request) {
   // Clear must_change_password when user sets password (invite/recovery flow)
   const admin = (await import('@/lib/supabase/admin')).createAdminClient()
   await admin.from('user_profiles').update({ must_change_password: false }).eq('id', user.id)
-
-  await logAuditEvent(
-    { type: 'password_changed', userId: user.id, email: user.email ?? '' },
-    {
-      ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim(),
-      userAgent: request.headers.get('user-agent') ?? undefined,
-    }
-  )
 
   return NextResponse.json({ success: true })
 }
