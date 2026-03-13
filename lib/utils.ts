@@ -125,8 +125,18 @@ export function formatDateInEastern(date: Date | string): string {
   return format(toEastern(d), 'MMM d, yyyy')
 }
 
-/** Format full date+time in Eastern (e.g. audit log, signatures with time) */
-export function formatDateTimeInEastern(date: Date | string): string {
-  const d = typeof date === 'string' ? parseISO(date) : date
-  return format(toEastern(d), 'MMM d, yyyy, h:mm:ss a')
+/** Format full date+time in Eastern (e.g. audit log, signatures with time). Returns '—' for null/invalid. Uses Intl for browser compatibility. */
+export function formatDateTimeInEastern(date: Date | string | null | undefined): string {
+  if (date == null || date === '') return '—'
+  try {
+    const d = typeof date === 'string' ? parseISO(date) : date
+    if (isNaN(d.getTime())) return '—'
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      dateStyle: 'medium',
+      timeStyle: 'medium',
+    }).format(d)
+  } catch {
+    return '—'
+  }
 }
