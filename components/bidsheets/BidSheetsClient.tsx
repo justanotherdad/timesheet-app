@@ -217,7 +217,7 @@ export default function BidSheetsClient({
           )}
         </div>
       ) : (
-        <>
+        <div className="contents">
           <div className="mb-4">
             <div className="flex items-center gap-2">
               <Search className="h-4 w-4 text-gray-500 flex-shrink-0" />
@@ -337,6 +337,7 @@ export default function BidSheetsClient({
               ))}
             </tbody>
           </table>
+        </div>
         </div>
       )}
 
