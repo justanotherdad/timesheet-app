@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Plus, Copy, Upload, FileSpreadsheet, X, Pencil, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { formatDate } from '@/lib/utils'
 
 interface BidSheet {
   id: string
@@ -263,7 +264,7 @@ export default function BidSheetsClient({
                     )}
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">Created {new Date(s.created_at).toLocaleDateString()}</p>
+                <p className="text-xs text-gray-500 mt-2">Created {formatDate(s.created_at)}</p>
               </div>
             ))}
           </div>
@@ -304,7 +305,7 @@ export default function BidSheetsClient({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-sm">
-                    {new Date(s.created_at).toLocaleDateString()}
+                    {formatDate(s.created_at)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">

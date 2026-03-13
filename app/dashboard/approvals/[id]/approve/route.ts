@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 import { NextResponse } from 'next/server'
 
 function getSafeReturnTo(request: Request, formData: FormData): string {
@@ -116,6 +117,15 @@ export async function POST(
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
+
+    logAudit({
+      actorId: user.id,
+      actorName: user.profile?.name,
+      action: 'timesheet.approve',
+      entityType: 'timesheet',
+      entityId: id,
+      newValues: { signer_role: signerRole, is_final: isFinalApproval },
+    })
 
     return NextResponse.redirect(new URL(getSafeReturnTo(request, formData), request.url))
   } catch (error: any) {

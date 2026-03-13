@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -138,5 +139,13 @@ export async function DELETE(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+  logAudit({
+    actorId: user.id,
+    actorName: user.profile?.name,
+    action: 'budget.access.revoke',
+    entityType: 'po_budget_access',
+    entityId: poId,
+    oldValues: { purchase_order_id: poId, user_id: userId },
+  })
   return NextResponse.json({ ok: true })
 }

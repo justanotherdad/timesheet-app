@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
-import { formatWeekEnding, getWeekDates } from '@/lib/utils'
+import { formatWeekEnding, getWeekDates, formatDateTimeInEastern } from '@/lib/utils'
 import { format } from 'date-fns'
 import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
@@ -351,7 +351,7 @@ export default async function TimesheetDetailPage({
                         <p className="text-sm text-gray-600 dark:text-gray-300">{sig.signer_name || sig.user_profiles?.name || 'Unknown'}</p>
                       </div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {new Date(sig.signed_at).toLocaleString()}
+                        {formatDateTimeInEastern(sig.signed_at)}
                       </p>
                     </div>
                   ))}

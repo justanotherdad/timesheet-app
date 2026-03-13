@@ -4,8 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import Link from 'next/link'
-import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList } from 'lucide-react'
-import { formatWeekEnding } from '@/lib/utils'
+import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList, Shield } from 'lucide-react'
+import { formatWeekEnding, formatDate } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 
@@ -302,6 +302,22 @@ export default async function DashboardPage() {
               </Link>
               </>
               )}
+          {['admin', 'super_admin'].includes(user.profile.role) && (
+            <Link
+              href="/dashboard/admin/audit-log"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
+            >
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="bg-amber-100 dark:bg-amber-900/30 p-3 rounded-lg">
+                  <Shield className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Audit Log</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">View who did what, when</p>
+                </div>
+              </div>
+            </Link>
+          )}
             </>
           )}
         </div>
@@ -340,7 +356,7 @@ export default async function DashboardPage() {
                           </span>
                         </div>
                         <p className="text-sm text-gray-600 dark:text-gray-300 mt-0.5">
-                          Week Ending {formatWeekEnding(ts.week_ending)} · Created {new Date(ts.created_at).toLocaleDateString()}
+                          Week Ending {formatWeekEnding(ts.week_ending)} · Created {formatDate(ts.created_at)}
                         </p>
                       </div>
                       <Link

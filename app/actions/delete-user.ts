@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { logAudit } from '@/lib/audit'
 
 export async function deleteUser(userId: string) {
   try {
@@ -21,13 +22,19 @@ export async function deleteUser(userId: string) {
     // Check if current user is admin
     const { data: currentUserProfile } = await supabase
       .from('user_profiles')
-      .select('role')
+      .select('role, name')
       .eq('id', user.id)
       .single()
 
     if (!currentUserProfile || !['admin', 'super_admin'].includes(currentUserProfile.role)) {
       return { error: 'Unauthorized: Admin access required' }
     }
+
+    const { data: targetProfile } = await supabase
+      .from('user_profiles')
+      .select('name, email')
+      .eq('id', userId)
+      .single()
 
     // Prevent deleting yourself
     if (user.id === userId) {
@@ -56,6 +63,15 @@ export async function deleteUser(userId: string) {
         return { error: deleteError.message || profileError.message || 'Failed to delete user' }
       }
     }
+
+    logAudit({
+      actorId: user.id,
+      actorName: (currentUserProfile as { name?: string })?.name,
+      action: 'user.delete',
+      entityType: 'user',
+      entityId: userId,
+      oldValues: { name: (targetProfile as { name?: string })?.name, email: (targetProfile as { email?: string })?.email },
+    })
 
     revalidatePath('/dashboard/admin/users')
     

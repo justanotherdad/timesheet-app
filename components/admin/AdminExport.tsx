@@ -465,7 +465,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
         <!DOCTYPE html>
         <html>
           <head>
-            <title>Timesheets Export - ${new Date().toLocaleDateString()}</title>
+            <title>Timesheets Export - ${formatDateInEastern(new Date())}</title>
             <style>
             @page { size: landscape; margin: 0.25in; }
             @media print { @page { size: landscape; margin: 0.25in; } }
