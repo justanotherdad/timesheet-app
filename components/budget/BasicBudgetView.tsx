@@ -74,6 +74,7 @@ export default function BasicBudgetView({
   const [editingBudget, setEditingBudget] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deactivating, setDeactivating] = useState(false)
   const [clientPOForm, setClientPOForm] = useState({
     po_number: '',
     department_id: '',
@@ -423,7 +424,6 @@ export default function BasicBudgetView({
   const inputClass = 'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 text-base'
 
   const isActive = po?.active !== false
-  const [deactivating, setDeactivating] = useState(false)
 
   const handleActiveToggle = async () => {
     if (isActive && !confirm('Deactivate this PO? It will no longer appear in timesheet dropdowns.')) return
