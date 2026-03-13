@@ -4,11 +4,12 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { User, UserRole } from '@/types/database'
-import { Plus, Edit, Trash2, Key, X, ArrowUpDown, ArrowUp, ArrowDown, Search, Eye } from 'lucide-react'
+import { Plus, Edit, Trash2, Key, X, ArrowUpDown, ArrowUp, ArrowDown, Search, Eye, PowerOff } from 'lucide-react'
 import { createUser } from '@/app/actions/create-user'
 import { deleteUser } from '@/app/actions/delete-user'
 import { updateUserAssignments, updateUserProfile } from '@/app/actions/update-user-assignments'
 import { generatePasswordLink } from '@/app/actions/generate-password-link'
+import { setUserPassword } from '@/app/actions/set-user-password'
 
 interface Site {
   id: string
@@ -63,6 +64,10 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
   const [success, setSuccess] = useState<string | null>(null)
   const [invitationLink, setInvitationLink] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showSetPasswordModal, setShowSetPasswordModal] = useState(false)
+  const [setPasswordUser, setSetPasswordUser] = useState<User | null>(null)
+  const [setPasswordLoading, setSetPasswordLoading] = useState(false)
+  const [setPasswordError, setSetPasswordError] = useState<string | null>(null)
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
   
   // Multiple assignment states
@@ -91,6 +96,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
   const [filterSupervisor, setFilterSupervisor] = useState<string>('')
   const [filterFinalApprover, setFilterFinalApprover] = useState<string>('')
   const [filterEmployeeType, setFilterEmployeeType] = useState<string>('')
+  const [filterActive, setFilterActive] = useState<string>('active') // 'all' | 'active' | 'archived'
   
   const assignmentsLoadedRef = useRef(false)
   const supabase = createClient()
@@ -148,6 +154,8 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
       }
       if (roleFilter && u.role !== roleFilter) return false
       if (filterEmployeeType && ((u.employee_type || 'internal') !== filterEmployeeType)) return false
+      if (filterActive === 'active' && (u as any).active === false) return false
+      if (filterActive === 'archived' && (u as any).active !== false) return false
       if (filterSupervisor && u.supervisor_id !== filterSupervisor) return false
       if (filterFinalApprover && u.final_approver_id !== filterFinalApprover) return false
       if (filterSite || filterDepartment || filterPO) {
@@ -494,6 +502,38 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
     }
   }
 
+  const handleSetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!setPasswordUser) return
+    const formData = new FormData(e.currentTarget)
+    const newPassword = formData.get('new_password') as string
+    const confirmPassword = formData.get('confirm_password') as string
+    const requireChange = formData.get('require_change') === 'on'
+    setSetPasswordError(null)
+    if (!newPassword || newPassword.length < 6) {
+      setSetPasswordError('Password must be at least 6 characters')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setSetPasswordError('Passwords do not match')
+      return
+    }
+    setSetPasswordLoading(true)
+    try {
+      const result = await setUserPassword(setPasswordUser.id, newPassword, requireChange)
+      if (result.error) throw new Error(result.error)
+      setSuccess(requireChange ? 'Password set. User must change it on first login.' : 'Password updated successfully.')
+      setShowSetPasswordModal(false)
+      setSetPasswordUser(null)
+      ;(e.target as HTMLFormElement).reset()
+      router.refresh()
+    } catch (err: any) {
+      setSetPasswordError(err.message || 'Failed to set password')
+    } finally {
+      setSetPasswordLoading(false)
+    }
+  }
+
   const handleGeneratePasswordLink = async (email: string, targetUserId?: string) => {
     setError(null)
     setSuccess(null)
@@ -621,6 +661,19 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
               required
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
+            {!assignmentsOnlyEdit && (
+              <div className="space-y-1">
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="Password (min 6 chars)"
+                  minLength={6}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  autoComplete="new-password"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400">User must change on first login. Leave blank to send invite link instead.</p>
+              </div>
+            )}
             {assignmentsOnlyEdit ? (
               <input type="hidden" name="role" value="employee" />
             ) : (
@@ -860,6 +913,18 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                 </select>
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Status</label>
+                <select
+                  value={filterActive}
+                  onChange={(e) => setFilterActive(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
+                  <option value="all">All</option>
+                </select>
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Site</label>
                 <select
                   value={filterSite}
@@ -977,6 +1042,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                   Name <SortIcon column="name" />
                 </button>
               </th>
+              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
               <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 <button type="button" onClick={() => handleSort('role')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
                   Role <SortIcon column="role" />
@@ -1025,6 +1091,11 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
               return (
               <tr key={user.id}>
                 <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 font-medium border-r border-gray-200 dark:border-gray-600 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.3)]">{user.name}</td>
+                <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${(user as any).active === false ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300' : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'}`}>
+                    {(user as any).active === false ? 'Archived' : 'Active'}
+                  </span>
+                </td>
                 <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">{user.role}</td>
                 <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userSites.length > 0 ? userSites.join(', ') : 'N/A'}</td>
                 <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userDepts.length > 0 ? userDepts.join(', ') : 'N/A'}</td>
@@ -1071,6 +1142,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
               <div className="space-y-4">
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Name:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.name}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Email:</span> <span className="text-gray-900 dark:text-gray-100">{editingUser.email}</span></div>
+                <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Status:</span> <span className={`px-2 py-0.5 rounded text-xs font-medium ${(editingUser as any).active === false ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300' : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'}`}>{(editingUser as any).active === false ? 'Archived' : 'Active'}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Role:</span> <span className="text-gray-900 dark:text-gray-100 capitalize">{editingUser.role}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Employee Type:</span> <span className="text-gray-900 dark:text-gray-100 capitalize">{(editingUser as any).employee_type || 'internal'}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Supervisor:</span> <span className="text-gray-900 dark:text-gray-100">{nameLookup.find(u => u.id === editingUser.supervisor_id)?.name || 'N/A'}</span></div>
@@ -1315,6 +1387,49 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                   <Key className="h-4 w-4" />
                   Generate Password Link
                 </button>
+                {!assignmentsOnlyEdit && canEditUser(editingUser) && (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    setSetPasswordUser(editingUser)
+                    setShowSetPasswordModal(true)
+                    setSetPasswordError(null)
+                  }}
+                  className="inline-flex items-center gap-1 bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  <Key className="h-4 w-4" />
+                  Set Password
+                </button>
+                )}
+                {canEditUser(editingUser) && !assignmentsOnlyEdit && currentUserId && editingUser.id !== currentUserId && (
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={async () => {
+                      if (!editingUser) return
+                      const isArchived = (editingUser as any).active === false
+                      if (isArchived && !confirm(`Reactivate ${editingUser.name}? They will regain access to the website.`)) return
+                      if (!isArchived && !confirm(`Deactivate ${editingUser.name}? They will lose access to the website. Admins can still view and reactivate them.`)) return
+                      setLoading(true)
+                      setError(null)
+                      const result = await updateUserProfile(editingUser.id, { active: !isArchived })
+                      if (result?.error) {
+                        setError(result.error)
+                      } else {
+                        setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, active: !isArchived } : u))
+                        setEditingUser({ ...editingUser, active: !isArchived } as any)
+                        setSuccess(isArchived ? 'User reactivated' : 'User deactivated')
+                        setTimeout(() => setSuccess(null), 3000)
+                      }
+                      setLoading(false)
+                    }}
+                    className={`inline-flex items-center gap-1 px-4 py-2 rounded-lg font-semibold disabled:opacity-50 ${(editingUser as any).active === false ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800/50'}`}
+                  >
+                    <PowerOff className="h-4 w-4" />
+                    {(editingUser as any).active === false ? 'Reactivate' : 'Deactivate'}
+                  </button>
+                )}
                 {canDeleteUser && currentUserId && editingUser.id !== currentUserId && (
                   <button
                     type="button"
@@ -1329,6 +1444,67 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
               </div>
             </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {showSetPasswordModal && setPasswordUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4" onClick={() => { setShowSetPasswordModal(false); setSetPasswordUser(null); setSetPasswordError(null) }}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              Set Password for {setPasswordUser.name}
+            </h3>
+            {setPasswordError && (
+              <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-4">
+                {setPasswordError}
+              </div>
+            )}
+            <form onSubmit={handleSetPassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Password</label>
+                <input
+                  type="password"
+                  name="new_password"
+                  minLength={6}
+                  required
+                  placeholder="Min 6 characters"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                  autoComplete="new-password"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Confirm Password</label>
+                <input
+                  type="password"
+                  name="confirm_password"
+                  minLength={6}
+                  required
+                  placeholder="Confirm new password"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                  autoComplete="new-password"
+                />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="require_change" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Require user to change password on first login</span>
+              </label>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={setPasswordLoading}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {setPasswordLoading ? 'Setting...' : 'Set Password'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowSetPasswordModal(false); setSetPasswordUser(null); setSetPasswordError(null) }}
+                  className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

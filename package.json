@@ -3,8 +3,8 @@
   "version": "0.1.2",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbo",
-    "dev:slow": "next dev",
+    "dev": "next dev --webpack",
+    "dev:turbo": "next dev --turbo",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.90.0",
+    "@tanstack/react-virtual": "^3.13.22",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.36.2",
     "clsx": "^2.1.1",

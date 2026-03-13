@@ -99,6 +99,7 @@ export async function updateUserProfile(
     supervisor_id?: string | null
     manager_id?: string | null
     final_approver_id?: string | null
+    active?: boolean
   }
 ) {
   try {
@@ -150,13 +151,16 @@ export async function updateUserProfile(
       if (authError) return { error: authError.message }
     }
 
+    const updatePayload: Record<string, unknown> = {
+      ...profileUpdates,
+      ...(email !== undefined && { email }),
+      ...(employee_type !== undefined && { employee_type: employee_type ?? 'internal' }),
+    }
+    if (updates.active !== undefined) updatePayload.active = updates.active
+
     const { error } = await adminClient
       .from('user_profiles')
-      .update({
-        ...profileUpdates,
-        ...(email !== undefined && { email }),
-        ...(employee_type !== undefined && { employee_type: employee_type ?? 'internal' }),
-      })
+      .update(updatePayload)
       .eq('id', userId)
 
     if (error) return { error: error.message }

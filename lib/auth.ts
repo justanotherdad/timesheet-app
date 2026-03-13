@@ -33,9 +33,12 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       5000
     )
 
-    const profile = profileResult.data as User | null
+    const profile = profileResult.data as (User & { active?: boolean }) | null
 
     if (!profile) return null
+
+    // Deactivated users cannot access the site
+    if (profile.active === false) return null
 
     return {
       id: user.id,

@@ -123,6 +123,33 @@ After pushing, Vercel will build and deploy; usually 2–3 minutes.
 
 ---
 
+## Bid Sheet → Project Flow
+
+1. **Create bid sheet** – Choose client (site), name it.
+2. **Import CSV** – Columns: System_Name, System_Number, Deliverable_Name, Activity_Name, Budgeted_Hours. Systems, deliverables, and activities are created locally for that bid sheet (no site-level setup needed).
+3. **Convert to project** – Creates a Project PO, creates site-level systems/deliverables/activities (or reuses by name), links them to the PO via `*_purchase_orders`, and populates `project_details`. The PO acts as a "timesheet options folder" for that project.
+4. **Deactivate when done** – From Budget Detail, click **Deactivate** on the PO. This sets `purchase_orders.active = false`. Inactive POs and their systems/deliverables/activities are excluded from timesheet dropdowns. Click **Reactivate** to bring them back.
+
+5. **Clone from converted bid sheets** – You can clone from any bid sheet (draft or converted), including those whose project PO is deactivated. Use **Create Bid Sheet → More → Clone from existing** to reuse systems, deliverables, activities, and hours from a past bid.
+
+6. **Delete bid sheet** – Deleting a bid sheet removes its data (matrix, labor, indirect costs). If the bid sheet was converted, the project PO and its budget remain; only the bid sheet record is removed.
+
+---
+
+## Deactivate / Archive
+
+### Purchase Orders
+- **Deactivate** from Budget Detail (Deactivate button on a PO). Archived POs are removed from timesheet dropdowns but remain accessible to admins.
+- **Budget selector**: By default only active POs are shown. Check "Show archived POs" to include archived when selecting a budget.
+- **Reactivate** to bring a PO back to the active list.
+
+### Employees (Users)
+- **Deactivate** from Manage Users (Edit user → Deactivate). Deactivated users cannot log in; admins can still view and manage them.
+- **Filter**: Status dropdown (Active / Archived / All) in the user list.
+- **Reactivate** to restore access; they regain access to their history (unless the profile was fully deleted).
+
+---
+
 ## 🔍 Verify Deployment
 
 After pushing:

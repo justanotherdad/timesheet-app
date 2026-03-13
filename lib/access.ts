@@ -69,3 +69,33 @@ export async function canAccessPoBudget(
     .maybeSingle()
   return !!data
 }
+
+/**
+ * Get bid sheet IDs the user can access.
+ * Admin/Super Admin: all. Manager/Supervisor: bid_sheet_access OR site assignment.
+ */
+export async function getAccessibleBidSheetIds(
+  supabase: SupabaseClient,
+  userId: string,
+  role: UserRole
+): Promise<string[] | null> {
+  if (role === 'admin' || role === 'super_admin') return null
+  if (role === 'employee') return []
+
+  const { data: accessRows } = await supabase
+    .from('bid_sheet_access')
+    .select('bid_sheet_id')
+    .eq('user_id', userId)
+  const accessIds = (accessRows || []).map((r: { bid_sheet_id: string }) => r.bid_sheet_id)
+
+  const accessibleSiteIds = await getAccessibleSiteIds(supabase, userId, role)
+  if (accessibleSiteIds && accessibleSiteIds.length > 0) {
+    const { data: siteSheets } = await supabase
+      .from('bid_sheets')
+      .select('id')
+      .in('site_id', accessibleSiteIds)
+    const siteIds = (siteSheets || []).map((s: { id: string }) => s.id)
+    return [...new Set([...accessIds, ...siteIds])]
+  }
+  return accessIds.length > 0 ? accessIds : []
+}

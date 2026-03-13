@@ -8,6 +8,7 @@ export interface User {
   name: string
   role: UserRole
   employee_type?: EmployeeType
+  active?: boolean
   reports_to_id?: string
   supervisor_id?: string
   manager_id?: string

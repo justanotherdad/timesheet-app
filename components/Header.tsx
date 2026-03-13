@@ -53,6 +53,7 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
   const canApprove = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
   const canManageOrg = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
   const canManageBudget = ['manager', 'admin', 'super_admin'].includes(userRole)
+  const canBidSheets = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
 
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm print:hidden">
@@ -163,6 +164,11 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                       {canManageBudget && (
                         <Link href="/dashboard/budget" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Budget Detail
+                        </Link>
+                      )}
+                      {canBidSheets && (
+                        <Link href="/dashboard/bid-sheets" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                          Bid Sheets
                         </Link>
                       )}
                       <Link href="/dashboard" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>

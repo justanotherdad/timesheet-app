@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import Link from 'next/link'
-import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3 } from 'lucide-react'
+import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList } from 'lucide-react'
 import { formatWeekEnding } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
@@ -218,6 +218,23 @@ export default async function DashboardPage() {
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Budget Detail</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-300">View PO budgets, invoices, and billable hours</p>
+                </div>
+              </div>
+            </Link>
+          )}
+
+          {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+            <Link
+              href="/dashboard/bid-sheets"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
+            >
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="bg-violet-100 dark:bg-violet-900/30 p-3 rounded-lg">
+                  <ClipboardList className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Bid Sheets</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Create and manage bid sheets, convert to project budgets</p>
                 </div>
               </div>
             </Link>

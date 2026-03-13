@@ -756,17 +756,19 @@ export default function HierarchicalItemManager({
       const itemsToAdd = lines.slice(1).map(line => {
         const rawValues = line.split(',').map(v => v.trim().replace(/\r$/, ''))
         const values = rawValues
-        const descriptionIdx = tableName === 'systems'
-          ? headers.findIndex((h: string) => h.includes('description') || h.includes('desc'))
-          : -1
 
         const insertData: any = {
           site_id: selectedSite,
           name: (values[nameIdx] || '').trim(),
         }
-        
-        if (tableName === 'systems' && descriptionIdx >= 0) {
-          insertData.description = values[descriptionIdx] || null
+        // Skip description for systems - the column may not exist (causes "Could not find description" error)
+        if (tableName === 'systems') {
+          // Systems: import name only
+        } else {
+          const descriptionIdx = headers.findIndex((h: string) => h.includes('description') || h.includes('desc'))
+          if (descriptionIdx >= 0) {
+            insertData.description = values[descriptionIdx] || null
+          }
         }
 
         return insertData

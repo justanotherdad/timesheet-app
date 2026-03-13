@@ -27,6 +27,7 @@ interface PurchaseOrder {
   proposal_number?: string
   project_name?: string
   budget_type?: string
+  active?: boolean
   sites?: Site
   departments?: { id: string; name: string }
 }
@@ -48,6 +49,7 @@ export default function BudgetPageClient({
 }: BudgetPageClientProps) {
   const router = useRouter()
   const [budgetRefreshKey, setBudgetRefreshKey] = useState(0)
+  const [showArchivedPOs, setShowArchivedPOs] = useState(false)
   const [selectedSiteId, setSelectedSiteId] = useState<string>(() => {
     if (initialPoId) {
       const po = purchaseOrders.find((p) => p.id === initialPoId)
@@ -57,8 +59,10 @@ export default function BudgetPageClient({
   })
   const [selectedPoId, setSelectedPoId] = useState<string | null>(initialPoId)
 
-  const sitePOs = selectedSiteId
-    ? purchaseOrders.filter((p) => p.site_id === selectedSiteId)
+  const allSitePOsForNav = selectedSiteId ? purchaseOrders.filter((p) => p.site_id === selectedSiteId) : []
+  const sitePOs = allSitePOsForNav
+  const sitePOsForSelector = selectedSiteId
+    ? purchaseOrders.filter((p) => p.site_id === selectedSiteId && (showArchivedPOs || p.active !== false))
     : []
 
   const selectedPO = selectedPoId
@@ -123,12 +127,25 @@ export default function BudgetPageClient({
     )
   }
 
+  const hasArchived = allSitePOsForNav.some((p) => p.active === false)
+
   return (
     <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
         Select a Budget to View
       </h2>
       <div className="space-y-4">
+        {hasArchived && (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showArchivedPOs}
+              onChange={(e) => setShowArchivedPOs(e.target.checked)}
+              className="rounded border-gray-300 dark:border-gray-600"
+            />
+            <span className="text-sm text-gray-600 dark:text-gray-400">Show archived POs</span>
+          </label>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Client / Site
@@ -155,12 +172,12 @@ export default function BudgetPageClient({
               Purchase Order
             </label>
             <div className="space-y-2">
-              {sitePOs.length === 0 ? (
+              {sitePOsForSelector.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  No purchase orders for this client.
+                  {hasArchived && !showArchivedPOs ? 'No active purchase orders. Check "Show archived POs" to see archived.' : 'No purchase orders for this client.'}
                 </p>
               ) : (
-                sitePOs.map((po) => (
+                sitePOsForSelector.map((po) => (
                   <button
                     key={po.id}
                     type="button"
@@ -170,6 +187,7 @@ export default function BudgetPageClient({
                     <span className="font-medium">
                       {po.po_number}
                       {(po.description || po.departments?.name) ? ` — ${po.description || po.departments?.name}` : ''}
+                      {po.active === false && <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">(Archived)</span>}
                     </span>
                     <span className="text-sm text-gray-500 capitalize">
                       {po.budget_type || 'basic'} budget

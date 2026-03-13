@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText, Eye } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText, Eye, PowerOff } from 'lucide-react'
 import { formatDate, formatDateShort, formatPeriodsList, formatDateForInput, formatHours } from '@/lib/utils'
 import { addWeeks, parseISO } from 'date-fns'
 import InvoiceFormModal from './InvoiceFormModal'
@@ -422,16 +422,50 @@ export default function BasicBudgetView({
 
   const inputClass = 'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 text-base'
 
+  const isActive = po?.active !== false
+  const [deactivating, setDeactivating] = useState(false)
+
+  const handleActiveToggle = async () => {
+    if (isActive && !confirm('Deactivate this PO? It will no longer appear in timesheet dropdowns.')) return
+    setDeactivating(true)
+    try {
+      const res = await fetch(`/api/budget/${po.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !isActive }),
+      })
+      if (res.ok) {
+        onSave?.()
+        window.location.reload()
+      }
+    } finally {
+      setDeactivating(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
-      <button
-        type="button"
-        onClick={onBack}
-        className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to budget list
-      </button>
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to budget list
+        </button>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={handleActiveToggle}
+            disabled={deactivating}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-600 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20"
+          >
+            <PowerOff className="h-4 w-4" />
+            {deactivating ? '…' : isActive ? 'Deactivate' : 'Reactivate'}
+          </button>
+        )}
+      </div>
 
       {/* Navigation: prev | Client + PO dropdowns | next — above container. On mobile, dropdowns stack so arrows fit properly. */}
       {(allSites.length > 0 || sitePOs.length > 0) && (

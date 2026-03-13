@@ -36,6 +36,7 @@ export async function createUser(formData: FormData) {
     const managerId = formData.get('manager_id') as string || null
     const finalApproverId = formData.get('final_approver_id') as string || null
     const employeeType = (formData.get('employee_type') as 'internal' | 'external') || 'internal'
+    const password = (formData.get('password') as string)?.trim() || null
 
     let effectiveRole: string
     if (currentUserProfile.role === 'manager') {
@@ -77,93 +78,71 @@ export async function createUser(formData: FormData) {
       // User already exists, use their ID
       userId = existingUser.id
     } else {
-      // Create new user - set email_confirm to false for invite links
-      // The invite link will confirm the email and allow password setup
-      const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-        email,
-        email_confirm: false, // Don't auto-confirm - invite link will confirm it
-        user_metadata: {
-          name
-        }
-      })
-
-      if (createError || !newUser.user) {
-        return { error: createError?.message || 'Failed to create auth user' }
-      }
-
-      userId = newUser.user.id
-      isNewUser = true
-
-      // Generate invitation link (don't rely on email delivery)
-      // Admin will copy and send this link manually
-      // Always use production URL, never localhost
-      // Normalize to non-www version for consistency
-      let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'
-      if (siteUrl.includes('localhost')) {
-        siteUrl = 'https://ctgtimesheet.com'
-      }
-      // Remove www if present - use base domain for redirect URLs
-      const redirectUrl = siteUrl.replace('www.', '')
-      
-      // Generate invite link - this allows user to set their password
-      // Use an intermediate landing page to prevent Teams/Slack previews from consuming the token
-      // The landing page requires user interaction before redirecting to the actual Supabase link
-      const redirectToUrl = `${redirectUrl}/auth/setup-password`
-      console.log('Generating invite link with redirectTo:', redirectToUrl)
-      
-      const { data: linkData, error: inviteError } = await adminClient.auth.admin.generateLink({
-        type: 'invite',
-        email,
-        options: {
-          redirectTo: redirectToUrl
-        }
-      })
-      
-      if (!inviteError && linkData?.properties?.action_link) {
-        // Wrap the Supabase link in our intermediate landing page
-        // This prevents preview bots from consuming the token
-        const supabaseLink = linkData.properties.action_link
-        // Encode the Supabase link and wrap it in our landing page
-        const wrappedLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(supabaseLink)}`
-        invitationLink = wrappedLink
-        console.log('Wrapped invite link to prevent preview consumption')
-      } else {
-        // If invite link generation failed, try alternatives
-        if (inviteError) {
-          console.error('Invite link generation error:', inviteError)
-        }
-        // If invite fails, try magic link instead (alternative approach)
-        const { data: magicLinkData, error: magicError } = await adminClient.auth.admin.generateLink({
-          type: 'magiclink',
+      // Create new user - with password (admin-set) or invite link
+      if (password && password.length >= 6) {
+        // Admin sets password - user must change on first login
+        const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
           email,
-          options: {
-            redirectTo: `${redirectUrl}/auth/setup-password`
-          }
+          password,
+          email_confirm: true,
+          user_metadata: { name }
         })
 
-        if (!magicError && magicLinkData?.properties?.action_link) {
-          // Wrap magic link too
-          const supabaseLink = magicLinkData.properties.action_link
-          const wrappedLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(supabaseLink)}`
+        if (createError || !newUser.user) {
+          return { error: createError?.message || 'Failed to create auth user' }
+        }
+
+        userId = newUser.user.id
+        isNewUser = true
+        // must_change_password will be set in profile upsert below
+      } else {
+        // Fallback: invite link (no password provided)
+        const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+          email,
+          email_confirm: false,
+          user_metadata: { name }
+        })
+
+        if (createError || !newUser.user) {
+          return { error: createError?.message || 'Failed to create auth user' }
+        }
+
+        userId = newUser.user.id
+        isNewUser = true
+
+        let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'
+        if (siteUrl.includes('localhost')) siteUrl = 'https://ctgtimesheet.com'
+        const redirectUrl = siteUrl.replace('www.', '')
+        const redirectToUrl = `${redirectUrl}/auth/setup-password`
+
+        const { data: linkData, error: inviteError } = await adminClient.auth.admin.generateLink({
+          type: 'invite',
+          email,
+          options: { redirectTo: redirectToUrl }
+        })
+
+        if (!inviteError && linkData?.properties?.action_link) {
+          const wrappedLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(linkData.properties.action_link)}`
           invitationLink = wrappedLink
         } else {
-          // Last resort: use recovery link (password reset)
-          const { data: resetLinkData, error: resetError } = await adminClient.auth.admin.generateLink({
-            type: 'recovery',
+          const { data: magicLinkData, error: magicError } = await adminClient.auth.admin.generateLink({
+            type: 'magiclink',
             email,
-            options: {
-              redirectTo: `${redirectUrl}/auth/setup-password`
-            }
+            options: { redirectTo: redirectToUrl }
           })
-
-          if (!resetError && resetLinkData?.properties?.action_link) {
-            // Wrap recovery link too
-            const supabaseLink = resetLinkData.properties.action_link
-            const wrappedLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(supabaseLink)}`
-            invitationLink = wrappedLink
+          if (!magicError && magicLinkData?.properties?.action_link) {
+            invitationLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(magicLinkData.properties.action_link)}`
           } else {
-            console.error('Failed to generate any invitation link:', { inviteError, magicError, resetError })
-            return { error: 'User created but failed to generate invitation link. Please use "Generate Password Link" button for this user.' }
+            const { data: resetLinkData, error: resetError } = await adminClient.auth.admin.generateLink({
+              type: 'recovery',
+              email,
+              options: { redirectTo: redirectToUrl }
+            })
+            if (!resetError && resetLinkData?.properties?.action_link) {
+              invitationLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(resetLinkData.properties.action_link)}`
+            } else {
+              return { error: 'User created but failed to generate invitation link. Use "Generate Password Link" for this user.' }
+            }
           }
         }
       }
@@ -199,15 +178,18 @@ export async function createUser(formData: FormData) {
 
     revalidatePath('/dashboard/admin/users')
     
+    const usedPassword = isNewUser && !!password && password.length >= 6
     return { 
       success: true, 
       userId,
-      emailSent: isNewUser && !!invitationLink,
+      emailSent: isNewUser && !!invitationLink && !usedPassword,
       invitationLink: invitationLink || null,
       message: isNewUser 
-        ? (invitationLink 
-          ? 'User created successfully. Copy the invitation link below to send to the user.' 
-          : 'User created successfully, but could not generate invitation link. You can generate a password reset link from Supabase dashboard.')
+        ? (usedPassword 
+          ? 'User created successfully. They must change their password on first login.'
+          : (invitationLink 
+            ? 'User created successfully. Copy the invitation link below to send to the user.' 
+            : 'User created successfully, but could not generate invitation link. Use "Generate Password Link" for this user.'))
         : 'User profile updated successfully. (User already exists in auth system)'
     }
   } catch (error: any) {

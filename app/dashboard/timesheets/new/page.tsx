@@ -110,7 +110,7 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
   // Fetch dropdown options - filter by user assignments unless admin
   // Cascading: Site → Departments (all at site if blank) → POs (all filtered by site/dept if blank, else only chosen)
   const sitesQuery = supabase.from('sites').select('*').order('name')
-  const posQuery = supabase.from('purchase_orders').select('*').order('po_number')
+  const posQuery = supabase.from('purchase_orders').select('*').eq('active', true).order('po_number')
   
   if (!['admin', 'super_admin'].includes(user.profile.role)) {
     if (userSiteIds.length > 0) {

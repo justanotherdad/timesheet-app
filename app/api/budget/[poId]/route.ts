@@ -194,6 +194,7 @@ export async function PATCH(
     prior_period_notes,
     weekly_burn,
     target_end_date,
+    active,
     changeOrders: changeOrdersPayload,
   } = body
 
@@ -230,6 +231,7 @@ export async function PATCH(
       if (prior_period_notes !== undefined) updateData.prior_period_notes = prior_period_notes || null
       if (weekly_burn !== undefined) updateData.weekly_burn = weekly_burn === '' || weekly_burn == null ? null : parseFloat(String(weekly_burn))
       if (target_end_date !== undefined) updateData.target_end_date = target_end_date || null
+      if (active !== undefined) updateData.active = !!active
 
       const { error: updateError } = await adminSupabase
         .from('purchase_orders')

@@ -35,11 +35,16 @@ export default function LoginForm() {
         throw error
       }
 
-      // Sign-in succeeded - verify profile exists before redirecting
+      // Sign-in succeeded - verify profile exists and check must_change_password
       if (data?.user) {
-        const { data: profile } = await supabase.from('user_profiles').select('id').eq('id', data.user.id).single()
+        const { data: profile } = await supabase.from('user_profiles').select('id, must_change_password').eq('id', data.user.id).single()
         if (!profile) {
           setError('Your account is not fully set up. Please contact your administrator to complete your profile.')
+          return
+        }
+        if ((profile as { must_change_password?: boolean }).must_change_password) {
+          router.push('/dashboard/change-password?required=1')
+          router.refresh()
           return
         }
       }

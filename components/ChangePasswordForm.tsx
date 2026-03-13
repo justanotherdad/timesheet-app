@@ -1,13 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Eye, EyeOff } from 'lucide-react'
 
 export default function ChangePasswordForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+  const isRequired = searchParams.get('required') === '1'
+
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -23,7 +26,11 @@ export default function ChangePasswordForm() {
     setError(null)
     setSuccess(false)
 
-    if (!currentPassword || !newPassword || !confirmPassword) {
+    if (!isRequired && (!currentPassword || !newPassword || !confirmPassword)) {
+      setError('All fields are required')
+      return
+    }
+    if (isRequired && (!newPassword || !confirmPassword)) {
       setError('All fields are required')
       return
     }
@@ -38,7 +45,7 @@ export default function ChangePasswordForm() {
       return
     }
 
-    if (currentPassword === newPassword) {
+    if (!isRequired && currentPassword === newPassword) {
       setError('New password must be different from current password')
       return
     }
@@ -46,30 +53,31 @@ export default function ChangePasswordForm() {
     setLoading(true)
 
     try {
-      // Get the current user
       const { data: { user }, error: userError } = await supabase.auth.getUser()
-      
       if (userError || !user) {
         throw new Error('User session not found. Please log in again.')
       }
 
-      // First, verify the current password by attempting to sign in
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email!,
-        password: currentPassword,
-      })
-
-      if (signInError) {
-        throw new Error('Current password is incorrect')
+      if (!isRequired) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: user.email!,
+          password: currentPassword,
+        })
+        if (signInError) {
+          throw new Error('Current password is incorrect')
+        }
       }
 
-      // Update the password
       const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       })
+      if (updateError) throw updateError
 
-      if (updateError) {
-        throw updateError
+      if (isRequired) {
+        const res = await fetch('/api/auth/clear-must-change-password', { method: 'POST' })
+        if (!res.ok) {
+          console.error('Failed to clear must_change_password')
+        }
       }
 
       setSuccess(true)
@@ -77,7 +85,6 @@ export default function ChangePasswordForm() {
       setNewPassword('')
       setConfirmPassword('')
 
-      // Redirect after 2 seconds
       setTimeout(() => {
         router.push('/dashboard')
         router.refresh()
@@ -91,6 +98,11 @@ export default function ChangePasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {isRequired && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 px-4 py-3 rounded">
+          You must change your password before continuing.
+        </div>
+      )}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded">
           {error}
@@ -103,6 +115,7 @@ export default function ChangePasswordForm() {
         </div>
       )}
 
+      {!isRequired && (
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Current Password
@@ -127,6 +140,7 @@ export default function ChangePasswordForm() {
           </button>
         </div>
       </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -186,6 +200,7 @@ export default function ChangePasswordForm() {
         >
           {loading ? 'Changing...' : 'Change Password'}
         </button>
+        {!isRequired && (
         <button
           type="button"
           onClick={() => router.back()}
@@ -194,6 +209,7 @@ export default function ChangePasswordForm() {
         >
           Cancel
         </button>
+        )}
       </div>
     </form>
   )
