@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { Shield, Search, ChevronDown } from 'lucide-react'
-import { formatDateTimeInEastern } from '@/lib/utils'
 
 const ENTITY_TYPES = [
   { value: '', label: 'All entities' },
@@ -31,8 +30,24 @@ const ACTIONS = [
   { value: 'budget.access.revoke', label: 'Budget access revoke' },
 ]
 
-function formatAction(action: string): string {
+function formatAction(action: string | undefined | null): string {
+  if (action == null || typeof action !== 'string') return '—'
   return action.replace(/_/g, ' ').replace(/\./g, ' · ')
+}
+
+function safeFormatDateTime(date: unknown): string {
+  if (date == null || date === '') return '—'
+  try {
+    const d = typeof date === 'string' ? new Date(date) : date instanceof Date ? date : new Date(String(date))
+    if (isNaN(d.getTime())) return '—'
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      dateStyle: 'medium',
+      timeStyle: 'medium',
+    }).format(d)
+  } catch {
+    return '—'
+  }
 }
 
 export default function AuditLogClient() {
@@ -126,39 +141,45 @@ export default function AuditLogClient() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {entries.map((e) => (
-                <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+              {entries.map((e, idx) => (
+                <tr key={e?.id ?? `row-${idx}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                   <td className="px-4 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                    {formatDateTimeInEastern(e.created_at)}
+                    {safeFormatDateTime(e?.created_at)}
                   </td>
                   <td className="px-4 py-2">
-                    <span className="font-medium">{e.actor_name || e.actor_id || '—'}</span>
+                    <span className="font-medium">{e?.actor_name || e?.actor_id || '—'}</span>
                   </td>
                   <td className="px-4 py-2">
                     <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-                      {formatAction(e.action)}
+                      {formatAction(e?.action)}
                     </span>
                   </td>
                   <td className="px-4 py-2">
-                    <span className="text-gray-600 dark:text-gray-400">{e.entity_type}</span>
-                    {e.entity_id && (
-                      <span className="ml-1 text-gray-400 dark:text-gray-500 text-xs truncate max-w-[120px] inline-block align-bottom" title={e.entity_id}>
-                        ({e.entity_id.slice(0, 8)}…)
+                    <span className="text-gray-600 dark:text-gray-400">{e?.entity_type ?? '—'}</span>
+                    {e?.entity_id != null && (
+                      <span className="ml-1 text-gray-400 dark:text-gray-500 text-xs truncate max-w-[120px] inline-block align-bottom" title={String(e.entity_id)}>
+                        ({String(e.entity_id).slice(0, 8)}…)
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-2 max-w-[200px]">
-                    {(e.new_values || e.old_values) && (
+                    {(e?.new_values || e?.old_values) && (
                       <details className="group">
                         <summary className="cursor-pointer text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
                           <ChevronDown className="h-3 w-3 group-open:rotate-180" /> View
                         </summary>
                         <pre className="mt-1 p-2 bg-gray-50 dark:bg-gray-800 rounded text-xs overflow-auto max-h-32">
-                          {JSON.stringify(
-                            { ...(e.old_values || {}), ...(e.new_values || {}) },
-                            null,
-                            2
-                          )}
+                          {(() => {
+                            try {
+                              return JSON.stringify(
+                                { ...(e?.old_values || {}), ...(e?.new_values || {}) },
+                                null,
+                                2
+                              )
+                            } catch {
+                              return '—'
+                            }
+                          })()}
                         </pre>
                       </details>
                     )}
