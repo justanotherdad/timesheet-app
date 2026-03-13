@@ -33,7 +33,7 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com",
               "frame-src 'self' https://www.google.com https://recaptcha.google.com",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob:",

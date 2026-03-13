@@ -4,21 +4,14 @@ import { startOfWeek, endOfWeek, format, parseISO, addWeeks, subWeeks } from "da
 
 const APP_TIMEZONE = 'America/New_York' // EST/EDT
 
-/** Format date in Eastern using Intl (avoids date-fns-tz client crashes) */
+/** Format date in Eastern using Intl (for signatures, exports). */
 function formatInEastern(d: Date, options: Intl.DateTimeFormatOptions): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: APP_TIMEZONE, ...options }).format(d)
 }
 
-/** Get current date in Eastern for week calculations. Uses Intl to avoid date-fns-tz. */
+/** Get current date for week calculations (uses local time, pre-audit-trail behavior). */
 function getNowInAppTz(): Date {
-  const now = new Date()
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: APP_TIMEZONE,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).formatToParts(now)
-  const get = (t: string) => parseInt(parts.find(p => p.type === t)?.value || '0', 10)
-  return new Date(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
+  return new Date()
 }
 
 export function cn(...inputs: ClassValue[]) {
@@ -78,17 +71,17 @@ export function getWeekDates(weekEnding: Date | string, weekStartsOn: number = 1
 
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return formatInEastern(d, { month: 'short', day: 'numeric', year: 'numeric' })
+  return format(d, 'MMM d, yyyy')
 }
 
 export function formatWeekEnding(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return formatInEastern(d, { month: 'short', day: 'numeric', year: 'numeric' })
+  return format(d, 'MMM d, yyyy')
 }
 
 export function formatDateShort(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return formatInEastern(d, { month: 'numeric', day: 'numeric', year: '2-digit' })
+  return format(d, 'M/d/yy')
 }
 
 /** Format period month/year as MMM-YYYY (e.g. Jul-2024). month is 1-12. */
@@ -104,18 +97,14 @@ export function formatPeriodsList(periods: { month: number; year: number }[]): s
   return periods.map((p) => formatPeriodMonthYear(p.month, p.year)).join(', ')
 }
 
-/** Format date for HTML date input (yyyy-MM-dd). Returns '' for invalid/empty. Uses Eastern. */
+/** Format date for HTML date input (yyyy-MM-dd). Returns '' for invalid/empty. */
 export function formatDateForInput(date: Date | string | null | undefined): string {
   if (date == null || date === '') return ''
   if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date
   try {
     const d = typeof date === 'string' ? parseISO(date) : date
     if (isNaN(d.getTime())) return ''
-    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: APP_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d)
-    const y = parts.find(p => p.type === 'year')?.value
-    const m = parts.find(p => p.type === 'month')?.value
-    const day = parts.find(p => p.type === 'day')?.value
-    return y && m && day ? `${y}-${m}-${day}` : format(d, 'yyyy-MM-dd')
+    return format(d, 'yyyy-MM-dd')
   } catch {
     return ''
   }
