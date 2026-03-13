@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Plus, Copy, Upload, FileSpreadsheet, X, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Copy, Upload, FileSpreadsheet, X, Pencil, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 interface BidSheet {
   id: string
@@ -41,6 +41,47 @@ export default function BidSheetsClient({
   const [error, setError] = useState<string | null>(null)
 
   const canCreate = !readOnly && ['manager', 'admin', 'super_admin'].includes(user.profile.role)
+
+  const [searchText, setSearchText] = useState('')
+  type SortKey = 'name' | 'site' | 'status' | 'created_at'
+  const [sortKey, setSortKey] = useState<SortKey>('created_at')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  const filteredAndSortedSheets = useMemo(() => {
+    const q = searchText.trim().toLowerCase()
+    let list = sheets.filter((s) => {
+      if (!q) return true
+      const name = (s.name || '').toLowerCase()
+      const site = (s.sites?.name || '').toLowerCase()
+      return name.includes(q) || site.includes(q)
+    })
+    const dir = sortDir === 'asc' ? 1 : -1
+    list = [...list].sort((a, b) => {
+      let va: string | number = ''
+      let vb: string | number = ''
+      switch (sortKey) {
+        case 'name': va = (a.name || '').toLowerCase(); vb = (b.name || '').toLowerCase(); break
+        case 'site': va = (a.sites?.name || '').toLowerCase(); vb = (b.sites?.name || '').toLowerCase(); break
+        case 'status': va = (a.status || '').toLowerCase(); vb = (b.status || '').toLowerCase(); break
+        case 'created_at': va = new Date(a.created_at).getTime(); vb = new Date(b.created_at).getTime(); break
+        default: return 0
+      }
+      if (va < vb) return -1 * dir
+      if (va > vb) return 1 * dir
+      return 0
+    })
+    return list
+  }, [sheets, searchText, sortKey, sortDir])
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <ArrowUpDown className="h-3.5 w-3.5 ml-0.5 opacity-50" />
+    return sortDir === 'asc' ? <ArrowUp className="h-3.5 w-3.5 ml-0.5" /> : <ArrowDown className="h-3.5 w-3.5 ml-0.5" />
+  }
 
   const handleCreate = async () => {
     setError(null)
@@ -176,19 +217,78 @@ export default function BidSheetsClient({
           )}
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <>
+          <div className="mb-4">
+            <div className="flex items-center gap-2">
+              <Search className="h-4 w-4 text-gray-500 flex-shrink-0" />
+              <input
+                type="text"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="Search by name or site..."
+                className="flex-1 min-w-0 max-w-xs h-9 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+            </div>
+            {searchText && (
+              <p className="text-xs text-gray-500 mt-1">Showing {filteredAndSortedSheets.length} of {sheets.length}</p>
+            )}
+          </div>
+          {/* Mobile: cards with visible Edit/Trash */}
+          <div className="md:hidden space-y-2">
+            {filteredAndSortedSheets.map((s) => (
+              <div key={s.id} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-700">
+                <div className="flex justify-between items-start gap-2">
+                  <div>
+                    <Link href={`/dashboard/bid-sheets/${s.id}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">
+                      {s.name}
+                    </Link>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{s.sites?.name || '-'}</p>
+                    <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium ${
+                      s.status === 'converted' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
+                    }`}>
+                      {s.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Link href={`/dashboard/bid-sheets/${s.id}`} className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg" title="Open">
+                      Open →
+                    </Link>
+                    <Link href={`/dashboard/bid-sheets/${s.id}`} className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" title="Edit">
+                      <Pencil className="h-4 w-4" />
+                    </Link>
+                    {!readOnly && (
+                      <button type="button" onClick={() => handleDelete(s.id, s.name, s.status)} className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" title="Delete">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">Created {new Date(s.created_at).toLocaleDateString()}</p>
+              </div>
+            ))}
+          </div>
+          {/* Desktop: table with sortable columns */}
+          <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">Name</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">Site</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">Status</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">Created</th>
+                <th className="text-left px-4 py-3 text-sm font-medium">
+                  <button type="button" onClick={() => handleSort('name')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">Name <SortIcon col="name" /></button>
+                </th>
+                <th className="text-left px-4 py-3 text-sm font-medium">
+                  <button type="button" onClick={() => handleSort('site')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">Site <SortIcon col="site" /></button>
+                </th>
+                <th className="text-left px-4 py-3 text-sm font-medium">
+                  <button type="button" onClick={() => handleSort('status')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">Status <SortIcon col="status" /></button>
+                </th>
+                <th className="text-left px-4 py-3 text-sm font-medium">
+                  <button type="button" onClick={() => handleSort('created_at')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">Created <SortIcon col="created_at" /></button>
+                </th>
                 <th className="text-right px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 w-40">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {sheets.map((s) => (
+              {filteredAndSortedSheets.map((s) => (
                 <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                   <td className="px-4 py-3">
                     <Link href={`/dashboard/bid-sheets/${s.id}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">

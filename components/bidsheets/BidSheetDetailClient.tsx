@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
-import { Upload, Plus, Trash2, X, FileSpreadsheet, Search, Info, Download, Layers } from 'lucide-react'
+import { Upload, Plus, Trash2, X, FileSpreadsheet, Search, Info, Download, Layers, Eye, Users } from 'lucide-react'
 
 interface Item {
   id: string
@@ -94,6 +94,7 @@ export default function BidSheetDetailClient({
   const [convertDepartmentId, setConvertDepartmentId] = useState('')
   const [systemSearch, setSystemSearch] = useState('')
   const [compactMode, setCompactMode] = useState(false)
+  const [viewRow, setViewRow] = useState<{ systemId: string; activityId: string; systemName: string; activityName: string } | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   const router = useRouter()
@@ -108,6 +109,72 @@ export default function BidSheetDetailClient({
   const [addSystemCode, setAddSystemCode] = useState('')
   const [addDeliverableName, setAddDeliverableName] = useState('')
   const [addActivityName, setAddActivityName] = useState('')
+
+  // Bid sheet access (grant/revoke)
+  const [accessUsers, setAccessUsers] = useState<Array<{ id: string; name: string }>>([])
+  const [accessLoading, setAccessLoading] = useState(false)
+  const [showGrantAccess, setShowGrantAccess] = useState(false)
+  const [grantUserId, setGrantUserId] = useState('')
+  const [availableUsers, setAvailableUsers] = useState<Array<{ id: string; name: string }>>([])
+
+  const fetchAccessUsers = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/access`)
+      if (res.ok) {
+        const json = await res.json()
+        setAccessUsers(json.users || [])
+      }
+    } catch {
+      setAccessUsers([])
+    }
+  }, [bidSheetId])
+
+  useEffect(() => {
+    if (canEdit) fetchAccessUsers()
+  }, [canEdit, fetchAccessUsers])
+
+  const handleGrantAccess = async () => {
+    if (!grantUserId) return
+    setAccessLoading(true)
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: grantUserId }),
+      })
+      if (res.ok) {
+        setGrantUserId('')
+        setShowGrantAccess(false)
+        fetchAccessUsers()
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Failed to grant access')
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to grant access')
+    } finally {
+      setAccessLoading(false)
+    }
+  }
+
+  const handleRevokeAccess = async (userId: string) => {
+    if (!confirm('Revoke this user\'s access to the bid sheet?')) return
+    setAccessLoading(true)
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/access?userId=${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) fetchAccessUsers()
+      else {
+        const data = await res.json()
+        setError(data.error || 'Failed to revoke access')
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to revoke access')
+    } finally {
+      setAccessLoading(false)
+    }
+  }
 
   const getItemHours = useCallback((systemId: string, deliverableId: string, activityId: string) => {
     const item = items.find((i) => i.bid_sheet_system_id === systemId && i.bid_sheet_deliverable_id === deliverableId && i.bid_sheet_activity_id === activityId)
@@ -184,6 +251,25 @@ export default function BidSheetDetailClient({
   }, [systemActivityRows, systemSearch])
 
   const totalBudgetedHours = items.reduce((s, i) => s + (i.budgeted_hours || 0), 0)
+
+  // Per-person totals for Labor & Rates
+  const laborHoursAndCost = useMemo(() => {
+    const map = new Map<string, { hours: number; cost: number }>()
+    for (const l of labor) {
+      map.set(l.id, { hours: 0, cost: 0 })
+    }
+    for (const i of items) {
+      if (!i.labor_id) continue
+      const entry = map.get(i.labor_id)
+      if (!entry) continue
+      const hrs = i.budgeted_hours || 0
+      const lab = labor.find((l) => l.id === i.labor_id)
+      const rate = lab?.bid_rate ?? 0
+      entry.hours += hrs
+      entry.cost += hrs * rate
+    }
+    return map
+  }, [items, labor])
   const totalLaborCost = items.reduce((s, i) => {
     const lab = i.labor_id ? labor.find((l) => l.id === i.labor_id) : null
     const rate = lab?.bid_rate ?? 0
@@ -469,99 +555,188 @@ export default function BidSheetDetailClient({
 
       {error && <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm">{error}</div>}
 
-      {/* Add Systems, Deliverables, Activities */}
-      {canEdit && sheet.status === 'draft' && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-            <Layers className="h-4 w-4" />
-            Systems, Deliverables & Activities
-          </h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Add systems (rows), deliverables (columns), and activities to build your bid sheet matrix. You can also import from CSV.
-          </p>
-          <div className="flex flex-wrap gap-4 items-center">
-            <div className="flex flex-col gap-2">
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Systems</span>
-              {!showAddSystem ? (
-                <button type="button" onClick={() => setShowAddSystem(true)} className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm h-9">
-                  <Plus className="h-4 w-4" /> Add System
-                </button>
+      {/* Systems/Deliverables/Activities + Control Access — 2 columns when canEdit */}
+      {canEdit && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Left: Systems, Deliverables & Activities (draft only) */}
+          {sheet.status === 'draft' && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+                <Layers className="h-4 w-4" />
+                Systems, Deliverables & Activities
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Add systems (rows), deliverables (columns), and activities to build your bid sheet matrix. You can also import from CSV.
+              </p>
+              <div className="flex flex-wrap gap-4 items-center">
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Systems</span>
+                  {!showAddSystem ? (
+                    <button type="button" onClick={() => setShowAddSystem(true)} className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm h-9">
+                      <Plus className="h-4 w-4" /> Add System
+                    </button>
+                  ) : (
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={addSystemName}
+                        onChange={(e) => setAddSystemName(e.target.value)}
+                        placeholder="Name (e.g. Local Systems)"
+                        className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-40"
+                      />
+                      <input
+                        type="text"
+                        value={addSystemCode}
+                        onChange={(e) => setAddSystemCode(e.target.value)}
+                        placeholder="Code (optional)"
+                        className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-24"
+                      />
+                      <button type="button" onClick={handleAddSystem} disabled={loading || !addSystemName.trim()} className="h-9 px-3 bg-blue-600 text-white rounded text-sm disabled:opacity-50 shrink-0">
+                        Add
+                      </button>
+                      <button type="button" onClick={() => { setShowAddSystem(false); setAddSystemName(''); setAddSystemCode('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  {systems.length > 0 && <span className="text-xs text-gray-500">{systems.length} system(s)</span>}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Deliverables</span>
+                  {!showAddDeliverable ? (
+                    <button type="button" onClick={() => setShowAddDeliverable(true)} className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm h-9">
+                      <Plus className="h-4 w-4" /> Add Deliverable
+                    </button>
+                  ) : (
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={addDeliverableName}
+                        onChange={(e) => setAddDeliverableName(e.target.value)}
+                        placeholder="Name (e.g. Design Documents)"
+                        className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-40"
+                      />
+                      <button type="button" onClick={handleAddDeliverable} disabled={loading || !addDeliverableName.trim()} className="h-9 px-3 bg-blue-600 text-white rounded text-sm disabled:opacity-50 shrink-0">
+                        Add
+                      </button>
+                      <button type="button" onClick={() => { setShowAddDeliverable(false); setAddDeliverableName('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  {deliverables.length > 0 && <span className="text-xs text-gray-500">{deliverables.length} deliverable(s)</span>}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Activities</span>
+                  {!showAddActivity ? (
+                    <button type="button" onClick={() => setShowAddActivity(true)} className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm h-9">
+                      <Plus className="h-4 w-4" /> Add Activity
+                    </button>
+                  ) : (
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={addActivityName}
+                        onChange={(e) => setAddActivityName(e.target.value)}
+                        placeholder="Name (e.g. Design)"
+                        className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-40"
+                      />
+                      <button type="button" onClick={handleAddActivity} disabled={loading || !addActivityName.trim()} className="h-9 px-3 bg-blue-600 text-white rounded text-sm disabled:opacity-50 shrink-0">
+                        Add
+                      </button>
+                      <button type="button" onClick={() => { setShowAddActivity(false); setAddActivityName('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  {activities.length > 0 && <span className="text-xs text-gray-500">{activities.length} activity(ies)</span>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Right: Control Access */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Control Access
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Grant users explicit access to this bid sheet. Users with site assignment can already view. Add users here for direct access.
+            </p>
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                {accessUsers.length} user{accessUsers.length !== 1 ? 's' : ''} with access
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowGrantAccess(true)
+                  try {
+                    const res = await fetch(`/api/bid-sheets/${bidSheetId}/access?available=1`)
+                    if (res.ok) {
+                      const json = await res.json()
+                      setAvailableUsers(json.users || [])
+                    }
+                  } catch {
+                    setAvailableUsers([])
+                  }
+                }}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
+              >
+                <Plus className="h-4 w-4" /> Grant Access
+              </button>
+            </div>
+            <div className="space-y-2">
+              {accessLoading && accessUsers.length === 0 ? (
+                <p className="text-sm text-gray-500">Loading…</p>
+              ) : accessUsers.length === 0 ? (
+                <p className="text-sm text-gray-500">No users with explicit access yet.</p>
               ) : (
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    value={addSystemName}
-                    onChange={(e) => setAddSystemName(e.target.value)}
-                    placeholder="Name (e.g. Local Systems)"
-                    className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-40"
-                  />
-                  <input
-                    type="text"
-                    value={addSystemCode}
-                    onChange={(e) => setAddSystemCode(e.target.value)}
-                    placeholder="Code (optional)"
-                    className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-24"
-                  />
-                  <button type="button" onClick={handleAddSystem} disabled={loading || !addSystemName.trim()} className="h-9 px-3 bg-blue-600 text-white rounded text-sm disabled:opacity-50 shrink-0">
-                    Add
+                accessUsers.map((u) => (
+                  <div key={u.id} className="flex justify-between items-center py-2 px-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{u.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRevokeAccess(u.id)}
+                      disabled={accessLoading}
+                      className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                      title="Revoke access"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+            {showGrantAccess && (
+              <div className="mt-4 p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/30">
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Select user to grant access</label>
+                <select
+                  value={grantUserId}
+                  onChange={(e) => setGrantUserId(e.target.value)}
+                  className="w-full h-9 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm mb-2"
+                >
+                  <option value="">— Select —</option>
+                  {availableUsers.filter((a) => !accessUsers.some((x) => x.id === a.id)).map((u) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleGrantAccess}
+                    disabled={accessLoading || !grantUserId}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium disabled:opacity-50"
+                  >
+                    Grant
                   </button>
-                  <button type="button" onClick={() => { setShowAddSystem(false); setAddSystemName(''); setAddSystemCode('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
+                  <button type="button" onClick={() => { setShowGrantAccess(false); setGrantUserId('') }} className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm">
                     Cancel
                   </button>
                 </div>
-              )}
-              {systems.length > 0 && <span className="text-xs text-gray-500">{systems.length} system(s)</span>}
-            </div>
-            <div className="flex flex-col gap-2">
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Deliverables</span>
-              {!showAddDeliverable ? (
-                <button type="button" onClick={() => setShowAddDeliverable(true)} className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm h-9">
-                  <Plus className="h-4 w-4" /> Add Deliverable
-                </button>
-              ) : (
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    value={addDeliverableName}
-                    onChange={(e) => setAddDeliverableName(e.target.value)}
-                    placeholder="Name (e.g. Design Documents)"
-                    className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-40"
-                  />
-                  <button type="button" onClick={handleAddDeliverable} disabled={loading || !addDeliverableName.trim()} className="h-9 px-3 bg-blue-600 text-white rounded text-sm disabled:opacity-50 shrink-0">
-                    Add
-                  </button>
-                  <button type="button" onClick={() => { setShowAddDeliverable(false); setAddDeliverableName('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
-                    Cancel
-                  </button>
-                </div>
-              )}
-              {deliverables.length > 0 && <span className="text-xs text-gray-500">{deliverables.length} deliverable(s)</span>}
-            </div>
-            <div className="flex flex-col gap-2">
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Activities</span>
-              {!showAddActivity ? (
-                <button type="button" onClick={() => setShowAddActivity(true)} className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm h-9">
-                  <Plus className="h-4 w-4" /> Add Activity
-                </button>
-              ) : (
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    value={addActivityName}
-                    onChange={(e) => setAddActivityName(e.target.value)}
-                    placeholder="Name (e.g. Design)"
-                    className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-40"
-                  />
-                  <button type="button" onClick={handleAddActivity} disabled={loading || !addActivityName.trim()} className="h-9 px-3 bg-blue-600 text-white rounded text-sm disabled:opacity-50 shrink-0">
-                    Add
-                  </button>
-                  <button type="button" onClick={() => { setShowAddActivity(false); setAddActivityName('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
-                    Cancel
-                  </button>
-                </div>
-              )}
-              {activities.length > 0 && <span className="text-xs text-gray-500">{activities.length} activity(ies)</span>}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -600,13 +775,39 @@ export default function BidSheetDetailClient({
           )}
         </div>
 
-        {/* Matrix: fixed column widths for alignment */}
+        {/* Mobile: System/Activity list + View button per row */}
+        <div className="md:hidden overflow-x-hidden">
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {filteredRows.map((row) => (
+              <div
+                key={`${row.systemId}-${row.activityId}`}
+                className="flex justify-between items-center py-3 px-4 hover:bg-gray-50 dark:hover:bg-gray-700/30"
+              >
+                <div className="min-w-0 flex-1 truncate" title={`${row.systemName}${row.systemCode ? ` (${row.systemCode})` : ''} · ${row.activityName}`}>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{row.systemName}</span>
+                  {row.systemCode && <span className="text-gray-500 dark:text-gray-400 text-sm ml-1">({row.systemCode})</span>}
+                  <span className="text-gray-500 dark:text-gray-400"> · </span>
+                  <span className="text-gray-500 dark:text-gray-400">{row.activityName}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewRow({ systemId: row.systemId, activityId: row.activityId, systemName: row.systemName, activityName: row.activityName })}
+                  className="ml-2 shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
+                >
+                  <Eye className="h-4 w-4" /> View
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Desktop: full matrix with horizontal scroll */}
         {(() => {
           const sysW = compactMode ? 180 : 200
           const colW = compactMode ? 100 : 130
           const gridCols = `${sysW}px repeat(${deliverables.length}, ${colW}px)`
           return (
-            <div className="min-w-[600px]">
+            <div className="hidden md:block min-w-[600px]">
               {/* Header row - same grid as body rows */}
               <div
                 className="flex border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700"
@@ -708,14 +909,20 @@ export default function BidSheetDetailClient({
             <tr className="border-b border-gray-200 dark:border-gray-700">
               <th className="text-left py-2 text-sm font-medium">Person</th>
               <th className="text-left py-2 text-sm font-medium">Rate ($/hr)</th>
+              <th className="text-left py-2 text-sm font-medium">Total Hours</th>
+              <th className="text-left py-2 text-sm font-medium">Total Cost</th>
               {canEdit && <th className="w-10"></th>}
             </tr>
           </thead>
           <tbody>
-            {labor.map((l) => (
+            {labor.map((l) => {
+              const { hours, cost } = laborHoursAndCost.get(l.id) || { hours: 0, cost: 0 }
+              return (
               <tr key={l.id} className="border-b border-gray-200 dark:border-gray-700">
                 <td className="py-2">{l.user_profiles?.name || l.placeholder_name || '-'}</td>
                 <td className="py-2">${Number(l.bid_rate).toFixed(2)}</td>
+                <td className="py-2">{hours.toFixed(1)}</td>
+                <td className="py-2">${cost.toFixed(0)}</td>
                 {canEdit && (
                   <td>
                     <button type="button" onClick={() => handleDeleteLabor(l.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
@@ -724,7 +931,7 @@ export default function BidSheetDetailClient({
                   </td>
                 )}
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
         {canEdit && (
@@ -910,6 +1117,50 @@ export default function BidSheetDetailClient({
           </div>
         </div>
       </div>
+
+      {/* View Deliverables Modal (mobile) */}
+      {viewRow && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setViewRow(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate pr-2">
+                {viewRow.systemName}{viewRow.systemName && viewRow.activityName ? ' · ' : ''}{viewRow.activityName}
+              </h3>
+              <button type="button" onClick={() => setViewRow(null)} className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="overflow-auto flex-1 px-4 py-3">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-600">
+                    <th className="text-left py-2 font-medium">Deliverable</th>
+                    <th className="text-right py-2 font-medium">Hrs</th>
+                    <th className="text-left py-2 font-medium">Resource</th>
+                    <th className="text-right py-2 font-medium">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deliverables.map((d) => {
+                    const hrs = getItemHours(viewRow.systemId, d.id, viewRow.activityId)
+                    const laborId = getItemLaborId(viewRow.systemId, d.id, viewRow.activityId)
+                    const cost = getItemCost(viewRow.systemId, d.id, viewRow.activityId)
+                    const laborName = laborId ? labor.find((l) => l.id === laborId)?.user_profiles?.name || labor.find((l) => l.id === laborId)?.placeholder_name || '?' : '—'
+                    return (
+                      <tr key={d.id} className="border-b border-gray-100 dark:border-gray-700">
+                        <td className="py-2 text-gray-900 dark:text-gray-100">{d.name}</td>
+                        <td className="py-2 text-right">{hrs > 0 ? hrs : '—'}</td>
+                        <td className="py-2 text-gray-600 dark:text-gray-400">{laborName}</td>
+                        <td className="py-2 text-right font-medium">{(hrs > 0 && laborId) ? `$${cost.toFixed(0)}` : '—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Import Modal */}
       {showImportModal && (
