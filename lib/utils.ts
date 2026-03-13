@@ -1,18 +1,24 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { startOfWeek, endOfWeek, format, parseISO, addWeeks, subWeeks } from "date-fns"
-import { toZonedTime } from "date-fns-tz"
 
 const APP_TIMEZONE = 'America/New_York' // EST/EDT
 
-/** Format date in Eastern using Intl (no date-fns-tz, avoids client crashes) */
+/** Format date in Eastern using Intl (avoids date-fns-tz client crashes) */
 function formatInEastern(d: Date, options: Intl.DateTimeFormatOptions): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: APP_TIMEZONE, ...options }).format(d)
 }
 
-/** Get current date in app timezone (EST) for week calculations */
+/** Get current date in Eastern for week calculations. Uses Intl to avoid date-fns-tz. */
 function getNowInAppTz(): Date {
-  return toZonedTime(new Date(), APP_TIMEZONE)
+  const now = new Date()
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: APP_TIMEZONE,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(now)
+  const get = (t: string) => parseInt(parts.find(p => p.type === t)?.value || '0', 10)
+  return new Date(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
 }
 
 export function cn(...inputs: ClassValue[]) {
@@ -72,17 +78,17 @@ export function getWeekDates(weekEnding: Date | string, weekStartsOn: number = 1
 
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return format(d, 'MMM d, yyyy')
+  return formatInEastern(d, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export function formatWeekEnding(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return format(d, 'MMM d, yyyy')
+  return formatInEastern(d, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export function formatDateShort(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return format(d, 'M/d/yy')
+  return formatInEastern(d, { month: 'numeric', day: 'numeric', year: '2-digit' })
 }
 
 /** Format period month/year as MMM-YYYY (e.g. Jul-2024). month is 1-12. */
