@@ -111,12 +111,14 @@ export default async function TimesheetDetailPage({
   let budgetAccessPoIds: string[] = []
   if (isAdminOrAbove) {
     const allPOs = await withQueryTimeout(() => adminSupabase.from('purchase_orders').select('id'))
-    budgetAccessPoIds = (allPOs.data || []).map((p: { id: string }) => p.id)
+    const poList = Array.isArray(allPOs.data) ? allPOs.data : []
+    budgetAccessPoIds = poList.map((p: { id: string }) => p.id)
   } else {
     const accessRows = await withQueryTimeout(() =>
       adminSupabase.from('po_budget_access').select('purchase_order_id').eq('user_id', user.id)
     )
-    budgetAccessPoIds = (accessRows.data || []).map((r: { purchase_order_id?: string }) => r.purchase_order_id).filter(Boolean) as string[]
+    const accessList = Array.isArray(accessRows.data) ? accessRows.data : []
+    budgetAccessPoIds = accessList.map((r: { purchase_order_id?: string }) => r.purchase_order_id).filter(Boolean) as string[]
   }
 
   // Get entries (with error handling)
