@@ -351,7 +351,17 @@ export default function BasicBudgetView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(clientPOForm),
       })
-      const json = await res.json()
+      const text = await res.text()
+      let json: { error?: string }
+      try {
+        json = JSON.parse(text)
+      } catch {
+        if (text.startsWith('<')) {
+          setSaveError(`Server returned an error page (${res.status}). Please refresh and try again, or contact support if it persists.`)
+          return
+        }
+        throw new Error('Invalid response from server')
+      }
       if (!res.ok) throw new Error(json.error || 'Failed to save')
       setEditingClientPO(false)
       window.location.reload()
@@ -396,7 +406,17 @@ export default function BasicBudgetView({
           changeOrders: budgetForm.changeOrders,
         }),
       })
-      const json = await res.json()
+      const text = await res.text()
+      let json: { error?: string }
+      try {
+        json = JSON.parse(text)
+      } catch {
+        if (text.startsWith('<')) {
+          setSaveError(`Server returned an error page (${res.status}). Please refresh and try again, or contact support if it persists.`)
+          return
+        }
+        throw new Error('Invalid response from server')
+      }
       if (!res.ok) throw new Error(json.error || 'Failed to save')
       setEditingBudget(false)
       window.location.reload()

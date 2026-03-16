@@ -59,7 +59,10 @@ export async function updateSession(request: NextRequest) {
       !isPublicPath &&
       !request.nextUrl.pathname.startsWith('/auth')
     ) {
-      // no user, potentially respond by redirecting the user to the login page
+      // API routes: return 401 JSON so the client gets a proper error, not an HTML redirect
+      if (request.nextUrl.pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
       const url = request.nextUrl.clone()
       url.pathname = '/login'
       return NextResponse.redirect(url)
@@ -77,7 +80,10 @@ export async function updateSession(request: NextRequest) {
       return supabaseResponse
     }
     
-    // For protected paths, redirect to login but don't hang
+    // API routes: return 401 JSON instead of redirect
+    if (request.nextUrl.pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

@@ -63,7 +63,7 @@ git status
 git add .
 
 # 3. Commit with a message
-git commit -m "Description of your changes"
+git commit -m "remove Audit Trail"
 
 # 4. Push to GitHub
 git push
@@ -114,7 +114,7 @@ npm run dev
 git add .
 
 # 2. Commit with a short message describing the change
-git commit -m "bug fixes related to budgets and expenses"
+git commit -m "bid sheets"
 
 # 3. Push to GitHub (triggers Vercel deployment)
 git push
