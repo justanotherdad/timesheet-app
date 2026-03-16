@@ -191,7 +191,6 @@ export default function WeeklyTimesheetExport({
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
-    const origin = window.location.origin
     const html = buildExportHtml(entriesToUse, unbillableToUse)
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -201,26 +200,59 @@ export default function WeeklyTimesheetExport({
           <style>
             @page { size: landscape; margin: 0.25in; }
             @media print { @page { size: landscape; margin: 0.25in; } }
-            @media print { html, body { width: 100%; height: 100%; margin: 0; padding: 0; } }
+            @media print { html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; } }
             @media print { .print-hide { display: none !important; } }
             body { font-family: Arial, sans-serif; font-size: 9pt; margin: 0; padding: 0; color: #000; }
-            .fit-page { transform-origin: top left; }
-            .print-hide { background: #fef3c7; padding: 8px 12px; margin-bottom: 12px; font-size: 11px; border: 1px solid #f59e0b; border-radius: 6px; }
-            @media print {
-              .fit-page { width: 11in; max-width: 100%; }
+            .fit-page-container {
+              width: 10.5in;
+              height: 7.5in;
+              overflow: hidden;
+              position: relative;
             }
+            @media print {
+              .fit-page-container {
+                width: 10.5in !important;
+                height: 7.5in !important;
+                page-break-after: avoid;
+              }
+            }
+            .fit-page-content {
+              transform-origin: top left;
+            }
+            .print-hide { background: #fef3c7; padding: 8px 12px; margin-bottom: 12px; font-size: 11px; border: 1px solid #f59e0b; border-radius: 6px; }
           </style>
         </head>
         <body>
           <div class="print-hide"><strong>Before printing:</strong> In the print dialog, open &quot;More settings&quot; and <strong>uncheck &quot;Headers and footers&quot;</strong> to remove the URL and page numbers from the output.</div>
-          <div class="fit-page">${html}</div>
+          <div class="fit-page-container">
+            <div class="fit-page-content" id="fit-content">${html}</div>
+          </div>
         </body>
       </html>
     `)
     printWindow.document.close()
-    setTimeout(() => {
-      printWindow.print()
-    }, 500)
+    const applyScaleAndPrint = () => {
+      try {
+        if (printWindow.closed) return
+        const container = printWindow.document.querySelector('.fit-page-container')
+        const content = printWindow.document.getElementById('fit-content')
+        if (container && content) {
+          const cw = container.clientWidth
+          const ch = container.clientHeight
+          const contentWidth = content.scrollWidth
+          const contentHeight = content.scrollHeight
+          const scale = Math.min(cw / contentWidth, ch / contentHeight, 1)
+          content.style.transform = `scale(${scale})`
+          content.style.width = `${100 / scale}%`
+          content.style.height = `${100 / scale}%`
+        }
+        printWindow.print()
+      } catch {
+        // User may have closed the print window
+      }
+    }
+    // Wait for content (including images) to render, then scale to fit one page
+    setTimeout(applyScaleAndPrint, 600)
   }
 
   const handleDownloadClick = () => {

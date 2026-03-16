@@ -48,19 +48,19 @@ export async function POST(
     const rejectorName = (user.profile as { name?: string }).name || 'Approver'
     const rejectionReason = `Rejected by ${rejectorName}: ${note}`
 
-    // When rejecting an approved timesheet, delete signatures so the workflow resets
-    if (timesheet.status === 'approved') {
-      const { error: deleteError } = await adminSupabase
-        .from('timesheet_signatures')
-        .delete()
-        .eq('timesheet_id', id)
+    // Delete signatures on reject so the workflow resets. When employee resubmits and
+    // approvers sign again, they get fresh timestamps. Required for both 'submitted'
+    // (e.g. supervisor signed, manager rejects) and 'approved' (fully approved, then rejected).
+    const { error: deleteError } = await adminSupabase
+      .from('timesheet_signatures')
+      .delete()
+      .eq('timesheet_id', id)
 
-      if (deleteError) {
-        return NextResponse.json({ error: deleteError.message }, { status: 500 })
-      }
+    if (deleteError) {
+      return NextResponse.json({ error: deleteError.message }, { status: 500 })
     }
 
-    // Clear approved fields when rejecting after approval
+    // Clear approved fields when rejecting after full approval
     const updatePayload: Record<string, unknown> = {
       status: 'rejected',
       rejected_by_id: user.id,

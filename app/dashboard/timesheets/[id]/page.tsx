@@ -106,6 +106,19 @@ export default async function TimesheetDetailPage({
     canApprove = true
   }
 
+  // Budget access: Admin/Super Admin see all POs; others need po_budget_access grant
+  const isAdminOrAbove = ['admin', 'super_admin'].includes(user.profile.role)
+  let budgetAccessPoIds: string[] = []
+  if (isAdminOrAbove) {
+    const allPOs = await withQueryTimeout(() => adminSupabase.from('purchase_orders').select('id'))
+    budgetAccessPoIds = (allPOs.data || []).map((p: { id: string }) => p.id)
+  } else {
+    const accessRows = await withQueryTimeout(() =>
+      adminSupabase.from('po_budget_access').select('purchase_order_id').eq('user_id', user.id)
+    )
+    budgetAccessPoIds = (accessRows.data || []).map((r: { purchase_order_id?: string }) => r.purchase_order_id).filter(Boolean) as string[]
+  }
+
   // Get entries (with error handling)
   let entries: any[] = []
   let unbillable: any[] = []
@@ -224,10 +237,10 @@ export default async function TimesheetDetailPage({
             {entries && entries.length > 0 && (
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
-                <div className="overflow-x-auto">
+                <div className={`overflow-x-auto ${entries.length > 6 ? 'max-h-[50vh] overflow-y-auto' : ''}`}>
                   <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
-                    <thead>
-                      <tr className="bg-gray-100 dark:bg-gray-700">
+                    <thead className={`${entries.length > 6 ? 'sticky top-0 z-10' : ''} bg-gray-100 dark:bg-gray-700`}>
+                      <tr>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Client/Project</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">PO#</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Task Description</th>
@@ -249,7 +262,16 @@ export default async function TimesheetDetailPage({
                             {entry.sites?.name || 'N/A'}
                           </td>
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
-                            {entry.purchase_orders?.po_number || 'N/A'}
+                            {entry.po_id && budgetAccessPoIds.includes(entry.po_id) ? (
+                              <Link
+                                href={`/dashboard/budget?poId=${entry.po_id}`}
+                                className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                              >
+                                {entry.purchase_orders?.po_number || 'N/A'}
+                              </Link>
+                            ) : (
+                              entry.purchase_orders?.po_number || 'N/A'
+                            )}
                           </td>
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
                             {entry.task_description}
