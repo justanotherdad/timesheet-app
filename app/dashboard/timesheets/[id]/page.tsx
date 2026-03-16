@@ -239,7 +239,7 @@ export default async function TimesheetDetailPage({
             {entries && entries.length > 0 && (
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
-                <div className={`overflow-x-auto ${entries.length > 6 ? 'max-h-[50vh] overflow-y-auto' : ''}`}>
+                <div className={`overflow-x-auto ${entries.length > 6 ? 'max-h-[35vh] overflow-y-auto' : ''}`}>
                   <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
                     <thead className={`${entries.length > 6 ? 'sticky top-0 z-10' : ''} bg-gray-100 dark:bg-gray-700`}>
                       <tr>
@@ -311,13 +311,20 @@ export default async function TimesheetDetailPage({
                     </tbody>
                   </table>
                 </div>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Billable Total: {billableTotal.toFixed(2)} hours</p>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                  Billable Total: {billableTotal.toFixed(2)} hours
+                  {entries.length > 6 && unbillable && unbillable.length > 0 && (
+                    <a href="#unbillable-section" className="ml-3 text-blue-600 dark:text-blue-400 hover:underline text-sm">
+                      ↓ Jump to Unbillable Time
+                    </a>
+                  )}
+                </p>
               </div>
             )}
 
             {/* Unbillable Entries */}
             {unbillable && unbillable.length > 0 && (
-              <div className="mb-6">
+              <div id="unbillable-section" className="mb-6 scroll-mt-4">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Unbillable Time</h2>
                 <div className="overflow-x-auto">
                   <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
