@@ -1,0 +1,107 @@
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
+
+export async function updateSession(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({
+    request,
+  })
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  // If env vars are missing, skip Supabase auth check and allow request through
+  if (!supabaseUrl || !supabaseKey) {
+    return supabaseResponse
+  }
+
+  const supabase = createServerClient(
+    supabaseUrl,
+    supabaseKey,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({
+            request,
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  // IMPORTANT: Avoid writing any logic between createServerClient and
+  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
+  // issues with users being randomly logged out.
+
+  try {
+    // Add timeout to auth check to prevent hanging
+    const authPromise = supabase.auth.getUser()
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+    })
+
+    const {
+      data: { user },
+    } = await Promise.race([authPromise, timeoutPromise])
+
+    // Allow public access to landing page, login, signup, and password setup
+    const publicPaths = ['/', '/login', '/signup', '/auth/setup-password']
+    const isPublicPath = publicPaths.includes(request.nextUrl.pathname)
+
+    if (
+      !user &&
+      !isPublicPath &&
+      !request.nextUrl.pathname.startsWith('/auth')
+    ) {
+      // API routes: return 401 JSON so the client gets a proper error, not an HTML redirect
+      if (request.nextUrl.pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+  } catch (error) {
+    // If Supabase connection fails or times out, allow request through to prevent timeouts
+    // This prevents Error 522 when Supabase is unavailable or slow
+    console.error('Supabase auth error in middleware:', error)
+    
+    // For public paths, always allow through
+    const publicPaths = ['/', '/login', '/signup', '/auth/setup-password', '/auth/invite']
+    const isPublicPath = publicPaths.includes(request.nextUrl.pathname)
+    
+    if (isPublicPath || request.nextUrl.pathname.startsWith('/auth')) {
+      return supabaseResponse
+    }
+    
+    // API routes: return 401 JSON instead of redirect
+    if (request.nextUrl.pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
+  // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
+  // creating a new response object with NextResponse.next() make sure to:
+  // 1. Pass the request in it, like so:
+  //    const myNewResponse = NextResponse.next({ request })
+  // 2. Copy over the cookies, like so:
+  //    myNewResponse.cookies.setAll(supabaseResponse.cookies.getAll())
+  // 3. Change the myNewResponse object to fit your needs, but avoid changing
+  //    the cookies!
+  // 4. Finally:
+  //    return myNewResponse
+  // If this is not done, you may be causing the browser and server to go out
+  // of sync and terminate the user's session prematurely.
+
+  return supabaseResponse
+}
+

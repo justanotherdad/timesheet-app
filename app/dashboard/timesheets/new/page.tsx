@@ -1,0 +1,381 @@
+import { redirect } from 'next/navigation'
+import { getCurrentUser } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import WeeklyTimesheetForm from '@/components/WeeklyTimesheetForm'
+import { getWeekEnding, formatDateForInput } from '@/lib/utils'
+import { withQueryTimeout } from '@/lib/timeout'
+import Header from '@/components/Header'
+
+export const maxDuration = 10 // Maximum duration for this route in seconds
+export const dynamic = 'force-dynamic'
+
+type SearchParams = { week?: string }
+
+export default async function NewTimesheetPage(props: { searchParams?: Promise<SearchParams> }) {
+  const user = await getCurrentUser()
+  
+  if (!user) {
+    redirect('/login')
+  }
+
+  const supabase = await createClient()
+  const params = props.searchParams ? await props.searchParams : {}
+  const weekParam = params.week
+
+  const weekEnding = getWeekEnding()
+  const weekEndingStr = formatDateForInput(weekEnding)
+
+  // If ?week=YYYY-MM-DD is provided (e.g. from "Create new timesheet" on rejected edit page), use it
+  const useWeekFromParam = weekParam && /^\d{4}-\d{2}-\d{2}$/.test(weekParam)
+
+  // Check for timesheets this week (may have multiple - use most recent for redirect logic)
+  const existingTimesheetResult = await withQueryTimeout<{ id: string; status: string }[]>(() =>
+    supabase
+      .from('weekly_timesheets')
+      .select('id, status')
+      .eq('user_id', user.id)
+      .eq('week_ending', weekEndingStr)
+      .order('created_at', { ascending: false })
+      .limit(1)
+  )
+
+  const existing = Array.isArray(existingTimesheetResult.data) && existingTimesheetResult.data.length > 0
+    ? existingTimesheetResult.data[0]
+    : null
+  // Effective week for the form: previous week by default (no existing); if current week exists and is submitted, use next week
+  // When ?week= is provided (e.g. "Create new" from rejected edit), use that week
+  let effectiveWeekEnding = new Date(weekEnding)
+  let effectiveWeekEndingStr = weekEndingStr
+
+  if (useWeekFromParam) {
+    effectiveWeekEndingStr = weekParam!
+    effectiveWeekEnding = new Date(weekParam!)
+  } else if (!existing?.id) {
+    // No timesheet for current week — default to previous week
+    const prevWeekEnding = new Date(weekEnding)
+    prevWeekEnding.setDate(prevWeekEnding.getDate() - 7)
+    effectiveWeekEnding = prevWeekEnding
+    effectiveWeekEndingStr = formatDateForInput(prevWeekEnding)
+  } else if (existing?.id) {
+    // Allow multiple timesheets per week
+    if (existing.status === 'draft') {
+      // Has draft(s) — show form for current week so user can create another
+      effectiveWeekEnding = weekEnding
+      effectiveWeekEndingStr = weekEndingStr
+    } else {
+      // Current week submitted/approved/rejected — default to next week
+      const nextWeekEnding = new Date(weekEnding)
+      nextWeekEnding.setDate(nextWeekEnding.getDate() + 7)
+      const nextWeekEndingStr = formatDateForInput(nextWeekEnding)
+
+      const nextExistingResult = await withQueryTimeout<{ id: string; status: string }[]>(() =>
+        supabase
+          .from('weekly_timesheets')
+          .select('id, status')
+          .eq('user_id', user.id)
+          .eq('week_ending', nextWeekEndingStr)
+          .order('created_at', { ascending: false })
+          .limit(1)
+      )
+      const nextExisting = Array.isArray(nextExistingResult.data) && nextExistingResult.data.length > 0
+        ? nextExistingResult.data[0]
+        : null
+      if (nextExisting?.id && nextExisting.status !== 'draft') {
+        redirect(`/dashboard/timesheets/${nextExisting.id}`)
+      }
+      effectiveWeekEnding = nextWeekEnding
+      effectiveWeekEndingStr = nextWeekEndingStr
+    }
+  }
+
+  // Get user's assigned sites, POs, and departments (unless admin)
+  // Use admin client to bypass RLS - user assignments may not have SELECT policy for own rows
+  let userSiteIds: string[] = []
+  let userPOIds: string[] = []
+  let userDepartmentIds: string[] = []
+
+  if (!['admin', 'super_admin'].includes(user.profile.role)) {
+    const adminSupabase = createAdminClient()
+    const [userSitesResult, userPOsResult, userDeptsResult] = await Promise.all([
+      withQueryTimeout<Array<{ site_id: string }>>(() => adminSupabase.from('user_sites').select('site_id').eq('user_id', user.id)),
+      withQueryTimeout<Array<{ purchase_order_id: string }>>(() => adminSupabase.from('user_purchase_orders').select('purchase_order_id').eq('user_id', user.id)),
+      withQueryTimeout<Array<{ department_id: string }>>(() => adminSupabase.from('user_departments').select('department_id').eq('user_id', user.id)),
+    ])
+    userSiteIds = Array.isArray(userSitesResult.data) ? userSitesResult.data.map((r) => r.site_id) : []
+    userPOIds = Array.isArray(userPOsResult.data) ? userPOsResult.data.map((r) => r.purchase_order_id) : []
+    userDepartmentIds = Array.isArray(userDeptsResult.data) ? userDeptsResult.data.map((r) => r.department_id) : []
+  }
+
+  // Fetch dropdown options - filter by user assignments unless admin
+  // Cascading: Site → Departments (all at site if blank) → POs (all filtered by site/dept if blank, else only chosen)
+  const sitesQuery = supabase.from('sites').select('*').order('name')
+  const posQuery = supabase.from('purchase_orders').select('*').eq('active', true).order('po_number')
+  
+  if (!['admin', 'super_admin'].includes(user.profile.role)) {
+    if (userSiteIds.length > 0) {
+      sitesQuery.in('id', userSiteIds)
+    } else {
+      sitesQuery.eq('id', '00000000-0000-0000-0000-000000000000') // Will return empty
+    }
+    if (userPOIds.length > 0) {
+      posQuery.in('id', userPOIds)
+    } else if (userSiteIds.length > 0) {
+      // No explicit POs: show all POs at user's sites, filtered by department if user has departments
+      posQuery.in('site_id', userSiteIds)
+      if (userDepartmentIds.length > 0) {
+        posQuery.in('department_id', userDepartmentIds)
+      }
+    } else {
+      posQuery.eq('id', '00000000-0000-0000-0000-000000000000') // No sites = no POs
+    }
+  }
+
+  // Systems, deliverables, activities: only those at sites assigned to the user (unless admin)
+  const systemsQuery = supabase.from('systems').select('*').order('name')
+  const deliverablesQuery = supabase.from('deliverables').select('*').order('name')
+  const activitiesQuery = supabase.from('activities').select('*').order('name')
+  if (!['admin', 'super_admin'].includes(user.profile.role)) {
+    if (userSiteIds.length > 0) {
+      systemsQuery.in('site_id', userSiteIds)
+      deliverablesQuery.in('site_id', userSiteIds)
+      activitiesQuery.in('site_id', userSiteIds)
+    } else {
+      systemsQuery.eq('site_id', '00000000-0000-0000-0000-000000000000')
+      deliverablesQuery.eq('site_id', '00000000-0000-0000-0000-000000000000')
+      activitiesQuery.eq('site_id', '00000000-0000-0000-0000-000000000000')
+    }
+  }
+
+  const [sitesResult, purchaseOrdersResult, systemsResult, deliverablesResult, activitiesResult, departmentsResult] = await Promise.all([
+    withQueryTimeout(() => sitesQuery),
+    withQueryTimeout(() => posQuery),
+    withQueryTimeout(() => systemsQuery),
+    withQueryTimeout(() => deliverablesQuery),
+    withQueryTimeout(() => activitiesQuery),
+    // Fetch departments at user's sites for effectiveDepartmentIds (when user has no explicit departments)
+    userSiteIds.length > 0
+      ? withQueryTimeout<Array<{ id: string }>>(() => supabase.from('departments').select('id').in('site_id', userSiteIds))
+      : Promise.resolve({ data: [] as { id: string }[] }),
+  ])
+
+  const sites = (sitesResult.data || []) as any[]
+  const purchaseOrders = (purchaseOrdersResult.data || []) as any[]
+  let systems = (systemsResult.data || []) as any[]
+  let deliverables = (deliverablesResult.data || []) as any[]
+  let activities = (activitiesResult.data || []) as any[]
+  const departmentsAtSites = (departmentsResult.data || []) as Array<{ id: string }>
+
+  // Filter systems, deliverables, activities by user's assigned departments and POs (non-admins only)
+  // When user has sites but no explicit POs/departments, treat POs and departments from those sites as accessible
+  const effectivePOIds = userPOIds.length > 0 ? userPOIds : purchaseOrders.map((p: any) => p.id)
+  const effectiveDepartmentIds = userDepartmentIds.length > 0 ? userDepartmentIds : departmentsAtSites.map((d) => d.id)
+  if (!['admin', 'super_admin'].includes(user.profile.role) && (systems.length > 0 || deliverables.length > 0 || activities.length > 0)) {
+    const filterByDeptAndPo = async (
+      itemIds: string[],
+      deptJunction: string,
+      poJunction: string,
+      itemIdCol: string
+    ): Promise<Set<string>> => {
+      if (itemIds.length === 0) return new Set()
+      const [deptRes, poRes] = await Promise.all([
+        withQueryTimeout<Array<{ [k: string]: string }>>(() => supabase.from(deptJunction).select(itemIdCol + ',department_id').in(itemIdCol, itemIds)),
+        withQueryTimeout<Array<{ [k: string]: string }>>(() => supabase.from(poJunction).select(itemIdCol + ',purchase_order_id').in(itemIdCol, itemIds)),
+      ])
+      const deptRows = (deptRes.data || []) as Array<{ department_id: string } & Record<string, string>>
+      const poRows = (poRes.data || []) as Array<{ purchase_order_id: string } & Record<string, string>>
+      const itemDepts: Record<string, string[]> = {}
+      const itemPOs: Record<string, string[]> = {}
+      itemIds.forEach((id) => {
+        itemDepts[id] = deptRows.filter((r) => r[itemIdCol] === id).map((r) => r.department_id)
+        itemPOs[id] = poRows.filter((r) => r[itemIdCol] === id).map((r) => r.purchase_order_id)
+      })
+      const allowed = new Set<string>()
+      itemIds.forEach((id) => {
+        const depts = itemDepts[id] || []
+        const pos = itemPOs[id] || []
+        const deptOk = depts.length === 0 || depts.some((d) => effectiveDepartmentIds.includes(d))
+        const poOk = pos.length === 0 || pos.some((p) => effectivePOIds.includes(p))
+        if (deptOk && poOk) allowed.add(id)
+      })
+      return allowed
+    }
+    const [sysAllowed, delAllowed, actAllowed] = await Promise.all([
+      filterByDeptAndPo(systems.map((s) => s.id), 'system_departments', 'system_purchase_orders', 'system_id'),
+      filterByDeptAndPo(deliverables.map((d) => d.id), 'deliverable_departments', 'deliverable_purchase_orders', 'deliverable_id'),
+      filterByDeptAndPo(activities.map((a) => a.id), 'activity_departments', 'activity_purchase_orders', 'activity_id'),
+    ])
+    systems = systems.filter((s) => sysAllowed.has(s.id))
+    deliverables = deliverables.filter((d) => delAllowed.has(d.id))
+    activities = activities.filter((a) => actAllowed.has(a.id))
+  }
+
+  // Deduplicate by id (in case of duplicate rows from imports or junction filters)
+  deliverables = Array.from(new Map(deliverables.map((d: any) => [d.id, d])).values())
+  activities = Array.from(new Map(activities.map((a: any) => [a.id, a])).values())
+
+  // Fetch PO and department assignments for deliverables and activities (for client-side filtering in form)
+  let deliverablePOIds: Record<string, string[]> = {}
+  let deliverableDepartmentIds: Record<string, string[]> = {}
+  let activityPOIds: Record<string, string[]> = {}
+  if (deliverables.length > 0 || activities.length > 0) {
+    const [delPORes, delDeptRes, actPORes] = await Promise.all([
+      deliverables.length > 0
+        ? withQueryTimeout<Array<{ deliverable_id: string; purchase_order_id: string }>>(() =>
+            supabase.from('deliverable_purchase_orders').select('deliverable_id,purchase_order_id').in('deliverable_id', deliverables.map((d: any) => d.id))
+          )
+        : Promise.resolve({ data: [] }),
+      deliverables.length > 0
+        ? withQueryTimeout<Array<{ deliverable_id: string; department_id: string }>>(() =>
+            supabase.from('deliverable_departments').select('deliverable_id,department_id').in('deliverable_id', deliverables.map((d: any) => d.id))
+          )
+        : Promise.resolve({ data: [] }),
+      activities.length > 0
+        ? withQueryTimeout<Array<{ activity_id: string; purchase_order_id: string }>>(() =>
+            supabase.from('activity_purchase_orders').select('activity_id,purchase_order_id').in('activity_id', activities.map((a: any) => a.id))
+          )
+        : Promise.resolve({ data: [] }),
+    ])
+    ;(delPORes.data || []).forEach((r: any) => {
+      if (!deliverablePOIds[r.deliverable_id]) deliverablePOIds[r.deliverable_id] = []
+      deliverablePOIds[r.deliverable_id].push(r.purchase_order_id)
+    })
+    ;(delDeptRes.data || []).forEach((r: any) => {
+      if (!deliverableDepartmentIds[r.deliverable_id]) deliverableDepartmentIds[r.deliverable_id] = []
+      deliverableDepartmentIds[r.deliverable_id].push(r.department_id)
+    })
+    ;(actPORes.data || []).forEach((r: any) => {
+      if (!activityPOIds[r.activity_id]) activityPOIds[r.activity_id] = []
+      activityPOIds[r.activity_id].push(r.purchase_order_id)
+    })
+  }
+
+  // Previous week for "Copy Previous Week" is the week before the effective (current or next) week we're creating
+  const previousWeekEnding = new Date(effectiveWeekEnding)
+  previousWeekEnding.setDate(previousWeekEnding.getDate() - 7)
+  const previousWeekEndingStr = formatDateForInput(previousWeekEnding)
+
+  // Check if previous week timesheet exists
+  let previousWeekData: {
+    entries?: Array<{
+      client_project_id?: string
+      po_id?: string
+      task_description: string
+      system_id?: string
+      system_name?: string
+      deliverable_id?: string
+      activity_id?: string
+      mon_hours: number
+      tue_hours: number
+      wed_hours: number
+      thu_hours: number
+      fri_hours: number
+      sat_hours: number
+      sun_hours: number
+    }>
+    unbillable?: Array<{
+      description: 'HOLIDAY' | 'INTERNAL' | 'PTO'
+      mon_hours: number
+      tue_hours: number
+      wed_hours: number
+      thu_hours: number
+      fri_hours: number
+      sat_hours: number
+      sun_hours: number
+    }>
+  } | undefined = undefined
+  try {
+    const previousTimesheetResult = await withQueryTimeout<{ id: string }>(() =>
+      supabase
+        .from('weekly_timesheets')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('week_ending', previousWeekEndingStr)
+        .single()
+    )
+
+    const previousTimesheet = previousTimesheetResult.data as { id: string } | null
+    if (previousTimesheet?.id) {
+      const previousTimesheetId = previousTimesheet.id
+      // Fetch previous week's entries and unbillable
+      const [prevEntriesResult, prevUnbillableResult] = await Promise.all([
+        withQueryTimeout<Array<any>>(() =>
+          supabase
+            .from('timesheet_entries')
+            .select('*')
+            .eq('timesheet_id', previousTimesheetId)
+            .order('created_at')
+        ),
+        withQueryTimeout<Array<any>>(() =>
+          supabase
+            .from('timesheet_unbillable')
+            .select('*')
+            .eq('timesheet_id', previousTimesheetId)
+            .order('description')
+        )
+      ])
+
+      const prevEntries = Array.isArray(prevEntriesResult.data) ? prevEntriesResult.data : []
+      const prevUnbillable = Array.isArray(prevUnbillableResult.data) ? prevUnbillableResult.data : []
+
+      if (prevEntries.length > 0 || prevUnbillable.length > 0) {
+        previousWeekData = {
+          entries: prevEntries.map((entry: any) => ({
+            client_project_id: entry.client_project_id,
+            po_id: entry.po_id,
+            task_description: entry.task_description,
+            system_id: entry.system_id,
+            system_name: entry.system_name,
+            deliverable_id: entry.deliverable_id,
+            activity_id: entry.activity_id,
+            mon_hours: entry.mon_hours,
+            tue_hours: entry.tue_hours,
+            wed_hours: entry.wed_hours,
+            thu_hours: entry.thu_hours,
+            fri_hours: entry.fri_hours,
+            sat_hours: entry.sat_hours,
+            sun_hours: entry.sun_hours,
+          })),
+          unbillable: prevUnbillable.map((entry: any) => ({
+            description: entry.description,
+            mon_hours: entry.mon_hours,
+            tue_hours: entry.tue_hours,
+            wed_hours: entry.wed_hours,
+            thu_hours: entry.thu_hours,
+            fri_hours: entry.fri_hours,
+            sat_hours: entry.sat_hours,
+            sun_hours: entry.sun_hours,
+          }))
+        }
+      }
+    }
+  } catch (error) {
+    // If previous week doesn't exist or error, just continue without it
+    console.log('No previous week data available or error fetching:', error)
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Header title="New Weekly Timesheet" showBack backUrl="/dashboard/timesheets" user={user} />
+      <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
+        <div className="max-w-7xl mx-auto overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+            <WeeklyTimesheetForm
+              sites={sites}
+              purchaseOrders={purchaseOrders}
+              systems={systems}
+              deliverables={deliverables}
+              activities={activities}
+              deliverablePOIds={deliverablePOIds}
+              deliverableDepartmentIds={deliverableDepartmentIds}
+              activityPOIds={activityPOIds}
+              defaultWeekEnding={effectiveWeekEndingStr}
+              userId={user.id}
+              previousWeekData={previousWeekData}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
