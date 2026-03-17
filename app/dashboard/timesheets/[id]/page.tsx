@@ -313,7 +313,11 @@ export default async function TimesheetDetailPage({
                 </div>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                   Billable Total: {billableTotal.toFixed(2)} hours
+<<<<<<< HEAD
                   {entries.length > 6 && (
+=======
+                  {entries.length > 6 && unbillable && unbillable.length > 0 && (
+>>>>>>> e2c8c8ff5b7d5bc7c23823674ccf4615dac59b56
                     <a href="#unbillable-section" className="ml-3 text-blue-600 dark:text-blue-400 hover:underline text-sm">
                       ↓ Jump to Unbillable Time
                     </a>
@@ -322,6 +326,7 @@ export default async function TimesheetDetailPage({
               </div>
             )}
 
+<<<<<<< HEAD
             {/* Unbillable Entries - always show so layout is consistent; use defaults when no rows in DB */}
             {(() => {
               const unbillableRows = unbillable && unbillable.length > 0
@@ -373,6 +378,47 @@ export default async function TimesheetDetailPage({
                 </div>
               )
             })()}
+=======
+            {/* Unbillable Entries */}
+            {unbillable && unbillable.length > 0 && (
+              <div id="unbillable-section" className="mb-6 scroll-mt-4">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Unbillable Time</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
+                    <thead>
+                      <tr className="bg-gray-100 dark:bg-gray-700">
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">Description</th>
+                        {weekDates.days.map((day, idx) => (
+                          <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm text-gray-900 dark:text-gray-100">
+                            {format(day, 'EEE')}
+                          </th>
+                        ))}
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm text-gray-900 dark:text-gray-100">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unbillable.map((entry) => (
+                        <tr key={entry.id}>
+                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {entry.description}
+                          </td>
+                          {days.map((day) => (
+                            <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
+                              {(entry[`${day}_hours`] || 0).toFixed(2)}
+                            </td>
+                          ))}
+                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-right font-medium text-gray-900 dark:text-gray-100">
+                            {calculateTotal(entry).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Unbillable Total: {unbillableTotal.toFixed(2)} hours</p>
+              </div>
+            )}
+>>>>>>> e2c8c8ff5b7d5bc7c23823674ccf4615dac59b56
 
             {/* Grand Total */}
             <div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-lg mb-6">
