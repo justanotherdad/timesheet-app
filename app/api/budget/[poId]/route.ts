@@ -71,11 +71,14 @@ export async function GET(
   const expenseTypesQuery = adminSupabase
     ? adminSupabase.from('po_expense_types').select('*').order('name')
     : supabase.from('po_expense_types').select('*').order('name')
+  const expensesQuery = adminSupabase
+    ? adminSupabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false })
+    : supabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false })
   const [changeOrdersRes, invoicesRes, billRatesRes, expensesRes, expenseTypesRes, attachmentsRes] = await Promise.all([
     changeOrdersQuery,
     invoicesQuery,
     billRatesQuery,
-    supabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false }),
+    expensesQuery,
     expenseTypesQuery,
     attachmentsQuery,
   ])
@@ -95,7 +98,11 @@ export async function GET(
     const { data: fallback } = await supabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })
     billRatesRaw = fallback || []
   }
-  const expenses = expensesRes.data || []
+  let expenses = expensesRes.data || []
+  if (expensesRes.error && adminSupabase) {
+    const { data: fallback } = await supabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false })
+    expenses = fallback ?? []
+  }
   let expenseTypes = expenseTypesRes.data || []
   // Fallback when admin query failed or returned empty (RLS may block user client in some envs)
   if ((expenseTypesRes.error || expenseTypes.length === 0) && adminSupabase) {

@@ -15,16 +15,26 @@ interface ExpenseFormModalProps {
 export default function ExpenseFormModal({ poId, expense, expenseTypes, onSave, onClose }: ExpenseFormModalProps) {
   const isEdit = !!expense
   const [types, setTypes] = useState<Array<{ id: string; name: string }>>(expenseTypes)
+  const [typesLoading, setTypesLoading] = useState(expenseTypes.length === 0)
   useEffect(() => {
     if (expenseTypes.length > 0) {
       setTypes(expenseTypes)
+      setTypesLoading(false)
       return
     }
-    fetch('/api/expense-types', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+    setTypesLoading(true)
+    const t = `t=${Date.now()}`
+    fetch(`/api/expense-types?${t}`, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } })
       .then((res) => (res.ok ? res.json() : []))
-      .then((arr) => setTypes(Array.isArray(arr) ? arr : []))
-      .catch(() => setTypes([]))
-  }, [expenseTypes])
+      .then((arr) => {
+        setTypes(Array.isArray(arr) ? arr : [])
+        setTypesLoading(false)
+      })
+      .catch(() => {
+        setTypes([])
+        setTypesLoading(false)
+      })
+  }, [expenseTypes.length])
   const [useCustom, setUseCustom] = useState(!!expense?.custom_type_name)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,7 +65,7 @@ export default function ExpenseFormModal({ poId, expense, expenseTypes, onSave, 
         const err = await res.json()
         throw new Error(err.error || 'Failed to save')
       }
-      onSave()
+      await onSave()
       onClose()
     } catch (e: any) {
       setError(e.message || 'Failed to save')
@@ -85,7 +95,7 @@ export default function ExpenseFormModal({ poId, expense, expenseTypes, onSave, 
             </label>
             {!useCustom && (
               <select value={form.expense_type_id} onChange={(e) => setForm({ ...form, expense_type_id: e.target.value })} className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-                <option value="">-- Select --</option>
+                <option value="">{typesLoading ? 'Loading...' : '-- Select --'}</option>
                 {types.map(t => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
