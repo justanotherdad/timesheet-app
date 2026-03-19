@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { formatDateForInput } from '@/lib/utils'
 
@@ -14,6 +14,17 @@ interface ExpenseFormModalProps {
 
 export default function ExpenseFormModal({ poId, expense, expenseTypes, onSave, onClose }: ExpenseFormModalProps) {
   const isEdit = !!expense
+  const [types, setTypes] = useState<Array<{ id: string; name: string }>>(expenseTypes)
+  useEffect(() => {
+    if (expenseTypes.length > 0) {
+      setTypes(expenseTypes)
+      return
+    }
+    fetch('/api/expense-types', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((arr) => setTypes(Array.isArray(arr) ? arr : []))
+      .catch(() => setTypes([]))
+  }, [expenseTypes])
   const [useCustom, setUseCustom] = useState(!!expense?.custom_type_name)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -75,7 +86,7 @@ export default function ExpenseFormModal({ poId, expense, expenseTypes, onSave, 
             {!useCustom && (
               <select value={form.expense_type_id} onChange={(e) => setForm({ ...form, expense_type_id: e.target.value })} className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
                 <option value="">-- Select --</option>
-                {expenseTypes.map(t => (
+                {types.map(t => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
               </select>
