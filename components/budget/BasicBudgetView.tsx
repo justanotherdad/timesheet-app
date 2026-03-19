@@ -924,7 +924,6 @@ export default function BasicBudgetView({
             </div>
           </div>
         </div>
-      </div>
 
       {/* 2. Budget table (original + change orders) — hidden for limited access */}
       {!hasLimitedAccess && (

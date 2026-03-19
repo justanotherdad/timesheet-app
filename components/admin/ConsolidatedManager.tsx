@@ -87,9 +87,9 @@ export default function ConsolidatedManager({
   useEffect(() => {
     if (activeTab === 'company-info' && !companyEmailLoaded) {
       fetch('/api/company-settings')
-        .then((res) => res.ok ? res.json() : {})
+        .then((res) => res.ok ? res.json() : ({} as { company_email?: string }))
         .then((data) => {
-          setCompanyEmail(data.company_email ?? '')
+          setCompanyEmail(data?.company_email ?? '')
           setCompanyEmailLoaded(true)
         })
         .catch(() => setCompanyEmailLoaded(true))
