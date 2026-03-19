@@ -10,7 +10,7 @@ export async function GET(
 ) {
   const { poId } = await params
   const user = await getCurrentUser()
-  if (!user || !['manager', 'admin', 'super_admin'].includes(user.profile.role)) {
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

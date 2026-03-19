@@ -68,12 +68,15 @@ export async function GET(
     ? adminSupabase.from('po_attachments').select('id, file_name, storage_path, file_type').eq('po_id', poId)
     : supabase.from('po_attachments').select('id, file_name, storage_path, file_type').eq('po_id', poId)
 
+  const expenseTypesQuery = adminSupabase
+    ? adminSupabase.from('po_expense_types').select('*').order('name')
+    : supabase.from('po_expense_types').select('*').order('name')
   const [changeOrdersRes, invoicesRes, billRatesRes, expensesRes, expenseTypesRes, attachmentsRes] = await Promise.all([
     changeOrdersQuery,
     invoicesQuery,
     billRatesQuery,
     supabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false }),
-    supabase.from('po_expense_types').select('*').order('name'),
+    expenseTypesQuery,
     attachmentsQuery,
   ])
 
@@ -93,7 +96,11 @@ export async function GET(
     billRatesRaw = fallback || []
   }
   const expenses = expensesRes.data || []
-  const expenseTypes = expenseTypesRes.data || []
+  let expenseTypes = expenseTypesRes.data || []
+  if (expenseTypesRes.error && adminSupabase) {
+    const { data: fallback } = await supabase.from('po_expense_types').select('*').order('name')
+    expenseTypes = fallback || []
+  }
   const attachments = attachmentsRes.data || []
 
   const billRateUserIds = [...new Set((billRatesRaw || []).map((r: any) => r.user_id).filter(Boolean))]

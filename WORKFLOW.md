@@ -114,7 +114,7 @@ npm run dev
 git add .
 
 # 2. Commit with a short message describing the change
-git commit -m "bid sheets"
+git commit -m "fix error"
 
 # 3. Push to GitHub (triggers Vercel deployment)
 git push

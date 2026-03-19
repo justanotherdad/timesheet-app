@@ -182,18 +182,16 @@ export default function BasicBudgetView({
         } else setBillRatesOverride(null)
         if (laborRes.ok) setLaborCostData(await laborRes.json())
         if (user && ['admin', 'super_admin'].includes(user.profile.role)) {
-          const [accRes, balRes] = await Promise.all([
-            fetch(`/api/budget/${po.id}/budget-access`, fetchOpts),
-            fetch(`/api/budget/${po.id}/balance`, fetchOpts),
-          ])
+          const accRes = await fetch(`/api/budget/${po.id}/budget-access`, fetchOpts)
           if (accRes.ok) {
             const accJson = await accRes.json()
             setBudgetAccessUsers(accJson.users || [])
           }
-          if (balRes.ok) {
-            const balJson = await balRes.json()
-            setBalanceData({ budgetBalance: balJson.budgetBalance ?? 0, lastTimesheetWe: balJson.lastTimesheetWe ?? null })
-          }
+        }
+        const balRes = await fetch(`/api/budget/${po.id}/balance`, fetchOpts)
+        if (balRes.ok) {
+          const balJson = await balRes.json()
+          setBalanceData({ budgetBalance: balJson.budgetBalance ?? 0, lastTimesheetWe: balJson.lastTimesheetWe ?? null })
         }
       } catch (e) {
         console.error(e)
@@ -736,10 +734,10 @@ export default function BasicBudgetView({
         </div>
       </div>
 
-      {/* 1b. Budget Access (left) + Budget Health (right) — 2-column row, admin only */}
-      {isAdmin && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Budget Access — left */}
+      {/* 1b. Budget Access (left, admin only) + Budget Health (right, anyone with access) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Budget Access — left, admin only */}
+        {isAdmin && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <div>
@@ -834,9 +832,10 @@ export default function BasicBudgetView({
               </div>
             )}
           </div>
+        )}
 
-          {/* Budget Health — right */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        {/* Budget Health — right, visible to anyone with budget access */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Budget Health</h2>
             <div className="space-y-4">
               <div>
@@ -925,7 +924,7 @@ export default function BasicBudgetView({
             </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* 2. Budget table (original + change orders) — hidden for limited access */}
       {!hasLimitedAccess && (

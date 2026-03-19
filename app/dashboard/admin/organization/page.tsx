@@ -36,6 +36,7 @@ export default async function OrganizationAdminPage() {
   }
 
   const readOnly = role === 'supervisor'
+  const isAdminOrAbove = role === 'admin' || role === 'super_admin'
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -48,6 +49,7 @@ export default async function OrganizationAdminPage() {
             purchaseOrders={purchaseOrders}
             expenseTypes={expenseTypes}
             readOnly={readOnly}
+            isAdminOrAbove={isAdminOrAbove}
           />
         </div>
       </div>

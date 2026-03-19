@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -45,9 +45,10 @@ interface ConsolidatedManagerProps {
   purchaseOrders: PurchaseOrder[]
   expenseTypes?: Array<{ id: string; name: string }>
   readOnly?: boolean
+  isAdminOrAbove?: boolean
 }
 
-type TabType = 'sites' | 'departments' | 'purchase-orders' | 'expense-types'
+type TabType = 'sites' | 'departments' | 'purchase-orders' | 'expense-types' | 'company-info'
 
 export default function ConsolidatedManager({
   sites: initialSites,
@@ -55,6 +56,7 @@ export default function ConsolidatedManager({
   purchaseOrders: initialPOs,
   expenseTypes: initialExpenseTypes = [],
   readOnly = false,
+  isAdminOrAbove = false,
 }: ConsolidatedManagerProps) {
   const router = useRouter()
   const [sites, setSites] = useState(initialSites)
@@ -76,8 +78,23 @@ export default function ConsolidatedManager({
   const [posSortColumn, setPosSortColumn] = useState<string>('po_number')
   const [posSortDirection, setPosSortDirection] = useState<'asc' | 'desc'>('asc')
   const [siteInfoCard, setSiteInfoCard] = useState<Site | null>(null)
+  const [companyEmail, setCompanyEmail] = useState('')
+  const [companyEmailSaving, setCompanyEmailSaving] = useState(false)
+  const [companyEmailLoaded, setCompanyEmailLoaded] = useState(false)
   
   const supabase = createClient()
+
+  useEffect(() => {
+    if (activeTab === 'company-info' && !companyEmailLoaded) {
+      fetch('/api/company-settings')
+        .then((res) => res.ok ? res.json() : {})
+        .then((data) => {
+          setCompanyEmail(data.company_email ?? '')
+          setCompanyEmailLoaded(true)
+        })
+        .catch(() => setCompanyEmailLoaded(true))
+    }
+  }, [activeTab, companyEmailLoaded])
 
   const filteredDepartments = selectedSite 
     ? departments.filter(d => d.site_id === selectedSite)
@@ -389,6 +406,19 @@ export default function ConsolidatedManager({
           }`}
         >
           Expense Types
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('company-info')
+            setShowAddForm(false)
+          }}
+          className={`px-4 py-2 font-medium ${
+            activeTab === 'company-info'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+          }`}
+        >
+          Company Information
         </button>
       </div>
 
@@ -832,6 +862,50 @@ export default function ConsolidatedManager({
             title="Expense Types"
             fields={[{ name: 'name', label: 'Name', type: 'text', required: true }]}
           />
+        </div>
+      )}
+
+      {activeTab === 'company-info' && (
+        <div className="mt-4 space-y-6">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Company-wide settings. More fields will be added as we progress.
+          </p>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 max-w-xl">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Company Email Address</label>
+              {isAdminOrAbove ? (
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={companyEmail}
+                    onChange={(e) => setCompanyEmail(e.target.value)}
+                    onBlur={async () => {
+                      setCompanyEmailSaving(true)
+                      try {
+                        const res = await fetch('/api/company-settings', {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ company_email: companyEmail }),
+                        })
+                        if (res.ok) {
+                          const json = await res.json()
+                          setCompanyEmail(json.company_email ?? '')
+                        }
+                      } finally {
+                        setCompanyEmailSaving(false)
+                      }
+                    }}
+                    placeholder="company@example.com"
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+                  />
+                  {companyEmailSaving && <span className="text-sm text-gray-500 self-center">Saving...</span>}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-900 dark:text-gray-100 py-2">{companyEmail || '—'}</p>
+              )}
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Editable by admins only.</p>
+            </div>
+          </div>
         </div>
       )}
 
