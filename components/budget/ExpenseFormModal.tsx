@@ -8,7 +8,7 @@ interface ExpenseFormModalProps {
   poId: string
   expense?: any
   expenseTypes: Array<{ id: string; name: string }>
-  onSave: () => void
+  onSave: (createdExpense?: any) => void | Promise<void>
   onClose: () => void
 }
 
@@ -65,7 +65,8 @@ export default function ExpenseFormModal({ poId, expense, expenseTypes, onSave, 
         const err = await res.json()
         throw new Error(err.error || 'Failed to save')
       }
-      await onSave()
+      const saved = isEdit ? undefined : await res.json()
+      await onSave(saved)
       onClose()
     } catch (e: any) {
       setError(e.message || 'Failed to save')

@@ -46,6 +46,7 @@ export default function BasicBudgetView({
   const [data, setData] = useState<any>(null)
   const [changeOrdersOverride, setChangeOrdersOverride] = useState<any[] | null>(null)
   const [invoicesOverride, setInvoicesOverride] = useState<any[] | null>(null)
+  const [expensesOverride, setExpensesOverride] = useState<any[] | null>(null)
   const [billRatesOverride, setBillRatesOverride] = useState<any[] | null>(null)
   const [billableData, setBillableData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -136,7 +137,11 @@ export default function BasicBudgetView({
       fetch(`/api/budget/${po.id}/bill-rates?${t}`, fetchOpts),
       fetch(`/api/budget/${po.id}/billable-hours?all=true&${t}`, fetchOpts),
     ])
-    if (res.ok) setData(await res.json())
+    if (res.ok) {
+      const json = await res.json()
+      setData(json)
+      setExpensesOverride(null)
+    }
     if (coRes.ok) {
       const json = await coRes.json()
       setChangeOrdersOverride(Array.isArray(json) ? json : [])
@@ -156,6 +161,7 @@ export default function BasicBudgetView({
 
   useEffect(() => {
     setExpenseTypesFallback([])
+    setExpensesOverride(null)
   }, [po.id])
 
   useEffect(() => {
@@ -257,7 +263,7 @@ export default function BasicBudgetView({
       user_profiles: br.user_profiles ?? (br.user_id ? { id: br.user_id, name: users.find((u: any) => u.id === br.user_id)?.name || 'Unknown' } : null),
     }))
     .sort((a: any, b: any) => (a.user_profiles?.name || 'Unknown').localeCompare(b.user_profiles?.name || 'Unknown'))
-  const expenses = data?.expenses || []
+  const expenses = expensesOverride !== null ? expensesOverride : (data?.expenses || [])
   const attachments = data?.attachments || []
   const expenseTypesFromData = data?.expenseTypes || []
   const expenseTypes = expenseTypesFromData.length > 0 ? expenseTypesFromData : expenseTypesFallback
@@ -1619,7 +1625,14 @@ export default function BasicBudgetView({
           poId={po.id}
           expense={expenseModal.id ? expenseModal : undefined}
           expenseTypes={expenseTypes}
-          onSave={refetch}
+          onSave={async (createdExpense) => {
+            if (createdExpense) {
+              setExpensesOverride((prev) => [createdExpense, ...(prev ?? data?.expenses ?? [])])
+            } else {
+              await refetch()
+              setExpensesOverride(null)
+            }
+          }}
           onClose={() => setExpenseModal(null)}
         />
       )}
