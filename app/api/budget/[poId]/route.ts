@@ -97,9 +97,10 @@ export async function GET(
   }
   const expenses = expensesRes.data || []
   let expenseTypes = expenseTypesRes.data || []
-  if (expenseTypesRes.error && adminSupabase) {
+  // Fallback when admin query failed or returned empty (RLS may block user client in some envs)
+  if ((expenseTypesRes.error || expenseTypes.length === 0) && adminSupabase) {
     const { data: fallback } = await supabase.from('po_expense_types').select('*').order('name')
-    expenseTypes = fallback || []
+    if ((fallback?.length ?? 0) > 0) expenseTypes = fallback
   }
   const attachments = attachmentsRes.data || []
 

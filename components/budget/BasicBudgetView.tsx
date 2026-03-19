@@ -75,6 +75,7 @@ export default function BasicBudgetView({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
+  const [expenseTypesFallback, setExpenseTypesFallback] = useState<Array<{ id: string; name: string }>>([])
   const [clientPOForm, setClientPOForm] = useState({
     po_number: '',
     department_id: '',
@@ -154,6 +155,10 @@ export default function BasicBudgetView({
   }, [po.id, loadBudgetAccess, loadBalance, user])
 
   useEffect(() => {
+    setExpenseTypesFallback([])
+  }, [po.id])
+
+  useEffect(() => {
     const load = async () => {
       setLoading(true)
       const t = `t=${Date.now()}`
@@ -212,6 +217,20 @@ export default function BasicBudgetView({
     }
   }, [data?.po, po])
 
+  // Fallback: when budget API returns empty expense types, fetch from dedicated API (bypasses RLS)
+  useEffect(() => {
+    if (!data || !po?.id) return
+    const fromBudget = data?.expenseTypes || []
+    if (fromBudget.length > 0) {
+      setExpenseTypesFallback([])
+      return
+    }
+    fetch('/api/expense-types', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+      .then((res) => res.ok ? res.json() : [])
+      .then((arr) => setExpenseTypesFallback(Array.isArray(arr) ? arr : []))
+      .catch(() => setExpenseTypesFallback([]))
+  }, [data, po?.id])
+
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -240,7 +259,8 @@ export default function BasicBudgetView({
     .sort((a: any, b: any) => (a.user_profiles?.name || 'Unknown').localeCompare(b.user_profiles?.name || 'Unknown'))
   const expenses = data?.expenses || []
   const attachments = data?.attachments || []
-  const expenseTypes = data?.expenseTypes || []
+  const expenseTypesFromData = data?.expenseTypes || []
+  const expenseTypes = expenseTypesFromData.length > 0 ? expenseTypesFromData : expenseTypesFallback
   const siteDepartmentsRaw = (data?.siteDepartments || []) as Array<{ id: string; name: string }>
   const siteDepartments = poData.department_id && poData.departments && !siteDepartmentsRaw.some((d) => d.id === poData.department_id)
     ? [{ id: poData.department_id, name: poData.departments.name || 'Unknown' }, ...siteDepartmentsRaw]
