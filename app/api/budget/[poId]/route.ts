@@ -112,9 +112,12 @@ export async function GET(
     .from('user_profiles')
     .select('id, name')
     .order('name')
-  const profilesList = (profiles || []).filter((p: any) => p?.name)
+  const profilesList = profiles || []
+  // Include all profiles (don't filter by name) so bill rate users with empty names still resolve; use 'Unknown' for display
+  const profilesMap: Record<string, { id: string; name: string }> = Object.fromEntries(
+    profilesList.map((p: any) => [p.id, { id: p.id, name: p.name || 'Unknown' }])
+  )
   const users: Array<{ id: string; name: string }> = profilesList.map((p: any) => ({ id: p.id, name: p.name || 'Unknown' }))
-  const profilesMap: Record<string, { id: string; name: string }> = Object.fromEntries(profilesList.map((p: any) => [p.id, { id: p.id, name: p.name || 'Unknown' }]))
 
   const billRates = billRatesRaw.map((br: any) => ({
     ...br,
