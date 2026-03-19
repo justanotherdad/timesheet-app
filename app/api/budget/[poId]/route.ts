@@ -72,8 +72,8 @@ export async function GET(
     ? adminSupabase.from('po_expense_types').select('*').order('name')
     : supabase.from('po_expense_types').select('*').order('name')
   const expensesQuery = adminSupabase
-    ? adminSupabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false })
-    : supabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false })
+    ? adminSupabase.from('po_expenses').select('*').eq('po_id', poId).order('expense_date', { ascending: false })
+    : supabase.from('po_expenses').select('*').eq('po_id', poId).order('expense_date', { ascending: false })
   const [changeOrdersRes, invoicesRes, billRatesRes, expensesRes, expenseTypesRes, attachmentsRes] = await Promise.all([
     changeOrdersQuery,
     invoicesQuery,
@@ -100,7 +100,7 @@ export async function GET(
   }
   let expenses = expensesRes.data || []
   if (expensesRes.error && adminSupabase) {
-    const { data: fallback } = await supabase.from('po_expenses').select('*, po_expense_types(id, name)').eq('po_id', poId).order('expense_date', { ascending: false })
+    const { data: fallback } = await supabase.from('po_expenses').select('*').eq('po_id', poId).order('expense_date', { ascending: false })
     expenses = fallback ?? []
   }
   let expenseTypes = expenseTypesRes.data || []

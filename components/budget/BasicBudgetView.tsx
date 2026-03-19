@@ -1544,7 +1544,7 @@ export default function BasicBudgetView({
               expenses.map((ex: any) => (
                 <tr key={ex.id} className="border-b border-gray-100 dark:border-gray-700">
                   <td className="py-2">{ex.expense_date ? formatDate(ex.expense_date) : '—'}</td>
-                  <td className="py-2">{ex.po_expense_types?.name || ex.custom_type_name || 'Custom'}</td>
+                  <td className="py-2">{(ex.expense_type_id && expenseTypes.find((t: any) => t.id === ex.expense_type_id)?.name) || ex.custom_type_name || 'Custom'}</td>
                   <td className="py-2">{ex.notes || '—'}</td>
                   <td className="text-right py-2">${(ex.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2">
