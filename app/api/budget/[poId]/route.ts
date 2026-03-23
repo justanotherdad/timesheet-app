@@ -267,22 +267,27 @@ export async function PATCH(
         }
       }
       for (const co of changeOrdersPayload) {
+        const typeVal = co.type === 'li' ? 'li' : 'co'
+        const lineItemType = co.line_item_type === 'personnel' ? 'personnel' : co.line_item_type === 'labor' ? 'labor' : null
+        const userIdVal = co.user_id || null
+        const baseRow = {
+          co_number: co.co_number ?? null,
+          co_date: co.co_date || null,
+          amount: co.amount === '' || co.amount == null ? null : parseFloat(String(co.amount)),
+          type: typeVal,
+          line_item_type: lineItemType,
+          user_id: userIdVal,
+        }
         if (co.id) {
           const { error: coErr } = await adminSupabase
             .from('po_change_orders')
-            .update({
-              co_number: co.co_number ?? null,
-              co_date: co.co_date || null,
-              amount: co.amount === '' || co.amount == null ? null : parseFloat(String(co.amount)),
-            })
+            .update(baseRow)
             .eq('id', co.id)
           if (coErr) throw coErr
         } else if (co.co_number || co.co_date || co.amount) {
           const { error: insertErr } = await adminSupabase.from('po_change_orders').insert({
             po_id: poId,
-            co_number: co.co_number ?? null,
-            co_date: co.co_date || null,
-            amount: co.amount === '' || co.amount == null ? null : parseFloat(String(co.amount)),
+            ...baseRow,
           })
           if (insertErr) throw insertErr
         }

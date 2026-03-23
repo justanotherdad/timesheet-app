@@ -30,11 +30,16 @@ export async function GET(
     return NextResponse.json({ error: 'PO not found' }, { status: 404 })
   }
 
-  const { data: cos } = await supabase.from('po_change_orders').select('amount').eq('po_id', poId)
+  const { data: cos } = await supabase
+    .from('po_change_orders')
+    .select('amount, type, line_item_type, user_id')
+    .eq('po_id', poId)
   const { data: invs } = await supabase.from('po_invoices').select('amount').eq('po_id', poId)
 
   const original = po?.original_po_amount ?? 0
-  const coTotal = (cos || []).reduce((s: number, c: any) => s + (c.amount || 0), 0)
+  const changeOrderRows = cos || []
+  const coTotal = changeOrderRows.filter((c: any) => (c.type || 'co') === 'co').reduce((s: number, c: any) => s + (c.amount || 0), 0)
+  const liTotal = changeOrderRows.filter((c: any) => c.type === 'li').reduce((s: number, c: any) => s + (c.amount || 0), 0)
   const invTotal = (invs || []).reduce((s: number, i: any) => s + (i.amount || 0), 0)
   const runningBalance = original + coTotal - invTotal
 
@@ -84,19 +89,53 @@ export async function GET(
     return userRates[0]?.rate ?? 0
   }
 
+  const laborCostByUser: Record<string, number> = {}
   let laborCost = 0
   for (const [uid, weekData] of Object.entries(hoursByUserWeek)) {
+    let userCost = 0
     for (const [weekEnding, hours] of Object.entries(weekData)) {
-      if (hours > 0) laborCost += getEffectiveRate(uid, weekEnding) * hours
+      if (hours > 0) {
+        const cost = getEffectiveRate(uid, weekEnding) * hours
+        laborCost += cost
+        userCost += cost
+      }
     }
+    laborCostByUser[uid] = userCost
   }
 
   const priorHours = po?.prior_hours_billed ?? 0
   const priorRate = po?.prior_hours_billed_rate ?? 0
   const priorAmountSpent = po?.prior_amount_spent ?? 0
   const priorCostFromHours = priorHours * priorRate
-  const totalAvailable = original + coTotal
+  const totalAvailable = original + coTotal + liTotal
   const budgetBalance = totalAvailable - priorAmountSpent - priorCostFromHours - laborCost
 
-  return NextResponse.json({ balance: runningBalance, budgetBalance, lastTimesheetWe })
+  const personnelLIs = changeOrderRows.filter((c: any) => c.type === 'li' && c.line_item_type === 'personnel' && c.user_id)
+  const personnelUserIds = [...new Set(personnelLIs.map((c: any) => c.user_id))]
+  const { data: profiles } = personnelUserIds.length > 0
+    ? await supabase.from('user_profiles').select('id, name').in('id', personnelUserIds)
+    : { data: [] }
+  const profilesMap = Object.fromEntries((profiles || []).map((p: any) => [p.id, { id: p.id, name: p.name || 'Unknown' }]))
+
+  const personnelLineItems = personnelLIs.map((li: any) => {
+    const allocated = li.amount || 0
+    const spent = laborCostByUser[li.user_id] ?? 0
+    const remaining = Math.max(0, allocated - spent)
+    const profile = profilesMap[li.user_id]
+    return {
+      user_id: li.user_id,
+      userName: profile?.name ?? 'Unknown',
+      allocated,
+      spent,
+      remaining,
+    }
+  })
+
+  return NextResponse.json({
+    balance: runningBalance,
+    budgetBalance,
+    lastTimesheetWe,
+    totalAvailable,
+    personnelLineItems,
+  })
 }

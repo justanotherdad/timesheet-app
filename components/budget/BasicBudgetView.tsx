@@ -65,7 +65,12 @@ export default function BasicBudgetView({
   const [laborCostData, setLaborCostData] = useState<any>(null)
   const [budgetAccessUsers, setBudgetAccessUsers] = useState<Array<{ id: string; name: string }>>([])
   const [budgetAccessModal, setBudgetAccessModal] = useState<'add' | null>(null)
-  const [balanceData, setBalanceData] = useState<{ budgetBalance: number; lastTimesheetWe: string | null } | null>(null)
+  const [balanceData, setBalanceData] = useState<{
+    budgetBalance: number
+    lastTimesheetWe: string | null
+    totalAvailable?: number
+    personnelLineItems?: Array<{ user_id: string; userName: string; allocated: number; spent: number; remaining: number }>
+  } | null>(null)
   const [budgetHealthForm, setBudgetHealthForm] = useState({ weekly_burn: '', target_end_date: '' })
   const [weeklyBurnFocused, setWeeklyBurnFocused] = useState(false)
   const [availableUsers, setAvailableUsers] = useState<Array<{ id: string; name: string }>>([])
@@ -94,7 +99,15 @@ export default function BasicBudgetView({
     prior_hours_billed_rate: string
     prior_amount_spent: string
     prior_period_notes: string
-    changeOrders: Array<{ id?: string; co_number: string; co_date: string; amount: string }>
+    changeOrders: Array<{
+      id?: string
+      type: 'co' | 'li'
+      line_item_type?: 'personnel' | 'labor'
+      user_id?: string
+      co_number: string
+      co_date: string
+      amount: string
+    }>
   }>({
     original_po_amount: '',
     prior_hours_billed: '',
@@ -123,7 +136,12 @@ export default function BasicBudgetView({
       const res = await fetch(`/api/budget/${po.id}/balance`, fetchOpts)
       if (res.ok) {
         const json = await res.json()
-        setBalanceData({ budgetBalance: json.budgetBalance ?? 0, lastTimesheetWe: json.lastTimesheetWe ?? null })
+        setBalanceData({
+          budgetBalance: json.budgetBalance ?? 0,
+          lastTimesheetWe: json.lastTimesheetWe ?? null,
+          totalAvailable: json.totalAvailable,
+          personnelLineItems: json.personnelLineItems ?? [],
+        })
       }
     } catch { /* ignore */ }
   }, [po.id, user])
@@ -290,8 +308,9 @@ export default function BasicBudgetView({
   const canEdit = user && ['manager', 'admin', 'super_admin'].includes(user.profile.role) && !hasLimitedAccess
 
   const originalBudget = poData.original_po_amount ?? 0
-  const coTotal = changeOrders.reduce((s: number, co: any) => s + (co.amount || 0), 0)
-  const totalBudget = originalBudget + coTotal
+  const coTotal = changeOrders.filter((c: any) => (c.type || 'co') === 'co').reduce((s: number, c: any) => s + (c.amount || 0), 0)
+  const liTotal = changeOrders.filter((c: any) => c.type === 'li').reduce((s: number, c: any) => s + (c.amount || 0), 0)
+  const totalBudget = originalBudget + coTotal + liTotal
   const priorAmountSpent = poData.prior_amount_spent ?? 0
   const priorHoursBilled = poData.prior_hours_billed ?? 0
   const priorHoursBilledRate = poData.prior_hours_billed_rate ?? 0
@@ -318,7 +337,8 @@ export default function BasicBudgetView({
     }
   }
 
-  const budgetBalance = totalBudget - priorAmountSpent - priorCostFromHours - laborCost
+  const budgetBalanceComputed = totalBudget - priorAmountSpent - priorCostFromHours - laborCost
+  const budgetBalance = balanceData?.budgetBalance ?? budgetBalanceComputed
 
   const rows = billableData?.rows || []
   const weekEndings = billableData?.weekEndings || []
@@ -420,6 +440,9 @@ export default function BasicBudgetView({
       prior_period_notes: poData.prior_period_notes || '',
       changeOrders: changeOrders.map((co: any) => ({
         id: co.id,
+        type: co.type === 'li' ? 'li' : 'co',
+        line_item_type: co.line_item_type === 'personnel' ? 'personnel' : co.line_item_type === 'labor' ? 'labor' : undefined,
+        user_id: co.user_id ?? undefined,
         co_number: co.co_number || '',
         co_date: co.co_date ? String(co.co_date).slice(0, 10) : '',
         amount: co.amount != null ? String(co.amount) : '',
@@ -468,15 +491,32 @@ export default function BasicBudgetView({
 
   const addChangeOrder = () => setBudgetForm((f) => ({
     ...f,
-    changeOrders: [...f.changeOrders, { co_number: '', co_date: '', amount: '' }],
+    changeOrders: [...f.changeOrders, { type: 'co' as const, co_number: '', co_date: '', amount: '' }],
   }))
   const removeChangeOrder = (idx: number) => setBudgetForm((f) => ({
     ...f,
     changeOrders: f.changeOrders.filter((_, i) => i !== idx),
   }))
-  const updateChangeOrder = (idx: number, field: string, value: string) => setBudgetForm((f) => {
+  const updateChangeOrder = (idx: number, field: string, value: string | undefined) => setBudgetForm((f) => {
     const next = [...f.changeOrders]
-    next[idx] = { ...next[idx], [field]: value }
+    const row = { ...next[idx] }
+    if (field === 'type') {
+      row.type = value === 'li' ? 'li' : 'co'
+      if (row.type === 'co') {
+        row.line_item_type = undefined
+        row.user_id = undefined
+      } else {
+        row.line_item_type = row.line_item_type || 'personnel'
+      }
+    } else if (field === 'line_item_type') {
+      row.line_item_type = value === 'personnel' ? 'personnel' : value === 'labor' ? 'labor' : undefined
+      if (row.line_item_type !== 'personnel') row.user_id = undefined
+    } else if (field === 'user_id') {
+      row.user_id = value || undefined
+    } else {
+      ;(row as any)[field] = value ?? ''
+    }
+    next[idx] = row
     return { ...f, changeOrders: next }
   })
 
@@ -982,43 +1022,74 @@ export default function BasicBudgetView({
         )}
         {editingBudget ? (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Original PO Amount ($)</label>
-              <input type="number" step="0.01" value={budgetForm.original_po_amount} onChange={(e) => setBudgetForm((f) => ({ ...f, original_po_amount: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Hours Billed</label>
-              <input type="number" step="0.1" value={budgetForm.prior_hours_billed} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_hours_billed: e.target.value }))} className={inputClass} placeholder="0" />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Hours billed before this system. Reduces Budget Balance.</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Hours Bill Rate ($/hr)</label>
-              <input type="number" step="0.01" value={budgetForm.prior_hours_billed_rate} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_hours_billed_rate: e.target.value }))} className={inputClass} placeholder="0" />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Rate to use for prior hours. Cost = hours × rate.</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Amount Spent ($)</label>
-              <input type="number" step="0.01" value={budgetForm.prior_amount_spent} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_amount_spent: e.target.value }))} className={inputClass} placeholder="0" />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Other prior spend (non-labor). Reduces Budget Balance only, not PO Balance.</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Period Notes</label>
-              <input type="text" value={budgetForm.prior_period_notes} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_period_notes: e.target.value }))} className={inputClass} placeholder="Optional" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Original PO Amount ($)</label>
+                <input type="number" step="0.01" value={budgetForm.original_po_amount} onChange={(e) => setBudgetForm((f) => ({ ...f, original_po_amount: e.target.value }))} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Hours Billed</label>
+                <input type="number" step="0.1" value={budgetForm.prior_hours_billed} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_hours_billed: e.target.value }))} className={inputClass} placeholder="0" />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Hours billed before this system. Reduces Budget Balance.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Hours Bill Rate ($/hr)</label>
+                <input type="number" step="0.01" value={budgetForm.prior_hours_billed_rate} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_hours_billed_rate: e.target.value }))} className={inputClass} placeholder="0" />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Rate to use for prior hours. Cost = hours × rate.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Amount Spent ($)</label>
+                <input type="number" step="0.01" value={budgetForm.prior_amount_spent} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_amount_spent: e.target.value }))} className={inputClass} placeholder="0" />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Other prior spend (non-labor). Reduces Budget Balance only, not PO Balance.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prior Period Notes</label>
+                <input type="text" value={budgetForm.prior_period_notes} onChange={(e) => setBudgetForm((f) => ({ ...f, prior_period_notes: e.target.value }))} className={inputClass} placeholder="Optional" />
+              </div>
             </div>
             <div>
               <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Change Orders</span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Change Orders / Line Items</span>
                 <button type="button" onClick={addChangeOrder} className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline text-sm">
                   <Plus className="h-4 w-4" /> Add
                 </button>
               </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">CO = Change Order, LI = Line Item (both add funds). Checkbox: checked = LI.</p>
               <div className="space-y-2">
                 {budgetForm.changeOrders.map((co, idx) => (
                   <div key={idx} className="flex flex-wrap gap-2 items-center p-3 border border-gray-200 dark:border-gray-600 rounded-lg">
-                    <input type="text" value={co.co_number} onChange={(e) => updateChangeOrder(idx, 'co_number', e.target.value)} placeholder="CO #" className="flex-1 min-w-[80px] px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm" />
-                    <input type="date" value={co.co_date} onChange={(e) => updateChangeOrder(idx, 'co_date', e.target.value)} className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm" />
+                    <label className="flex items-center gap-1 shrink-0 text-sm">
+                      <input type="checkbox" checked={co.type === 'li'} onChange={(e) => updateChangeOrder(idx, 'type', e.target.checked ? 'li' : 'co')} className="rounded" />
+                      <span>{co.type === 'li' ? 'LI' : 'CO'}</span>
+                    </label>
+                    {co.type === 'li' && (
+                      <>
+                        <label className="flex items-center gap-1 shrink-0 text-sm">
+                          <input type="radio" name={`li-type-${idx}`} checked={co.line_item_type === 'personnel'} onChange={() => updateChangeOrder(idx, 'line_item_type', 'personnel')} />
+                          <span>Personnel</span>
+                        </label>
+                        <label className="flex items-center gap-1 shrink-0 text-sm">
+                          <input type="radio" name={`li-type-${idx}`} checked={co.line_item_type === 'labor'} onChange={() => updateChangeOrder(idx, 'line_item_type', 'labor')} />
+                          <span>Labor</span>
+                        </label>
+                        {co.line_item_type === 'personnel' ? (
+                          <select value={co.user_id || ''} onChange={(e) => updateChangeOrder(idx, 'user_id', e.target.value || undefined)} className="min-w-[140px] px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                            <option value="">Select employee</option>
+                            {users.map((u) => (
+                              <option key={u.id} value={u.id}>{u.name}</option>
+                            ))}
+                          </select>
+                        ) : co.line_item_type === 'labor' ? (
+                          <input type="text" value={co.co_number} onChange={(e) => updateChangeOrder(idx, 'co_number', e.target.value)} placeholder="Description" className="flex-1 min-w-[100px] px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm" />
+                        ) : null}
+                      </>
+                    )}
+                    {co.type === 'co' && (
+                      <input type="text" value={co.co_number} onChange={(e) => updateChangeOrder(idx, 'co_number', e.target.value)} placeholder="CO #" className="flex-1 min-w-[80px] px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm" />
+                    )}
+                    <input type="date" value={co.co_date} onChange={(e) => updateChangeOrder(idx, 'co_date', e.target.value)} className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0" />
                     <input type="number" step="0.01" value={co.amount} onChange={(e) => updateChangeOrder(idx, 'amount', e.target.value)} placeholder="Amount" className="w-24 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm" />
-                    <button type="button" onClick={() => removeChangeOrder(idx)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Remove"><Trash2 className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => removeChangeOrder(idx)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded shrink-0" title="Remove"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>
@@ -1045,12 +1116,20 @@ export default function BasicBudgetView({
                 <td className="py-2">Original PO</td>
                 <td className="text-right py-2">${originalBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
               </tr>
-              {changeOrders.map((co: any, idx: number) => (
-                <tr key={co.id || `co-${idx}`} className="border-b border-gray-100 dark:border-gray-700">
-                  <td className="py-2">Change Order {co.co_number || ''} ({co.co_date ? formatDate(co.co_date) : ''})</td>
-                  <td className="text-right py-2">${(co.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                </tr>
-              ))}
+              {changeOrders.map((co: any, idx: number) => {
+                const isLI = co.type === 'li'
+                const label = isLI
+                  ? (co.line_item_type === 'personnel'
+                    ? `Line Item (Personnel: ${users.find((u: any) => u.id === co.user_id)?.name ?? 'Unknown'}) ${co.co_date ? formatDate(co.co_date) : ''}`
+                    : `Line Item (Labor: ${co.co_number || '—'}) ${co.co_date ? formatDate(co.co_date) : ''}`)
+                  : `Change Order ${co.co_number || ''} (${co.co_date ? formatDate(co.co_date) : ''})`
+                return (
+                  <tr key={co.id || `co-${idx}`} className="border-b border-gray-100 dark:border-gray-700">
+                    <td className="py-2">{label}</td>
+                    <td className="text-right py-2">${(co.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                )
+              })}
               <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
                 <td className="py-2">Total Available</td>
                 <td className="text-right py-2">${totalBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
@@ -1171,9 +1250,15 @@ export default function BasicBudgetView({
           </thead>
           <tbody>
             <tr className="border-b border-gray-100 dark:border-gray-700">
-              <td className="py-2">Total Available (from PO + change orders)</td>
-              <td className="text-right py-2">${totalBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              <td className="py-2">Total Available (from PO + COs + LIs)</td>
+              <td className="text-right py-2">${(balanceData?.totalAvailable ?? totalBudget).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
             </tr>
+            {(balanceData?.personnelLineItems?.length ?? 0) > 0 && (balanceData?.personnelLineItems ?? []).map((pli: { user_id: string; userName: string; allocated: number; spent: number; remaining: number }) => (
+              <tr key={pli.user_id} className="border-b border-gray-100 dark:border-gray-700">
+                <td className="py-2 pl-4 text-gray-600 dark:text-gray-400">Personnel LI: {pli.userName} (remaining)</td>
+                <td className="text-right py-2">${pli.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              </tr>
+            ))}
             {(priorAmountSpent > 0 || priorCostFromHours > 0) && (
               <tr className="border-b border-gray-100 dark:border-gray-700">
                 <td className="py-2 text-amber-700 dark:text-amber-300">Prior period (before this system)</td>
