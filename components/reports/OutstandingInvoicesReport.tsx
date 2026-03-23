@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Loader2, Printer } from 'lucide-react'
 
 interface OutstandingRow {
+  po_id: string
   client: string
   site_id: string
   po_number: string
@@ -104,9 +106,13 @@ export default function OutstandingInvoicesReport() {
               </tr>
             ) : (
               rows.map((row, i) => (
-                <tr key={`${row.site_id}-${row.po_number}-${i}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                <tr key={`${row.po_id}-${i}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                   <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.client}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.po_number}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                    <Link href={`/dashboard/budget?poId=${row.po_id}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+                      {row.po_number}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.project_name}</td>
                   <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.original_po_amount)}</td>
                   <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.current_po_balance)}</td>

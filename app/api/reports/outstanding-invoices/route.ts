@@ -114,6 +114,7 @@ export async function GET() {
     const budgetBalance = totalAvailable - priorCost - laborCost
 
     return {
+      po_id: po.id,
       client: sitesMap[po.site_id]?.name || '—',
       site_id: po.site_id,
       po_number: po.po_number || '—',
