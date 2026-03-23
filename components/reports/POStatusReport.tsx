@@ -8,10 +8,8 @@ interface POStatusRow {
   site_id: string
   po_id: string
   po_number: string
-  original_po_amount: number
-  original_po_date: string
-  cos_display: string
-  cos_total: number
+  project_name: string
+  original_po_amount_incl_cos: number
   total_invoiced: number
   total_paid: number
   total_outstanding: number
@@ -30,7 +28,7 @@ function formatCurrency(val: number): string {
   return `$${(val ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-type SortColumn = 'client' | 'po_number' | 'original_po_amount' | 'total_invoiced' | 'total_paid' | 'total_outstanding' | 'po_balance' | 'budget_balance'
+type SortColumn = 'client' | 'po_number' | 'project_name' | 'original_po_amount_incl_cos' | 'total_invoiced' | 'total_paid' | 'total_outstanding' | 'po_balance' | 'budget_balance'
 
 export default function POStatusReport() {
   const [loading, setLoading] = useState(true)
@@ -92,9 +90,13 @@ export default function POStatusReport() {
           aVal = a.po_number || ''
           bVal = b.po_number || ''
           break
-        case 'original_po_amount':
-          aVal = a.original_po_amount ?? 0
-          bVal = b.original_po_amount ?? 0
+        case 'original_po_amount_incl_cos':
+          aVal = a.original_po_amount_incl_cos ?? 0
+          bVal = b.original_po_amount_incl_cos ?? 0
+          break
+        case 'project_name':
+          aVal = a.project_name || ''
+          bVal = b.project_name || ''
           break
         case 'total_invoiced':
           aVal = a.total_invoiced ?? 0
@@ -238,8 +240,16 @@ export default function POStatusReport() {
                   PO # <SortIcon col="po_number" />
                 </button>
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">Original PO (Date)</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">COs (Dates)</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
+                <button type="button" onClick={() => handleSort('project_name')} className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100">
+                  Project Name <SortIcon col="project_name" />
+                </button>
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
+                <button type="button" onClick={() => handleSort('original_po_amount_incl_cos')} className="flex items-center gap-1 ml-auto hover:text-gray-900 dark:hover:text-gray-100">
+                  Original PO Amount (incl. COs) <SortIcon col="original_po_amount_incl_cos" />
+                </button>
+              </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
                 <button type="button" onClick={() => handleSort('total_invoiced')} className="flex items-center gap-1 ml-auto hover:text-gray-900 dark:hover:text-gray-100">
                   Total Invoiced <SortIcon col="total_invoiced" />
@@ -280,15 +290,14 @@ export default function POStatusReport() {
                 .map(([clientName, clientRows]) => {
                 const clientTotal = clientRows.reduce(
                   (acc, r) => ({
-                    original_po_amount: acc.original_po_amount + (r.original_po_amount ?? 0),
-                    cos_total: acc.cos_total + (r.cos_total ?? 0),
+                    original_po_amount_incl_cos: acc.original_po_amount_incl_cos + (r.original_po_amount_incl_cos ?? 0),
                     total_invoiced: acc.total_invoiced + (r.total_invoiced ?? 0),
                     total_paid: acc.total_paid + (r.total_paid ?? 0),
                     total_outstanding: acc.total_outstanding + (r.total_outstanding ?? 0),
                     po_balance: acc.po_balance + (r.po_balance ?? 0),
                     budget_balance: acc.budget_balance + (r.budget_balance ?? 0),
                   }),
-                  { original_po_amount: 0, cos_total: 0, total_invoiced: 0, total_paid: 0, total_outstanding: 0, po_balance: 0, budget_balance: 0 }
+                  { original_po_amount_incl_cos: 0, total_invoiced: 0, total_paid: 0, total_outstanding: 0, po_balance: 0, budget_balance: 0 }
                 )
                 return (
                   <React.Fragment key={clientName}>
@@ -296,12 +305,8 @@ export default function POStatusReport() {
                       <tr key={row.po_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.client}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.po_number}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                          {formatCurrency(row.original_po_amount)} {row.original_po_date !== '—' ? `(${row.original_po_date})` : ''}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 max-w-[280px] whitespace-normal break-words align-top">
-                          {row.cos_display}
-                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.project_name}</td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.original_po_amount_incl_cos)}</td>
                         <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.total_invoiced)}</td>
                         <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.total_paid)}</td>
                         <td className="px-4 py-3 text-sm text-right text-amber-700 dark:text-amber-300">{formatCurrency(row.total_outstanding)}</td>
@@ -314,7 +319,7 @@ export default function POStatusReport() {
                         Subtotal: {clientName}
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">—</td>
-                      <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">—</td>
+                      <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.original_po_amount_incl_cos)}</td>
                       <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.total_invoiced)}</td>
                       <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.total_paid)}</td>
                       <td className="px-4 py-2 text-sm text-right text-amber-700 dark:text-amber-300">{formatCurrency(clientTotal.total_outstanding)}</td>

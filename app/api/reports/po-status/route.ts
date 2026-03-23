@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   if (isAdminOrAbove) {
     const { data } = await adminSupabase
       .from('purchase_orders')
-      .select('id, po_number, site_id, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
+      .select('id, po_number, site_id, project_name, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
       .order('po_number')
     purchaseOrders = data || []
   } else {
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
     }
     const { data } = await adminSupabase
       .from('purchase_orders')
-      .select('id, po_number, site_id, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
+      .select('id, po_number, site_id, project_name, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
       .in('id', poIds)
       .order('po_number')
     purchaseOrders = data || []
@@ -126,17 +126,13 @@ export async function GET(req: Request) {
     const laborCost = laborByPo[po.id] ?? 0
     const budgetBalance = totalAvailable - priorCost - laborCost
 
-    const coDisplay = coList.map((c) => `${c.co_number || 'CO'} ${c.co_date ? `(${c.co_date})` : ''}: $${c.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`).join('; ') || '—'
-
     return {
       client: sitesMap[po.site_id]?.name || '—',
       site_id: po.site_id,
       po_id: po.id,
       po_number: po.po_number || '—',
-      original_po_amount: original,
-      original_po_date: po.po_issue_date || '—',
-      cos_display: coDisplay,
-      cos_total: coTotal,
+      project_name: po.project_name || '—',
+      original_po_amount_incl_cos: original + coTotal,
       total_invoiced: totalInvoiced,
       total_paid: totalPaid,
       total_outstanding: totalOutstanding,
