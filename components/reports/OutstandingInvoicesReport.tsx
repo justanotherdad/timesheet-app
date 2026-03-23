@@ -7,6 +7,7 @@ interface OutstandingRow {
   client: string
   site_id: string
   po_number: string
+  project_name: string
   original_po_amount: number
   current_po_balance: number
   current_budget_balance: number
@@ -88,6 +89,7 @@ export default function OutstandingInvoicesReport() {
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">Client</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">PO #</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">Project Name</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">Original PO Amount (incl. COs)</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">Current PO Balance</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">Current Budget Balance</th>
@@ -96,7 +98,7 @@ export default function OutstandingInvoicesReport() {
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                   No outstanding invoices found
                 </td>
               </tr>
@@ -105,6 +107,7 @@ export default function OutstandingInvoicesReport() {
                 <tr key={`${row.site_id}-${row.po_number}-${i}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                   <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.client}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.po_number}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.project_name}</td>
                   <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.original_po_amount)}</td>
                   <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.current_po_balance)}</td>
                   <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.current_budget_balance)}</td>
