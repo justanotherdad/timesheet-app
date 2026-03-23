@@ -299,7 +299,7 @@ export default function POStatusReport() {
                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                           {formatCurrency(row.original_po_amount)} {row.original_po_date !== '—' ? `(${row.original_po_date})` : ''}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate" title={row.cos_display}>
+                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 max-w-[280px] whitespace-normal break-words align-top">
                           {row.cos_display}
                         </td>
                         <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.total_invoiced)}</td>
