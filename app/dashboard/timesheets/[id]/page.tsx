@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
+import POLinkWithBalanceTooltip from '@/components/timesheet/POLinkWithBalanceTooltip'
 import { formatWeekEnding, getWeekDates, formatDateTimeInEastern } from '@/lib/utils'
 import { format } from 'date-fns'
 import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
@@ -265,12 +266,10 @@ export default async function TimesheetDetailPage({
                           </td>
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
                             {entry.po_id && budgetAccessPoIds.includes(entry.po_id) ? (
-                              <Link
-                                href={`/dashboard/budget?poId=${entry.po_id}`}
-                                className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
-                              >
-                                {entry.purchase_orders?.po_number || 'N/A'}
-                              </Link>
+                              <POLinkWithBalanceTooltip
+                                poId={entry.po_id}
+                                poNumber={entry.purchase_orders?.po_number || 'N/A'}
+                              />
                             ) : (
                               entry.purchase_orders?.po_number || 'N/A'
                             )}
