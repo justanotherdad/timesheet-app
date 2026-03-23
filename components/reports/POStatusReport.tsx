@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Printer } from 'lucide-react'
 
 interface POStatusRow {
   client: string
@@ -156,14 +156,31 @@ export default function POStatusReport() {
     )
   }
 
+  const handlePrint = () => {
+    window.print()
+  }
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden report-print-container">
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">PO Status Report</h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          Full PO status by client with Original PO, Change Orders, Invoices, Balances. Each client has a subtotal.
-        </p>
-        <div className="flex flex-wrap gap-4 items-center">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">PO Status Report</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Full PO status by client with Original PO, Change Orders, Invoices, Balances. Each client has a subtotal.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="print:hidden flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 transition-colors shrink-0"
+            title="Print or save as PDF"
+          >
+            <Printer className="h-5 w-5" />
+            Print / Export to PDF
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-4 items-center print:hidden">
           <label className="flex items-center gap-2">
             <span className="text-sm text-gray-600 dark:text-gray-400">Year:</span>
             <select
@@ -258,7 +275,9 @@ export default function POStatusReport() {
                 </td>
               </tr>
             ) : (
-              Array.from(rowsByClient.entries()).map(([clientName, clientRows]) => {
+              Array.from(rowsByClient.entries())
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([clientName, clientRows]) => {
                 const clientTotal = clientRows.reduce(
                   (acc, r) => ({
                     original_po_amount: acc.original_po_amount + (r.original_po_amount ?? 0),

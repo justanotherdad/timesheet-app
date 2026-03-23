@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Printer } from 'lucide-react'
 
 interface OutstandingRow {
   client: string
@@ -59,13 +59,28 @@ export default function OutstandingInvoicesReport() {
     )
   }
 
+  const handlePrint = () => {
+    window.print()
+  }
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">All Outstanding Invoices</h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          POs with at least one invoice without a Payment Received date, organized by client
-        </p>
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden report-print-container">
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">All Outstanding Invoices</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            POs with at least one invoice without a Payment Received date, organized by client
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handlePrint}
+          className="print:hidden flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 transition-colors"
+          title="Print or save as PDF"
+        >
+          <Printer className="h-5 w-5" />
+          Print / Export to PDF
+        </button>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">

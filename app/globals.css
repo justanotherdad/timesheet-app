@@ -38,4 +38,28 @@ select {
   header {
     display: none !important;
   }
+  body {
+    background: white !important;
+  }
+}
+
+/* Reports: print-friendly styling */
+@media print {
+  .report-print-container {
+    box-shadow: none !important;
+    background: white !important;
+  }
+  .report-print-container * {
+    color: #111827 !important;
+  }
+  .report-print-container thead {
+    background: #f3f4f6 !important;
+  }
+  .report-print-container tbody tr:nth-child(even) {
+    background: #f9fafb !important;
+  }
+  .report-print-container .text-amber-700,
+  .report-print-container .dark\:text-amber-300 {
+    color: #b45309 !important;
+  }
 }

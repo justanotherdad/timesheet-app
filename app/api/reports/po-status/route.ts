@@ -159,7 +159,9 @@ export async function GET(req: Request) {
   if (filterClient) filtered = filtered.filter((r: any) => r.site_id === filterClient)
   if (filterPO) filtered = filtered.filter((r: any) => r.po_id === filterPO)
 
-  const clients = Object.values(sitesMap).map((s: any) => ({ id: s.id, name: s.name }))
+  const clients = Object.values(sitesMap)
+    .map((s: any) => ({ id: s.id, name: s.name || '' }))
+    .sort((a, b) => a.name.localeCompare(b.name))
   return NextResponse.json({
     rows: filtered,
     clients,

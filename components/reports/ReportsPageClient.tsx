@@ -12,8 +12,9 @@ export default function ReportsPageClient() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Select a Report</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="print:hidden">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Select a Report</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
         <button
           type="button"
           onClick={() => setActiveReport(activeReport === 'outstanding-invoices' ? null : 'outstanding-invoices')}
@@ -49,6 +50,7 @@ export default function ReportsPageClient() {
             <p className="text-sm text-gray-600 dark:text-gray-400">Full PO status by client with totals and filters</p>
           </div>
         </button>
+        </div>
       </div>
 
       {activeReport === 'outstanding-invoices' && <OutstandingInvoicesReport />}
