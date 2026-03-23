@@ -128,6 +128,18 @@ export default function BasicBudgetView({
     } catch { /* ignore */ }
   }, [po.id, user])
 
+  const loadExpenses = useCallback(async () => {
+    try {
+      const t = `t=${Date.now()}`
+      const res = await fetch(`/api/budget/${po.id}/expenses?${t}`, { ...fetchOpts, credentials: 'include' })
+      if (res.ok) {
+        const expenses = await res.json()
+        setData((prev: any) => prev ? { ...prev, expenses: Array.isArray(expenses) ? expenses : prev.expenses } : prev)
+      }
+    } catch { /* ignore */ }
+    setExpensesOverride(null)
+  }, [po.id])
+
   const refetch = useCallback(async () => {
     const t = `t=${Date.now()}`
     const [res, coRes, invRes, brRes, laborRes] = await Promise.all([
@@ -223,7 +235,7 @@ export default function BasicBudgetView({
     }
   }, [data?.po, po])
 
-  // Fallback: when budget API returns empty expense types, fetch from dedicated API (bypasses RLS)
+  // Fallback: when budget API returns empty expense types or expenses, fetch from dedicated APIs
   useEffect(() => {
     if (!data || !po?.id) return
     const fromBudget = data?.expenseTypes || []
@@ -235,7 +247,10 @@ export default function BasicBudgetView({
       .then((res) => res.ok ? res.json() : [])
       .then((arr) => setExpenseTypesFallback(Array.isArray(arr) ? arr : []))
       .catch(() => setExpenseTypesFallback([]))
-  }, [data, po?.id])
+    if ((data?.expenses?.length ?? 0) === 0) {
+      loadExpenses()
+    }
+  }, [data, po?.id, loadExpenses])
 
   if (loading && !data) {
     return (
@@ -1556,7 +1571,7 @@ export default function BasicBudgetView({
                   <td className="py-2">
                     <div className="flex gap-1">
                       <button type="button" onClick={() => setExpenseModal(ex)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Edit"><Pencil className="h-4 w-4" /></button>
-                      <button type="button" onClick={async () => { if (confirm('Delete this expense?')) { await fetch(`/api/budget/${po.id}/expenses/${ex.id}`, { method: 'DELETE' }); refetch() } }} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                      <button type="button" onClick={async () => { if (confirm('Delete this expense?')) { await fetch(`/api/budget/${po.id}/expenses/${ex.id}`, { method: 'DELETE' }); loadExpenses() } }} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Delete"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -1625,14 +1640,7 @@ export default function BasicBudgetView({
           poId={po.id}
           expense={expenseModal.id ? expenseModal : undefined}
           expenseTypes={expenseTypes}
-          onSave={async (createdExpense) => {
-            if (createdExpense) {
-              setExpensesOverride((prev) => [createdExpense, ...(prev ?? data?.expenses ?? [])])
-            } else {
-              await refetch()
-              setExpensesOverride(null)
-            }
-          }}
+          onSave={loadExpenses}
           onClose={() => setExpenseModal(null)}
         />
       )}

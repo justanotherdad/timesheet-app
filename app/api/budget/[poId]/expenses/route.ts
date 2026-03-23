@@ -1,7 +1,40 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
+
+export const dynamic = 'force-dynamic'
+
+/** GET: List expenses for this PO. Uses admin client when available to bypass RLS. */
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ poId: string }> }
+) {
+  const { poId } = await params
+  const user = await getCurrentUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const supabase = await createClient()
+  const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
+  if (!allowed) return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+
+  let client = supabase
+  try {
+    client = createAdminClient()
+  } catch {
+    // Service role key may be missing
+  }
+
+  const { data, error } = await client
+    .from('po_expenses')
+    .select('*')
+    .eq('po_id', poId)
+    .order('expense_date', { ascending: false })
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data || [])
+}
 
 export async function POST(
   req: Request,

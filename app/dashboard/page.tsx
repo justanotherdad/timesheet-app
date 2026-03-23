@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import Link from 'next/link'
-import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList } from 'lucide-react'
+import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList, FileBarChart } from 'lucide-react'
 import { formatWeekEnding, formatDate } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
@@ -189,17 +189,17 @@ export default async function DashboardPage() {
 
           {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
             <Link
-              href="/dashboard/approvals"
+              href="/dashboard/reports"
               className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
             >
               <div className="flex items-center gap-3 sm:gap-4">
                 <div className="bg-orange-100 p-3 rounded-lg">
-                  <Users className="h-6 w-6 text-orange-600" />
+                  <FileBarChart className="h-6 w-6 text-orange-600" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Pending Approvals</h3>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Reports</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-300">
-                    {pendingApprovalsCount} timesheet{pendingApprovalsCount !== 1 ? 's' : ''} pending
+                    Run reports for invoices, PO status, and more
                   </p>
                 </div>
               </div>
