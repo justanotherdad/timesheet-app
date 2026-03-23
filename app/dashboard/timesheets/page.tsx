@@ -9,16 +9,20 @@ import { FileText, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 import MyTimesheetsTable from '@/components/MyTimesheetsTable'
+import TimesheetFilters from '@/components/timesheet/TimesheetFilters'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10
 
-type SearchParams = { sort?: string; dir?: string }
+type SearchParams = { sort?: string; dir?: string; user?: string; weekEnding?: string; status?: string }
 
 export default async function TimesheetsPage(props: { searchParams?: Promise<SearchParams> }) {
   const params = props.searchParams ? await props.searchParams : {}
   const sortBy = params.sort || 'week_ending'
   const sortDir = (params.dir || 'desc') as 'asc' | 'desc'
+  const filterUser = params.user || ''
+  const filterWeekEnding = params.weekEnding || ''
+  const filterStatus = params.status || ''
 
   const user = await getCurrentUser()
   
@@ -32,15 +36,17 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
   let timesheetsResult
   if (['admin', 'super_admin'].includes(user.profile.role)) {
     // Admins see all timesheets (include approval chain for "With" column)
+    let adminQuery = supabase
+      .from('weekly_timesheets')
+      .select(`
+        *,
+        user_profiles!user_id(name, email, reports_to_id, manager_id, supervisor_id, final_approver_id)
+      `)
+    if (filterUser) adminQuery = adminQuery.eq('user_id', filterUser)
+    if (filterWeekEnding) adminQuery = adminQuery.eq('week_ending', filterWeekEnding)
+    if (filterStatus) adminQuery = adminQuery.eq('status', filterStatus)
     timesheetsResult = await withQueryTimeout(() =>
-      supabase
-        .from('weekly_timesheets')
-        .select(`
-          *,
-          user_profiles!user_id(name, email, reports_to_id, manager_id, supervisor_id, final_approver_id)
-        `)
-        .order('week_ending', { ascending: false })
-        .order('created_at', { ascending: false })
+      adminQuery.order('week_ending', { ascending: false }).order('created_at', { ascending: false })
     )
   } else if (['supervisor', 'manager'].includes(user.profile.role)) {
     // Users who have this user as reports_to, supervisor, manager, or final approver (skip-none: next in chain)
@@ -80,6 +86,19 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
   }
 
   const timesheets = (timesheetsResult.data || []) as any[]
+
+  // For admins: fetch all users for the person filter dropdown
+  let filterUsers: { id: string; name: string }[] = []
+  if (['admin', 'super_admin'].includes(user.profile.role)) {
+    const adminSupabaseForUsers = createAdminClient()
+    const usersResult = await withQueryTimeout(() =>
+      adminSupabaseForUsers
+        .from('user_profiles')
+        .select('id, name')
+        .order('name')
+    )
+    filterUsers = (Array.isArray(usersResult.data) ? usersResult.data : []).map((u: any) => ({ id: u.id, name: u.name || 'Unknown' }))
+  }
 
   // Auto-approve any submitted timesheets where employee has no approvers (final approver with no one above)
   // Run for all users so final approvers viewing their own timesheets get auto-approved on page load
@@ -163,6 +182,17 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
     }
   }
 
+  // Build returnTo URL preserving sort and filter params (for View links)
+  const buildReturnTo = () => {
+    const p = new URLSearchParams()
+    p.set('sort', sortBy)
+    p.set('dir', sortDir)
+    if (filterUser) p.set('user', filterUser)
+    if (filterWeekEnding) p.set('weekEnding', filterWeekEnding)
+    if (filterStatus) p.set('status', filterStatus)
+    return `/dashboard/timesheets?${p.toString()}`
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved':
@@ -214,6 +244,12 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
             </a>
           </div>
 
+          {['admin', 'super_admin'].includes(user.profile.role) && (
+            <TimesheetFilters
+              users={filterUsers}
+            />
+          )}
+
           {sortedTimesheets && sortedTimesheets.length > 0 ? (
             <>
               {/* Mobile: cards with Employee, Week Ending, Status, View button only */}
@@ -239,7 +275,7 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
                         </span>
                       </div>
                       <Link
-                        href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent(`/dashboard/timesheets?sort=${sortBy}&dir=${sortDir}`)}`}
+                        href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent(buildReturnTo())}`}
                         className="shrink-0 inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
                       >
                         View
