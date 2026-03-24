@@ -652,7 +652,7 @@ export default function BasicBudgetView({
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
           onClick={onBack}
@@ -661,17 +661,27 @@ export default function BasicBudgetView({
           <ArrowLeft className="h-4 w-4" />
           Back to budget list
         </button>
-        {canEdit && (
-          <button
-            type="button"
-            onClick={handleActiveToggle}
-            disabled={deactivating}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-600 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20"
-          >
-            <PowerOff className="h-4 w-4" />
-            {deactivating ? '…' : isActive ? 'Deactivate' : 'Reactivate'}
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {poData.budget_type === 'project' && (
+            <Link
+              href={`/dashboard/budget?poId=${po.id}&matrix=1`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-teal-600 text-white hover:bg-teal-700 shadow-sm"
+            >
+              View project matrix →
+            </Link>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleActiveToggle}
+              disabled={deactivating}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-600 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20"
+            >
+              <PowerOff className="h-4 w-4" />
+              {deactivating ? '…' : isActive ? 'Deactivate' : 'Reactivate'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Navigation: prev | Client + PO dropdowns | next — above container. On mobile, dropdowns stack so arrows fit properly. */}

@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { ArrowLeft } from 'lucide-react'
 import BasicBudgetView from './BasicBudgetView'
+import ProjectBudgetMatrix from './ProjectBudgetMatrix'
 
 interface Site {
   id: string
@@ -39,7 +41,7 @@ interface BudgetPageClientProps {
   hasLimitedAccess?: boolean
 }
 
-export default function BudgetPageClient({
+function BudgetPageClientInner({
   sites,
   purchaseOrders,
   initialPoId,
@@ -47,6 +49,9 @@ export default function BudgetPageClient({
   hasLimitedAccess = false,
 }: BudgetPageClientProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const matrixMode = searchParams.get('matrix') === '1'
+
   const [budgetRefreshKey, setBudgetRefreshKey] = useState(0)
   const [showArchivedPOs, setShowArchivedPOs] = useState(false)
   const [selectedSiteId, setSelectedSiteId] = useState<string>(() => {
@@ -78,10 +83,40 @@ export default function BudgetPageClient({
     router.replace('/dashboard/budget', { scroll: false })
   }
 
+  const backToBudgetDetails = () => {
+    if (selectedPoId) {
+      router.replace(`/dashboard/budget?poId=${selectedPoId}`, { scroll: false })
+    }
+  }
+
+  useEffect(() => {
+    if (!matrixMode || !selectedPO) return
+    if (selectedPO.budget_type !== 'project') {
+      router.replace(selectedPoId ? `/dashboard/budget?poId=${selectedPoId}` : '/dashboard/budget', { scroll: false })
+    }
+  }, [matrixMode, selectedPO, selectedPoId, router])
+
   if (selectedPO) {
     const currentIndex = sitePOs.findIndex((p) => p.id === selectedPoId)
     const hasPrev = currentIndex > 0
     const hasNext = currentIndex >= 0 && currentIndex < sitePOs.length - 1
+
+    if (matrixMode && selectedPO.budget_type === 'project') {
+      return (
+        <div className="max-w-7xl mx-auto space-y-6">
+          <button
+            type="button"
+            onClick={backToBudgetDetails}
+            className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline font-medium"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to budget details
+          </button>
+          <ProjectBudgetMatrix poId={selectedPO.id} refreshTick={budgetRefreshKey} />
+        </div>
+      )
+    }
+
     return (
       <div className="max-w-7xl mx-auto">
         <BasicBudgetView
@@ -190,5 +225,21 @@ export default function BudgetPageClient({
         )}
       </div>
     </div>
+  )
+}
+
+function BudgetLoadingFallback() {
+  return (
+    <div className="flex justify-center py-16">
+      <div className="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full" />
+    </div>
+  )
+}
+
+export default function BudgetPageClient(props: BudgetPageClientProps) {
+  return (
+    <Suspense fallback={<BudgetLoadingFallback />}>
+      <BudgetPageClientInner {...props} />
+    </Suspense>
   )
 }
