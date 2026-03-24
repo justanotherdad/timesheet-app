@@ -155,19 +155,30 @@ export default function BasicBudgetView({
   )
 
   /** Overwrites attachments from admin-only GET so main budget fetch (RLS/cache) cannot clear the list. */
-  const mergeAttachmentsFromServer = useCallback(async () => {
-    try {
-      const t = `t=${Date.now()}`
-      const res = await fetch(`/api/budget/${po.id}/attachments?${t}`, fetchOpts)
-      if (!res.ok) return
-      const body = await res.json()
-      const att = body?.attachments
-      if (!Array.isArray(att)) return
-      setData((prev: any) => (prev ? { ...prev, attachments: att } : prev))
-    } catch {
-      /* ignore */
-    }
-  }, [po.id, fetchOpts])
+  const mergeAttachmentsFromServer = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      /** Default true: background refetches should not flash errors if the attachments route is misconfigured. */
+      const silent = opts?.silent ?? true
+      try {
+        const t = `t=${Date.now()}`
+        const res = await fetch(`/api/budget/${po.id}/attachments?${t}`, fetchOpts)
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          const msg = (err as { error?: string }).error || `Could not load attachments (${res.status})`
+          if (!silent) setAttachmentError(msg)
+          return
+        }
+        const body = await res.json()
+        const att = body?.attachments
+        if (!Array.isArray(att)) return
+        setData((prev: any) => (prev ? { ...prev, attachments: att } : prev))
+        setAttachmentError(null)
+      } catch {
+        if (!silent) setAttachmentError('Could not load attachments. Check your connection.')
+      }
+    },
+    [po.id, fetchOpts]
+  )
 
   const loadBudgetAccess = useCallback(async () => {
     if (!user || !['admin', 'super_admin'].includes(user.profile.role)) return
@@ -221,7 +232,6 @@ export default function BasicBudgetView({
       const json = await res.json()
       setData(json)
       setExpensesOverride(null)
-      await mergeAttachmentsFromServer()
     }
     if (coRes.ok) {
       const json = await coRes.json()
@@ -238,6 +248,8 @@ export default function BasicBudgetView({
     if (laborRes.ok) setLaborCostData(await laborRes.json())
     loadBudgetAccess()
     if (user && ['manager', 'admin', 'super_admin'].includes(user.profile.role)) loadBalance()
+    // Always merge attachments: main GET can fail or omit rows; this endpoint uses service role only.
+    await mergeAttachmentsFromServer({ silent: true })
   }, [po.id, loadBudgetAccess, loadBalance, user, mergeAttachmentsFromServer])
 
   useEffect(() => {
@@ -261,8 +273,8 @@ export default function BasicBudgetView({
         if (res.ok) {
           const json = await res.json()
           setData(json)
-          await mergeAttachmentsFromServer()
         }
+        await mergeAttachmentsFromServer({ silent: true })
         if (bhRes.ok) setBillableData(await bhRes.json())
         if (coRes.ok) {
           const json = await coRes.json()
@@ -916,9 +928,10 @@ export default function BasicBudgetView({
                       }
                     }
                     await refetch()
+                    await mergeAttachmentsFromServer({ silent: false })
                   } catch (err: any) {
                     setAttachmentError(err.message || 'Upload failed')
-                    void refetch()
+                    await mergeAttachmentsFromServer({ silent: false })
                   } finally {
                     setUploadingAttachment(false)
                     e.target.value = ''
