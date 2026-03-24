@@ -9,6 +9,20 @@ import InvoiceFormModal from './InvoiceFormModal'
 import ExpenseFormModal from './ExpenseFormModal'
 import BillRateFormModal from './BillRateFormModal'
 
+/** YYYY-MM-DD for <input type="date"> — handles ISO strings, DB date strings, avoids empty edit field when co_date exists */
+function coDateForInput(v: unknown): string {
+  if (v == null || v === '') return ''
+  const s = String(v).trim()
+  const ymd = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (ymd) return ymd[1]
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const mo = String(d.getMonth() + 1).padStart(2, '0')
+  const da = String(d.getDate()).padStart(2, '0')
+  return `${y}-${mo}-${da}`
+}
+
 interface BasicBudgetViewProps {
   po: any
   sites?: Array<{ id: string; name?: string; address_street?: string; address_city?: string; address_state?: string; address_zip?: string; contact?: string }>
@@ -281,7 +295,10 @@ export default function BasicBudgetView({
   const poData = data?.po ?? po
   const site = poData.sites || (poData.site_id && sitesProp?.length ? sitesProp.find((s) => s.id === poData.site_id) : null) || {}
   const addressParts = [site.address_street, [site.address_city, site.address_state, site.address_zip].filter(Boolean).join(', ')].filter(Boolean)
-  const changeOrders = changeOrdersOverride !== null ? changeOrdersOverride : (data?.changeOrders || [])
+  // Prefer change orders from the main /api/budget GET (authoritative). The separate /change-orders fetch
+  // must NOT override that — it caused stale/incomplete rows (e.g. missing co_date) to replace fresh data.
+  const changeOrders =
+    data != null && Array.isArray(data.changeOrders) ? data.changeOrders : (changeOrdersOverride ?? [])
   const invoices = invoicesOverride !== null ? invoicesOverride : (data?.invoices || [])
   const usersFromApi = data?.users || []
   const usersFromBillable = (billableData?.rows || []).map((r: any) => ({ id: r.userId, name: r.userName }))
@@ -444,7 +461,7 @@ export default function BasicBudgetView({
         line_item_type: co.line_item_type === 'personnel' ? 'personnel' : co.line_item_type === 'labor' ? 'labor' : undefined,
         user_id: co.user_id ?? undefined,
         co_number: co.co_number || '',
-        co_date: co.co_date ? String(co.co_date).slice(0, 10) : '',
+        co_date: coDateForInput(co.co_date),
         amount: co.amount != null ? String(co.amount) : '',
       })),
     })
