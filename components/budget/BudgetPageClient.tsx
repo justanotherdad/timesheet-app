@@ -107,12 +107,17 @@ function BudgetPageClientInner({
           <button
             type="button"
             onClick={backToBudgetDetails}
-            className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline font-medium"
+            className="print:hidden inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline font-medium"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to budget details
           </button>
-          <ProjectBudgetMatrix poId={selectedPO.id} refreshTick={budgetRefreshKey} />
+          <ProjectBudgetMatrix
+            poId={selectedPO.id}
+            refreshTick={budgetRefreshKey}
+            reportTitle={`${selectedPO.po_number}${selectedPO.description ? ` — ${selectedPO.description}` : selectedPO.project_name ? ` — ${selectedPO.project_name}` : ''}`}
+            fileBaseName={selectedPO.po_number}
+          />
         </div>
       )
     }
