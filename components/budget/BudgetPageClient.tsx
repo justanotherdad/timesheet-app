@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import BasicBudgetView from './BasicBudgetView'
-import ProjectBudgetShell from './ProjectBudgetShell'
 
 interface Site {
   id: string
@@ -80,50 +79,40 @@ export default function BudgetPageClient({
   }
 
   if (selectedPO) {
-    const isProject = selectedPO.budget_type === 'project'
     const currentIndex = sitePOs.findIndex((p) => p.id === selectedPoId)
     const hasPrev = currentIndex > 0
     const hasNext = currentIndex >= 0 && currentIndex < sitePOs.length - 1
     return (
       <div className="max-w-7xl mx-auto">
-        {isProject ? (
-          <ProjectBudgetShell
-            key={`${selectedPoId}-${budgetRefreshKey}`}
-            po={selectedPO}
-            sites={sites}
-            onBack={handleBackToSelector}
-          />
-        ) : (
-          <BasicBudgetView
-            key={`${selectedPoId}-${budgetRefreshKey}`}
-            po={selectedPO}
-            sites={sites}
-            onBack={handleBackToSelector}
-            hasLimitedAccess={hasLimitedAccess}
-            onSave={() => {
-              setBudgetRefreshKey((k) => k + 1)
-              router.refresh()
-            }}
-            user={user}
-            allSites={sites}
-            sitePOs={sitePOs}
-            selectedSiteId={selectedSiteId}
-            selectedPoId={selectedPoId ?? undefined}
-            onSelectSite={(siteId) => {
-              setSelectedSiteId(siteId)
-              const firstPo = purchaseOrders.find((p) => p.site_id === siteId)
-              if (firstPo) {
-                handleSelectPO(firstPo.id)
-              } else {
-                setSelectedPoId(null)
-                router.replace('/dashboard/budget', { scroll: false })
-              }
-            }}
-            onSelectPo={handleSelectPO}
-            onPrev={hasPrev ? () => handleSelectPO(sitePOs[currentIndex - 1].id) : undefined}
-            onNext={hasNext ? () => handleSelectPO(sitePOs[currentIndex + 1].id) : undefined}
-          />
-        )}
+        <BasicBudgetView
+          key={`${selectedPoId}-${budgetRefreshKey}`}
+          po={selectedPO}
+          sites={sites}
+          onBack={handleBackToSelector}
+          hasLimitedAccess={hasLimitedAccess}
+          onSave={() => {
+            setBudgetRefreshKey((k) => k + 1)
+            router.refresh()
+          }}
+          user={user}
+          allSites={sites}
+          sitePOs={sitePOs}
+          selectedSiteId={selectedSiteId}
+          selectedPoId={selectedPoId ?? undefined}
+          onSelectSite={(siteId) => {
+            setSelectedSiteId(siteId)
+            const firstPo = purchaseOrders.find((p) => p.site_id === siteId)
+            if (firstPo) {
+              handleSelectPO(firstPo.id)
+            } else {
+              setSelectedPoId(null)
+              router.replace('/dashboard/budget', { scroll: false })
+            }
+          }}
+          onSelectPo={handleSelectPO}
+          onPrev={hasPrev ? () => handleSelectPO(sitePOs[currentIndex - 1].id) : undefined}
+          onNext={hasNext ? () => handleSelectPO(sitePOs[currentIndex + 1].id) : undefined}
+        />
       </div>
     )
   }
