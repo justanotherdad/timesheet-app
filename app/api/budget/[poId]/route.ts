@@ -65,6 +65,18 @@ export async function GET(
     // Service role key may be missing in some environments
   }
 
+  // Re-fetch PO with service role when available. Session/RLS reads can omit or null out columns (e.g. po_issue_date)
+  // even after a successful admin PATCH, which made the UI look like saves "didn't work".
+  let mergedPo: Record<string, unknown> = po as Record<string, unknown>
+  if (adminSupabase) {
+    const { data: adminPo } = await adminSupabase
+      .from('purchase_orders')
+      .select('*, sites(id, name, address_street, address_city, address_state, address_zip, contact), departments(id, name)')
+      .eq('id', poId)
+      .single()
+    if (adminPo) mergedPo = adminPo as Record<string, unknown>
+  }
+
   const changeOrdersQuery = adminSupabase
     ? adminSupabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: true })
     : supabase.from('po_change_orders').select('*').eq('po_id', poId).order('co_date', { ascending: true })
@@ -117,17 +129,15 @@ export async function GET(
     const { data: fallback } = await supabase.from('po_expense_types').select('*').order('name')
     if ((fallback?.length ?? 0) > 0) expenseTypes = fallback ?? []
   }
-  // Fetch attachments separately: avoids any Promise.all slot mix-ups and ensures service-role read
-  // (RLS often returns [] for the user client with no error, which hid rows that exist in the table).
+  // Attachments: always use service-role read when possible (RLS often hides rows with no error).
   let attachments: Array<{ id: string; file_name: string; storage_path: string; file_type?: string | null }> = []
   if (adminSupabase) {
     const { data: attData, error: attErr } = await adminSupabase
       .from('po_attachments')
       .select('id, file_name, storage_path, file_type')
       .eq('po_id', poId)
-    if (!attErr && attData) {
-      attachments = attData
-    }
+    attachments = attData ?? []
+    if (attErr) console.error('[budget GET] po_attachments admin', attErr)
   }
   if (attachments.length === 0) {
     const { data: fallback } = await supabase
@@ -157,15 +167,16 @@ export async function GET(
     user_profiles: br.user_id && profilesMap[br.user_id] ? { id: profilesMap[br.user_id].id, name: profilesMap[br.user_id].name } : null,
   }))
 
+  const siteId = mergedPo.site_id as string
   const { data: siteDepartments } = await supabase
     .from('departments')
     .select('id, name')
-    .eq('site_id', po.site_id)
+    .eq('site_id', siteId)
     .order('name')
 
   return NextResponse.json(
     {
-      po,
+      po: mergedPo,
       changeOrders,
       invoices,
       billRates,
@@ -321,7 +332,18 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json({ ok: true })
+    // Return the full PO row from service role so the client can merge without relying on RLS-masked GET reads.
+    let poAfter: Record<string, unknown> | null = null
+    if (adminSupabase) {
+      const { data: freshPo } = await adminSupabase
+        .from('purchase_orders')
+        .select('*, sites(id, name, address_street, address_city, address_state, address_zip, contact), departments(id, name)')
+        .eq('id', poId)
+        .single()
+      if (freshPo) poAfter = freshPo as Record<string, unknown>
+    }
+
+    return NextResponse.json({ ok: true, po: poAfter })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to update'
     return NextResponse.json({ error: message }, { status: 500 })

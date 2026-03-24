@@ -448,7 +448,7 @@ export default function BasicBudgetView({
         }),
       })
       const text = await res.text()
-      let json: { error?: string }
+      let json: { error?: string; po?: Record<string, unknown> }
       try {
         json = JSON.parse(text)
       } catch {
@@ -459,6 +459,9 @@ export default function BasicBudgetView({
         throw new Error('Invalid response from server')
       }
       if (!res.ok) throw new Error(json.error || 'Failed to save')
+      if (json.po) {
+        setData((prev: any) => (prev ? { ...prev, po: json.po } : prev))
+      }
       setEditingClientPO(false)
       await refetch()
       onSave?.()
@@ -528,7 +531,7 @@ export default function BasicBudgetView({
         }),
       })
       const text = await res.text()
-      let json: { error?: string }
+      let json: { error?: string; po?: Record<string, unknown> }
       try {
         json = JSON.parse(text)
       } catch {
@@ -539,6 +542,9 @@ export default function BasicBudgetView({
         throw new Error('Invalid response from server')
       }
       if (!res.ok) throw new Error(json.error || 'Failed to save')
+      if (json.po) {
+        setData((prev: any) => (prev ? { ...prev, po: json.po } : prev))
+      }
       setEditingBudget(false)
       await refetch()
       onSave?.()
