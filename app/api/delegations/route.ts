@@ -72,12 +72,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'You cannot delegate to yourself' }, { status: 400 })
   }
 
-  const start = new Date(start_date)
-  const end = new Date(end_date)
-  if (isNaN(start.getTime()) || isNaN(end.getTime()) {
+  const startDate = new Date(start_date)
+  const endDate = new Date(end_date)
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
     return NextResponse.json({ error: 'Invalid dates' }, { status: 400 })
   }
-  if (end < start) {
+  if (endDate < startDate) {
     return NextResponse.json({ error: 'end_date must be on or after start_date' }, { status: 400 })
   }
 
