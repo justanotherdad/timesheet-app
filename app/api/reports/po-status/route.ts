@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   if (isAdminOrAbove) {
     const { data } = await adminSupabase
       .from('purchase_orders')
-      .select('id, po_number, site_id, project_name, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
+      .select('id, po_number, site_id, project_name, description, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
       .order('po_number')
     purchaseOrders = data || []
   } else {
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
     }
     const { data } = await adminSupabase
       .from('purchase_orders')
-      .select('id, po_number, site_id, project_name, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
+      .select('id, po_number, site_id, project_name, description, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
       .in('id', poIds)
       .order('po_number')
     purchaseOrders = data || []
@@ -131,7 +131,7 @@ export async function GET(req: Request) {
       site_id: po.site_id,
       po_id: po.id,
       po_number: po.po_number || '—',
-      project_name: po.project_name || '—',
+      project_name: po.project_name || po.description || '—',
       original_po_amount_incl_cos: original + coTotal,
       total_invoiced: totalInvoiced,
       total_paid: totalPaid,

@@ -22,7 +22,7 @@ export async function GET() {
   if (isAdminOrAbove) {
     const { data } = await adminSupabase
       .from('purchase_orders')
-      .select('id, po_number, site_id, project_name, original_po_amount, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
+      .select('id, po_number, site_id, project_name, description, original_po_amount, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
       .order('po_number')
     purchaseOrders = data || []
   } else {
@@ -36,7 +36,7 @@ export async function GET() {
     }
     const { data } = await adminSupabase
       .from('purchase_orders')
-      .select('id, po_number, site_id, project_name, original_po_amount, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
+      .select('id, po_number, site_id, project_name, description, original_po_amount, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
       .in('id', poIds)
       .order('po_number')
     purchaseOrders = data || []
@@ -118,7 +118,7 @@ export async function GET() {
       client: sitesMap[po.site_id]?.name || '—',
       site_id: po.site_id,
       po_number: po.po_number || '—',
-      project_name: po.project_name || '—',
+      project_name: po.project_name || po.description || '—',
       original_po_amount: original + coTotal,
       current_po_balance: poBalance,
       current_budget_balance: budgetBalance,

@@ -121,7 +121,14 @@ export async function GET(
     const { data: fallback } = await supabase.from('po_expense_types').select('*').order('name')
     if ((fallback?.length ?? 0) > 0) expenseTypes = fallback ?? []
   }
-  const attachments = attachmentsRes.data || []
+  let attachments = attachmentsRes.data || []
+  if (attachmentsRes.error && adminSupabase) {
+    const { data: fallback } = await supabase
+      .from('po_attachments')
+      .select('id, file_name, storage_path, file_type')
+      .eq('po_id', poId)
+    attachments = fallback ?? []
+  }
 
   const billRateUserIds = [...new Set((billRatesRaw || []).map((r: any) => r.user_id).filter(Boolean))]
 

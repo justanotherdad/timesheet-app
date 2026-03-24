@@ -6,6 +6,9 @@ import { getCurrentUser } from '@/lib/auth'
 
 const ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 
+/** Node route handlers: upload File/Blob from FormData can fail or hang with Supabase's storage client; Buffer is reliable. */
+export const maxDuration = 60
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ poId: string }> }
@@ -41,7 +44,25 @@ export async function POST(
   }
 
   const path = `po_attachments/${poId}/${crypto.randomUUID()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
-  const { error: uploadErr } = await adminSupabase.storage.from('site-attachments').upload(path, file, { upsert: false })
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const contentType =
+    file.type ||
+    (ext === '.docx'
+      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      : ext === '.doc'
+        ? 'application/msword'
+        : ext === '.pdf'
+          ? 'application/pdf'
+          : ext === '.xlsx'
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : ext === '.xls'
+              ? 'application/vnd.ms-excel'
+              : 'application/octet-stream')
+
+  const { error: uploadErr } = await adminSupabase.storage.from('site-attachments').upload(path, bytes, {
+    upsert: false,
+    contentType,
+  })
   if (uploadErr) {
     return NextResponse.json({ error: uploadErr.message }, { status: 500 })
   }
@@ -61,6 +82,11 @@ export async function POST(
   if (insertErr) {
     await adminSupabase.storage.from('site-attachments').remove([path])
     return NextResponse.json({ error: insertErr.message }, { status: 500 })
+  }
+
+  if (!inserted) {
+    await adminSupabase.storage.from('site-attachments').remove([path])
+    return NextResponse.json({ error: 'Failed to save attachment record' }, { status: 500 })
   }
 
   return NextResponse.json(inserted)

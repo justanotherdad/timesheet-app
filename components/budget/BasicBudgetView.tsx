@@ -792,15 +792,31 @@ export default function BasicBudgetView({
                     for (const file of Array.from(files)) {
                       const formData = new FormData()
                       formData.append('file', file)
-                      const res = await fetch(`/api/budget/${po.id}/attachments`, { method: 'POST', body: formData })
+                      const res = await fetch(`/api/budget/${po.id}/attachments`, {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'include',
+                      })
                       if (!res.ok) {
-                        const err = await res.json()
-                        throw new Error(err.error || 'Upload failed')
+                        const err = await res.json().catch(() => ({}))
+                        throw new Error((err as { error?: string }).error || 'Upload failed')
+                      }
+                      const inserted = await res.json()
+                      if (inserted?.id) {
+                        setData((prev: any) =>
+                          prev
+                            ? {
+                                ...prev,
+                                attachments: [...(prev.attachments || []), inserted],
+                              }
+                            : prev
+                        )
                       }
                     }
-                    refetch()
+                    await refetch()
                   } catch (err: any) {
                     setAttachmentError(err.message || 'Upload failed')
+                    void refetch()
                   } finally {
                     setUploadingAttachment(false)
                     e.target.value = ''
