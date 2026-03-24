@@ -230,7 +230,21 @@ export default function BasicBudgetView({
     ])
     if (res.ok) {
       const json = await res.json()
-      setData(json)
+      // Single setData: merging attachments in the same object avoids a React race where setData(json)
+      // with empty attachments overwrites a later setData(prev => ({ ...prev, attachments })).
+      let merged = json
+      try {
+        const attRes = await fetch(`/api/budget/${po.id}/attachments?${t}`, fetchOpts)
+        if (attRes.ok) {
+          const body = await attRes.json()
+          if (Array.isArray(body?.attachments)) {
+            merged = { ...json, attachments: body.attachments }
+          }
+        }
+      } catch {
+        /* use json as returned by main GET */
+      }
+      setData(merged)
       setExpensesOverride(null)
     }
     if (coRes.ok) {
@@ -248,9 +262,7 @@ export default function BasicBudgetView({
     if (laborRes.ok) setLaborCostData(await laborRes.json())
     loadBudgetAccess()
     if (user && ['manager', 'admin', 'super_admin'].includes(user.profile.role)) loadBalance()
-    // Always merge attachments: main GET can fail or omit rows; this endpoint uses service role only.
-    await mergeAttachmentsFromServer({ silent: true })
-  }, [po.id, loadBudgetAccess, loadBalance, user, mergeAttachmentsFromServer])
+  }, [po.id, loadBudgetAccess, loadBalance, user, fetchOpts])
 
   useEffect(() => {
     setExpenseTypesFallback([])
@@ -272,9 +284,20 @@ export default function BasicBudgetView({
         ])
         if (res.ok) {
           const json = await res.json()
-          setData(json)
+          let merged = json
+          try {
+            const attRes = await fetch(`/api/budget/${po.id}/attachments?${t}`, fetchOpts)
+            if (attRes.ok) {
+              const body = await attRes.json()
+              if (Array.isArray(body?.attachments)) {
+                merged = { ...json, attachments: body.attachments }
+              }
+            }
+          } catch {
+            /* use json */
+          }
+          setData(merged)
         }
-        await mergeAttachmentsFromServer({ silent: true })
         if (bhRes.ok) setBillableData(await bhRes.json())
         if (coRes.ok) {
           const json = await coRes.json()
@@ -308,7 +331,7 @@ export default function BasicBudgetView({
       }
     }
     load()
-  }, [po.id, selectedMonth, showAllMonths, user, mergeAttachmentsFromServer, fetchOpts])
+  }, [po.id, selectedMonth, showAllMonths, user, fetchOpts])
 
   useEffect(() => {
     const p = data?.po ?? po
@@ -928,7 +951,6 @@ export default function BasicBudgetView({
                       }
                     }
                     await refetch()
-                    await mergeAttachmentsFromServer({ silent: false })
                   } catch (err: any) {
                     setAttachmentError(err.message || 'Upload failed')
                     await mergeAttachmentsFromServer({ silent: false })
