@@ -43,6 +43,7 @@ interface WeeklyTimesheetFormProps {
     }>
     unbillable?: Array<{
       description: 'HOLIDAY' | 'INTERNAL' | 'PTO'
+      notes?: string
       mon_hours: number
       tue_hours: number
       wed_hours: number
@@ -73,6 +74,7 @@ interface WeeklyTimesheetFormProps {
     unbillable?: Array<{
       id?: string
       description: 'HOLIDAY' | 'INTERNAL' | 'PTO'
+      notes?: string
       mon_hours: number
       tue_hours: number
       wed_hours: number
@@ -105,6 +107,8 @@ interface BillableEntry {
 interface UnbillableEntry {
   id?: string
   description: 'HOLIDAY' | 'INTERNAL' | 'PTO'
+  /** Free-text detail shown to the right of the type label */
+  notes?: string
   mon_hours: number
   tue_hours: number
   wed_hours: number
@@ -151,9 +155,9 @@ export default function WeeklyTimesheetForm({
 
   const [unbillableEntries, setUnbillableEntries] = useState<UnbillableEntry[]>(
     initialData?.unbillable || [
-      { description: 'HOLIDAY', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
-      { description: 'INTERNAL', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
-      { description: 'PTO', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
+      { description: 'HOLIDAY', notes: '', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
+      { description: 'INTERNAL', notes: '', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
+      { description: 'PTO', notes: '', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
     ]
   )
 
@@ -362,6 +366,7 @@ export default function WeeklyTimesheetForm({
       const unbillableToInsert = unbillableEntries.map(e => ({
         timesheet_id: currentTimesheetId!,
         description: e.description,
+        notes: (e.notes && e.notes.trim()) ? e.notes.trim() : null,
         mon_hours: e.mon_hours || 0,
         tue_hours: e.tue_hours || 0,
         wed_hours: e.wed_hours || 0,
@@ -406,6 +411,12 @@ export default function WeeklyTimesheetForm({
   const updateUnbillableEntry = (index: number, day: typeof days[number], value: number) => {
     const updated = [...unbillableEntries]
     updated[index] = { ...updated[index], [`${day}_hours`]: value }
+    setUnbillableEntries(updated)
+  }
+
+  const updateUnbillableNotes = (index: number, value: string) => {
+    const updated = [...unbillableEntries]
+    updated[index] = { ...updated[index], notes: value }
     setUnbillableEntries(updated)
   }
 
@@ -703,7 +714,7 @@ export default function WeeklyTimesheetForm({
           </button>
         </div>
 
-        {/* Unbillable Time Section - Unchanged */}
+        {/* Unbillable Time */}
         <div>
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Unbillable Time</h2>
           
@@ -711,9 +722,10 @@ export default function WeeklyTimesheetForm({
             <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Description</th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 w-[7rem]">Description</th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 min-w-[8rem]">Notes</th>
                   {weekDates.days.map((day, idx) => (
-                    <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <th key={idx} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100 w-12 max-w-[3.5rem]">
                       <div>{format(day, 'EEE')}</div>
                       <div className="text-xs font-normal">{formatDateShort(weekDates.days[idx])}</div>
                     </th>
@@ -725,8 +737,17 @@ export default function WeeklyTimesheetForm({
                 {unbillableEntries.map((entry, entryIdx) => (
                   <tr key={entryIdx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{entry.description}</td>
+                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2">
+                      <input
+                        type="text"
+                        value={entry.notes ?? ''}
+                        onChange={(e) => updateUnbillableNotes(entryIdx, e.target.value)}
+                        placeholder="Optional"
+                        className="w-full min-w-0 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-900 bg-white dark:bg-gray-700 dark:text-gray-100"
+                      />
+                    </td>
                     {days.map((day) => (
-                      <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2">
+                      <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2 w-12 max-w-[3.5rem]">
                         <input
                           type="number"
                           step="0.25"
@@ -734,7 +755,7 @@ export default function WeeklyTimesheetForm({
                           max="24"
                           value={entry[`${day}_hours`] || ''}
                           onChange={(e) => updateUnbillableEntry(entryIdx, day, parseFloat(e.target.value) || 0)}
-                          className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                          className="w-full max-w-[3.25rem] min-w-[3rem] mx-auto px-1 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                         />
                       </td>
                     ))}
@@ -746,9 +767,9 @@ export default function WeeklyTimesheetForm({
                 
                 {/* Sub Totals Row */}
                 <tr className="bg-yellow-50 dark:bg-yellow-900/30 font-semibold">
-                  <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
+                  <td colSpan={2} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
                   {days.map((day) => (
-                    <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-gray-900 dark:text-gray-100">
+                    <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-gray-900 dark:text-gray-100">
                       {formatHours(getUnbillableSubtotal(day))}
                     </td>
                   ))}

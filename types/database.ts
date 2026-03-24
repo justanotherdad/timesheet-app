@@ -59,6 +59,8 @@ export interface TimesheetUnbillable {
   id: string
   timesheet_id: string
   description: 'HOLIDAY' | 'INTERNAL' | 'PTO'
+  /** Free-text detail next to the type (Holiday / Internal / PTO) */
+  notes?: string | null
   mon_hours: number
   tue_hours: number
   wed_hours: number

@@ -345,9 +345,9 @@ export default async function TimesheetDetailPage({
               const unbillableRows = unbillable && unbillable.length > 0
                 ? unbillable
                 : [
-                    { description: 'HOLIDAY', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
-                    { description: 'INTERNAL', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
-                    { description: 'PTO', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
+                    { description: 'HOLIDAY', notes: '', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
+                    { description: 'INTERNAL', notes: '', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
+                    { description: 'PTO', notes: '', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
                   ]
               const displayUnbillableTotal = unbillable && unbillable.length > 0
                 ? unbillableTotal
@@ -360,8 +360,9 @@ export default async function TimesheetDetailPage({
                       <thead>
                         <tr className="bg-gray-100 dark:bg-gray-700">
                           <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">Description</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">Notes</th>
                           {weekDates.days.map((day, idx) => (
-                            <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm text-gray-900 dark:text-gray-100">
+                            <th key={idx} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm text-gray-900 dark:text-gray-100 w-12 max-w-[3.5rem]">
                               {format(day, 'EEE')}
                             </th>
                           ))}
@@ -374,8 +375,11 @@ export default async function TimesheetDetailPage({
                             <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">
                               {entry.description}
                             </td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
+                              {(entry as { notes?: string }).notes || '—'}
+                            </td>
                             {days.map((day) => (
-                              <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
+                              <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-sm text-right text-gray-900 dark:text-gray-100 w-12 max-w-[3.5rem]">
                                 {(entry[`${day}_hours`] || 0).toFixed(2)}
                               </td>
                             ))}

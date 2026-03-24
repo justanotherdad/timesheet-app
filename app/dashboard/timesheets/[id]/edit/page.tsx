@@ -259,6 +259,7 @@ export default async function EditTimesheetPage({
     }>
     unbillable?: Array<{
       description: 'HOLIDAY' | 'INTERNAL' | 'PTO'
+      notes?: string
       mon_hours: number
       tue_hours: number
       wed_hours: number
@@ -326,6 +327,7 @@ export default async function EditTimesheetPage({
           })),
           unbillable: prevUnbillable.map((entry: any) => ({
             description: entry.description,
+            notes: entry.notes ?? '',
             mon_hours: entry.mon_hours,
             tue_hours: entry.tue_hours,
             wed_hours: entry.wed_hours,

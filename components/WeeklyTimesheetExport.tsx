@@ -168,9 +168,9 @@ export default function WeeklyTimesheetExport({
         </div>
         <div style="margin-top: 6px;"><h3 style="font-size: 9pt; margin-bottom: 4px;">UNBILLABLE TIME</h3>
         <table style="width: 100%; border-collapse: collapse; font-size: 8pt;">
-          <thead><tr style="background-color: #f0f0f0;"><th style="border: 1px solid #000; padding: 3px;">Description</th>${weekDates.days.map((d, i) => `<th style="border: 1px solid #000; padding: 3px; text-align: center;"><div>${format(d, 'EEE')}</div><div style="font-size: 7pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}<th style="border: 1px solid #000; padding: 3px; text-align: center;">Total</th></tr></thead>
-          <tbody>${unbillableToUse.map((u: any) => `<tr><td style="border: 1px solid #000; padding: 3px; font-weight: bold;">${escapeHtml(u.description)}</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${(u[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right; font-weight: bold;">${calculateTotal(u).toFixed(2)}</td></tr>`).join('')}
-          <tr style="background-color: #FFFF99; font-weight: bold;"><td style="border: 1px solid #000; padding: 3px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableSubtotal(day, unbillableToUse).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableGrandTotal(unbillableToUse).toFixed(2)}</td></tr>
+          <thead><tr style="background-color: #f0f0f0;"><th style="border: 1px solid #000; padding: 3px;">Description</th><th style="border: 1px solid #000; padding: 3px; text-align: left;">Notes</th>${weekDates.days.map((d, i) => `<th style="border: 1px solid #000; padding: 3px; text-align: center;"><div>${format(d, 'EEE')}</div><div style="font-size: 7pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}<th style="border: 1px solid #000; padding: 3px; text-align: center;">Total</th></tr></thead>
+          <tbody>${unbillableToUse.map((u: any) => `<tr><td style="border: 1px solid #000; padding: 3px; font-weight: bold;">${escapeHtml(u.description)}</td><td style="border: 1px solid #000; padding: 3px;">${escapeHtml(u.notes || '')}</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${(u[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right; font-weight: bold;">${calculateTotal(u).toFixed(2)}</td></tr>`).join('')}
+          <tr style="background-color: #FFFF99; font-weight: bold;"><td colspan="2" style="border: 1px solid #000; padding: 3px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableSubtotal(day, unbillableToUse).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableGrandTotal(unbillableToUse).toFixed(2)}</td></tr>
           </tbody></table></div>
         <div style="background-color: #90EE90; font-weight: bold; padding: 6px; margin-top: 6px; text-align: right; font-size: 9pt;">GRAND TOTAL ${getGrandTotal(entriesToUse, unbillableToUse).toFixed(2)}</div>
       </div>
@@ -636,6 +636,7 @@ export default function WeeklyTimesheetExport({
             <thead>
               <tr style={{ backgroundColor: '#f0f0f0' }}>
                 <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Description</th>
+                <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Notes</th>
                 {weekDates.days.map((day, idx) => (
                   <th key={idx} className="day-header" style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>
                     <div>{format(day, 'EEE')}</div>
@@ -653,6 +654,9 @@ export default function WeeklyTimesheetExport({
                   <td style={{ border: '1px solid #000', padding: '5px', fontWeight: 'bold', color: '#000' }}>
                     {entry.description}
                   </td>
+                  <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
+                    {(entry as { notes?: string }).notes || '—'}
+                  </td>
                   {days.map((day) => (
                     <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
                       {(entry[`${day}_hours`] || 0).toFixed(2)}
@@ -666,7 +670,7 @@ export default function WeeklyTimesheetExport({
               
               {/* Sub Totals */}
               <tr className="subtotal-row" style={{ backgroundColor: '#FFFF99', fontWeight: 'bold', color: '#000' }}>
-                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>Sub Totals</td>
+                <td colSpan={2} style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>Sub Totals</td>
                 {days.map((day) => (
                   <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
                     {getUnbillableSubtotal(day).toFixed(2)}

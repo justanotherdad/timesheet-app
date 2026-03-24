@@ -422,6 +422,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                 <thead>
                   <tr style="background-color: #f0f0f0;">
                     <th style="border: 1px solid #000; padding: 3px; text-align: left;">Description</th>
+                    <th style="border: 1px solid #000; padding: 3px; text-align: left;">Notes</th>
                     ${weekDates.days.map((day, idx) => `
                       <th style="border: 1px solid #000; padding: 3px; text-align: center;">
                         <div>${format(day, 'EEE')}</div>
@@ -435,6 +436,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                   ${unbillable.map((entry: any) => `
                     <tr>
                       <td style="border: 1px solid #000; padding: 3px; font-weight: bold; color: #000;">${entry.description}</td>
+                      <td style="border: 1px solid #000; padding: 3px; color: #000;">${escapeHtml(entry.notes || '')}</td>
                       ${days.map(day => `
                         <td style="border: 1px solid #000; padding: 3px; text-align: right; color: #000;">${(entry[`${day}_hours`] || 0).toFixed(2)}</td>
                       `).join('')}
@@ -442,7 +444,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                     </tr>
                   `).join('')}
                   <tr style="background-color: #FFFF99; font-weight: bold; color: #000;">
-                    <td style="border: 1px solid #000; padding: 3px; color: #000;">Sub Totals</td>
+                    <td colspan="2" style="border: 1px solid #000; padding: 3px; color: #000;">Sub Totals</td>
                     ${days.map(day => `
                       <td style="border: 1px solid #000; padding: 3px; text-align: right; color: #000;">${getUnbillableSubtotal(day).toFixed(2)}</td>
                     `).join('')}
