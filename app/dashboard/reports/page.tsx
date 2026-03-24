@@ -8,7 +8,7 @@ export default async function ReportsPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Reports" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto min-w-0 w-full">
           <ReportsPageClient />
         </div>
       </div>

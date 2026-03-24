@@ -31,7 +31,7 @@ export async function GET() {
       .eq('user_id', user.id)
     const poIds = (accessRows || []).map((r: any) => r.purchase_order_id).filter(Boolean)
     if (poIds.length === 0) {
-      return NextResponse.json({ rows: [], sites: [] })
+      return NextResponse.json({ rows: [], sites: [], clients: [], purchaseOrders: [], years: [] })
     }
     const { data } = await adminSupabase
       .from('purchase_orders')
@@ -43,12 +43,29 @@ export async function GET() {
 
   const poIds = purchaseOrders.map((p: any) => p.id)
   if (poIds.length === 0) {
-    return NextResponse.json({ rows: [], sites: [] })
+    return NextResponse.json({ rows: [], sites: [], clients: [], purchaseOrders: [], years: [] })
   }
+
+  const allSiteIds = [...new Set(purchaseOrders.map((p: any) => p.site_id).filter(Boolean))]
+  const { data: sitesForFilter } = await adminSupabase.from('sites').select('id, name').in('id', allSiteIds)
+  const sitesMap = (sitesForFilter || []).reduce((acc: Record<string, any>, s: any) => {
+    acc[s.id] = s
+    return acc
+  }, {})
+
+  const purchaseOrdersForFilter = purchaseOrders.map((p: any) => ({
+    id: p.id,
+    po_number: p.po_number,
+    site_id: p.site_id,
+  }))
+
+  const clients = Object.values(sitesMap)
+    .map((s: any) => ({ id: s.id, name: s.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
 
   const { data: outstandingInvoices } = await adminSupabase
     .from('po_invoices')
-    .select('id, po_id, invoice_number, amount, invoice_date')
+    .select('id, po_id, invoice_number, amount, invoice_date, created_at')
     .in('po_id', poIds)
     .is('payment_received_date', null)
     .order('invoice_date', { ascending: true })
@@ -58,7 +75,13 @@ export async function GET() {
   )
 
   if (invsFiltered.length === 0) {
-    return NextResponse.json({ rows: [], sites: [] })
+    return NextResponse.json({
+      rows: [],
+      sites: Object.values(sitesMap),
+      clients,
+      purchaseOrders: purchaseOrdersForFilter,
+      years: [],
+    })
   }
 
   const poIdsInReport = [...new Set(invsFiltered.map((i: any) => i.po_id))]
@@ -87,13 +110,6 @@ export async function GET() {
     return acc
   }, {})
 
-  const siteIds = [...new Set(poIdsInReport.map((id) => poById[id]?.site_id).filter(Boolean))]
-  const { data: sites } = await adminSupabase.from('sites').select('id, name').in('id', siteIds)
-  const sitesMap = (sites || []).reduce((acc: Record<string, any>, s: any) => {
-    acc[s.id] = s
-    return acc
-  }, {})
-
   const currentPoBalance = (poId: string) => {
     const po = poById[poId]
     if (!po) return 0
@@ -111,6 +127,8 @@ export async function GET() {
       invoice_number: inv.invoice_number ?? '',
       invoice_amount: Number(inv.amount) || 0,
       invoice_date: inv.invoice_date ?? null,
+      /** When the invoice was entered in the app; used for aging / duration. */
+      submitted_at: inv.created_at ?? null,
       po_id: inv.po_id,
       po_number: po?.po_number || '—',
       project_name: po?.project_name || po?.description || '—',
@@ -130,5 +148,20 @@ export async function GET() {
     return da.localeCompare(db)
   })
 
-  return NextResponse.json({ rows, sites: Object.values(sitesMap) })
+  const yearsSet = new Set<string>()
+  for (const inv of invsFiltered) {
+    const dateStr = inv.created_at || inv.invoice_date
+    if (!dateStr) continue
+    const y = String(dateStr).slice(0, 4)
+    if (/^\d{4}$/.test(y)) yearsSet.add(y)
+  }
+  const years = [...yearsSet].sort()
+
+  return NextResponse.json({
+    rows,
+    sites: Object.values(sitesMap),
+    clients,
+    purchaseOrders: purchaseOrdersForFilter,
+    years,
+  })
 }

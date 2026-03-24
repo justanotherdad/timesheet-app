@@ -11,7 +11,7 @@ export default function ReportsPageClient() {
   const [activeReport, setActiveReport] = useState<ReportType>(null)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full">
       <div className="print:hidden">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Select a Report</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
