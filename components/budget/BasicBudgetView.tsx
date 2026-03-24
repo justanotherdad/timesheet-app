@@ -105,6 +105,8 @@ export default function BasicBudgetView({
   const [editingClientPO, setEditingClientPO] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
+  /** Authoritative list from GET /attachments only (not tied to main budget JSON — that can be missing when data is null). */
+  const [attachmentsList, setAttachmentsList] = useState<any[] | null>(null)
   const [editingBudget, setEditingBudget] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -154,10 +156,8 @@ export default function BasicBudgetView({
     []
   )
 
-  /** Overwrites attachments from admin-only GET so main budget fetch (RLS/cache) cannot clear the list. */
-  const mergeAttachmentsFromServer = useCallback(
+  const fetchAttachmentsList = useCallback(
     async (opts?: { silent?: boolean }) => {
-      /** Default true: background refetches should not flash errors if the attachments route is misconfigured. */
       const silent = opts?.silent ?? true
       try {
         const t = `t=${Date.now()}`
@@ -169,16 +169,21 @@ export default function BasicBudgetView({
           return
         }
         const body = await res.json()
-        const att = body?.attachments
-        if (!Array.isArray(att)) return
-        setData((prev: any) => (prev ? { ...prev, attachments: att } : prev))
+        const att = Array.isArray(body?.attachments) ? body.attachments : []
+        setAttachmentsList(att)
         setAttachmentError(null)
+        setData((prev: any) => (prev ? { ...prev, attachments: att } : prev))
       } catch {
         if (!silent) setAttachmentError('Could not load attachments. Check your connection.')
       }
     },
     [po.id, fetchOpts]
   )
+
+  useEffect(() => {
+    setAttachmentsList(null)
+    fetchAttachmentsList({ silent: true })
+  }, [po.id, fetchAttachmentsList])
 
   const loadBudgetAccess = useCallback(async () => {
     if (!user || !['admin', 'super_admin'].includes(user.profile.role)) return
@@ -230,21 +235,7 @@ export default function BasicBudgetView({
     ])
     if (res.ok) {
       const json = await res.json()
-      // Single setData: merging attachments in the same object avoids a React race where setData(json)
-      // with empty attachments overwrites a later setData(prev => ({ ...prev, attachments })).
-      let merged = json
-      try {
-        const attRes = await fetch(`/api/budget/${po.id}/attachments?${t}`, fetchOpts)
-        if (attRes.ok) {
-          const body = await attRes.json()
-          if (Array.isArray(body?.attachments)) {
-            merged = { ...json, attachments: body.attachments }
-          }
-        }
-      } catch {
-        /* use json as returned by main GET */
-      }
-      setData(merged)
+      setData(json)
       setExpensesOverride(null)
     }
     if (coRes.ok) {
@@ -262,7 +253,8 @@ export default function BasicBudgetView({
     if (laborRes.ok) setLaborCostData(await laborRes.json())
     loadBudgetAccess()
     if (user && ['manager', 'admin', 'super_admin'].includes(user.profile.role)) loadBalance()
-  }, [po.id, loadBudgetAccess, loadBalance, user, fetchOpts])
+    await fetchAttachmentsList({ silent: true })
+  }, [po.id, loadBudgetAccess, loadBalance, user, fetchOpts, fetchAttachmentsList])
 
   useEffect(() => {
     setExpenseTypesFallback([])
@@ -284,19 +276,7 @@ export default function BasicBudgetView({
         ])
         if (res.ok) {
           const json = await res.json()
-          let merged = json
-          try {
-            const attRes = await fetch(`/api/budget/${po.id}/attachments?${t}`, fetchOpts)
-            if (attRes.ok) {
-              const body = await attRes.json()
-              if (Array.isArray(body?.attachments)) {
-                merged = { ...json, attachments: body.attachments }
-              }
-            }
-          } catch {
-            /* use json */
-          }
-          setData(merged)
+          setData(json)
         }
         if (bhRes.ok) setBillableData(await bhRes.json())
         if (coRes.ok) {
@@ -390,7 +370,7 @@ export default function BasicBudgetView({
     }))
     .sort((a: any, b: any) => (a.user_profiles?.name || 'Unknown').localeCompare(b.user_profiles?.name || 'Unknown'))
   const expenses = expensesOverride !== null ? expensesOverride : (data?.expenses || [])
-  const attachments = data?.attachments || []
+  const attachments = attachmentsList !== null ? attachmentsList : data?.attachments || []
   const expenseTypesFromData = data?.expenseTypes || []
   const expenseTypes = expenseTypesFromData.length > 0 ? expenseTypesFromData : expenseTypesFallback
   const siteDepartmentsRaw = (data?.siteDepartments || []) as Array<{ id: string; name: string }>
@@ -953,7 +933,7 @@ export default function BasicBudgetView({
                     await refetch()
                   } catch (err: any) {
                     setAttachmentError(err.message || 'Upload failed')
-                    await mergeAttachmentsFromServer({ silent: false })
+                    await fetchAttachmentsList({ silent: false })
                   } finally {
                     setUploadingAttachment(false)
                     e.target.value = ''
