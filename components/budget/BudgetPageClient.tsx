@@ -88,13 +88,14 @@ export default function BudgetPageClient({
       <div className="max-w-7xl mx-auto">
         {isProject ? (
           <ProjectBudgetShell
+            key={`${selectedPoId}-${budgetRefreshKey}`}
             po={selectedPO}
             sites={sites}
             onBack={handleBackToSelector}
           />
         ) : (
           <BasicBudgetView
-            key={budgetRefreshKey}
+            key={`${selectedPoId}-${budgetRefreshKey}`}
             po={selectedPO}
             sites={sites}
             onBack={handleBackToSelector}

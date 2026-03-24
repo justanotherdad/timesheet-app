@@ -1,13 +1,24 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText, Eye, PowerOff } from 'lucide-react'
-import { formatDate, formatDateShort, formatPeriodsList, formatDateForInput, formatHours } from '@/lib/utils'
+import {
+  formatDate,
+  formatDateShort,
+  formatPeriodsList,
+  formatDateForInput,
+  formatHours,
+  normalizePoIssueDateToIso,
+  formatPoIssueDateForDisplay,
+} from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 import { addWeeks, parseISO } from 'date-fns'
 import InvoiceFormModal from './InvoiceFormModal'
 import ExpenseFormModal from './ExpenseFormModal'
 import BillRateFormModal from './BillRateFormModal'
+
+const ATTACHMENT_ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 
 /** YYYY-MM-DD for <input type="date"> — handles ISO strings, DB date strings, avoids empty edit field when co_date exists */
 function coDateForInput(v: unknown): string {
@@ -57,6 +68,7 @@ export default function BasicBudgetView({
   onSave,
   hasLimitedAccess = false,
 }: BasicBudgetViewProps) {
+  const supabase = useMemo(() => createClient(), [])
   const [data, setData] = useState<any>(null)
   const [changeOrdersOverride, setChangeOrdersOverride] = useState<any[] | null>(null)
   const [invoicesOverride, setInvoicesOverride] = useState<any[] | null>(null)
@@ -407,7 +419,7 @@ export default function BasicBudgetView({
       po_number: poData.po_number || '',
       department_id: poData.department_id || '',
       project_name: poData.description ?? poData.project_name ?? '',
-      po_issue_date: poData.po_issue_date ? String(poData.po_issue_date).slice(0, 10) : '',
+      po_issue_date: normalizePoIssueDateToIso(poData.po_issue_date),
       proposal_number: poData.proposal_number || '',
       client_contact_name: poData.client_contact_name || '',
       budget_type: (poData.budget_type || 'basic') as 'basic' | 'project',
@@ -425,7 +437,11 @@ export default function BasicBudgetView({
       const res = await fetch(`/api/budget/${po.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(clientPOForm),
+        credentials: 'include',
+        body: JSON.stringify({
+          ...clientPOForm,
+          po_issue_date: normalizePoIssueDateToIso(clientPOForm.po_issue_date) || null,
+        }),
       })
       const text = await res.text()
       let json: { error?: string }
@@ -760,7 +776,7 @@ export default function BasicBudgetView({
               <p><span className="font-medium text-gray-500 dark:text-gray-400">PO#:</span> {poData.po_number}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Department:</span> {poData.departments?.name || '—'}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Project:</span> {poData.description ?? poData.project_name ?? '—'}</p>
-              <p><span className="font-medium text-gray-500 dark:text-gray-400">PO Issue Date:</span> {poData.po_issue_date ? formatDate(poData.po_issue_date) : '—'}</p>
+              <p><span className="font-medium text-gray-500 dark:text-gray-400">PO Issue Date:</span> {formatPoIssueDateForDisplay(poData.po_issue_date)}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Proposal #:</span> {poData.proposal_number || '—'}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Net Terms:</span> {poData.net_terms || '—'}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">How to Bill:</span> {poData.how_to_bill || '—'}</p>
@@ -789,7 +805,32 @@ export default function BasicBudgetView({
                   setAttachmentError(null)
                   setUploadingAttachment(true)
                   try {
-                    for (const file of Array.from(files)) {
+                    const uploadOne = async (file: File) => {
+                      const ext = '.' + (file.name.split('.').pop() || '').toLowerCase()
+                      if (!ATTACHMENT_ALLOWED_EXT.includes(ext)) {
+                        throw new Error('File type not allowed. Use Word, Excel, or PDF.')
+                      }
+                      const path = `po_attachments/${po.id}/${crypto.randomUUID()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+                      const { error: uploadErr } = await supabase.storage.from('site-attachments').upload(path, file, { upsert: false })
+                      if (uploadErr) throw uploadErr
+                      const { data: inserted, error: insertErr } = await supabase
+                        .from('po_attachments')
+                        .insert({
+                          po_id: po.id,
+                          file_name: file.name,
+                          storage_path: path,
+                          file_type: file.type,
+                          file_size: file.size,
+                        })
+                        .select('id, file_name, storage_path, file_type')
+                        .single()
+                      if (insertErr) {
+                        await supabase.storage.from('site-attachments').remove([path]).catch(() => {})
+                        throw insertErr
+                      }
+                      return inserted
+                    }
+                    const uploadOneViaApi = async (file: File) => {
                       const formData = new FormData()
                       formData.append('file', file)
                       const res = await fetch(`/api/budget/${po.id}/attachments`, {
@@ -801,7 +842,15 @@ export default function BasicBudgetView({
                         const err = await res.json().catch(() => ({}))
                         throw new Error((err as { error?: string }).error || 'Upload failed')
                       }
-                      const inserted = await res.json()
+                      return res.json()
+                    }
+                    for (const file of Array.from(files)) {
+                      let inserted: { id?: string } | null = null
+                      try {
+                        inserted = await uploadOne(file)
+                      } catch {
+                        inserted = await uploadOneViaApi(file)
+                      }
                       if (inserted?.id) {
                         setData((prev: any) =>
                           prev

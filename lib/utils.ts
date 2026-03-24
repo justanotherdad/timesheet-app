@@ -118,6 +118,44 @@ export function isValidDateInputValue(value: string): boolean {
   return !isNaN(d.getTime())
 }
 
+/**
+ * Normalize PO issue date from DB/API or free text (MM/DD/YYYY, ISO, etc.) to yyyy-MM-dd for
+ * `<input type="date">` and Postgres `date` columns. Returns '' if unparseable.
+ */
+export function normalizePoIssueDateToIso(value: unknown): string {
+  if (value == null || value === '') return ''
+  const s = String(value).trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  const ymd = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (ymd) return ymd[1]
+  const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (us) {
+    const mo = us[1].padStart(2, '0')
+    const da = us[2].padStart(2, '0')
+    return `${us[3]}-${mo}-${da}`
+  }
+  try {
+    const d = parseISO(s)
+    if (!isNaN(d.getTime())) return format(d, 'yyyy-MM-dd')
+  } catch {
+    /* ignore */
+  }
+  return ''
+}
+
+/** Value for Postgres `date` column or null when empty / invalid. */
+export function normalizePoIssueDateForDb(value: unknown): string | null {
+  const v = normalizePoIssueDateToIso(value)
+  return v === '' ? null : v
+}
+
+/** Display PO issue date (e.g. Client & PO section) when value may be legacy or non-ISO. */
+export function formatPoIssueDateForDisplay(value: unknown): string {
+  const iso = normalizePoIssueDateToIso(value)
+  if (!iso) return '—'
+  return formatDate(iso)
+}
+
 /** Format date for display (e.g. signatures, exports). Eastern timezone. */
 export function formatDateInEastern(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
+import { normalizePoIssueDateForDb } from '@/lib/utils'
 
 /** Normalize CO/LI date from client (YYYY-MM-DD, ISO string, etc.) for Postgres date column */
 function parseCoDate(value: unknown): string | null {
@@ -251,7 +252,7 @@ export async function PATCH(
       const updateData: Record<string, unknown> = {}
       if (po_number !== undefined) updateData.po_number = po_number
       if (original_po_amount !== undefined) updateData.original_po_amount = original_po_amount === '' || original_po_amount == null ? null : parseFloat(String(original_po_amount))
-      if (po_issue_date !== undefined) updateData.po_issue_date = po_issue_date || null
+      if (po_issue_date !== undefined) updateData.po_issue_date = normalizePoIssueDateForDb(po_issue_date)
       if (proposal_number !== undefined) updateData.proposal_number = proposal_number || null
       if (project_name !== undefined) {
         updateData.project_name = project_name || null
