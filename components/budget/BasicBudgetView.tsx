@@ -456,6 +456,26 @@ export default function BasicBudgetView({
     setSaving(true)
     setSaveError(null)
     try {
+      // Always send co_date as a string (never omit the key): JSON.stringify drops undefined values,
+      // which made the API treat the date as missing and save null.
+      const changeOrdersPayload = budgetForm.changeOrders.map((co) => {
+        const raw = co.co_date
+        const coDateStr =
+          typeof raw === 'string'
+            ? raw.trim().slice(0, 10)
+            : raw != null && raw !== ''
+              ? String(raw).trim().slice(0, 10)
+              : ''
+        return {
+          id: co.id,
+          type: co.type ?? 'co',
+          line_item_type: co.line_item_type,
+          user_id: co.user_id,
+          co_number: co.co_number ?? '',
+          co_date: coDateStr,
+          amount: co.amount ?? '',
+        }
+      })
       const res = await fetch(`/api/budget/${po.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -465,7 +485,7 @@ export default function BasicBudgetView({
           prior_hours_billed_rate: budgetForm.prior_hours_billed_rate,
           prior_amount_spent: budgetForm.prior_amount_spent,
           prior_period_notes: budgetForm.prior_period_notes,
-          changeOrders: budgetForm.changeOrders,
+          changeOrders: changeOrdersPayload,
         }),
       })
       const text = await res.text()
@@ -1087,7 +1107,12 @@ export default function BasicBudgetView({
                     {co.type === 'co' && (
                       <input type="text" value={co.co_number} onChange={(e) => updateChangeOrder(idx, 'co_number', e.target.value)} placeholder="CO #" className="flex-1 min-w-[80px] px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm" />
                     )}
-                    <input type="date" value={co.co_date} onChange={(e) => updateChangeOrder(idx, 'co_date', e.target.value)} className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0" />
+                    <input
+                      type="date"
+                      value={co.co_date ?? ''}
+                      onChange={(e) => updateChangeOrder(idx, 'co_date', e.target.value)}
+                      className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0"
+                    />
                     <input type="number" step="0.01" value={co.amount} onChange={(e) => updateChangeOrder(idx, 'amount', e.target.value)} placeholder="Amount" className="w-24 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm" />
                     <button type="button" onClick={() => removeChangeOrder(idx)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded shrink-0" title="Remove"><Trash2 className="h-4 w-4" /></button>
                   </div>
@@ -1118,11 +1143,12 @@ export default function BasicBudgetView({
               </tr>
               {changeOrders.map((co: any, idx: number) => {
                 const isLI = co.type === 'li'
+                const dateSuffix = co.co_date ? ` (${formatDate(co.co_date)})` : ''
                 const label = isLI
                   ? (co.line_item_type === 'personnel'
-                    ? `Line Item (Personnel: ${users.find((u: any) => u.id === co.user_id)?.name ?? 'Unknown'}) ${co.co_date ? formatDate(co.co_date) : ''}`
-                    : `Line Item (Labor: ${co.co_number || '—'}) ${co.co_date ? formatDate(co.co_date) : ''}`)
-                  : `Change Order ${co.co_number || ''} (${co.co_date ? formatDate(co.co_date) : ''})`
+                    ? `Line Item (Personnel: ${users.find((u: any) => u.id === co.user_id)?.name ?? 'Unknown'})${dateSuffix}`
+                    : `Line Item (Labor: ${co.co_number || '—'})${dateSuffix}`)
+                  : `Change Order ${co.co_number || ''}${dateSuffix}`
                 return (
                   <tr key={co.id || `co-${idx}`} className="border-b border-gray-100 dark:border-gray-700">
                     <td className="py-2">{label}</td>

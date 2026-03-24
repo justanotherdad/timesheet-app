@@ -3,6 +3,18 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 
+/** Normalize CO/LI date from client (YYYY-MM-DD, ISO string, etc.) for Postgres date column */
+function parseCoDate(value: unknown): string | null {
+  if (value == null) return null
+  const s = String(value).trim()
+  if (!s) return null
+  const ymd = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (ymd) return ymd[1]
+  const d = new Date(s)
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+  return null
+}
+
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
@@ -272,7 +284,7 @@ export async function PATCH(
         const userIdVal = co.user_id || null
         const baseRow = {
           co_number: co.co_number ?? null,
-          co_date: co.co_date || null,
+          co_date: parseCoDate(co.co_date),
           amount: co.amount === '' || co.amount == null ? null : parseFloat(String(co.amount)),
           type: typeVal,
           line_item_type: lineItemType,
