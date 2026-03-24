@@ -77,23 +77,18 @@ export async function GET(
     ? adminSupabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })
     : supabase.from('po_bill_rates').select('*').eq('po_id', poId).order('effective_from_date', { ascending: false })
 
-  const attachmentsQuery = adminSupabase
-    ? adminSupabase.from('po_attachments').select('id, file_name, storage_path, file_type').eq('po_id', poId)
-    : supabase.from('po_attachments').select('id, file_name, storage_path, file_type').eq('po_id', poId)
-
   const expenseTypesQuery = adminSupabase
     ? adminSupabase.from('po_expense_types').select('*').order('name')
     : supabase.from('po_expense_types').select('*').order('name')
   const expensesQuery = adminSupabase
     ? adminSupabase.from('po_expenses').select('*').eq('po_id', poId).order('expense_date', { ascending: false })
     : supabase.from('po_expenses').select('*').eq('po_id', poId).order('expense_date', { ascending: false })
-  const [changeOrdersRes, invoicesRes, billRatesRes, expensesRes, expenseTypesRes, attachmentsRes] = await Promise.all([
+  const [changeOrdersRes, invoicesRes, billRatesRes, expensesRes, expenseTypesRes] = await Promise.all([
     changeOrdersQuery,
     invoicesQuery,
     billRatesQuery,
     expensesQuery,
     expenseTypesQuery,
-    attachmentsQuery,
   ])
 
   let changeOrders = changeOrdersRes.data || []
@@ -122,8 +117,19 @@ export async function GET(
     const { data: fallback } = await supabase.from('po_expense_types').select('*').order('name')
     if ((fallback?.length ?? 0) > 0) expenseTypes = fallback ?? []
   }
-  let attachments = attachmentsRes.data || []
-  if (attachmentsRes.error && adminSupabase) {
+  // Fetch attachments separately: avoids any Promise.all slot mix-ups and ensures service-role read
+  // (RLS often returns [] for the user client with no error, which hid rows that exist in the table).
+  let attachments: Array<{ id: string; file_name: string; storage_path: string; file_type?: string | null }> = []
+  if (adminSupabase) {
+    const { data: attData, error: attErr } = await adminSupabase
+      .from('po_attachments')
+      .select('id, file_name, storage_path, file_type')
+      .eq('po_id', poId)
+    if (!attErr && attData) {
+      attachments = attData
+    }
+  }
+  if (attachments.length === 0) {
     const { data: fallback } = await supabase
       .from('po_attachments')
       .select('id, file_name, storage_path, file_type')
@@ -248,7 +254,8 @@ export async function PATCH(
         proposal_number !== undefined || project_name !== undefined || department_id !== undefined ||
         budget_type !== undefined || client_contact_name !== undefined || net_terms !== undefined ||
         how_to_bill !== undefined || prior_hours_billed !== undefined || prior_hours_billed_rate !== undefined ||
-        prior_amount_spent !== undefined || prior_period_notes !== undefined || weekly_burn !== undefined || target_end_date !== undefined) {
+        prior_amount_spent !== undefined || prior_period_notes !== undefined || weekly_burn !== undefined || target_end_date !== undefined ||
+        active !== undefined) {
       const updateData: Record<string, unknown> = {}
       if (po_number !== undefined) updateData.po_number = po_number
       if (original_po_amount !== undefined) updateData.original_po_amount = original_po_amount === '' || original_po_amount == null ? null : parseFloat(String(original_po_amount))

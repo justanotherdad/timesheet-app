@@ -143,7 +143,11 @@ export default function BasicBudgetView({
     changeOrders: [],
   })
 
-  const fetchOpts: RequestInit = { cache: 'no-store', headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } }
+  const fetchOpts: RequestInit = {
+    cache: 'no-store',
+    credentials: 'include',
+    headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+  }
 
   const loadBudgetAccess = useCallback(async () => {
     if (!user || !['admin', 'super_admin'].includes(user.profile.role)) return
@@ -456,7 +460,8 @@ export default function BasicBudgetView({
       }
       if (!res.ok) throw new Error(json.error || 'Failed to save')
       setEditingClientPO(false)
-      window.location.reload()
+      await refetch()
+      onSave?.()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
@@ -512,6 +517,7 @@ export default function BasicBudgetView({
       const res = await fetch(`/api/budget/${po.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           original_po_amount: budgetForm.original_po_amount,
           prior_hours_billed: budgetForm.prior_hours_billed,
@@ -534,7 +540,8 @@ export default function BasicBudgetView({
       }
       if (!res.ok) throw new Error(json.error || 'Failed to save')
       setEditingBudget(false)
-      window.location.reload()
+      await refetch()
+      onSave?.()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
@@ -584,11 +591,12 @@ export default function BasicBudgetView({
       const res = await fetch(`/api/budget/${po.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ active: !isActive }),
       })
       if (res.ok) {
+        await refetch()
         onSave?.()
-        window.location.reload()
       }
     } finally {
       setDeactivating(false)

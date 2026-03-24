@@ -5,6 +5,9 @@ import Header from '@/components/Header'
 import BudgetPageClient from '@/components/budget/BudgetPageClient'
 import { withQueryTimeout } from '@/lib/timeout'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export default async function BudgetPage({
   searchParams,
 }: {
