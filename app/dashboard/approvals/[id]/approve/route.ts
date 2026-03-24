@@ -51,7 +51,7 @@ export async function POST(
       .eq('timesheet_id', id)
     const signedIds = (existingSignatures || []).map((s: { signer_id: string }) => s.signer_id)
 
-    // If user has already signed, treat as success (idempotent - e.g. double-click or stale UI)
+    // If delegator has already signed (or user acting as self), treat as success (idempotent)
     if (signedIds.includes(user.id)) {
       return NextResponse.redirect(new URL(getSafeReturnTo(request, formData), request.url))
     }
@@ -59,7 +59,21 @@ export async function POST(
     // Next approver is first in chain who hasn't signed; admins can always approve (treated as final)
     const nextApproverId = chain.find((uid) => !signedIds.includes(uid))
     const isAdmin = ['admin', 'super_admin'].includes(user.profile.role)
-    const canApprove = isAdmin || (nextApproverId !== undefined && nextApproverId === user.id)
+    let canApprove = isAdmin || (nextApproverId !== undefined && nextApproverId === user.id)
+
+    if (!canApprove && nextApproverId) {
+      const today = new Date().toISOString().slice(0, 10)
+      const { data: activeDelegation } = await adminSupabase
+        .from('approval_delegations')
+        .select('id')
+        .eq('delegator_id', nextApproverId)
+        .eq('delegate_id', user.id)
+        .lte('start_date', today)
+        .gte('end_date', today)
+        .limit(1)
+        .maybeSingle()
+      canApprove = !!activeDelegation
+    }
 
     if (!canApprove) {
       return NextResponse.json(
@@ -68,23 +82,29 @@ export async function POST(
       )
     }
 
-    // Determine signer role for this user
+    const actingAsDelegate = nextApproverId && nextApproverId !== user.id && canApprove
+    const signerId = actingAsDelegate ? nextApproverId : user.id
+
+    // Determine signer role based on who is signing (delegator or self)
     let signerRole: 'manager' | 'supervisor' | 'final_approver'
-    if (user.id === profile?.final_approver_id || isAdmin) {
+    if (signerId === profile?.final_approver_id || isAdmin) {
       signerRole = 'final_approver'
-    } else if (user.id === profile?.manager_id) {
+    } else if (signerId === profile?.manager_id) {
       signerRole = 'manager'
     } else {
       signerRole = 'supervisor'
     }
 
-    // Create signature - snapshot signer_name so it doesn't change if user profile is updated later
-    const signerName = user.profile?.name || 'Unknown'
+    // Signer name: delegator's name when acting as delegate, else current user
+    const { data: signerProfile } = actingAsDelegate
+      ? await adminSupabase.from('user_profiles').select('name').eq('id', signerId).single()
+      : { data: null }
+    const signerName = signerProfile?.name ?? (actingAsDelegate ? 'Unknown' : (user.profile?.name || 'Unknown'))
     const { error: signatureError } = await adminSupabase
       .from('timesheet_signatures')
       .insert({
         timesheet_id: id,
-        signer_id: user.id,
+        signer_id: signerId,
         signer_role: signerRole,
         signer_name: signerName,
       })

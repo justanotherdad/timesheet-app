@@ -26,13 +26,33 @@ export async function POST(
     }
 
     const ownerProfile = timesheet.user_profiles as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string; email?: string; name?: string }
-    const canReject =
+    let canReject =
       ownerProfile?.reports_to_id === user.id ||
       ownerProfile?.supervisor_id === user.id ||
       ownerProfile?.manager_id === user.id ||
       ownerProfile?.final_approver_id === user.id ||
       timesheet.user_id === user.id ||
       ['admin', 'super_admin'].includes(user.profile.role)
+
+    if (!canReject) {
+      const approverIds = [ownerProfile?.supervisor_id, ownerProfile?.manager_id, ownerProfile?.final_approver_id].filter(Boolean)
+      const today = new Date().toISOString().slice(0, 10)
+      for (const approverId of approverIds) {
+        const { data: activeDelegation } = await adminSupabase
+          .from('approval_delegations')
+          .select('id')
+          .eq('delegator_id', approverId)
+          .eq('delegate_id', user.id)
+          .lte('start_date', today)
+          .gte('end_date', today)
+          .limit(1)
+          .maybeSingle()
+        if (activeDelegation) {
+          canReject = true
+          break
+        }
+      }
+    }
 
     if (!canReject) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })

@@ -94,11 +94,30 @@ export default async function TimesheetDetailPage({
         .single()
     )
     const owner = ownerResult.data as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string } | null
-    const isApprover =
+    let isApprover =
       owner?.reports_to_id === user.id ||
       owner?.supervisor_id === user.id ||
       owner?.manager_id === user.id ||
       owner?.final_approver_id === user.id
+    if (!isApprover) {
+      const approverIds = [owner?.supervisor_id, owner?.manager_id, owner?.final_approver_id].filter(Boolean)
+      const today = new Date().toISOString().slice(0, 10)
+      for (const approverId of approverIds) {
+        const { data: activeDelegation } = await adminSupabase
+          .from('approval_delegations')
+          .select('id')
+          .eq('delegator_id', approverId)
+          .eq('delegate_id', user.id)
+          .lte('start_date', today)
+          .gte('end_date', today)
+          .limit(1)
+          .maybeSingle()
+        if (activeDelegation) {
+          isApprover = true
+          break
+        }
+      }
+    }
     if (!isApprover) {
       redirect('/dashboard')
     }

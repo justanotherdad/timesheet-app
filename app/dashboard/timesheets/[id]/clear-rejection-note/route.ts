@@ -27,13 +27,33 @@ export async function POST(
     }
 
     const profile = timesheet.user_profiles as { reports_to_id?: string; manager_id?: string; supervisor_id?: string; final_approver_id?: string }
-    const canApprove =
+    let canApprove =
       profile?.reports_to_id === user.id ||
       profile?.manager_id === user.id ||
       profile?.supervisor_id === user.id ||
       profile?.final_approver_id === user.id ||
       timesheet.user_id === user.id ||
       ['admin', 'super_admin'].includes(user.profile.role)
+
+    if (!canApprove) {
+      const approverIds = [profile?.supervisor_id, profile?.manager_id, profile?.final_approver_id].filter(Boolean)
+      const today = new Date().toISOString().slice(0, 10)
+      for (const approverId of approverIds) {
+        const { data: activeDelegation } = await adminSupabase
+          .from('approval_delegations')
+          .select('id')
+          .eq('delegator_id', approverId)
+          .eq('delegate_id', user.id)
+          .lte('start_date', today)
+          .gte('end_date', today)
+          .limit(1)
+          .maybeSingle()
+        if (activeDelegation) {
+          canApprove = true
+          break
+        }
+      }
+    }
 
     if (!canApprove) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })

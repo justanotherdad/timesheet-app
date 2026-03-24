@@ -24,7 +24,35 @@ export default async function ApprovalsPage(props: { searchParams: Promise<Searc
       .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`)
   )
 
-  const reports = (reportsResult.data || []) as Array<{ id: string }>
+  let reports = (reportsResult.data || []) as Array<{ id: string }>
+
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: delegationRows } = await adminSupabase
+    .from('approval_delegations')
+    .select('delegator_id')
+    .eq('delegate_id', user.id)
+    .lte('start_date', today)
+    .gte('end_date', today)
+  const delegatorIds = [...new Set((delegationRows || []).map((r: any) => r.delegator_id))]
+  const delegatedByIds = new Set(delegatorIds)
+  if (delegatorIds.length > 0) {
+    const seen = new Set(reports.map((r) => r.id))
+    for (const delegatorId of delegatorIds) {
+      const delegatorReportsResult = await withQueryTimeout(() =>
+        adminSupabase
+          .from('user_profiles')
+          .select('id')
+          .or(`reports_to_id.eq.${delegatorId},supervisor_id.eq.${delegatorId},manager_id.eq.${delegatorId},final_approver_id.eq.${delegatorId}`)
+      )
+      const delegatorReports = (delegatorReportsResult.data || []) as Array<{ id: string }>
+      for (const r of delegatorReports) {
+        if (!seen.has(r.id)) {
+          seen.add(r.id)
+          reports = [...reports, r]
+        }
+      }
+    }
+  }
 
   if (!reports || reports.length === 0) {
     return (
@@ -78,7 +106,7 @@ export default async function ApprovalsPage(props: { searchParams: Promise<Searc
       if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
       const signedIds = signedByTimesheet[ts.id] || new Set<string>()
       const nextId = chain.find((uid) => !signedIds.has(uid))
-      return nextId === user.id
+      return nextId === user.id || (nextId && delegatedByIds.has(nextId))
     })
   }
 

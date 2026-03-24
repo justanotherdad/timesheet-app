@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import HierarchicalItemManager from './HierarchicalItemManager'
+import DelegationManager from './DelegationManager'
 
 interface Site {
   id: string
@@ -14,7 +15,7 @@ interface TimesheetOptionsManagerProps {
   readOnly?: boolean
 }
 
-type TabType = 'systems' | 'activities' | 'deliverables'
+type TabType = 'systems' | 'activities' | 'deliverables' | 'delegation'
 
 export default function TimesheetOptionsManager({ sites, readOnly = false }: TimesheetOptionsManagerProps) {
   const [activeTab, setActiveTab] = useState<TabType>('systems')
@@ -57,6 +58,16 @@ export default function TimesheetOptionsManager({ sites, readOnly = false }: Tim
         >
           Deliverables
         </button>
+        <button
+          onClick={() => setActiveTab('delegation')}
+          className={`px-4 py-2 font-medium ${
+            activeTab === 'delegation'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+          }`}
+        >
+          Delegation
+        </button>
       </div>
 
       {/* Tab content */}
@@ -89,6 +100,9 @@ export default function TimesheetOptionsManager({ sites, readOnly = false }: Tim
           readOnly={readOnly}
           embedded
         />
+      )}
+      {activeTab === 'delegation' && (
+        <DelegationManager />
       )}
     </div>
   )
