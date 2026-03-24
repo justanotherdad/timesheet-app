@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText, Eye, PowerOff } from 'lucide-react'
 import {
@@ -69,6 +69,8 @@ export default function BasicBudgetView({
   hasLimitedAccess = false,
 }: BasicBudgetViewProps) {
   const supabase = useMemo(() => createClient(), [])
+  /** Safari often fails to sync controlled <input type="date"> with React state; read .value on save. */
+  const poIssueDateInputRef = useRef<HTMLInputElement | null>(null)
   const [data, setData] = useState<any>(null)
   const [changeOrdersOverride, setChangeOrdersOverride] = useState<any[] | null>(null)
   const [invoicesOverride, setInvoicesOverride] = useState<any[] | null>(null)
@@ -143,11 +145,29 @@ export default function BasicBudgetView({
     changeOrders: [],
   })
 
-  const fetchOpts: RequestInit = {
-    cache: 'no-store',
-    credentials: 'include',
-    headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
-  }
+  const fetchOpts = useMemo<RequestInit>(
+    () => ({
+      cache: 'no-store',
+      credentials: 'include',
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    }),
+    []
+  )
+
+  /** Overwrites attachments from admin-only GET so main budget fetch (RLS/cache) cannot clear the list. */
+  const mergeAttachmentsFromServer = useCallback(async () => {
+    try {
+      const t = `t=${Date.now()}`
+      const res = await fetch(`/api/budget/${po.id}/attachments?${t}`, fetchOpts)
+      if (!res.ok) return
+      const body = await res.json()
+      const att = body?.attachments
+      if (!Array.isArray(att)) return
+      setData((prev: any) => (prev ? { ...prev, attachments: att } : prev))
+    } catch {
+      /* ignore */
+    }
+  }, [po.id, fetchOpts])
 
   const loadBudgetAccess = useCallback(async () => {
     if (!user || !['admin', 'super_admin'].includes(user.profile.role)) return
@@ -201,6 +221,7 @@ export default function BasicBudgetView({
       const json = await res.json()
       setData(json)
       setExpensesOverride(null)
+      await mergeAttachmentsFromServer()
     }
     if (coRes.ok) {
       const json = await coRes.json()
@@ -217,7 +238,7 @@ export default function BasicBudgetView({
     if (laborRes.ok) setLaborCostData(await laborRes.json())
     loadBudgetAccess()
     if (user && ['manager', 'admin', 'super_admin'].includes(user.profile.role)) loadBalance()
-  }, [po.id, loadBudgetAccess, loadBalance, user])
+  }, [po.id, loadBudgetAccess, loadBalance, user, mergeAttachmentsFromServer])
 
   useEffect(() => {
     setExpenseTypesFallback([])
@@ -237,7 +258,11 @@ export default function BasicBudgetView({
           fetch(`/api/budget/${po.id}/bill-rates?${t}`, fetchOpts),
           fetch(`/api/budget/${po.id}/billable-hours?all=true&${t}`, fetchOpts),
         ])
-        if (res.ok) setData(await res.json())
+        if (res.ok) {
+          const json = await res.json()
+          setData(json)
+          await mergeAttachmentsFromServer()
+        }
         if (bhRes.ok) setBillableData(await bhRes.json())
         if (coRes.ok) {
           const json = await coRes.json()
@@ -271,7 +296,7 @@ export default function BasicBudgetView({
       }
     }
     load()
-  }, [po.id, selectedMonth, showAllMonths, user])
+  }, [po.id, selectedMonth, showAllMonths, user, mergeAttachmentsFromServer, fetchOpts])
 
   useEffect(() => {
     const p = data?.po ?? po
@@ -438,13 +463,14 @@ export default function BasicBudgetView({
     setSaving(true)
     setSaveError(null)
     try {
+      const issueDateRaw = poIssueDateInputRef.current?.value ?? clientPOForm.po_issue_date
       const res = await fetch(`/api/budget/${po.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           ...clientPOForm,
-          po_issue_date: normalizePoIssueDateToIso(clientPOForm.po_issue_date) || null,
+          po_issue_date: normalizePoIssueDateToIso(issueDateRaw) || null,
         }),
       })
       const text = await res.text()
@@ -750,7 +776,14 @@ export default function BasicBudgetView({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">PO Issue Date</label>
-                <input type="date" value={clientPOForm.po_issue_date} onChange={(e) => setClientPOForm((f) => ({ ...f, po_issue_date: e.target.value }))} className={inputClass} />
+                <input
+                  ref={poIssueDateInputRef}
+                  key={`${po.id}-po-issue-date`}
+                  type="date"
+                  value={clientPOForm.po_issue_date}
+                  onChange={(e) => setClientPOForm((f) => ({ ...f, po_issue_date: e.target.value }))}
+                  className={inputClass}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Proposal #</label>
@@ -825,7 +858,13 @@ export default function BasicBudgetView({
                         throw new Error('File type not allowed. Use Word, Excel, or PDF.')
                       }
                       const path = `po_attachments/${po.id}/${crypto.randomUUID()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
-                      const { error: uploadErr } = await supabase.storage.from('site-attachments').upload(path, file, { upsert: false })
+                      const mime = file.type || 'application/octet-stream'
+                      const buf = await file.arrayBuffer()
+                      const blob = new Blob([buf], { type: mime })
+                      const { error: uploadErr } = await supabase.storage.from('site-attachments').upload(path, blob, {
+                        upsert: false,
+                        contentType: mime,
+                      })
                       if (uploadErr) throw uploadErr
                       const { data: inserted, error: insertErr } = await supabase
                         .from('po_attachments')

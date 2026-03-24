@@ -9,6 +9,49 @@ const ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 /** Node route handlers: upload File/Blob from FormData can fail or hang with Supabase's storage client; Buffer is reliable. */
 export const maxDuration = 60
 
+const noStore = {
+  headers: {
+    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    Pragma: 'no-cache',
+  },
+}
+
+/** Authoritative attachment list (service role). Merged client-side after budget GET so RLS/cache cannot leave the UI empty. */
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ poId: string }> }
+) {
+  const { poId } = await params
+  const user = await getCurrentUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const supabase = await createClient()
+  const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
+  if (!allowed) {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
+
+  let adminSupabase: ReturnType<typeof createAdminClient>
+  try {
+    adminSupabase = createAdminClient()
+  } catch {
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+  }
+
+  const { data, error } = await adminSupabase
+    .from('po_attachments')
+    .select('id, file_name, storage_path, file_type')
+    .eq('po_id', poId)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ attachments: data ?? [] }, noStore)
+}
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ poId: string }> }
@@ -89,5 +132,5 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to save attachment record' }, { status: 500 })
   }
 
-  return NextResponse.json(inserted)
+  return NextResponse.json(inserted, noStore)
 }
