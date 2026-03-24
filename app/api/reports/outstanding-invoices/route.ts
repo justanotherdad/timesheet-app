@@ -65,7 +65,7 @@ export async function GET() {
 
   const { data: outstandingInvoices } = await adminSupabase
     .from('po_invoices')
-    .select('id, po_id, invoice_number, amount, invoice_date, created_at')
+    .select('id, po_id, invoice_number, amount, invoice_date')
     .in('po_id', poIds)
     .is('payment_received_date', null)
     .order('invoice_date', { ascending: true })
@@ -127,8 +127,6 @@ export async function GET() {
       invoice_number: inv.invoice_number ?? '',
       invoice_amount: Number(inv.amount) || 0,
       invoice_date: inv.invoice_date ?? null,
-      /** When the invoice was entered in the app; used for aging / duration. */
-      submitted_at: inv.created_at ?? null,
       po_id: inv.po_id,
       po_number: po?.po_number || '—',
       project_name: po?.project_name || po?.description || '—',
@@ -150,9 +148,8 @@ export async function GET() {
 
   const yearsSet = new Set<string>()
   for (const inv of invsFiltered) {
-    const dateStr = inv.created_at || inv.invoice_date
-    if (!dateStr) continue
-    const y = String(dateStr).slice(0, 4)
+    if (!inv.invoice_date) continue
+    const y = String(inv.invoice_date).slice(0, 4)
     if (/^\d{4}$/.test(y)) yearsSet.add(y)
   }
   const years = [...yearsSet].sort()

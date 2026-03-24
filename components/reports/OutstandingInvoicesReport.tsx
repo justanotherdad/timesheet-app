@@ -11,8 +11,6 @@ interface OutstandingRow {
   invoice_number: string
   invoice_amount: number
   invoice_date: string | null
-  /** ISO timestamp when the invoice was entered (submission); drives aging buckets & Days out. */
-  submitted_at: string | null
   po_id: string
   po_number: string
   project_name: string
@@ -53,11 +51,11 @@ function formatInvoiceDate(iso: string | null): string {
   }
 }
 
-/** Whole days from submission (invoice entered in app) to today; null if unknown. */
-function daysSinceSubmission(submittedAt: string | null): number | null {
-  if (!submittedAt) return null
+/** Whole calendar days from invoice date (document date) to today; null if unknown. */
+function daysOutstanding(invoiceDate: string | null): number | null {
+  if (!invoiceDate) return null
   try {
-    const d = parseISO(submittedAt)
+    const d = parseISO(invoiceDate)
     if (isNaN(d.getTime())) return null
     return differenceInDays(startOfDay(new Date()), startOfDay(d))
   } catch {
@@ -65,17 +63,16 @@ function daysSinceSubmission(submittedAt: string | null): number | null {
   }
 }
 
-function displayDaysSinceSubmission(submittedAt: string | null): string {
-  const d = daysSinceSubmission(submittedAt)
+function displayDaysOutstanding(invoiceDate: string | null): string {
+  const d = daysOutstanding(invoiceDate)
   if (d === null) return '—'
   return String(d)
 }
 
-/** Calendar year for Year filter: submission year, or invoice document year if submission missing. */
-function yearForFilters(row: OutstandingRow): string | null {
-  const raw = row.submitted_at || row.invoice_date
-  if (!raw) return null
-  const y = String(raw).slice(0, 4)
+/** Calendar year of invoice date for Year filter. */
+function invoiceYear(row: OutstandingRow): string | null {
+  if (!row.invoice_date) return null
+  const y = String(row.invoice_date).slice(0, 4)
   return /^\d{4}$/.test(y) ? y : null
 }
 
@@ -154,12 +151,12 @@ export default function OutstandingInvoicesReport() {
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
       if (filterYear) {
-        const y = yearForFilters(r)
+        const y = invoiceYear(r)
         if (!y || y !== filterYear) return false
       }
       if (filterClient && r.site_id !== filterClient) return false
       if (filterPO && r.po_id !== filterPO) return false
-      const days = daysSinceSubmission(r.submitted_at)
+      const days = daysOutstanding(r.invoice_date)
       if (!matchesDurationBucket(days, filterDuration)) return false
       return true
     })
@@ -199,8 +196,8 @@ export default function OutstandingInvoicesReport() {
           break
         }
         case 'days_outstanding': {
-          const da = daysSinceSubmission(a.submitted_at)
-          const db = daysSinceSubmission(b.submitted_at)
+          const da = daysOutstanding(a.invoice_date)
+          const db = daysOutstanding(b.invoice_date)
           if (da === null && db === null) cmp = 0
           else if (da === null) cmp = 1
           else if (db === null) cmp = -1
@@ -294,7 +291,7 @@ export default function OutstandingInvoicesReport() {
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Each row is an invoice without a Payment Received date, grouped by client. Current PO balance is the PO-level balance (original + COs − all invoiced).{' '}
               <span className="text-gray-500 dark:text-gray-500">
-                Duration and Days out. use the date the invoice was submitted (entered in this system), not the invoice document date.
+                Duration and Days out. are calendar days from the invoice date (Inv. date) through today.
               </span>
             </p>
           </div>
@@ -426,7 +423,7 @@ export default function OutstandingInvoicesReport() {
               </th>
               <th
                 className="px-2 sm:px-3 py-2 sm:py-3 text-right text-[10px] sm:text-xs font-medium text-gray-600 dark:text-gray-300 uppercase whitespace-nowrap"
-                title="Days since the invoice was submitted (entered)"
+                title="Calendar days from invoice date to today"
               >
                 <button
                   type="button"
@@ -489,11 +486,8 @@ export default function OutstandingInvoicesReport() {
                         <td className="px-2 sm:px-3 py-2 sm:py-3 text-gray-900 dark:text-gray-100 align-top whitespace-nowrap tabular-nums">
                           {formatInvoiceDate(row.invoice_date)}
                         </td>
-                        <td
-                          className="px-2 sm:px-3 py-2 sm:py-3 text-right text-gray-900 dark:text-gray-100 align-top whitespace-nowrap tabular-nums"
-                          title={row.submitted_at ? 'Submitted ' + formatInvoiceDate(row.submitted_at) : undefined}
-                        >
-                          {displayDaysSinceSubmission(row.submitted_at)}
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right text-gray-900 dark:text-gray-100 align-top whitespace-nowrap tabular-nums">
+                          {displayDaysOutstanding(row.invoice_date)}
                         </td>
                         <td className="px-2 sm:px-3 py-2 sm:py-3 text-right text-gray-900 dark:text-gray-100 align-top whitespace-nowrap tabular-nums">
                           {formatCurrency(row.current_po_balance)}
