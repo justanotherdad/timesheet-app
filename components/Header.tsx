@@ -50,7 +50,9 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
   }, [menuOpen])
 
   const userRole = user?.profile.role || ''
+  /** Supervisors+ see approval menus; employees may only need Pending when acting as a delegate. */
   const canApprove = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
+  const canAccessPendingApprovals = ['employee', 'supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
   const canManageOrg = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
   const canManageBudget = ['manager', 'admin', 'super_admin'].includes(userRole)
   const canBidSheets = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
@@ -202,7 +204,7 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                       <Link href="/dashboard/timesheets" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                         My Timesheets
                       </Link>
-                      {canApprove && (
+                      {canAccessPendingApprovals && (
                         <Link href="/dashboard/approvals" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Pending Approvals
                         </Link>

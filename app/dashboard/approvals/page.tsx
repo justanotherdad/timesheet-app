@@ -1,3 +1,4 @@
+import { APPROVAL_PARTICIPANT_ROLES } from '@/lib/approval-access'
 import { requireRole } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
@@ -11,7 +12,7 @@ export const maxDuration = 10
 type SearchParams = { sort?: string; dir?: string }
 
 export default async function ApprovalsPage(props: { searchParams: Promise<SearchParams> }) {
-  const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
+  const user = await requireRole(APPROVAL_PARTICIPANT_ROLES)
   const params = await props.searchParams
   const sortBy = params.sort || 'user'
   const sortDir = (params.dir || 'asc') as 'asc' | 'desc'

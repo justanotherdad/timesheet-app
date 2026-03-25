@@ -110,7 +110,7 @@ export default function DelegationManager() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-600 dark:text-gray-400">
-        Delegate your timesheet approval responsibility to another person for a specified period. During that time, they can approve (and reject) timesheets on your behalf. After the end date, the delegation automatically expires. Active dates use US Eastern time for “today” (not UTC), and are independent of a timesheet’s week ending.
+        Delegate your timesheet approval responsibility to another person for a specified period. During that time, they can approve (and reject) timesheets on your behalf. The delegate can be any user (including employees who are not otherwise in an approver role). After the end date, the delegation automatically expires. Active dates use US Eastern time for “today” (not UTC), and are independent of a timesheet’s week ending.
       </p>
 
       {error && (

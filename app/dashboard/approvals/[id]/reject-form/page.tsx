@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation'
+import { APPROVAL_PARTICIPANT_ROLES } from '@/lib/approval-access'
 import { requireRole } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
+import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 import { formatWeekEnding } from '@/lib/utils'
@@ -13,7 +16,7 @@ export default async function RejectTimesheetPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
+  const user = await requireRole(APPROVAL_PARTICIPANT_ROLES)
   const { id } = await params
   const adminSupabase = createAdminClient()
 
@@ -54,7 +57,26 @@ export default async function RejectTimesheetPage({
       owner?.supervisor_id === user.id ||
       owner?.manager_id === user.id ||
       owner?.final_approver_id === user.id
-    if (!isApprover) {
+    let allowed = isApprover
+    if (!allowed && owner) {
+      const today = getCalendarDateStringInAppTimezone()
+      for (const approverId of buildApprovalChain(owner)) {
+        const { data: activeDelegation } = await adminSupabase
+          .from('approval_delegations')
+          .select('id')
+          .eq('delegator_id', approverId)
+          .eq('delegate_id', user.id)
+          .lte('start_date', today)
+          .gte('end_date', today)
+          .limit(1)
+          .maybeSingle()
+        if (activeDelegation) {
+          allowed = true
+          break
+        }
+      }
+    }
+    if (!allowed) {
       redirect('/dashboard/approvals')
     }
   }

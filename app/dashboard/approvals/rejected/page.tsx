@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation'
+import { APPROVAL_PARTICIPANT_ROLES } from '@/lib/approval-access'
 import { requireRole } from '@/lib/auth'
 import Header from '@/components/Header'
 import RejectedEmailHandler from './RejectedEmailHandler'
 
 export default async function RejectedPage(props: { searchParams: Promise<{ email?: string; reason?: string; week_ending?: string }> }) {
-  const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
+  const user = await requireRole(APPROVAL_PARTICIPANT_ROLES)
   const params = await props.searchParams
 
   if (!params.email) {

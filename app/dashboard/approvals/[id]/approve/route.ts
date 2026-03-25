@@ -1,3 +1,4 @@
+import { APPROVAL_PARTICIPANT_ROLES } from '@/lib/approval-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
@@ -19,7 +20,7 @@ export async function POST(
 ) {
   try {
     const formData = await request.formData()
-    const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
+    const user = await requireRole(APPROVAL_PARTICIPANT_ROLES)
     const adminSupabase = createAdminClient()
     const { id } = await params
 
