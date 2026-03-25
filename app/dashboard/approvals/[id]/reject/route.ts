@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
+import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
 import { NextResponse } from 'next/server'
 
 export async function POST(
@@ -35,7 +36,7 @@ export async function POST(
       ['admin', 'super_admin'].includes(user.profile.role)
 
     if (!canReject) {
-      const approverIds = [ownerProfile?.supervisor_id, ownerProfile?.manager_id, ownerProfile?.final_approver_id].filter(Boolean)
+      const approverIds = buildApprovalChain(ownerProfile)
       const today = new Date().toISOString().slice(0, 10)
       for (const approverId of approverIds) {
         const { data: activeDelegation } = await adminSupabase

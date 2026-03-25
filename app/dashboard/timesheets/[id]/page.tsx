@@ -7,6 +7,7 @@ import { formatWeekEnding, getWeekDates, formatDateTimeInEastern } from '@/lib/u
 import { format } from 'date-fns'
 import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
+import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
 import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
@@ -100,7 +101,7 @@ export default async function TimesheetDetailPage({
       owner?.manager_id === user.id ||
       owner?.final_approver_id === user.id
     if (!isApprover) {
-      const approverIds = [owner?.supervisor_id, owner?.manager_id, owner?.final_approver_id].filter(Boolean)
+      const approverIds = buildApprovalChain(owner)
       const today = new Date().toISOString().slice(0, 10)
       for (const approverId of approverIds) {
         const { data: activeDelegation } = await adminSupabase

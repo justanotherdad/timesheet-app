@@ -5,7 +5,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
-function buildApprovalChain(profile: {
+/** Ordered approvers: first line (supervisor or reports-to) → manager → final. Exported for approve/delegate logic. */
+export function buildApprovalChain(profile: {
   reports_to_id?: string
   supervisor_id?: string
   manager_id?: string

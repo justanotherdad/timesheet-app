@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
+import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
 import { NextResponse } from 'next/server'
 
 function getSafeReturnTo(request: Request, formData: FormData): string {
@@ -24,7 +25,7 @@ export async function POST(
     // Use admin client so RLS does not block supervisors/managers from reading the employee's timesheet
     const { data: timesheet, error: fetchError } = await adminSupabase
       .from('weekly_timesheets')
-      .select('*, user_profiles!user_id(manager_id, supervisor_id, final_approver_id)')
+      .select('*, user_profiles!user_id(manager_id, supervisor_id, reports_to_id, final_approver_id)')
       .eq('id', id)
       .single()
 
@@ -32,12 +33,14 @@ export async function POST(
       return NextResponse.json({ error: 'Timesheet not found' }, { status: 404 })
     }
 
-    const profile = timesheet.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string }
-    // Approval chain: Employee → Supervisor → Manager → Final Approver (skip none = use next in line)
-    const chain: string[] = []
-    if (profile?.supervisor_id) chain.push(profile.supervisor_id)
-    if (profile?.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
-    if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
+    const profile = timesheet.user_profiles as {
+      manager_id?: string
+      supervisor_id?: string
+      reports_to_id?: string
+      final_approver_id?: string
+    }
+    // Must match approvals page, auto-approve, etc.: first approver is supervisor OR reports_to
+    const chain = buildApprovalChain(profile)
 
     // Allow approval of submitted timesheets, or allow admins to approve any status
     if (timesheet.status !== 'submitted' && !['admin', 'super_admin'].includes(user.profile.role)) {
