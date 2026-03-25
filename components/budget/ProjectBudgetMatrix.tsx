@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, Printer, Search } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Printer } from 'lucide-react'
 import { formatHours } from '@/lib/utils'
 
 /** Variance always shows numeric (0.00 when balanced); formatHours treats 0 as em dash. */
@@ -13,6 +13,52 @@ function safeFileBase(name: string): string {
   const s = name.replace(/[^\w.\-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
   return s.slice(0, 80) || 'project-matrix'
 }
+
+const EPS = 1e-6
+
+function rowBudgetPct(r: MatrixRow): number | null {
+  return r.budgetedHours > 0 ? (r.actualHours / r.budgetedHours) * 100 : null
+}
+
+/** Hour columns: zero, or positive bands (hours). */
+type HourBucket = '' | 'zero' | 'gt0_lte24' | 'gt24_lte100' | 'gt100'
+
+function matchesHourBucket(h: number, bucket: HourBucket): boolean {
+  if (!bucket) return true
+  const z = Math.abs(h) < EPS
+  if (bucket === 'zero') return z
+  if (bucket === 'gt0_lte24') return !z && h <= 24 + EPS
+  if (bucket === 'gt24_lte100') return h > 24 + EPS && h <= 100 + EPS
+  if (bucket === 'gt100') return h > 100 + EPS
+  return true
+}
+
+type VarianceBucket = '' | 'zero' | 'over' | 'under'
+
+function matchesVarianceBucket(v: number, bucket: VarianceBucket): boolean {
+  if (!bucket) return true
+  if (bucket === 'zero') return Math.abs(v) < EPS
+  if (bucket === 'over') return v < -EPS
+  if (bucket === 'under') return v > EPS
+  return true
+}
+
+/** Budget %: N/A (no budget hours), 0%, bands, or over 100%. */
+type PctBucket = '' | 'na' | 'zero' | 'r0_50' | 'r50_100' | 'gt100'
+
+function matchesPctBucket(pct: number | null, bucket: PctBucket): boolean {
+  if (!bucket) return true
+  if (bucket === 'na') return pct === null
+  if (pct === null) return false
+  if (bucket === 'zero') return Math.abs(pct) < EPS
+  if (bucket === 'r0_50') return pct > EPS && pct <= 50 + EPS
+  if (bucket === 'r50_100') return pct > 50 + EPS && pct <= 100 + EPS
+  if (bucket === 'gt100') return pct > 100 + EPS
+  return true
+}
+
+const selectClass =
+  'rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm'
 
 type MatrixRow = {
   id: string
@@ -54,7 +100,13 @@ export default function ProjectBudgetMatrix({
   const [data, setData] = useState<MatrixPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filterText, setFilterText] = useState('')
+  const [filterSystem, setFilterSystem] = useState('')
+  const [filterDeliverable, setFilterDeliverable] = useState('')
+  const [filterActivity, setFilterActivity] = useState('')
+  const [filterBudget, setFilterBudget] = useState<HourBucket>('')
+  const [filterActual, setFilterActual] = useState<HourBucket>('')
+  const [filterVariance, setFilterVariance] = useState<VarianceBucket>('')
+  const [filterPct, setFilterPct] = useState<PctBucket>('')
   const [sortColumn, setSortColumn] = useState<SortColumn>('system')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -86,24 +138,38 @@ export default function ProjectBudgetMatrix({
     }
   }, [poId, refreshTick])
 
+  const filterOptions = useMemo(() => {
+    if (!data?.rows.length) {
+      return { systems: [] as string[], deliverables: [] as string[], activities: [] as string[] }
+    }
+    const sys = new Set<string>()
+    const del = new Set<string>()
+    const act = new Set<string>()
+    for (const r of data.rows) {
+      if (r.systemLabel) sys.add(r.systemLabel)
+      if (r.deliverableName) del.add(r.deliverableName)
+      if (r.activityName) act.add(r.activityName)
+    }
+    return {
+      systems: [...sys].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
+      deliverables: [...del].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
+      activities: [...act].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
+    }
+  }, [data?.rows])
+
   const filteredRows = useMemo(() => {
     if (!data?.rows.length) return []
-    const q = filterText.trim().toLowerCase()
-    if (!q) return data.rows
     return data.rows.filter((r) => {
-      const blob = [
-        r.systemLabel,
-        r.deliverableName,
-        r.activityName,
-        String(r.budgetedHours),
-        String(r.actualHours),
-        String(r.variance),
-      ]
-        .join(' ')
-        .toLowerCase()
-      return blob.includes(q)
+      if (filterSystem && r.systemLabel !== filterSystem) return false
+      if (filterDeliverable && r.deliverableName !== filterDeliverable) return false
+      if (filterActivity && r.activityName !== filterActivity) return false
+      if (!matchesHourBucket(r.budgetedHours, filterBudget)) return false
+      if (!matchesHourBucket(r.actualHours, filterActual)) return false
+      if (!matchesVarianceBucket(r.variance, filterVariance)) return false
+      if (!matchesPctBucket(rowBudgetPct(r), filterPct)) return false
+      return true
     })
-  }, [data, filterText])
+  }, [data, filterSystem, filterDeliverable, filterActivity, filterBudget, filterActual, filterVariance, filterPct])
 
   const sortedRows = useMemo(() => {
     const rows = [...filteredRows]
@@ -188,8 +254,19 @@ export default function ProjectBudgetMatrix({
       lines.push([q('Report'), q(reportTitle)].join(','))
     }
     lines.push([q('Generated'), q(new Date().toISOString())].join(','))
-    if (filterText.trim()) {
-      lines.push([q('Filter'), q(filterText.trim())].join(','))
+    const filterSummary = [
+      filterSystem && `System=${filterSystem}`,
+      filterDeliverable && `Deliverable=${filterDeliverable}`,
+      filterActivity && `Activity=${filterActivity}`,
+      filterBudget && `Budget=${filterBudget}`,
+      filterActual && `Actual=${filterActual}`,
+      filterVariance && `Var=${filterVariance}`,
+      filterPct && `Budget %=${filterPct}`,
+    ]
+      .filter(Boolean)
+      .join('; ')
+    if (filterSummary) {
+      lines.push([q('Filters'), q(filterSummary)].join(','))
     }
     lines.push([q('Sort'), q(`${sortColumn} ${sortDir}`)].join(','))
     lines.push(headers.join(','))
@@ -209,7 +286,7 @@ export default function ProjectBudgetMatrix({
     }
     lines.push(
       [
-        q(filterText.trim() ? 'Totals (visible rows)' : 'Totals (matrix rows)'),
+        q(filterSummary ? 'Totals (visible rows)' : 'Totals (matrix rows)'),
         q(''),
         q(''),
         q(visibleTotals.budgetedHours.toFixed(2)),
@@ -242,7 +319,15 @@ export default function ProjectBudgetMatrix({
   }
 
   const hasRows = data && data.rows.length > 0
-  const isFiltered = filterText.trim().length > 0
+  const hasActiveFilters = Boolean(
+    filterSystem ||
+      filterDeliverable ||
+      filterActivity ||
+      filterBudget ||
+      filterActual ||
+      filterVariance ||
+      filterPct
+  )
   const showTable = hasRows && sortedRows.length > 0
 
   return (
@@ -305,27 +390,121 @@ export default function ProjectBudgetMatrix({
       )}
 
       {hasRows && (
-        <div className="mb-4 print:hidden">
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Filter rows</label>
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-            <input
-              type="search"
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-              placeholder="Search system, deliverable, activity, or hours…"
-              className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            />
+        <div className="mb-4 print:hidden space-y-3">
+          <div className="flex flex-wrap gap-4 items-center">
+            <label className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">System:</span>
+              <select
+                value={filterSystem}
+                onChange={(e) => setFilterSystem(e.target.value)}
+                className={`${selectClass} min-w-[200px]`}
+              >
+                <option value="">All</option>
+                {filterOptions.systems.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Deliverable:</span>
+              <select
+                value={filterDeliverable}
+                onChange={(e) => setFilterDeliverable(e.target.value)}
+                className={`${selectClass} min-w-[180px]`}
+              >
+                <option value="">All</option>
+                {filterOptions.deliverables.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Activity:</span>
+              <select
+                value={filterActivity}
+                onChange={(e) => setFilterActivity(e.target.value)}
+                className={`${selectClass} min-w-[180px]`}
+              >
+                <option value="">All</option>
+                {filterOptions.activities.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-          {isFiltered && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+          <div className="flex flex-wrap gap-4 items-center">
+            <label className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Budget (h):</span>
+              <select
+                value={filterBudget}
+                onChange={(e) => setFilterBudget(e.target.value as HourBucket)}
+                className={`${selectClass} min-w-[160px]`}
+              >
+                <option value="">All</option>
+                <option value="zero">Zero (0 h)</option>
+                <option value="gt0_lte24">&gt; 0 to 24 h</option>
+                <option value="gt24_lte100">&gt; 24 to 100 h</option>
+                <option value="gt100">&gt; 100 h</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Actual (h):</span>
+              <select
+                value={filterActual}
+                onChange={(e) => setFilterActual(e.target.value as HourBucket)}
+                className={`${selectClass} min-w-[160px]`}
+              >
+                <option value="">All</option>
+                <option value="zero">Zero (0 h)</option>
+                <option value="gt0_lte24">&gt; 0 to 24 h</option>
+                <option value="gt24_lte100">&gt; 24 to 100 h</option>
+                <option value="gt100">&gt; 100 h</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Var (h):</span>
+              <select
+                value={filterVariance}
+                onChange={(e) => setFilterVariance(e.target.value as VarianceBucket)}
+                className={`${selectClass} min-w-[200px]`}
+              >
+                <option value="">All</option>
+                <option value="zero">Zero</option>
+                <option value="over">Over budget (&lt; 0)</option>
+                <option value="under">Under budget (&gt; 0)</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Budget %:</span>
+              <select
+                value={filterPct}
+                onChange={(e) => setFilterPct(e.target.value as PctBucket)}
+                className={`${selectClass} min-w-[180px]`}
+              >
+                <option value="">All</option>
+                <option value="na">— (no budget)</option>
+                <option value="zero">0%</option>
+                <option value="r0_50">1% to 50%</option>
+                <option value="r50_100">51% to 100%</option>
+                <option value="gt100">&gt; 100%</option>
+              </select>
+            </label>
+          </div>
+          {hasActiveFilters && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Showing {sortedRows.length} of {data!.rows.length} rows
             </p>
           )}
         </div>
       )}
 
-      {hasRows && isFiltered && sortedRows.length === 0 && (
+      {hasRows && hasActiveFilters && sortedRows.length === 0 && (
         <p className="text-sm text-gray-500 dark:text-gray-400 py-6">No rows match your filter.</p>
       )}
 
@@ -408,7 +587,7 @@ export default function ProjectBudgetMatrix({
             </thead>
             <tbody>
               {sortedRows.map((r) => {
-                const pct = r.budgetedHours > 0 ? (r.actualHours / r.budgetedHours) * 100 : null
+                const pct = rowBudgetPct(r)
                 const varCls =
                   r.budgetedHours > 0
                     ? r.variance < 0
@@ -431,7 +610,7 @@ export default function ProjectBudgetMatrix({
               })}
               <tr className="font-semibold bg-gray-50 dark:bg-gray-900/40 border-t-2 border-gray-200 dark:border-gray-600">
                 <td className="py-3 pr-4" colSpan={3}>
-                  {isFiltered ? 'Totals (visible rows)' : 'Totals (matrix rows)'}
+                  {hasActiveFilters ? 'Totals (visible rows)' : 'Totals (matrix rows)'}
                 </td>
                 <td className="text-right py-3 px-2 tabular-nums">{formatHours(visibleTotals.budgetedHours)}</td>
                 <td className="text-right py-3 px-2 tabular-nums">{formatHours(visibleTotals.actualHoursInMatrix)}</td>
