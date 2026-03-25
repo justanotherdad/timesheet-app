@@ -1,6 +1,7 @@
 import { APPROVAL_PARTICIPANT_ROLES } from '@/lib/approval-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
+import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
 import { NextResponse } from 'next/server'
@@ -64,20 +65,27 @@ export async function POST(
     // Next approver is first in chain who hasn't signed; admins can always approve (treated as final)
     const nextApproverId = chain.find((uid) => !signedIds.includes(uid))
     const isAdmin = ['admin', 'super_admin'].includes(user.profile.role)
-    let canApprove = isAdmin || (nextApproverId !== undefined && nextApproverId === user.id)
+    const today = getCalendarDateStringInAppTimezone()
 
-    if (!canApprove && nextApproverId) {
-      const today = getCalendarDateStringInAppTimezone()
-      const { data: activeDelegation } = await adminSupabase
-        .from('approval_delegations')
-        .select('id')
-        .eq('delegator_id', nextApproverId)
-        .eq('delegate_id', user.id)
-        .lte('start_date', today)
-        .gte('end_date', today)
-        .limit(1)
-        .maybeSingle()
-      canApprove = !!activeDelegation
+    let canApprove = false
+    if (isAdmin) {
+      canApprove = true
+    } else if (nextApproverId !== undefined) {
+      if (nextApproverId === user.id) {
+        const delegatedAway = await hasActiveOutgoingDelegation(adminSupabase, user.id, today)
+        canApprove = !delegatedAway
+      } else {
+        const { data: activeDelegation } = await adminSupabase
+          .from('approval_delegations')
+          .select('id')
+          .eq('delegator_id', nextApproverId)
+          .eq('delegate_id', user.id)
+          .lte('start_date', today)
+          .gte('end_date', today)
+          .limit(1)
+          .maybeSingle()
+        canApprove = !!activeDelegation
+      }
     }
 
     if (!canApprove) {

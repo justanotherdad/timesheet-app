@@ -7,6 +7,7 @@ import { formatWeekEnding, getWeekDates, formatDateTimeInEastern, getCalendarDat
 import { format } from 'date-fns'
 import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
+import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
 import Header from '@/components/Header'
 
@@ -126,6 +127,39 @@ export default async function TimesheetDetailPage({
   } else if (['admin', 'super_admin'].includes(user.profile.role)) {
     canApprove = true
   }
+
+  if (
+    canApprove &&
+    timesheet.user_id !== user.id &&
+    !['admin', 'super_admin'].includes(user.profile.role) &&
+    timesheet.status === 'submitted'
+  ) {
+    const ownerForChain = await withQueryTimeout(() =>
+      adminSupabase
+        .from('user_profiles')
+        .select('reports_to_id, supervisor_id, manager_id, final_approver_id')
+        .eq('id', timesheet.user_id)
+        .single()
+    )
+    const ownerProfile = ownerForChain.data as {
+      reports_to_id?: string
+      supervisor_id?: string
+      manager_id?: string
+      final_approver_id?: string
+    } | null
+    const chain = buildApprovalChain(ownerProfile)
+    const signedIds = new Set(signatures.map((s: { signer_id: string }) => s.signer_id))
+    const nextId = chain.find((uid) => !signedIds.has(uid))
+    const today = getCalendarDateStringInAppTimezone()
+    if (nextId === user.id && (await hasActiveOutgoingDelegation(adminSupabase, user.id, today))) {
+      canApprove = false
+    }
+  }
+
+  const canShowApproverActions =
+    canApprove &&
+    (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) ||
+      (user.profile.role === 'employee' && timesheet.user_id !== user.id))
 
   // Budget access: Admin/Super Admin see all POs; others need po_budget_access grant
   const isAdminOrAbove = ['admin', 'super_admin'].includes(user.profile.role)
@@ -434,7 +468,7 @@ export default async function TimesheetDetailPage({
               </div>
             )}
 
-            {timesheet.status === 'submitted' && timesheet.rejection_reason && canApprove && (
+            {timesheet.status === 'submitted' && timesheet.rejection_reason && canShowApproverActions && (
               <div className="border-t pt-6 mt-6">
                 <div className="p-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -476,7 +510,7 @@ export default async function TimesheetDetailPage({
                   Edit & resubmit
                 </Link>
               )}
-              {timesheet.status === 'submitted' && canApprove && ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+              {timesheet.status === 'submitted' && canShowApproverActions && (
                 <>
                   <form action={`/dashboard/approvals/${timesheet.id}/approve`} method="post" className="inline">
                     <button
@@ -496,7 +530,7 @@ export default async function TimesheetDetailPage({
                   </Link>
                 </>
               )}
-              {timesheet.status === 'approved' && canApprove && ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+              {timesheet.status === 'approved' && canShowApproverActions && (
                 <Link
                   href={`/dashboard/approvals/${timesheet.id}/reject-form`}
                   className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 gap-2 bg-red-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-red-700 transition-colors"

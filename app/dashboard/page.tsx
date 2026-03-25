@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
+import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import Link from 'next/link'
 import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList, FileBarChart } from 'lucide-react'
 import { formatWeekEnding, formatDate, getCalendarDateStringInAppTimezone } from '@/lib/utils'
@@ -72,6 +73,7 @@ export default async function DashboardPage() {
   const delegatorIds = [...new Set((delegationRows || []).map((r: { delegator_id: string }) => r.delegator_id))]
   hasActiveDelegationAsDelegate = delegatorIds.length > 0
   const delegatedByIds = new Set(delegatorIds)
+  const hasOutgoingDelegation = await hasActiveOutgoingDelegation(adminSupabase, user.id, today)
   if (delegatorIds.length > 0) {
     const seen = new Set(reports.map((r) => r.id))
     for (const delegatorId of delegatorIds) {
@@ -128,6 +130,9 @@ export default async function DashboardPage() {
       if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
       const signedIds = signedByTimesheet[ts.id] || new Set<string>()
       const nextId = chain.find((uid) => !signedIds.has(uid))
+      if (nextId === user.id && hasOutgoingDelegation) {
+        return false
+      }
       return nextId === user.id || (nextId != null && delegatedByIds.has(nextId))
     })
     pendingApprovals = allPendingForUser.slice(0, 5)

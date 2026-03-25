@@ -1,6 +1,7 @@
 import { APPROVAL_PARTICIPANT_ROLES } from '@/lib/approval-access'
 import { requireRole } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
@@ -37,6 +38,7 @@ export default async function ApprovalsPage(props: { searchParams: Promise<Searc
     .gte('end_date', today)
   const delegatorIds = [...new Set((delegationRows || []).map((r: any) => r.delegator_id))]
   const delegatedByIds = new Set(delegatorIds)
+  const hasOutgoingDelegation = await hasActiveOutgoingDelegation(adminSupabase, user.id, today)
   if (delegatorIds.length > 0) {
     const seen = new Set(reports.map((r) => r.id))
     for (const delegatorId of delegatorIds) {
@@ -108,6 +110,9 @@ export default async function ApprovalsPage(props: { searchParams: Promise<Searc
       if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
       const signedIds = signedByTimesheet[ts.id] || new Set<string>()
       const nextId = chain.find((uid) => !signedIds.has(uid))
+      if (nextId === user.id && hasOutgoingDelegation) {
+        return false
+      }
       return nextId === user.id || (nextId && delegatedByIds.has(nextId))
     })
   }
