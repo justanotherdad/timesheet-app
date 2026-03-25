@@ -1,5 +1,6 @@
 import { requireRole } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 import PendingApprovalsClient from './PendingApprovalsClient'
@@ -26,7 +27,7 @@ export default async function ApprovalsPage(props: { searchParams: Promise<Searc
 
   let reports = (reportsResult.data || []) as Array<{ id: string }>
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getCalendarDateStringInAppTimezone()
   const { data: delegationRows } = await adminSupabase
     .from('approval_delegations')
     .select('delegator_id')

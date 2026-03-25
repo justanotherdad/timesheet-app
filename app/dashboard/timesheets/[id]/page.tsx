@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import POLinkWithBalanceTooltip from '@/components/timesheet/POLinkWithBalanceTooltip'
-import { formatWeekEnding, getWeekDates, formatDateTimeInEastern } from '@/lib/utils'
+import { formatWeekEnding, getWeekDates, formatDateTimeInEastern, getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { format } from 'date-fns'
 import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
@@ -102,7 +102,7 @@ export default async function TimesheetDetailPage({
       owner?.final_approver_id === user.id
     if (!isApprover) {
       const approverIds = buildApprovalChain(owner)
-      const today = new Date().toISOString().slice(0, 10)
+      const today = getCalendarDateStringInAppTimezone()
       for (const approverId of approverIds) {
         const { data: activeDelegation } = await adminSupabase
           .from('approval_delegations')

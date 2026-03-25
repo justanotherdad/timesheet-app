@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import { formatDate, getCalendarDateStringInAppTimezone } from '@/lib/utils'
 
 interface Delegation {
   id: string
@@ -97,7 +97,7 @@ export default function DelegationManager() {
     }
   }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getCalendarDateStringInAppTimezone()
 
   const statusBadge = (d: Delegation) => {
     if (d.end_date < today) return <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300">Expired</span>
@@ -110,7 +110,7 @@ export default function DelegationManager() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-600 dark:text-gray-400">
-        Delegate your timesheet approval responsibility to another person for a specified period. During that time, they can approve (and reject) timesheets on your behalf. After the end date, the delegation automatically expires.
+        Delegate your timesheet approval responsibility to another person for a specified period. During that time, they can approve (and reject) timesheets on your behalf. After the end date, the delegation automatically expires. Active dates use US Eastern time for “today” (not UTC), and are independent of a timesheet’s week ending.
       </p>
 
       {error && (

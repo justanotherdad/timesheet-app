@@ -4,6 +4,25 @@ import { startOfWeek, endOfWeek, format, parseISO, addWeeks, subWeeks } from "da
 
 const APP_TIMEZONE = 'America/New_York' // EST/EDT
 
+/**
+ * Calendar date YYYY-MM-DD in APP_TIMEZONE (not UTC).
+ * Use for delegation windows and any "business today" comparison; avoids evening US times
+ * where UTC `toISOString().slice(0,10)` is already the next calendar day.
+ */
+export function getCalendarDateStringInAppTimezone(date: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: APP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const y = parts.find((p) => p.type === 'year')?.value
+  const m = parts.find((p) => p.type === 'month')?.value
+  const d = parts.find((p) => p.type === 'day')?.value
+  if (!y || !m || !d) return date.toISOString().slice(0, 10)
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
 /** Format date in Eastern using Intl (for signatures, exports). */
 function formatInEastern(d: Date, options: Intl.DateTimeFormatOptions): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: APP_TIMEZONE, ...options }).format(d)

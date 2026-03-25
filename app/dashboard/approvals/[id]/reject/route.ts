@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
+import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
 import { NextResponse } from 'next/server'
 
@@ -37,7 +38,7 @@ export async function POST(
 
     if (!canReject) {
       const approverIds = buildApprovalChain(ownerProfile)
-      const today = new Date().toISOString().slice(0, 10)
+      const today = getCalendarDateStringInAppTimezone()
       for (const approverId of approverIds) {
         const { data: activeDelegation } = await adminSupabase
           .from('approval_delegations')
