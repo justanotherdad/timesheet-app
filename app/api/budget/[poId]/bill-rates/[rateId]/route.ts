@@ -20,9 +20,49 @@ export async function PATCH(
   }
 
   const body = await req.json()
-  const updates: Record<string, any> = {}
+
+  const { data: existing, error: existingErr } = await supabase
+    .from('po_bill_rates')
+    .select('id, effective_from_date, effective_to_date')
+    .eq('id', rateId)
+    .eq('po_id', poId)
+    .maybeSingle()
+
+  if (existingErr || !existing) {
+    return NextResponse.json({ error: 'Bill rate not found' }, { status: 404 })
+  }
+
+  const updates: Record<string, unknown> = {}
   if (body.rate != null) updates.rate = parseFloat(String(body.rate))
   if (body.effective_from_date != null) updates.effective_from_date = body.effective_from_date
+
+  if (body.effective_to_date !== undefined) {
+    const raw = body.effective_to_date
+    if (raw === null || raw === '') {
+      updates.effective_to_date = null
+    } else {
+      updates.effective_to_date = String(raw).slice(0, 10)
+    }
+  }
+
+  const finalFrom = String(
+    (updates.effective_from_date as string | undefined) ?? existing.effective_from_date ?? ''
+  ).slice(0, 10)
+  const finalTo =
+    updates.effective_to_date !== undefined
+      ? updates.effective_to_date === null
+        ? null
+        : String(updates.effective_to_date).slice(0, 10)
+      : existing.effective_to_date != null && existing.effective_to_date !== ''
+        ? String(existing.effective_to_date).slice(0, 10)
+        : null
+
+  if (finalTo != null && finalTo !== '' && finalFrom && finalTo < finalFrom) {
+    return NextResponse.json(
+      { error: 'effective_to_date must be on or after effective_from_date' },
+      { status: 400 }
+    )
+  }
 
   const { data, error } = await supabase
     .from('po_bill_rates')

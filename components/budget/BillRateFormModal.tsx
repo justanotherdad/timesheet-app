@@ -32,20 +32,31 @@ export default function BillRateFormModal({ poId, rate, users: usersProp, onSave
     user_id: rate?.user_id || '',
     rate: rate?.rate != null ? String(rate.rate) : '',
     effective_from_date: rate?.effective_from_date ? formatDateForInput(rate.effective_from_date) : formatDateForInput(new Date()),
+    effective_to_date: rate?.effective_to_date ? formatDateForInput(rate.effective_to_date) : '',
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    const toTrim = form.effective_to_date.trim()
+    if (toTrim && form.effective_from_date && toTrim < form.effective_from_date) {
+      setError('Effective to date must be on or after effective from date.')
+      return
+    }
     setLoading(true)
     try {
       const url = isEdit ? `/api/budget/${poId}/bill-rates/${rate.id}` : `/api/budget/${poId}/bill-rates`
       const method = isEdit ? 'PATCH' : 'POST'
-      const body: any = {
+      const body: Record<string, unknown> = {
         rate: parseFloat(String(form.rate)),
         effective_from_date: form.effective_from_date,
       }
       if (!isEdit) body.user_id = form.user_id
+      if (isEdit) {
+        body.effective_to_date = toTrim === '' ? null : toTrim
+      } else if (toTrim) {
+        body.effective_to_date = toTrim
+      }
 
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!res.ok) {
@@ -96,6 +107,17 @@ export default function BillRateFormModal({ poId, rate, users: usersProp, onSave
             <label className="block text-sm font-medium mb-1">Effective From Date *</label>
             <input type="date" value={form.effective_from_date} onChange={(e) => setForm({ ...form, effective_from_date: e.target.value })} required className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
             <p className="text-xs text-gray-500 mt-1">Historical data uses the rate that was effective at that time.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Effective To Date</label>
+            <input
+              type="date"
+              value={form.effective_to_date}
+              min={form.effective_from_date || undefined}
+              onChange={(e) => setForm({ ...form, effective_to_date: e.target.value })}
+              className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
+            <p className="text-xs text-gray-500 mt-1">Optional. Leave blank while the assignment is ongoing. Use Remove from PO to require an end date when offboarding.</p>
           </div>
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={loading} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">

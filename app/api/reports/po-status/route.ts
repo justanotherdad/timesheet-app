@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
+import { pickEffectiveRateForWeek } from '@/lib/po-bill-rate-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,7 +78,10 @@ export async function GET(req: Request) {
     })
   })
 
-  const { data: billRates } = await adminSupabase.from('po_bill_rates').select('po_id, user_id, rate, effective_from_date').in('po_id', poIds)
+  const { data: billRates } = await adminSupabase
+    .from('po_bill_rates')
+    .select('po_id, user_id, rate, effective_from_date, effective_to_date')
+    .in('po_id', poIds)
   const { data: entries } = await adminSupabase.from('timesheet_entries').select('po_id, timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours').in('po_id', poIds)
   const tsIds = [...new Set((entries || []).map((e: any) => e.timesheet_id).filter(Boolean))]
   const { data: timesheets } = tsIds.length > 0
@@ -85,9 +89,8 @@ export async function GET(req: Request) {
     : { data: [] }
 
   const getEffectiveRate = (poId: string, userId: string, dateStr: string) => {
-    const rates = (billRates || []).filter((br: any) => br.po_id === poId && br.user_id === userId && (br.effective_from_date || '') <= dateStr)
-      .sort((a: any, b: any) => (b.effective_from_date || '').localeCompare(a.effective_from_date || ''))
-    return rates[0]?.rate ?? 0
+    const rates = (billRates || []).filter((br: any) => br.po_id === poId && br.user_id === userId)
+    return pickEffectiveRateForWeek(rates, dateStr)
   }
 
   const tsMap = (timesheets || []).reduce((acc: Record<string, any>, t: any) => { acc[t.id] = t; return acc }, {})

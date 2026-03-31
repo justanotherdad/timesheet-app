@@ -68,30 +68,40 @@ export async function POST(
   }
 
   const body = await req.json()
-  const { user_id, rate, effective_from_date } = body
+  const { user_id, rate, effective_from_date, effective_to_date } = body
 
   if (!user_id || rate == null || !effective_from_date) {
     return NextResponse.json({ error: 'user_id, rate, and effective_from_date are required' }, { status: 400 })
   }
 
+  const fromStr = String(effective_from_date).slice(0, 10)
+  const toStr = effective_to_date != null && effective_to_date !== '' ? String(effective_to_date).slice(0, 10) : null
+  if (toStr && toStr < fromStr) {
+    return NextResponse.json({ error: 'effective_to_date must be on or after effective_from_date' }, { status: 400 })
+  }
+
   const db = getDb(supabase)
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     po_id: poId,
     user_id,
     rate: parseFloat(String(rate)),
-    effective_from_date,
+    effective_from_date: fromStr,
   }
+  if (toStr) payload.effective_to_date = toStr
 
   let result = await db.from('po_bill_rates').insert(payload).select('*').single()
 
   if (result.error && (result.error.code === '23505' || result.error.message?.includes('duplicate key'))) {
     const updateRes = await db
       .from('po_bill_rates')
-      .update({ rate: payload.rate })
+      .update({
+        rate: payload.rate,
+        ...(toStr ? { effective_to_date: toStr } : { effective_to_date: null }),
+      })
       .eq('po_id', poId)
       .eq('user_id', user_id)
-      .eq('effective_from_date', effective_from_date)
+      .eq('effective_from_date', fromStr)
       .select('*')
       .single()
     if (!updateRes.error) return NextResponse.json(updateRes.data)

@@ -1,11 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { withQueryTimeout } from '@/lib/timeout'
+import { billRateIsActiveOnDate } from '@/lib/po-bill-rate-utils'
 
-/** Distinct PO ids where this user has any bill rate row (Bill Rates by Person). */
+/** Distinct PO ids where this user has an active bill rate (not ended before today). */
 export async function getBillRatePoIdsForUser(admin: SupabaseClient, userId: string): Promise<string[]> {
-  const { data, error } = await admin.from('po_bill_rates').select('po_id').eq('user_id', userId)
+  const { data, error } = await admin
+    .from('po_bill_rates')
+    .select('po_id,effective_from_date,effective_to_date')
+    .eq('user_id', userId)
   if (error || !data) return []
-  return [...new Set(data.map((r: { po_id: string }) => r.po_id).filter(Boolean))]
+  const today = new Date().toISOString().slice(0, 10)
+  const ids = new Set<string>()
+  for (const r of data as { po_id: string; effective_from_date?: string | null; effective_to_date?: string | null }[]) {
+    if (r.po_id && billRateIsActiveOnDate(r, today)) ids.add(r.po_id)
+  }
+  return [...ids]
 }
 
 export type BillRatePoSummaryRow = {
@@ -67,13 +76,22 @@ export async function getBillRatePoSummaryByUserIds(
   })
   if (userIds.length === 0) return {}
 
-  const { data: brRows } = await admin.from('po_bill_rates').select('user_id, po_id').in('user_id', userIds)
+  const { data: brRows } = await admin
+    .from('po_bill_rates')
+    .select('user_id, po_id, effective_from_date, effective_to_date')
+    .in('user_id', userIds)
   if (!brRows?.length) return empty
 
+  const today = new Date().toISOString().slice(0, 10)
   const byUser: Record<string, Set<string>> = {}
   for (const uid of userIds) byUser[uid] = new Set()
-  for (const r of brRows as { user_id: string; po_id: string }[]) {
-    byUser[r.user_id]?.add(r.po_id)
+  for (const r of brRows as {
+    user_id: string
+    po_id: string
+    effective_from_date?: string | null
+    effective_to_date?: string | null
+  }[]) {
+    if (billRateIsActiveOnDate(r, today)) byUser[r.user_id]?.add(r.po_id)
   }
 
   const allPoIds = [...new Set((brRows as { po_id: string }[]).map((r) => r.po_id).filter(Boolean))]

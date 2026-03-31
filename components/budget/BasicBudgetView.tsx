@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText, Eye, PowerOff } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, UserMinus, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText, Eye, PowerOff } from 'lucide-react'
+import { pickEffectiveRateForWeek } from '@/lib/po-bill-rate-utils'
 import {
   formatDate,
   formatDateShort,
@@ -17,6 +18,7 @@ import { addWeeks, parseISO } from 'date-fns'
 import InvoiceFormModal from './InvoiceFormModal'
 import ExpenseFormModal from './ExpenseFormModal'
 import BillRateFormModal from './BillRateFormModal'
+import BillRateRemoveModal from './BillRateRemoveModal'
 
 const ATTACHMENT_ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 
@@ -88,6 +90,7 @@ export default function BasicBudgetView({
   const [invoiceModal, setInvoiceModal] = useState<any>(null)
   const [expenseModal, setExpenseModal] = useState<any>(null)
   const [billRateModal, setBillRateModal] = useState<any>(null)
+  const [billRateRemoveModal, setBillRateRemoveModal] = useState<any>(null)
   const [billableSortColumn, setBillableSortColumn] = useState<string>('employee')
   const [billableSortDir, setBillableSortDir] = useState<'asc' | 'desc'>('asc')
   const [laborCostData, setLaborCostData] = useState<any>(null)
@@ -398,10 +401,8 @@ export default function BasicBudgetView({
   const runningBalance = totalBudget - invoiceTotal
 
   const getEffectiveRate = (userId: string, dateStr: string) => {
-    const userRates = (billRatesRaw || [])
-      .filter((br: any) => br.user_id === userId && (br.effective_from_date || '') <= dateStr)
-      .sort((a: any, b: any) => (b.effective_from_date || '').localeCompare(a.effective_from_date || ''))
-    return userRates[0]?.rate ?? 0
+    const userRows = (billRatesRaw || []).filter((br: any) => br.user_id === userId)
+    return pickEffectiveRateForWeek(userRows, dateStr)
   }
 
   let laborCost = 0
@@ -1864,7 +1865,9 @@ export default function BasicBudgetView({
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Bill Rates by Person</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Rates can change over time; effective date indicates when each rate applies.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Rates can change over time. Use <span className="font-medium">Remove from PO</span> when offboarding—an end date is required there; add/edit does not require one.
+            </p>
           </div>
           <button type="button" onClick={() => setBillRateModal({})} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">
             <Plus className="h-4 w-4" /> Add Bill Rate
@@ -1875,23 +1878,42 @@ export default function BasicBudgetView({
             <tr className="border-b border-gray-200 dark:border-gray-600">
               <th className="text-left py-2 font-medium">Employee</th>
               <th className="text-left py-2 font-medium">Effective From</th>
+              <th className="text-left py-2 font-medium">Effective To</th>
               <th className="text-right py-2 font-medium">Rate ($/hr)</th>
-              <th className="w-20 py-2"></th>
+              <th className="w-28 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {billRates.length === 0 ? (
-              <tr><td colSpan={4} className="py-4 text-center text-gray-500">No bill rates defined</td></tr>
+              <tr><td colSpan={5} className="py-4 text-center text-gray-500">No bill rates defined</td></tr>
             ) : (
               billRates.map((br: any) => (
                 <tr key={br.id} className="border-b border-gray-100 dark:border-gray-700">
                   <td className="py-2">{br.user_profiles?.name || 'Unknown'}</td>
                   <td className="py-2">{br.effective_from_date ? formatDate(br.effective_from_date) : '—'}</td>
+                  <td className="py-2">
+                    {br.effective_to_date ? (
+                      <span>{formatDate(br.effective_to_date)}</span>
+                    ) : (
+                      <span className="text-gray-400 dark:text-gray-500">—</span>
+                    )}
+                  </td>
                   <td className="text-right py-2">${(br.rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2">
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-1 flex-wrap justify-end">
                       <button type="button" onClick={() => setBillRateModal(br)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Edit"><Pencil className="h-4 w-4" /></button>
-                      <button type="button" onClick={async () => { if (confirm('Delete this bill rate?')) { await fetch(`/api/budget/${po.id}/bill-rates/${br.id}`, { method: 'DELETE' }); refetch() } }} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                      {br.effective_to_date ? (
+                        <span className="text-xs text-gray-500 dark:text-gray-400 px-1">Ended</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setBillRateRemoveModal(br)}
+                          className="p-1.5 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded"
+                          title="Remove from PO (set end date)"
+                        >
+                          <UserMinus className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -1927,6 +1949,14 @@ export default function BasicBudgetView({
           users={users}
           onSave={refetch}
           onClose={() => setBillRateModal(null)}
+        />
+      )}
+      {billRateRemoveModal && (
+        <BillRateRemoveModal
+          poId={po.id}
+          rate={billRateRemoveModal}
+          onSave={refetch}
+          onClose={() => setBillRateRemoveModal(null)}
         />
       )}
 

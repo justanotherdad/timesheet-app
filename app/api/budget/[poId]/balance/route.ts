@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
+import { pickEffectiveRateForWeek } from '@/lib/po-bill-rate-utils'
 
 /** Syncs po_balance from running balance and returns balance + budget_balance */
 export async function GET(
@@ -48,7 +49,7 @@ export async function GET(
 
   const { data: billRates } = await supabase
     .from('po_bill_rates')
-    .select('user_id, rate, effective_from_date')
+    .select('user_id, rate, effective_from_date, effective_to_date')
     .eq('po_id', poId)
     .order('effective_from_date', { ascending: false })
 
@@ -93,10 +94,8 @@ export async function GET(
   }
 
   const getEffectiveRate = (userId: string, dateStr: string) => {
-    const userRates = (billRates || [])
-      .filter((br: any) => br.user_id === userId && (br.effective_from_date || '') <= dateStr)
-      .sort((a: any, b: any) => (b.effective_from_date || '').localeCompare(a.effective_from_date || ''))
-    return userRates[0]?.rate ?? 0
+    const userRows = (billRates || []).filter((br: any) => br.user_id === userId)
+    return pickEffectiveRateForWeek(userRows, dateStr)
   }
 
   const laborCostByUser: Record<string, number> = {}
