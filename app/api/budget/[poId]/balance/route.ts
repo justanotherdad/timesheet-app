@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 
@@ -51,14 +52,23 @@ export async function GET(
     .eq('po_id', poId)
     .order('effective_from_date', { ascending: false })
 
-  const { data: entries } = await supabase
+  // Use admin client for timesheet rows so Budget Balance matches billable-hours / UI.
+  // RLS on timesheet_entries would otherwise hide other employees' rows for grantees.
+  let dbLabor = supabase
+  try {
+    dbLabor = createAdminClient()
+  } catch {
+    // Service role key missing in env — fall back to user client (may be RLS-restricted).
+  }
+
+  const { data: entries } = await dbLabor
     .from('timesheet_entries')
     .select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
     .eq('po_id', poId)
 
   const tsIds = [...new Set((entries || []).map((e: any) => e.timesheet_id).filter(Boolean))]
   const { data: timesheets } = tsIds.length > 0
-    ? await supabase
+    ? await dbLabor
         .from('weekly_timesheets')
         .select('id, user_id, week_ending')
         .in('id', tsIds)

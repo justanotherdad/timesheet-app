@@ -197,7 +197,7 @@ export default function BasicBudgetView({
   }, [po.id, user])
 
   const loadBalance = useCallback(async () => {
-    if (!user || !['manager', 'admin', 'super_admin'].includes(user.profile.role)) return
+    if (!user) return
     try {
       const res = await fetch(`/api/budget/${po.id}/balance`, fetchOpts)
       if (res.ok) {
@@ -252,7 +252,7 @@ export default function BasicBudgetView({
     } else setBillRatesOverride(null)
     if (laborRes.ok) setLaborCostData(await laborRes.json())
     loadBudgetAccess()
-    if (user && ['manager', 'admin', 'super_admin'].includes(user.profile.role)) loadBalance()
+    if (user) loadBalance()
     await fetchAttachmentsList({ silent: true })
   }, [po.id, loadBudgetAccess, loadBalance, user, fetchOpts, fetchAttachmentsList])
 
@@ -302,7 +302,12 @@ export default function BasicBudgetView({
         const balRes = await fetch(`/api/budget/${po.id}/balance`, fetchOpts)
         if (balRes.ok) {
           const balJson = await balRes.json()
-          setBalanceData({ budgetBalance: balJson.budgetBalance ?? 0, lastTimesheetWe: balJson.lastTimesheetWe ?? null })
+          setBalanceData({
+            budgetBalance: balJson.budgetBalance ?? 0,
+            lastTimesheetWe: balJson.lastTimesheetWe ?? null,
+            totalAvailable: balJson.totalAvailable,
+            personnelLineItems: balJson.personnelLineItems ?? [],
+          })
         }
       } catch (e) {
         console.error(e)
