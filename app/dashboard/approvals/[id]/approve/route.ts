@@ -4,6 +4,7 @@ import { requireRole } from '@/lib/auth'
 import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
+import { nextApprovalConfirmationSequence } from '@/lib/timesheet-confirmation'
 import { NextResponse } from 'next/server'
 
 function getSafeReturnTo(request: Request, formData: FormData): string {
@@ -136,9 +137,11 @@ export async function POST(
       updated_at: new Date().toISOString(),
     }
     if (isFinalApproval) {
+      const prevSeq = (timesheet as { approval_confirmation_sequence?: number }).approval_confirmation_sequence
       updateData.status = 'approved'
       updateData.approved_by_id = user.id
       updateData.approved_at = new Date().toISOString()
+      updateData.approval_confirmation_sequence = nextApprovalConfirmationSequence(prevSeq)
     }
 
     const { error: updateError } = await adminSupabase

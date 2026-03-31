@@ -5,10 +5,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import Link from 'next/link'
-import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList, FileBarChart } from 'lucide-react'
+import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList, FileBarChart, ClipboardCheck } from 'lucide-react'
 import { formatWeekEnding, formatDate, getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
+import { loadCompanySettingsMap, parseConfirmationAssigneeIds } from '@/lib/timesheet-confirmation'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10 // Maximum duration for this route in seconds
@@ -139,6 +140,29 @@ export default async function DashboardPage() {
     pendingApprovalsCount = allPendingForUser.length
   }
 
+  let showTimesheetConfirmationsCard = false
+  let timesheetConfirmationsPending = 0
+  const settingsForConfirm = await loadCompanySettingsMap(adminSupabase)
+  const confirmationAssignees = parseConfirmationAssigneeIds(settingsForConfirm)
+  if (confirmationAssignees.length > 0 && confirmationAssignees.includes(user.id)) {
+    showTimesheetConfirmationsCard = true
+    const { data: confReceipts } = await adminSupabase
+      .from('timesheet_confirmation_receipts')
+      .select('timesheet_id, approval_sequence')
+      .eq('user_id', user.id)
+    const receiptKey = new Set((confReceipts || []).map((r) => `${r.timesheet_id}:${r.approval_sequence}`))
+    const { data: approvedForConfirm } = await adminSupabase
+      .from('weekly_timesheets')
+      .select('id, approval_confirmation_sequence')
+      .eq('status', 'approved')
+    for (const row of approvedForConfirm || []) {
+      const r = row as { id: string; approval_confirmation_sequence?: number }
+      const seq = r.approval_confirmation_sequence ?? 0
+      if (seq <= 0) continue
+      if (!receiptKey.has(`${r.id}:${seq}`)) timesheetConfirmationsPending += 1
+    }
+  }
+
   // Get approved timesheets from reports (for supervisors, managers, admins)
   let approvedTimesheets: any[] = []
   if (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
@@ -199,6 +223,32 @@ export default async function DashboardPage() {
               </div>
             </div>
           </Link>
+
+          {showTimesheetConfirmationsCard && (
+            <Link
+              href="/dashboard/timesheet-confirmations"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
+            >
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="bg-indigo-100 dark:bg-indigo-900/30 p-3 rounded-lg relative">
+                  <ClipboardCheck className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                  {timesheetConfirmationsPending > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold">
+                      {timesheetConfirmationsPending > 99 ? '99+' : timesheetConfirmationsPending}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Timesheet Confirmations</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {timesheetConfirmationsPending > 0
+                      ? `${timesheetConfirmationsPending} awaiting confirmation`
+                      : 'Confirm receipt of approved timesheets'}
+                  </p>
+                </div>
+              </div>
+            </Link>
+          )}
 
           {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
             <Link

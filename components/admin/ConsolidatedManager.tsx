@@ -81,20 +81,60 @@ export default function ConsolidatedManager({
   const [companyEmail, setCompanyEmail] = useState('')
   const [companyEmailSaving, setCompanyEmailSaving] = useState(false)
   const [companyEmailLoaded, setCompanyEmailLoaded] = useState(false)
+  const [confirmationUserIds, setConfirmationUserIds] = useState<string[]>([])
+  const [confirmationUsersList, setConfirmationUsersList] = useState<Array<{ id: string; name: string }>>([])
+  const [confirmationSaving, setConfirmationSaving] = useState(false)
   
   const supabase = createClient()
 
   useEffect(() => {
     if (activeTab === 'company-info' && !companyEmailLoaded) {
       fetch('/api/company-settings')
-        .then((res) => res.ok ? res.json() : ({} as { company_email?: string }))
+        .then((res) => res.ok ? res.json() : ({} as { company_email?: string; timesheet_confirmation_user_ids?: string[] }))
         .then((data) => {
           setCompanyEmail(data?.company_email ?? '')
+          const ids = data?.timesheet_confirmation_user_ids
+          setConfirmationUserIds(Array.isArray(ids) ? ids : [])
           setCompanyEmailLoaded(true)
         })
         .catch(() => setCompanyEmailLoaded(true))
     }
   }, [activeTab, companyEmailLoaded])
+
+  useEffect(() => {
+    if (activeTab === 'company-info' && isAdminOrAbove && confirmationUsersList.length === 0) {
+      fetch('/api/admin/users-for-select')
+        .then((res) => (res.ok ? res.json() : { users: [] }))
+        .then((body) => setConfirmationUsersList(Array.isArray(body?.users) ? body.users : []))
+        .catch(() => {})
+    }
+  }, [activeTab, isAdminOrAbove, confirmationUsersList.length])
+
+  const saveConfirmationAssignees = async (nextIds: string[]) => {
+    setConfirmationSaving(true)
+    try {
+      const res = await fetch('/api/company-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timesheet_confirmation_user_ids: nextIds }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        const ids = json?.timesheet_confirmation_user_ids
+        setConfirmationUserIds(Array.isArray(ids) ? ids : [])
+      }
+    } finally {
+      setConfirmationSaving(false)
+    }
+  }
+
+  const toggleConfirmationUser = (id: string) => {
+    const next = confirmationUserIds.includes(id)
+      ? confirmationUserIds.filter((x) => x !== id)
+      : [...confirmationUserIds, id]
+    setConfirmationUserIds(next)
+    void saveConfirmationAssignees(next)
+  }
 
   const filteredDepartments = selectedSite 
     ? departments.filter(d => d.site_id === selectedSite)
@@ -905,6 +945,45 @@ export default function ConsolidatedManager({
               )}
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Editable by admins only.</p>
             </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 max-w-xl">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Timesheet Confirmation
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              People listed here see a <strong>Timesheet Confirmations</strong> area on the dashboard. Each must confirm
+              receipt of approved timesheets independently (per user). Editable by admins only.
+            </p>
+            {isAdminOrAbove ? (
+              <>
+                <div className="max-h-56 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-2 space-y-1">
+                  {confirmationUsersList.length === 0 ? (
+                    <p className="text-sm text-gray-500 py-2">Loading users…</p>
+                  ) : (
+                    confirmationUsersList.map((u) => (
+                      <label
+                        key={u.id}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={confirmationUserIds.includes(u.id)}
+                          onChange={() => toggleConfirmationUser(u.id)}
+                          className="rounded border-gray-300 dark:border-gray-600"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-gray-100">{u.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {confirmationSaving && <p className="text-xs text-gray-500 mt-2">Saving…</p>}
+              </>
+            ) : (
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {confirmationUserIds.length === 0 ? '—' : `${confirmationUserIds.length} user(s) assigned`}
+              </p>
+            )}
           </div>
         </div>
       )}

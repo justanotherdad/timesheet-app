@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import WeeklyTimesheetExport from '@/components/WeeklyTimesheetExport'
 import { formatWeekEnding } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
+import { loadCompanySettingsMap, parseConfirmationAssigneeIds } from '@/lib/timesheet-confirmation'
 import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
@@ -87,7 +88,11 @@ export default async function ExportTimesheetPage({
       owner?.manager_id === user.id ||
       owner?.final_approver_id === user.id
     if (!canView) {
-      redirect('/dashboard')
+      const settings = await loadCompanySettingsMap(adminSupabase)
+      const assignees = parseConfirmationAssigneeIds(settings)
+      if (!(timesheet.status === 'approved' && assignees.includes(user.id))) {
+        redirect('/dashboard')
+      }
     }
   }
 

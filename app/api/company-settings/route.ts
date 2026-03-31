@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/auth'
+import {
+  TIMESHEET_CONFIRMATION_USER_IDS_KEY,
+  parseConfirmationAssigneeIds,
+  stringifyConfirmationAssigneeIds,
+} from '@/lib/timesheet-confirmation'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +28,10 @@ export async function GET() {
   for (const row of data || []) {
     settings[row.key] = row.value ?? ''
   }
-  return NextResponse.json(settings)
+  return NextResponse.json({
+    ...settings,
+    timesheet_confirmation_user_ids: parseConfirmationAssigneeIds(settings),
+  })
 }
 
 /** PATCH: Update company settings (admin/super_admin only) */
@@ -40,6 +48,22 @@ export async function PATCH(req: Request) {
   if (typeof body.company_email === 'string') {
     updates.push({ key: 'company_email', value: body.company_email.trim() })
   }
+  if (body.timesheet_confirmation_user_ids !== undefined) {
+    const raw = body.timesheet_confirmation_user_ids
+    const ids = Array.isArray(raw)
+      ? raw
+      : typeof raw === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(raw) as unknown
+            } catch {
+              return []
+            }
+          })()
+        : []
+    const cleaned = [...new Set((ids as unknown[]).filter((x): x is string => typeof x === 'string' && x.length > 0))]
+    updates.push({ key: TIMESHEET_CONFIRMATION_USER_IDS_KEY, value: stringifyConfirmationAssigneeIds(cleaned) })
+  }
 
   for (const { key, value } of updates) {
     const { error } = await supabase
@@ -55,5 +79,8 @@ export async function PATCH(req: Request) {
   for (const row of data || []) {
     settings[row.key] = row.value ?? ''
   }
-  return NextResponse.json(settings)
+  return NextResponse.json({
+    ...settings,
+    timesheet_confirmation_user_ids: parseConfirmationAssigneeIds(settings),
+  })
 }

@@ -4,6 +4,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { nextApprovalConfirmationSequence } from '@/lib/timesheet-confirmation'
 
 /** Ordered approvers: first line (supervisor or reports-to) → manager → final. Exported for approve/delegate logic. */
 export function buildApprovalChain(profile: {
@@ -73,10 +74,11 @@ export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<b
       // Signature already exists (e.g. from parallel auto-approve or manual approve) - ensure status is updated
       const { data: current } = await adminSupabase
         .from('weekly_timesheets')
-        .select('status')
+        .select('status, approval_confirmation_sequence')
         .eq('id', timesheetId)
         .single()
       if (current?.status === 'submitted') {
+        const prevSeq = (current as { approval_confirmation_sequence?: number }).approval_confirmation_sequence
         const { error: updateError } = await adminSupabase
           .from('weekly_timesheets')
           .update({
@@ -84,6 +86,7 @@ export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<b
             approved_by_id: userId,
             approved_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            approval_confirmation_sequence: nextApprovalConfirmationSequence(prevSeq),
           })
           .eq('id', timesheetId)
         return !updateError
@@ -93,6 +96,7 @@ export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<b
     return false
   }
 
+  const prevSeq = (timesheet as { approval_confirmation_sequence?: number }).approval_confirmation_sequence
   const { error: updateError } = await adminSupabase
     .from('weekly_timesheets')
     .update({
@@ -100,6 +104,7 @@ export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<b
       approved_by_id: userId,
       approved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      approval_confirmation_sequence: nextApprovalConfirmationSequence(prevSeq),
     })
     .eq('id', timesheetId)
 

@@ -23,6 +23,8 @@ export interface WeeklyTimesheet {
   user_id: string
   week_ending: string // ISO date string (Sunday)
   week_starting: string // ISO date string (Monday)
+  /** Incremented each time status becomes approved (confirmations tie to this). */
+  approval_confirmation_sequence?: number
   status: 'draft' | 'submitted' | 'approved' | 'rejected'
   submitted_at?: string
   approved_by_id?: string

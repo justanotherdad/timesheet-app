@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Menu, BookOpen, Sun, Moon } from 'lucide-react'
+import { Menu, BookOpen, Sun, Moon, ClipboardCheck } from 'lucide-react'
 import GuideModal from './GuideModal'
 
 interface HeaderProps {
@@ -23,11 +23,35 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
   const [menuOpen, setMenuOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(true)
+  const [timesheetConfirmNav, setTimesheetConfirmNav] = useState<{ show: boolean; pending: number }>({
+    show: false,
+    pending: 0,
+  })
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setDarkMode(document.documentElement.classList.contains('dark'))
   }, [])
+
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    fetch('/api/timesheet-confirmations/nav', { credentials: 'include', cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : { showLink: false, pendingCount: 0 }))
+      .then((j) => {
+        if (cancelled) return
+        setTimesheetConfirmNav({
+          show: !!j.showLink,
+          pending: typeof j.pendingCount === 'number' ? j.pendingCount : 0,
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setTimesheetConfirmNav({ show: false, pending: 0 })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user])
 
   const toggleTheme = () => {
     const isDark = !document.documentElement.classList.contains('dark')
@@ -204,6 +228,23 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                       <Link href="/dashboard/timesheets" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                         My Timesheets
                       </Link>
+                      {timesheetConfirmNav.show && (
+                        <Link
+                          href="/dashboard/timesheet-confirmations"
+                          className="flex items-center justify-between gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          onClick={() => setMenuOpen(false)}
+                        >
+                          <span className="flex items-center gap-2">
+                            <ClipboardCheck className="h-4 w-4 shrink-0" />
+                            Timesheet Confirmations
+                          </span>
+                          {timesheetConfirmNav.pending > 0 && (
+                            <span className="min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold">
+                              {timesheetConfirmNav.pending > 99 ? '99+' : timesheetConfirmNav.pending}
+                            </span>
+                          )}
+                        </Link>
+                      )}
                       {canAccessPendingApprovals && (
                         <Link href="/dashboard/approvals" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Pending Approvals

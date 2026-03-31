@@ -9,6 +9,7 @@ import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
 import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
+import { parseConfirmationAssigneeIds, loadCompanySettingsMap } from '@/lib/timesheet-confirmation'
 import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
@@ -121,9 +122,16 @@ export default async function TimesheetDetailPage({
       }
     }
     if (!isApprover) {
-      redirect('/dashboard')
+      const settings = await loadCompanySettingsMap(adminSupabase)
+      const assignees = parseConfirmationAssigneeIds(settings)
+      const allowAsConfirmationAssignee =
+        timesheet.status === 'approved' && assignees.includes(user.id)
+      if (!allowAsConfirmationAssignee) {
+        redirect('/dashboard')
+      }
+    } else {
+      canApprove = true
     }
-    canApprove = true
   } else if (['admin', 'super_admin'].includes(user.profile.role)) {
     canApprove = true
   }
