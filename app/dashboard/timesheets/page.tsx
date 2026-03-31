@@ -48,33 +48,9 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
     timesheetsResult = await withQueryTimeout(() =>
       adminQuery.order('week_ending', { ascending: false }).order('created_at', { ascending: false })
     )
-  } else if (['supervisor', 'manager'].includes(user.profile.role)) {
-    // Users who have this user as reports_to, supervisor, manager, or final approver (skip-none: next in chain)
-    const reportsResult = await withQueryTimeout(() =>
-      supabase
-        .from('user_profiles')
-        .select('id')
-        .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`)
-    )
-    const reports = (reportsResult.data || []) as Array<{ id: string }>
-    const reportIds = reports.map(r => r.id)
-    const allUserIds = [user.id, ...reportIds]
-
-    // Use admin client so RLS does not block reading other users' timesheets (we already scoped to reports)
-    const adminSupabase = createAdminClient()
-    timesheetsResult = await withQueryTimeout(() =>
-      adminSupabase
-        .from('weekly_timesheets')
-        .select(`
-          *,
-          user_profiles!user_id(name, email)
-        `)
-        .in('user_id', allUserIds)
-        .order('week_ending', { ascending: false })
-        .order('created_at', { ascending: false })
-    )
   } else {
-    // Regular employees see only their own timesheets
+    // Non-admins (employee, supervisor, manager, etc.): only this user's timesheets.
+    // Approvers use /dashboard/approvals for others' submitted timesheets.
     timesheetsResult = await withQueryTimeout(() =>
       supabase
         .from('weekly_timesheets')
@@ -261,7 +237,7 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0 flex-1 space-y-1">
-                        {(['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)) && (
+                        {['admin', 'super_admin'].includes(user.profile.role) && (
                           <p className="font-medium text-gray-900 dark:text-gray-100 break-words">
                             {ts.user_profiles?.name || 'Unknown'}
                           </p>

@@ -105,7 +105,7 @@ export default function MyTimesheetsTable({
     }
   }
 
-  const showEmployee = ['admin', 'super_admin', 'supervisor', 'manager'].includes(user.profile.role)
+  const showEmployee = ['admin', 'super_admin'].includes(user.profile.role)
   const showWith = ['admin', 'super_admin'].includes(user.profile.role)
 
   return (

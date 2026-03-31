@@ -155,6 +155,10 @@ function GuideContent() {
         <p className="text-sm text-gray-700 dark:text-gray-300">
           Use the <strong>header menu</strong> and choose <strong>Log out</strong> (or the equivalent link).
         </p>
+        <h4 className="text-sm font-semibold mt-3 mb-1">Automatic logoff (idle)</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          If you are inactive (no mouse, keyboard, scroll, or touch) for <strong>one hour</strong>, the site signs you out and sends you to the login page. Activity resets the timer.
+        </p>
       </section>
 
       <section data-section="dashboard" className="scroll-mt-4">
@@ -167,7 +171,7 @@ function GuideContent() {
         <h4 className="text-sm font-semibold mt-3 mb-1">Everyone sees</h4>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
           <li><strong>New Timesheet</strong> – Start a new timesheet for the current week.</li>
-          <li><strong>My Timesheets</strong> – List of your timesheets (and, for supervisors/managers, timesheets of people who have you as their Supervisor, Manager, or Final Approver—including timesheets you have approved).</li>
+          <li><strong>My Timesheets</strong> – List of <strong>your</strong> timesheets only (every role except Admin/Super Admin). <strong>Admins</strong> see all timesheets here with filters. Supervisors and managers open others’ timesheets from <strong>Pending Approvals</strong> or <strong>Approved Timesheets</strong>.</li>
           <li><strong>Current Week</strong> – Quick view of this week’s timesheet (if one exists) with a link to view or create.</li>
         </ul>
         <h4 className="text-sm font-semibold mt-3 mb-1">Supervisors, Managers, Admins, and Super Admins also see</h4>
@@ -248,7 +252,7 @@ function GuideContent() {
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">3.8 Export PDF</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          From the timesheet <strong>detail</strong> page, use <strong>Export PDF</strong> (or <strong>Export</strong>) to download a PDF of that timesheet. Available to the timesheet owner, to supervisors/managers for their reports’ timesheets, and to Admins/Super Admins for any timesheet.
+          From the timesheet <strong>detail</strong> page, use <strong>Export PDF</strong> (or <strong>Export</strong>) to download a PDF of that timesheet. Available to the <strong>owner</strong>, to supervisors/managers who opened the timesheet from <strong>Pending Approvals</strong> or <strong>Approved Timesheets</strong>, and to Admins/Super Admins for any timesheet.
         </p>
       </section>
 
@@ -284,7 +288,7 @@ function GuideContent() {
         </ol>
         <h4 className="text-sm font-semibold mt-3 mb-1">4.4 Seeing approved timesheets</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Supervisors and managers can see timesheets they have approved via <strong>My Timesheets</strong> and the <strong>Approved Timesheets</strong> card on the Dashboard. Click <strong>Approved Timesheets</strong> to view and filter approved timesheets for your reports.
+          Supervisors and managers can see timesheets they have approved via the <strong>Approved Timesheets</strong> card on the Dashboard (not on <strong>My Timesheets</strong>, which lists only your own). Click <strong>Approved Timesheets</strong> to view and filter approved timesheets for your reports.
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">4.5 Clearing a rejection note (Admin/Super Admin only)</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -354,6 +358,9 @@ function GuideContent() {
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
           <strong>Managers, Supervisors, and Employees:</strong> Only POs where an Admin or Super Admin has <strong>granted them budget access</strong>. When granted, they see the full view (all timesheets, hours, expenses, invoices, etc.).
         </p>
+        <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+          <strong>Budget Balance</strong> on a PO uses total labor from <strong>all</strong> employees’ approved hours on that PO—the same figures for grantees as for admins.
+        </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">7.2 Opening Budget Detail</h4>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
           <li>From the <strong>Dashboard</strong>, click <strong>Budget Detail</strong>.</li>
@@ -400,7 +407,7 @@ function GuideContent() {
             <tbody className="text-gray-700 dark:text-gray-300">
               <tr><td className="border px-2 py-1">Dashboard</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
               <tr><td className="border px-2 py-1">New Timesheet</td><td className="border px-2 py-1">✓ (own)</td><td className="border px-2 py-1">✓ (own)</td><td className="border px-2 py-1">✓ (own)</td><td className="border px-2 py-1">✓ (own)</td><td className="border px-2 py-1">✓ (own)</td></tr>
-              <tr><td className="border px-2 py-1">My Timesheets</td><td className="border px-2 py-1">Own only</td><td className="border px-2 py-1">Own + reports</td><td className="border px-2 py-1">Own + reports</td><td className="border px-2 py-1">All</td><td className="border px-2 py-1">All</td></tr>
+              <tr><td className="border px-2 py-1">My Timesheets</td><td className="border px-2 py-1">Own only</td><td className="border px-2 py-1">Own only</td><td className="border px-2 py-1">Own only</td><td className="border px-2 py-1">All</td><td className="border px-2 py-1">All</td></tr>
               <tr><td className="border px-2 py-1">Copy Previous Week</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
               <tr><td className="border px-2 py-1">Edit/Delete own (draft)</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
               <tr><td className="border px-2 py-1">Edit any timesheet</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>

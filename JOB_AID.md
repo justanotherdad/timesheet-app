@@ -44,6 +44,10 @@ If an admin or manager sent you an **invitation link** (e.g. to set your passwor
 
 - Use the **header menu** and choose **Log out** (or the equivalent link).
 
+### Automatic logoff (idle)
+
+- If you are inactive (no mouse, keyboard, scroll, or touch) for **one hour**, the site signs you out and sends you to the login page. Activity resets the timer.
+
 ---
 
 ## 2. Dashboard Overview
@@ -53,7 +57,7 @@ After login, you see the **Timesheet Dashboard**. The cards and links you see de
 ### Everyone sees
 
 - **New Timesheet** – Start a new timesheet for the current week.
-- **My Timesheets** – List of your timesheets (and, for supervisors/managers, timesheets of people who have you as their Supervisor, Manager, or Final Approver).
+- **My Timesheets** – List of **your** timesheets only (every role except Admin/Super Admin). **Admins** see all timesheets here with filters. Supervisors and managers use **Pending Approvals** and **Approved Timesheets** to open others’ timesheets.
 - **Current Week** – Quick view of this week’s timesheet (if one exists) with a link to view or create.
 
 ### Supervisors, Managers, Admins, and Super Admins also see
@@ -130,7 +134,7 @@ After login, you see the **Timesheet Dashboard**. The cards and links you see de
 
 ### 3.8 Export PDF
 
-- From the timesheet **detail** page, use **Export PDF** (or **Export**) to download a PDF of that timesheet. Available to the timesheet owner and to Admins/Super Admins.
+- From the timesheet **detail** page, use **Export PDF** (or **Export**) to download a PDF of that timesheet. Available to the **owner**, to **Supervisors/Managers** who opened that timesheet from **Pending Approvals** or **Approved Timesheets**, and to **Admins/Super Admins** (including from **My Timesheets** when viewing any user).
 
 ---
 
@@ -268,7 +272,7 @@ The **Budget Detail** page shows PO-level budgets: client and PO information, bu
 - **Budget Access** (Admins only) – List of users granted access to this budget; **Grant Access** and revoke options.
 - **Budget Summary** – Original PO amount, change orders, total available, prior period spent.
 - **Invoice History** – Invoices entered by Admin; running balance.
-- **Budget Balance** – Based on labor cost (rates × hours from timesheets).
+- **Budget Balance** – Based on labor cost (rates × hours from timesheets). Totals match for everyone with access to that PO (including users granted budget access); labor includes all employees’ hours on the PO, not only yours.
 - **Billable Activities (from Timesheets)** – Hours by employee and week (to hundredths place, e.g. 40.00). Filter by month/year or view all months.
 - **Billable Cost (from Timesheets)** – Same layout as hours, but shows cost ($) = hours × bill rate per employee/week.
 - **Additional Expenses** – Travel, equipment, mileage, etc.
@@ -315,7 +319,7 @@ Available only to **Managers**, **Admins**, and **Super Admins**. Employees and 
 |--------|----------|------------|---------|-------|-------------|
 | **Dashboard** | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **New Timesheet** | ✓ (own) | ✓ (own) | ✓ (own) | ✓ (own) | ✓ (own) |
-| **My Timesheets** | Own only | Own + reports | Own + reports | All | All |
+| **My Timesheets** | Own only | Own only | Own only | All | All |
 | **Copy Previous Week** | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Edit/Delete own (draft)** | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Edit any timesheet** | — | — | — | ✓ | ✓ |
@@ -343,4 +347,4 @@ Available only to **Managers**, **Admins**, and **Super Admins**. Employees and 
 
 ---
 
-*Last updated to match the current CTG Timesheet Management site, including Budget Detail, Budget Access, Client Contact, Billable Cost, and bill rates for all users.*
+*Last updated to match the current CTG Timesheet Management site: My Timesheets (own only for non-admins), Budget Balance parity for grantees, one-hour idle auto logoff, Budget Detail, Budget Access, Client Contact, Billable Cost, and bill rates for all users.*

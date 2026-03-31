@@ -248,6 +248,10 @@ git push
 - Production connects to the same Supabase project
 - No database changes needed between environments
 
+### Session / idle logout (dashboard)
+
+- The dashboard layout uses **`AutoLogout`** (`components/AutoLogout.tsx`): after **one hour** of no mouse, keyboard, scroll, or touch activity, the client signs out via Supabase and redirects to `/login`. Timer resets on activity. To change duration, edit `timeoutMinutes` on `<AutoLogout />` in `app/dashboard/layout.tsx` (default prop in `AutoLogout.tsx` should stay in sync for clarity).
+
 ### Build Time
 - First build: ~3-5 minutes
 - Subsequent builds: ~2-3 minutes
@@ -286,7 +290,7 @@ git push
 ## 📖 Related documentation
 
 - **JOB_AID.md** – How to use the site (employees through admins): timesheets, approvals, manage users, dropdowns (activities/deliverables/systems filtered by user’s assigned sites), single Supervisor field in edit user, approval chain (Supervisor → Manager → Final Approver; skip none).
-- **Access Levels.md** – Role-based access, who sees which timesheets, implementation notes (admin client for supervisor/manager timesheet visibility, etc.).
+- **Access Levels.md** – Role-based access; My Timesheets (own only for non-admins); Pending Approvals / Approved Timesheets; Budget Balance API / billable labor aggregation (service-role where needed).
 
 ---
 

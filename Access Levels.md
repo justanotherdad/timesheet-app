@@ -20,7 +20,7 @@ This document describes what each role can see and do: screens, data scope, and 
 | ------------------------ | ------------- | ----------------- | --------------- | --------- | ----------- |
 | **Dashboard (home)**     | ✓             | ✓                 | ✓               | ✓         | ✓           |
 | New Timesheet            | ✓             | ✓                 | ✓               | ✓         | ✓           |
-| My Timesheets            | ✓ (own only)  | ✓ (own + reports) | ✓ (own + reports) | ✓ (all) | ✓ (all)     |
+| My Timesheets            | ✓ (own only)  | ✓ (own only)      | ✓ (own only)      | ✓ (all) | ✓ (all)     |
 | Pending Approvals card   | —             | ✓                 | ✓               | ✓         | ✓           |
 | Approved Timesheets card | —             | ✓                 | ✓               | ✓         | ✓           |
 | Manage Users card        | —             | ✓ (view only)     | ✓               | ✓         | ✓           |
@@ -33,7 +33,7 @@ This document describes what each role can see and do: screens, data scope, and 
 | Budget Detail            | —             | ✓ (if granted)    | ✓ (if granted)  | ✓ (all)   | ✓ (all)     |
 
 - **Employee:** No “Manage” or admin cards.
-- **Supervisor:** Sees Manage Users, My Timesheets (own + reports), Pending Approvals, Approved Timesheets, and Organization/Systems/Activities/Deliverables; all except Pending Approvals are **view-only**. Can see timesheets they approved via My Timesheets and Approved Timesheets. Does not see View Timesheet Data or Export.
+- **Supervisor:** Sees Manage Users, My Timesheets (own only), Pending Approvals, Approved Timesheets, and Organization/Systems/Activities/Deliverables; all except Pending Approvals are **view-only**. Sees others’ timesheets via **Pending Approvals** and **Approved Timesheets** (not on My Timesheets). Does not see View Timesheet Data or Export.
 - **Manager / Admin / Super Admin:** Full access to the cards they see; Manager is scoped to their team and assigned sites (see below).
 - **Budget Detail:** Only Admin and Super Admin see all POs automatically. Managers, Supervisors, and Employees see only POs where an Admin has explicitly granted them budget access (see [Budget Detail](#budget-detail) below).
 
@@ -43,16 +43,15 @@ This document describes what each role can see and do: screens, data scope, and 
 
 ### Who sees which timesheets
 
-- **Employee:** Only their own.
-- **Supervisor / Manager:** Own + timesheets of users who have them as `reports_to_id`, `supervisor_id`, `manager_id`, or `final_approver_id`. This includes timesheets they have approved (via My Timesheets and Approved Timesheets).
-- **Admin / Super Admin:** All timesheets.
+- **Employee, Supervisor, Manager:** Only their **own** timesheets on **My Timesheets**. To review or approve others’ timesheets, use **Pending Approvals** and **Approved Timesheets** (and open detail from there).
+- **Admin / Super Admin:** All timesheets on **My Timesheets**, with filters (person, week, status).
 
 ### Create / Edit / Delete
 
 - **New timesheet:** Any logged-in user (own only).
 - **Edit timesheet:** Owner when status is draft or rejected; Admin/Super Admin can edit any.
 - **Delete timesheet:** Owner when draft; Admin/Super Admin can delete any status.
-- **Export (PDF):** Owner or Admin/Super Admin (others see only their own or their reports per list above).
+- **Export (PDF):** Timesheet owner or Admin/Super Admin from the detail page. Supervisors and managers open a report’s timesheet from **Pending Approvals** or **Approved Timesheets**, then export from the detail page.
 
 ### Approval workflow (submitted timesheets)
 
@@ -144,6 +143,10 @@ Each PO can have a **Client Contact Name** (stored per PO, shown below Client / 
 - **Billable Activities:** Hours from approved timesheets, by employee and week. Hours are shown to the hundredths place (e.g. 40.00).
 - **Billable Cost:** Same layout as hours, but shows cost ($) = hours × bill rate per employee/week.
 
+### Budget Balance (labor total)
+
+- **Budget Balance** is computed from total labor (rates × hours) for **all** approved timesheet hours on the PO. Users with **budget access** (including grantees who are not admins) must see the **same** totals as admins; the balance API aggregates timesheets with the service role so row-level security does not hide other employees’ hours from the calculation.
+
 ### Bill Rates
 
 Managers and Admins can add **bill rates** for any user with a profile—not only those who have already logged time to the PO. Rates have an effective date; historical cost uses the rate in effect at that time.
@@ -163,10 +166,11 @@ Managers and Admins can add **bill rates** for any user with a profile—not onl
    - **Manage Users:** View only – list of employees reporting to them; click to see read-only user details. No add, edit, password link, or delete.
    - **Organization, Systems, Activities, Deliverables:** View only – sites assigned to them via `user_sites`; no add/edit/delete/import.
    - **Pending Approvals:** Full (approve/reject as in chain).
-   - **My Timesheets & Approved Timesheets:** Can see timesheets they approved (timesheets of their reports, including after approval).
+   - **My Timesheets:** Own timesheets only. **Approved Timesheets:** Can see approved timesheets for their reports (filter/list).
    - No access to View Timesheet Data or Export.
 
 2. **Manager**
+   - **My Timesheets:** Own timesheets only. **Pending Approvals** and **Approved Timesheets** list reports’ timesheets for approval and review.
    - **Users:** Add/edit only users reporting to them (directly or through a supervisor); role limited to Manager, Supervisor, or Employee; can send password reset to their reports.
    - **Organization:** Add/edit/delete only sites (and their departments/POs) assigned to them or their subordinates.
    - **Systems / Activities / Deliverables:** Add/edit/delete/import only for sites they or their subordinates have access to.
@@ -187,7 +191,7 @@ Managers and Admins can add **bill rates** for any user with a profile—not onl
 - **Sites “assigned to” a user:** Stored in `user_sites` (user_id, site_id). Used for both supervisors and managers.
 - **Accessible sites:** `lib/access.ts` – `getAccessibleSiteIds(supabase, userId, role)` returns site IDs the user can access: null = all (admin/super_admin), else sites from `user_sites` for the current user (supervisor) or current user + subordinates (manager). `getSubordinateUserIds(supabase, managerId)` returns user IDs that report to the manager.
 - **Manager subordinates:** Users with `reports_to_id`, `supervisor_id`, `manager_id`, or `final_approver_id` equal to the manager’s id. `getSubordinateUserIds` includes all four.
-- **Timesheets visibility (supervisor/manager):** My Timesheets and Pending Approvals use `createAdminClient()` to fetch `weekly_timesheets` for report IDs so RLS does not block reading subordinates’ timesheets.
+- **My Timesheets (non-admin):** Lists only `weekly_timesheets` for the logged-in user (standard client + RLS). **Pending Approvals / Approved Timesheets** use `createAdminClient()` where needed so approvers can read subordinates’ timesheets. **Budget Balance API** (`GET /api/budget/[poId]/balance`): labor cost uses `createAdminClient()` for `timesheet_entries` / `weekly_timesheets` so totals match **Billable Hours** for grantees (RLS alone would undercount labor and skew Budget Balance).
 - **Timesheet dropdowns:** On New/Edit timesheet, Activity, Deliverable, and System options are filtered to sites assigned to the user (`user_sites`); admins see all.
 - **Purchase Orders:** Cascading from profile: Site → Departments (all at site if blank) → POs. If no POs explicitly assigned, employee sees all POs at their sites (filtered by department if departments are assigned). If POs are assigned, only those show.
 - **Read-only UI:** Organization uses `ConsolidatedManager` with `readOnly={true}` for supervisors; Systems/Activities/Deliverables use `HierarchicalItemManager` with `readOnly={true}` (hides Add, Import, Edit, Delete, bulk actions).

@@ -12,7 +12,7 @@ export default async function DashboardLayout({
 
   return (
     <>
-      <AutoLogout timeoutMinutes={30} />
+      <AutoLogout timeoutMinutes={60} />
       <PasswordChangeGuard mustChangePassword={mustChangePassword}>
         {children}
       </PasswordChangeGuard>
