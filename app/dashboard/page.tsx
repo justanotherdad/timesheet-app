@@ -261,7 +261,7 @@ export default async function DashboardPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Users</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Add, edit, and manage user accounts</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">View or manage profiles, roles, and approval chain (timesheet POs: set on each PO budget)</p>
                 </div>
               </div>
             </Link>

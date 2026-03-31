@@ -18,9 +18,9 @@
 
 **Relevant tables:**
 - `user_profiles` – `id`, `name`, `email`, `role`, `reports_to_id`, `supervisor_id`, `manager_id`, `final_approver_id`, `employee_type` (internal/external)
-- `user_sites` – `user_id`, `site_id` (sites assigned to user)
-- `user_departments` – `user_id`, `department_id`
-- `user_purchase_orders` – `user_id`, `purchase_order_id`
+- `user_sites` – `user_id`, `site_id` (sites assigned to user; used for org/bid-sheet scope and similar — **not** the driver for which POs appear on weekly timesheets; those come from `po_bill_rates` / Bill Rates by Person on each PO budget)
+- `user_departments` – `user_id`, `department_id` (same: retained for other features, not timesheet PO picklists from Manage Users)
+- `user_purchase_orders` – `user_id`, `purchase_order_id` (same)
 - `po_budget_access` – `user_id`, `purchase_order_id` (explicit budget access for non-admins)
 
 **Access logic:** `lib/access.ts` – `getAccessibleSiteIds()`, `getSubordinateUserIds()`, `canAccessPoBudget()`

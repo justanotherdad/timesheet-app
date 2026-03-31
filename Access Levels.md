@@ -53,6 +53,12 @@ This document describes what each role can see and do: screens, data scope, and 
 - **Delete timesheet:** Owner when draft; Admin/Super Admin can delete any status.
 - **Export (PDF):** Timesheet owner or Admin/Super Admin from the detail page. Supervisors and managers open a report’s timesheet from **Pending Approvals** or **Approved Timesheets**, then export from the detail page.
 
+### Which POs appear on the timesheet (non-admins)
+
+- **Source of truth:** **Bill Rates by Person** on each PO’s budget (`po_bill_rates`). If a user has any bill-rate row for a PO, that PO (when active) appears in the timesheet PO dropdown; sites and downstream filters (systems, deliverables, activities) are derived from those POs.
+- **Not** from **Manage Users** — site/department/PO pickers were removed there; that screen shows a **read-only** list of POs inferred from bill rates for reference.
+- **Editing old timesheets:** POs already on the sheet are merged with current bill-rate POs so historical lines stay editable even if a PO is inactive or removed from bill rates later.
+
 ### Approval workflow (submitted timesheets)
 
 - **Chain:** Employee → Supervisor → Manager → Final Approver. Built from `user_profiles` (supervisor_id, manager_id, final_approver_id). If a field is “None,” the next person in the structure is used.
@@ -84,7 +90,7 @@ Supervisor, Manager, Admin, Super Admin. (Employees have no access.)
 
 ### Edit user
 
-- **Supervisor:** View only. Can open a user to see name, email, role, Supervisor, and site/department/PO assignments; no Save, no password link, no delete.
+- **Supervisor:** View only. Can open a user to see name, email, role, Supervisor, and a **read-only** list of **Timesheet POs (from bill rates)**; no Save, no password link, no delete.
 - **Single Supervisor field:** The edit form has one Supervisor dropdown (reports_to_id); supervisor_id is synced to the same value for the approval chain.
 - **Manager:** Full edit for users they see; can set role only to Manager, Supervisor, or Employee.
 - **Admin:** Full edit for non–Super Admins; can set any role except Super Admin.
@@ -188,12 +194,11 @@ Managers and Admins can add **bill rates** for any user with a profile—not onl
 
 ## Implementation notes
 
-- **Sites “assigned to” a user:** Stored in `user_sites` (user_id, site_id). Used for both supervisors and managers.
-- **Accessible sites:** `lib/access.ts` – `getAccessibleSiteIds(supabase, userId, role)` returns site IDs the user can access: null = all (admin/super_admin), else sites from `user_sites` for the current user (supervisor) or current user + subordinates (manager). `getSubordinateUserIds(supabase, managerId)` returns user IDs that report to the manager.
+- **Sites “assigned to” a user (`user_sites`):** Still used for **Organization / Systems / Activities / Deliverables** scoping (supervisors and managers), **bid sheets**, and `lib/access.ts` (`getAccessibleSiteIds`, etc.). They are **not** used to decide which POs appear on the timesheet.
+- **Timesheet POs and sites:** `lib/timesheet-bill-rate-access.ts` — `loadTimesheetDropdownData` loads PO ids from `po_bill_rates` for the timesheet owner (non-admins), merges entry `po_id`s on edit, derives sites from those POs, then applies junction filtering for systems/deliverables/activities. Admins see all active POs / catalog data.
+- **Accessible sites (org admin):** `getAccessibleSiteIds(supabase, userId, role)` returns site IDs for **Manage Organization** and related admin UIs: null = all (admin/super_admin), else sites from `user_sites` for the current user (supervisor) or current user + subordinates (manager). `getSubordinateUserIds(supabase, managerId)` returns user IDs that report to the manager.
 - **Manager subordinates:** Users with `reports_to_id`, `supervisor_id`, `manager_id`, or `final_approver_id` equal to the manager’s id. `getSubordinateUserIds` includes all four.
 - **My Timesheets (non-admin):** Lists only `weekly_timesheets` for the logged-in user (standard client + RLS). **Pending Approvals / Approved Timesheets** use `createAdminClient()` where needed so approvers can read subordinates’ timesheets. **Budget Balance API** (`GET /api/budget/[poId]/balance`): labor cost uses `createAdminClient()` for `timesheet_entries` / `weekly_timesheets` so totals match **Billable Hours** for grantees (RLS alone would undercount labor and skew Budget Balance).
-- **Timesheet dropdowns:** On New/Edit timesheet, Activity, Deliverable, and System options are filtered to sites assigned to the user (`user_sites`); admins see all.
-- **Purchase Orders:** Cascading from profile: Site → Departments (all at site if blank) → POs. If no POs explicitly assigned, employee sees all POs at their sites (filtered by department if departments are assigned). If POs are assigned, only those show.
 - **Read-only UI:** Organization uses `ConsolidatedManager` with `readOnly={true}` for supervisors; Systems/Activities/Deliverables use `HierarchicalItemManager` with `readOnly={true}` (hides Add, Import, Edit, Delete, bulk actions).
-- **Server actions:** create-user, update-user-assignments, and generate-password-link allow only Manager, Admin, Super Admin (not Supervisor).
+- **Server actions:** create-user, `updateUserProfile` (in `update-user-assignments.ts`), and generate-password-link allow only Manager, Admin, Super Admin (not Supervisor). Profile updates no longer replace `user_sites` / `user_departments` / `user_purchase_orders` (those tables remain for other features).
 - **Budget access:** `po_budget_access` table stores explicit grants (user_id, purchase_order_id). Only Admin/Super Admin have automatic access to all POs. Managers, Supervisors, and Employees must be explicitly granted per PO via the Budget Access section.

@@ -202,7 +202,7 @@ function GuideContent() {
           <li>From the Dashboard, click <strong>New Timesheet</strong> (or <strong>Create one</strong> under Current Week).</li>
           <li>You are on <strong>New Weekly Timesheet</strong> for the current week.</li>
           <li>Optionally use <strong>Copy Previous Week</strong> to bring in rows from last week (see below).</li>
-          <li>Add <strong>billable</strong> rows: Site/Client, PO, Task description, System/Deliverable/Activity as needed, and hours per day (Mon–Sun). The <strong>Activity</strong>, <strong>Deliverable</strong>, and <strong>System</strong> dropdowns show options for sites you are assigned to (and departments/POs at those sites).</li>
+          <li>Add <strong>billable</strong> rows: Site/Client, PO, Task description, System/Deliverable/Activity as needed, and hours per day (Mon–Sun). <strong>Which POs appear</strong> is driven by <strong>Bill Rates by Person</strong> on each PO&apos;s budget—not by user site/PO pickers in Manage Users. The <strong>Activity</strong>, <strong>Deliverable</strong>, and <strong>System</strong> dropdowns follow sites and junction rules tied to those POs.</li>
           <li>Add or adjust <strong>unbillable</strong> rows (Holiday, Internal, PTO) if applicable.</li>
           <li>Click <strong>Save as Draft</strong> to save and continue later, or <strong>Submit</strong> when the week is complete.</li>
         </ol>
@@ -307,7 +307,7 @@ function GuideContent() {
         <p className="text-sm text-gray-700 dark:text-gray-300">From the Dashboard, click <strong>Manage Users</strong>.</p>
         <h4 className="text-sm font-semibold mt-3 mb-1">5.2 Viewing users</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">
-          You see a table (or on mobile, cards) with: Name, Email, Role, Sites, Departments, Purchase Orders, Supervisor, Final Approver, and a <strong>View</strong> button. Use <strong>Search</strong> (name/email) and <strong>Role</strong> filter to narrow the list. Click <strong>View</strong> (or the user name) to open that user’s details.
+          You see a table (or on mobile, cards) with: Name, Status, Role, <strong>Timesheet POs (bill rates)</strong> (read-only), Supervisor, Final Approver, and <strong>View</strong>. Use <strong>Search</strong>, <strong>Role</strong>, and <strong>Timesheet PO (bill rate)</strong> filters as needed. Click <strong>View</strong> (or the user name) to open that user’s details.
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">5.3 Supervisor: view only</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -315,7 +315,7 @@ function GuideContent() {
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">5.4 Manager: add and edit users</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          You see <strong>employees and supervisors</strong> who report to you. <strong>Add user:</strong> Click <strong>Add User</strong>, fill in name, email, role (Employee, Supervisor, or Manager), <strong>Supervisor</strong> (one field), Manager, Final Approver, and site/department/PO assignments. <strong>Edit user:</strong> Open the user with <strong>View</strong>, then use <strong>Edit</strong>. There is a single <strong>Supervisor</strong> field. You can <strong>generate a password/invite link</strong> for users who report to you.
+          You see <strong>employees and supervisors</strong> who report to you. <strong>Add user:</strong> Click <strong>Add User</strong>, fill in name, email, role (Employee, Supervisor, or Manager), <strong>Supervisor</strong> (one field), Manager, and Final Approver. Timesheet PO access is set on each PO budget (<strong>Bill Rates by Person</strong>), not on this screen. <strong>Edit user:</strong> Open the user with <strong>View</strong>, then use <strong>Edit</strong>. There is a single <strong>Supervisor</strong> field. You can <strong>generate a password/invite link</strong> for users who report to you.
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">5.5 Admin / Super Admin: full user management</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -433,13 +433,13 @@ function GuideContent() {
         </h3>
         <ul className="list-disc list-inside space-y-2 text-sm text-gray-700 dark:text-gray-300">
           <li><strong>Login or password:</strong> Contact your manager or an administrator.</li>
-          <li><strong>Missing options or access:</strong> Your role or assignments (sites, reports) may need to be updated in <strong>Manage Users</strong> (admin/manager).</li>
+          <li><strong>Missing options or access:</strong> Reporting fields (Supervisor, Manager, Final Approver) are set in <strong>Manage Users</strong>. <strong>Timesheet POs</strong> come from <strong>Bill Rates by Person</strong> on each PO budget.</li>
           <li><strong>Approval chain:</strong> The structure is Employee → Supervisor → Manager → Final Approver. Each user’s profile has one <strong>Supervisor</strong> field plus <strong>Manager</strong> and <strong>Final Approver</strong>. If a field is “None,” the next person in the structure is used. Set these in <strong>Manage Users</strong>.</li>
-          <li><strong>Empty Activity/Deliverable/System dropdowns:</strong> Options are filtered by your assigned sites and departments/POs. Ask an admin or manager to assign you to the right sites (and departments/POs if needed) in <strong>Manage Users</strong>, and ensure those sites have systems, activities, and deliverables configured.</li>
+          <li><strong>Empty PO dropdown:</strong> Add yourself under <strong>Budget Detail</strong> → PO → <strong>Bill Rates by Person</strong>. <strong>Empty Activity/Deliverable/System dropdowns:</strong> Depend on those POs’ sites and how options are linked in <strong>Manage Organization</strong> / <strong>Manage Timesheet Options</strong>.</li>
           <li><strong>Budget access:</strong> Only Admins can grant budget access. Ask an Admin to go to <strong>Budget Detail</strong> → select the PO → <strong>Budget Access</strong> → <strong>Grant Access</strong> → select your name.</li>
         </ul>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-6 italic">
-          Last updated to match the current CTG Timesheet Management site, including Budget Detail and grant-based budget access.
+          Last updated to match the current CTG Timesheet Management site, including bill-rate–driven timesheet POs and grant-based budget access.
         </p>
       </section>
     </div>

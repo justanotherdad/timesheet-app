@@ -137,7 +137,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
 
   const filteredUsers = useMemo(() => {
     // Users are filtered by site/dept/PO via the data - for now show all accessible users
-    // (User assignments would require additional data; cascading works for Site/Dept/PO)
+    // (Per-user timesheet PO scope is from bill rates, not used here; cascading works for Site/Dept/PO)
     return users
   }, [users])
 

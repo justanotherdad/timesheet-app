@@ -1,49 +1,37 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { User, UserRole } from '@/types/database'
 import { Plus, Edit, Trash2, Key, X, ArrowUpDown, ArrowUp, ArrowDown, Search, Eye, PowerOff } from 'lucide-react'
 import { createUser } from '@/app/actions/create-user'
 import { deleteUser } from '@/app/actions/delete-user'
-import { updateUserAssignments, updateUserProfile } from '@/app/actions/update-user-assignments'
+import type { BillRatePoSummaryRow } from '@/lib/timesheet-bill-rate-access'
+import { updateUserProfile } from '@/app/actions/update-user-assignments'
 import { generatePasswordLink } from '@/app/actions/generate-password-link'
 import { setUserPassword } from '@/app/actions/set-user-password'
-
-interface Site {
-  id: string
-  name: string
-  code?: string
-}
-
-interface Department {
-  id: string
-  site_id: string
-  name: string
-  code?: string
-}
-
-interface PurchaseOrder {
-  id: string
-  site_id: string
-  department_id?: string
-  po_number: string
-  description?: string
-}
 
 interface UserManagementProps {
   users: User[]
   lookupUsers?: User[]
-  initialUserAssignments?: Record<string, { sites: string[]; departments: string[]; purchaseOrders: string[] }>
+  /** Timesheet PO eligibility from PO budget Bill Rates by Person (read-only). */
+  billRateTimesheetSummaryByUserId: Record<string, BillRatePoSummaryRow[]>
   currentUserRole: UserRole
   currentUserId?: string
-  sites: Site[]
-  departments: Department[]
-  purchaseOrders: PurchaseOrder[]
 }
 
-export default function UserManagement({ users: initialUsers, lookupUsers, initialUserAssignments, currentUserRole, currentUserId, sites, departments, purchaseOrders }: UserManagementProps) {
+function formatBillRateSummaryLine(rows: BillRatePoSummaryRow[]): string {
+  if (rows.length === 0) return '—'
+  return rows.map((r) => `${r.site_name} — ${r.po_number}: ${r.project_description}`).join('; ')
+}
+
+export default function UserManagement({
+  users: initialUsers,
+  lookupUsers,
+  billRateTimesheetSummaryByUserId,
+  currentUserRole,
+  currentUserId,
+}: UserManagementProps) {
   const [users, setUsers] = useState(initialUsers)
   const nameLookup = lookupUsers ?? users
 
@@ -52,12 +40,6 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
     setUsers(initialUsers)
   }, [initialUsers])
 
-  // Sync assignments when server provides them (e.g. supervisor view)
-  useEffect(() => {
-    if (initialUserAssignments && Object.keys(initialUserAssignments).length > 0) {
-      setUserAssignments(initialUserAssignments)
-    }
-  }, [initialUserAssignments])
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -68,38 +50,20 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
   const [setPasswordUser, setSetPasswordUser] = useState<User | null>(null)
   const [setPasswordLoading, setSetPasswordLoading] = useState(false)
   const [setPasswordError, setSetPasswordError] = useState<string | null>(null)
-  const [selectedSiteId, setSelectedSiteId] = useState<string>('')
-  
-  // Multiple assignment states
-  const [selectedSites, setSelectedSites] = useState<string[]>([])
-  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([])
-  const [selectedPOs, setSelectedPOs] = useState<string[]>([])
-  
-  // User assignments: prefer server-loaded (so supervisors see reports' data), else loaded from junction tables client-side
-  const [userAssignments, setUserAssignments] = useState<Record<string, {
-    sites: string[]
-    departments: string[]
-    purchaseOrders: string[]
-  }>>(initialUserAssignments ?? {})
-
   // Sort: column key and direction
-  type SortKey = 'name' | 'email' | 'role' | 'sites' | 'departments' | 'purchase_orders' | 'reports_to' | 'final_approver'
+  type SortKey = 'name' | 'email' | 'role' | 'timesheet_pos' | 'reports_to' | 'final_approver'
   const [sortColumn, setSortColumn] = useState<SortKey>('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
   // Filter / search
   const [searchText, setSearchText] = useState('')
   const [filterRole, setFilterRole] = useState<string>('')
-  const [filterSite, setFilterSite] = useState<string>('')
-  const [filterDepartment, setFilterDepartment] = useState<string>('')
-  const [filterPO, setFilterPO] = useState<string>('')
+  const [filterBillRatePoId, setFilterBillRatePoId] = useState<string>('')
   const [filterSupervisor, setFilterSupervisor] = useState<string>('')
   const [filterFinalApprover, setFilterFinalApprover] = useState<string>('')
   const [filterEmployeeType, setFilterEmployeeType] = useState<string>('')
   const [filterActive, setFilterActive] = useState<string>('active') // 'all' | 'active' | 'archived'
   
-  const assignmentsLoadedRef = useRef(false)
-  const supabase = createClient()
   const router = useRouter()
 
   // Who can change role: super_admin any; admin can change admin or lower; manager can change manager or lower; supervisor cannot
@@ -130,17 +94,15 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
   const canAddUser = ['manager', 'admin', 'super_admin'].includes(currentUserRole)
   const canDeleteUser = ['admin', 'super_admin'].includes(currentUserRole)
 
-  // Filter departments by selected sites
-  const filteredDepartments = selectedSites.length > 0
-    ? departments.filter(d => selectedSites.includes(d.site_id))
-    : departments
-
-  // Filter POs by selected sites and departments
-  const filteredPOs = purchaseOrders.filter(po => {
-    if (selectedSites.length > 0 && !selectedSites.includes(po.site_id)) return false
-    if (selectedDepartments.length > 0 && po.department_id && !selectedDepartments.includes(po.department_id)) return false
-    return true
-  })
+  const billRatePoFilterOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const rows of Object.values(billRateTimesheetSummaryByUserId)) {
+      for (const r of rows) {
+        if (!map.has(r.po_id)) map.set(r.po_id, `${r.po_number} (${r.site_name})`)
+      }
+    }
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1], undefined, { numeric: true }))
+  }, [billRateTimesheetSummaryByUserId])
 
   // Filter and sort users for table
   const filteredAndSortedUsers = (() => {
@@ -158,24 +120,16 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
       if (filterActive === 'archived' && (u as any).active !== false) return false
       if (filterSupervisor && u.supervisor_id !== filterSupervisor) return false
       if (filterFinalApprover && u.final_approver_id !== filterFinalApprover) return false
-      if (filterSite || filterDepartment || filterPO) {
-        const assignments = userAssignments[u.id] || { sites: [], departments: [], purchaseOrders: [] }
-        if (filterSite && !assignments.sites.includes(filterSite)) return false
-        if (filterDepartment && !assignments.departments.includes(filterDepartment)) return false
-        if (filterPO && !assignments.purchaseOrders.includes(filterPO)) return false
+      if (filterBillRatePoId) {
+        const rows = billRateTimesheetSummaryByUserId[u.id] || []
+        if (!rows.some((r) => r.po_id === filterBillRatePoId)) return false
       }
       return true
     })
     const dir = sortDirection === 'asc' ? 1 : -1
     list = [...list].sort((a: any, b: any) => {
-      const assignmentsA = userAssignments[a.id] || { sites: [], departments: [], purchaseOrders: [] }
-      const assignmentsB = userAssignments[b.id] || { sites: [], departments: [], purchaseOrders: [] }
-      const sitesA = assignmentsA.sites.map((id: string) => sites.find(s => s.id === id)?.name).filter(Boolean).join(', ')
-      const sitesB = assignmentsB.sites.map((id: string) => sites.find(s => s.id === id)?.name).filter(Boolean).join(', ')
-      const deptsA = assignmentsA.departments.map((id: string) => departments.find(d => d.id === id)?.name).filter(Boolean).join(', ')
-      const deptsB = assignmentsB.departments.map((id: string) => departments.find(d => d.id === id)?.name).filter(Boolean).join(', ')
-      const posA = assignmentsA.purchaseOrders.map((id: string) => purchaseOrders.find(p => p.id === id)?.po_number).filter(Boolean).join(', ')
-      const posB = assignmentsB.purchaseOrders.map((id: string) => purchaseOrders.find(p => p.id === id)?.po_number).filter(Boolean).join(', ')
+      const posA = formatBillRateSummaryLine(billRateTimesheetSummaryByUserId[a.id] || [])
+      const posB = formatBillRateSummaryLine(billRateTimesheetSummaryByUserId[b.id] || [])
       const reportsToA = nameLookup.find(u => u.id === a.supervisor_id)?.name || ''
       const reportsToB = nameLookup.find(u => u.id === b.supervisor_id)?.name || ''
       const finalApproverA = nameLookup.find(u => u.id === a.final_approver_id)?.name || ''
@@ -186,9 +140,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         case 'name': va = (a.name || '').toLowerCase(); vb = (b.name || '').toLowerCase(); break
         case 'email': va = (a.email || '').toLowerCase(); vb = (b.email || '').toLowerCase(); break
         case 'role': va = (a.role || '').toLowerCase(); vb = (b.role || '').toLowerCase(); break
-        case 'sites': va = sitesA.toLowerCase(); vb = sitesB.toLowerCase(); break
-        case 'departments': va = deptsA.toLowerCase(); vb = deptsB.toLowerCase(); break
-        case 'purchase_orders': va = posA.toLowerCase(); vb = posB.toLowerCase(); break
+        case 'timesheet_pos': va = posA.toLowerCase(); vb = posB.toLowerCase(); break
         case 'reports_to': va = reportsToA.toLowerCase(); vb = reportsToB.toLowerCase(); break
         case 'final_approver': va = finalApproverA.toLowerCase(); vb = finalApproverB.toLowerCase(); break
         default: return 0
@@ -214,109 +166,10 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
     return sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5 ml-1" /> : <ArrowDown className="h-3.5 w-3.5 ml-1" />
   }
 
-  // Load all user assignments client-side only when server did not provide them (admins: RLS allows; supervisors: use server data)
-  useEffect(() => {
-    const hasServerAssignments = initialUserAssignments && Object.keys(initialUserAssignments).length > 0
-    if (hasServerAssignments) {
-      assignmentsLoadedRef.current = true
-      return
-    }
-
-    const loadAllUserAssignments = async () => {
-      if (users.length === 0) return
-
-      const assignmentsMap: Record<string, {
-        sites: string[]
-        departments: string[]
-        purchaseOrders: string[]
-      }> = {}
-
-      await Promise.all(
-        users.map(async (user) => {
-          try {
-            const [sitesResult, deptsResult, posResult] = await Promise.all([
-              supabase.from('user_sites').select('site_id').eq('user_id', user.id),
-              supabase.from('user_departments').select('department_id').eq('user_id', user.id),
-              supabase.from('user_purchase_orders').select('purchase_order_id').eq('user_id', user.id),
-            ])
-
-            assignmentsMap[user.id] = {
-              sites: Array.isArray(sitesResult.data) ? sitesResult.data.map((r: any) => r.site_id) : [],
-              departments: Array.isArray(deptsResult.data) ? deptsResult.data.map((r: any) => r.department_id) : [],
-              purchaseOrders: Array.isArray(posResult.data) ? posResult.data.map((r: any) => r.purchase_order_id) : [],
-            }
-          } catch (err) {
-            console.error(`Error loading assignments for user ${user.id}:`, err)
-            assignmentsMap[user.id] = { sites: [], departments: [], purchaseOrders: [] }
-          }
-        })
-      )
-
-      setUserAssignments(assignmentsMap)
-      assignmentsLoadedRef.current = true
-    }
-
-    const currentAssignmentsCount = Object.keys(userAssignments).length
-    if (!assignmentsLoadedRef.current || users.length !== currentAssignmentsCount) {
-      loadAllUserAssignments()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [users, initialUserAssignments])
-
-  // Load user assignments from junction tables
-  const loadUserAssignments = async (userId: string) => {
-    try {
-      const [sitesResult, deptsResult, posResult] = await Promise.all([
-        supabase.from('user_sites').select('site_id').eq('user_id', userId),
-        supabase.from('user_departments').select('department_id').eq('user_id', userId),
-        supabase.from('user_purchase_orders').select('purchase_order_id').eq('user_id', userId),
-      ])
-
-      return {
-        sites: Array.isArray(sitesResult.data) ? sitesResult.data.map((r: any) => r.site_id) : [],
-        departments: Array.isArray(deptsResult.data) ? deptsResult.data.map((r: any) => r.department_id) : [],
-        purchaseOrders: Array.isArray(posResult.data) ? posResult.data.map((r: any) => r.purchase_order_id) : [],
-      }
-    } catch (err) {
-      console.error('Error loading user assignments:', err)
-      return { sites: [], departments: [], purchaseOrders: [] }
-    }
-  }
-
-  const openUserDetails = async (user: any) => {
+  const openUserDetails = (user: any) => {
     setError(null)
     setEditingUser(user)
-    // Prefer server-loaded assignments (avoids RLS issues when admin/manager views user)
-    const cached = (initialUserAssignments && initialUserAssignments[user.id]) || userAssignments[user.id]
-    const assignments = cached ?? await loadUserAssignments(user.id)
-    setSelectedSites(assignments.sites)
-    setSelectedDepartments(assignments.departments)
-    setSelectedPOs(assignments.purchaseOrders)
-    if (!cached) setUserAssignments(prev => ({ ...prev, [user.id]: assignments }))
   }
-
-  // Fallback: load assignments client-side when no server data (e.g. admin; supervisor path uses initialUserAssignments)
-  useEffect(() => {
-    if (initialUserAssignments && Object.keys(initialUserAssignments).length > 0) return
-
-    const loadAllAssignments = async () => {
-      const assignmentsMap: Record<string, {
-        sites: string[]
-        departments: string[]
-        purchaseOrders: string[]
-      }> = {}
-      const assignmentPromises = users.map(async (user) => {
-        const assignments = await loadUserAssignments(user.id)
-        assignmentsMap[user.id] = assignments
-      })
-      await Promise.all(assignmentPromises)
-      setUserAssignments(assignmentsMap)
-    }
-
-    if (users.length > 0) {
-      loadAllAssignments()
-    }
-  }, [users.length, initialUserAssignments])
 
   const handleAddUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -337,19 +190,6 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         throw new Error(result.error)
       }
 
-      // If user was created, save multiple assignments (always call to persist selections)
-      if (result.userId) {
-        const assignResult = await updateUserAssignments(
-          result.userId,
-          selectedSites,
-          selectedDepartments,
-          selectedPOs
-        )
-        if (assignResult.error) {
-          throw new Error(assignResult.error)
-        }
-      }
-
       // Show success message and invitation link if available
       if (result.message) {
         setSuccess(result.message)
@@ -361,10 +201,6 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         if (e.currentTarget) {
           e.currentTarget.reset()
         }
-        setSelectedSiteId('')
-        setSelectedSites([])
-        setSelectedDepartments([])
-        setSelectedPOs([])
         setShowAddForm(false)
         
         // If there's an invitation link, don't reload - keep the link visible
@@ -396,75 +232,44 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
     setLoading(true)
 
     try {
-      if (assignmentsOnlyEdit) {
-        const assignResult = await updateUserAssignments(
-          editingUser.id,
-          selectedSites,
-          selectedDepartments,
-          selectedPOs
-        )
-        if (assignResult.error) throw new Error(assignResult.error)
-        setUserAssignments((prev) => ({
-          ...prev,
-          [editingUser.id]: { sites: selectedSites, departments: selectedDepartments, purchaseOrders: selectedPOs },
-        }))
-      } else {
-        const formData = new FormData(e.currentTarget)
-        const name = formData.get('name') as string
-        const email = formData.get('email') as string
-        const role = formData.get('role') as UserRole
-        const supervisorId = formData.get('supervisor_id') as string || null
-        const managerId = formData.get('manager_id') as string || null
-        const finalApproverId = formData.get('final_approver_id') as string || null
-        const employeeType = (formData.get('employee_type') as 'internal' | 'external') || 'internal'
+      const formData = new FormData(e.currentTarget)
+      const name = formData.get('name') as string
+      const email = formData.get('email') as string
+      const role = formData.get('role') as UserRole
+      const supervisorId = (formData.get('supervisor_id') as string) || null
+      const managerId = (formData.get('manager_id') as string) || null
+      const finalApproverId = (formData.get('final_approver_id') as string) || null
+      const employeeType = (formData.get('employee_type') as 'internal' | 'external') || 'internal'
 
-        const profileResult = await updateUserProfile(editingUser.id, {
-          name,
-          email: email?.trim() || undefined,
-          role: canChangeRole(editingUser) ? role : editingUser.role,
-          employee_type: employeeType,
-          supervisor_id: supervisorId || null,
-          manager_id: managerId || null,
-          final_approver_id: finalApproverId || null,
-        })
-        if (profileResult.error) throw new Error(profileResult.error)
+      const profileResult = await updateUserProfile(editingUser.id, {
+        name,
+        email: email?.trim() || undefined,
+        role: canChangeRole(editingUser) ? role : editingUser.role,
+        employee_type: employeeType,
+        supervisor_id: supervisorId || null,
+        manager_id: managerId || null,
+        final_approver_id: finalApproverId || null,
+      })
+      if (profileResult.error) throw new Error(profileResult.error)
 
-        const assignResult = await updateUserAssignments(
-          editingUser.id,
-          selectedSites,
-          selectedDepartments,
-          selectedPOs
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === editingUser.id
+            ? {
+                ...u,
+                name,
+                email: email?.trim() || u.email,
+                role: canChangeRole(editingUser) ? role : editingUser.role,
+                employee_type: employeeType,
+                supervisor_id: supervisorId || undefined,
+                manager_id: managerId || undefined,
+                final_approver_id: finalApproverId || undefined,
+              }
+            : u
         )
-        if (assignResult.error) throw new Error(assignResult.error)
-
-        // Update local state so table reflects changes without reload
-        setUsers((prev) =>
-          prev.map((u) =>
-            u.id === editingUser.id
-              ? {
-                  ...u,
-                  name,
-                  email: email?.trim() || u.email,
-                  role: canChangeRole(editingUser) ? role : editingUser.role,
-                  employee_type: employeeType,
-                  supervisor_id: supervisorId || undefined,
-                  manager_id: managerId || undefined,
-                  final_approver_id: finalApproverId || undefined,
-                }
-              : u
-          )
-        )
-        setUserAssignments((prev) => ({
-          ...prev,
-          [editingUser.id]: { sites: selectedSites, departments: selectedDepartments, purchaseOrders: selectedPOs },
-        }))
-      }
+      )
 
       setEditingUser(null)
-      setSelectedSiteId('')
-      setSelectedSites([])
-      setSelectedDepartments([])
-      setSelectedPOs([])
       setSuccess('User updated successfully')
       router.refresh()
     } catch (err: any) {
@@ -755,91 +560,9 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
           {assignmentsOnlyEdit && currentUserId && (
             <input type="hidden" name="supervisor_id" value={currentUserId} />
           )}
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sites (Select Multiple)</label>
-              <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
-                {sites.map(site => (
-                  <label key={site.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedSites.includes(site.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedSites([...selectedSites, site.id])
-                        } else {
-                          setSelectedSites(selectedSites.filter(id => id !== site.id))
-                          // Remove departments from unselected sites
-                          setSelectedDepartments(selectedDepartments.filter(deptId => {
-                            const dept = departments.find(d => d.id === deptId)
-                            return dept && selectedSites.includes(dept.site_id)
-                          }))
-                        }
-                      }}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-900 dark:text-gray-100">{site.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Departments (Select Multiple)</label>
-              <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
-                {filteredDepartments.length > 0 ? (
-                  filteredDepartments.map(dept => (
-                    <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedDepartments.includes(dept.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedDepartments([...selectedDepartments, dept.id])
-                          } else {
-                            setSelectedDepartments(selectedDepartments.filter(id => id !== dept.id))
-                          }
-                        }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-900 dark:text-gray-100">
-                        {dept.name} ({sites.find(s => s.id === dept.site_id)?.name})
-                      </span>
-                    </label>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">Select sites first to see departments</p>
-                )}
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Purchase Orders (Select Multiple)</label>
-              <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
-                {filteredPOs.length > 0 ? (
-                  filteredPOs.map(po => (
-                    <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedPOs.includes(po.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedPOs([...selectedPOs, po.id])
-                          } else {
-                            setSelectedPOs(selectedPOs.filter(id => id !== po.id))
-                          }
-                        }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-900 dark:text-gray-100">
-                        {po.po_number} {po.description ? `- ${po.description}` : ''}
-                      </span>
-                    </label>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">Select sites/departments first to see purchase orders</p>
-                )}
-              </div>
-            </div>
-          </div>
+          <p className="text-sm text-gray-600 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-3">
+            Timesheet PO access is set per user on each PO&apos;s budget (Bill Rates by Person), not on this screen.
+          </p>
           <div className="flex gap-2">
             <button
               type="submit"
@@ -850,13 +573,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
             </button>
             <button
               type="button"
-              onClick={() => {
-                setShowAddForm(false)
-                setSelectedSiteId('')
-                setSelectedSites([])
-                setSelectedDepartments([])
-                setSelectedPOs([])
-              }}
+              onClick={() => setShowAddForm(false)}
               className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600"
             >
               Cancel
@@ -925,41 +642,15 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Site</label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Timesheet PO (bill rate)</label>
                 <select
-                  value={filterSite}
-                  onChange={(e) => setFilterSite(e.target.value)}
+                  value={filterBillRatePoId}
+                  onChange={(e) => setFilterBillRatePoId(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                 >
-                  <option value="">All sites</option>
-                  {sites.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Department</label>
-                <select
-                  value={filterDepartment}
-                  onChange={(e) => setFilterDepartment(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-                >
-                  <option value="">All departments</option>
-                  {departments.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Purchase Order</label>
-                <select
-                  value={filterPO}
-                  onChange={(e) => setFilterPO(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-                >
-                  <option value="">All POs</option>
-                  {purchaseOrders.map(p => (
-                    <option key={p.id} value={p.id}>{p.po_number}</option>
+                  <option value="">All</option>
+                  {billRatePoFilterOptions.map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
                   ))}
                 </select>
               </div>
@@ -999,8 +690,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
         {/* Mobile: card list */}
         <div className="flex-1 min-w-0 md:hidden space-y-2">
           {filteredAndSortedUsers.map((user: any) => {
-            const assignments = userAssignments[user.id] || { sites: [], departments: [], purchaseOrders: [] }
-            const userSites = assignments.sites.map((siteId: string) => sites.find(s => s.id === siteId)?.name).filter(Boolean)
+            const brSummary = formatBillRateSummaryLine(billRateTimesheetSummaryByUserId[user.id] || [])
             return (
               <div
                 key={user.id}
@@ -1013,11 +703,9 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       Final approver: {nameLookup.find(u => u.id === user.final_approver_id)?.name || 'N/A'}
                     </p>
-                    {userSites.length > 0 && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate" title={userSites.join(', ')}>
-                        Sites: {userSites.join(', ')}
-                      </p>
-                    )}
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2" title={brSummary}>
+                      Timesheet POs: {brSummary}
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -1048,19 +736,9 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                   Role <SortIcon column="role" />
                 </button>
               </th>
-              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                <button type="button" onClick={() => handleSort('sites')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
-                  Sites <SortIcon column="sites" />
-                </button>
-              </th>
-              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                <button type="button" onClick={() => handleSort('departments')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
-                  Departments <SortIcon column="departments" />
-                </button>
-              </th>
-              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                <button type="button" onClick={() => handleSort('purchase_orders')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
-                  Purchase Orders <SortIcon column="purchase_orders" />
+              <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase max-w-md">
+                <button type="button" onClick={() => handleSort('timesheet_pos')} className="inline-flex items-center hover:text-gray-700 dark:hover:text-gray-200">
+                  Timesheet POs (bill rates) <SortIcon column="timesheet_pos" />
                 </button>
               </th>
               <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -1080,14 +758,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {filteredAndSortedUsers.map((user: any) => {
-              // Get assignments from state (will be loaded on edit click or via useEffect)
-              const assignments = userAssignments[user.id] || { sites: [], departments: [], purchaseOrders: [] }
-              
-              const userSites = assignments.sites.map((siteId: string) => sites.find(s => s.id === siteId)?.name).filter(Boolean)
-              const userDepts = assignments.departments.map((deptId: string) => departments.find(d => d.id === deptId)?.name).filter(Boolean)
-              const userPOs = assignments.purchaseOrders.map((poId: string) => purchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean)
-              
-              const editable = canEditUser(user)
+              const brLine = formatBillRateSummaryLine(billRateTimesheetSummaryByUserId[user.id] || [])
               return (
               <tr key={user.id}>
                 <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 font-medium border-r border-gray-200 dark:border-gray-600 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.3)]">{user.name}</td>
@@ -1097,9 +768,9 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                   </span>
                 </td>
                 <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 capitalize">{user.role}</td>
-                <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userSites.length > 0 ? userSites.join(', ') : 'N/A'}</td>
-                <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userDepts.length > 0 ? userDepts.join(', ') : 'N/A'}</td>
-                <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100">{userPOs.length > 0 ? userPOs.join(', ') : 'N/A'}</td>
+                <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-900 dark:text-gray-100 max-w-md align-top" title={brLine}>
+                  <span className="line-clamp-3">{brLine}</span>
+                </td>
                 <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {nameLookup.find(u => u.id === user.supervisor_id)?.name || 'N/A'}
                 </td>
@@ -1127,7 +798,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                {viewOnlyUser ? 'View User' : assignmentsOnlyEdit ? `Edit assignments: ${editingUser.name}` : 'Edit User'}
+                {viewOnlyUser ? 'View User' : `Edit User: ${editingUser.name}`}
               </h3>
               <button type="button" onClick={() => setEditingUser(null)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                 <X className="h-5 w-5" />
@@ -1148,22 +819,17 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Supervisor:</span> <span className="text-gray-900 dark:text-gray-100">{nameLookup.find(u => u.id === editingUser.supervisor_id)?.name || 'N/A'}</span></div>
                 <div><span className="text-sm font-medium text-gray-500 dark:text-gray-400">Final Approver:</span> <span className="text-gray-900 dark:text-gray-100">{nameLookup.find(u => u.id === editingUser.final_approver_id)?.name || 'N/A'}</span></div>
                 <div>
-                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Sites:</span>
-                  <span className="text-gray-900 dark:text-gray-100">
-                    {(userAssignments[editingUser.id]?.sites || []).map((siteId: string) => sites.find(s => s.id === siteId)?.name).filter(Boolean).join(', ') || 'N/A'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Departments:</span>
-                  <span className="text-gray-900 dark:text-gray-100">
-                    {(userAssignments[editingUser.id]?.departments || []).map((deptId: string) => departments.find(d => d.id === deptId)?.name).filter(Boolean).join(', ') || 'N/A'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Purchase Orders:</span>
-                  <span className="text-gray-900 dark:text-gray-100">
-                    {(userAssignments[editingUser.id]?.purchaseOrders || []).map((poId: string) => purchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean).join(', ') || 'N/A'}
-                  </span>
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Timesheet POs (from bill rates):</span>
+                  <ul className="text-sm text-gray-900 dark:text-gray-100 list-disc list-inside space-y-1">
+                    {(billRateTimesheetSummaryByUserId[editingUser.id] || []).map((r) => (
+                      <li key={r.po_id}>
+                        {r.site_name} — {r.po_number}: {r.project_description}
+                      </li>
+                    ))}
+                  </ul>
+                  {(billRateTimesheetSummaryByUserId[editingUser.id] || []).length === 0 && (
+                    <span className="text-sm text-gray-500 dark:text-gray-400">No bill rates yet. Add this user on a PO budget.</span>
+                  )}
                 </div>
                 <div className="pt-4">
                   <button
@@ -1214,87 +880,18 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                   </div>
                 </>
               )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sites (Select Multiple)</label>
-                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
-                  {sites.map(site => (
-                    <label key={site.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedSites.includes(site.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedSites([...selectedSites, site.id])
-                          } else {
-                            setSelectedSites(selectedSites.filter(id => id !== site.id))
-                            setSelectedDepartments(selectedDepartments.filter(deptId => {
-                              const dept = departments.find(d => d.id === deptId)
-                              return dept && selectedSites.includes(dept.site_id)
-                            }))
-                          }
-                        }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-900 dark:text-gray-100">{site.name}</span>
-                    </label>
+              <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50 dark:bg-gray-700/40">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Timesheet POs (from bill rates)</p>
+                <ul className="text-sm text-gray-900 dark:text-gray-100 list-disc list-inside space-y-1 max-h-48 overflow-y-auto">
+                  {(billRateTimesheetSummaryByUserId[editingUser.id] || []).map((r) => (
+                    <li key={r.po_id}>
+                      {r.site_name} — {r.po_number}: {r.project_description}
+                    </li>
                   ))}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Departments (Select Multiple)</label>
-                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
-                  {filteredDepartments.length > 0 ? (
-                    filteredDepartments.map(dept => (
-                      <label key={dept.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedDepartments.includes(dept.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedDepartments([...selectedDepartments, dept.id])
-                            } else {
-                              setSelectedDepartments(selectedDepartments.filter(id => id !== dept.id))
-                            }
-                          }}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-sm text-gray-900 dark:text-gray-100">
-                          {dept.name} ({sites.find(s => s.id === dept.site_id)?.name})
-                        </span>
-                      </label>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">Select sites first to see departments</p>
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Purchase Orders (Select Multiple)</label>
-                <div className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
-                  {filteredPOs.length > 0 ? (
-                    filteredPOs.map(po => (
-                      <label key={po.id} className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedPOs.includes(po.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedPOs([...selectedPOs, po.id])
-                            } else {
-                              setSelectedPOs(selectedPOs.filter(id => id !== po.id))
-                            }
-                          }}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-sm text-gray-900 dark:text-gray-100">
-                          {po.po_number} {po.description ? `- ${po.description}` : ''}
-                        </span>
-                      </label>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">Select sites/departments first to see purchase orders</p>
-                  )}
-                </div>
+                </ul>
+                {(billRateTimesheetSummaryByUserId[editingUser.id] || []).length === 0 && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No bill rates yet. Add this user on a PO budget.</p>
+                )}
               </div>
               {!assignmentsOnlyEdit && (
                 <>
@@ -1367,13 +964,7 @@ export default function UserManagement({ users: initialUsers, lookupUsers, initi
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditingUser(null)
-                    setSelectedSiteId('')
-                    setSelectedSites([])
-                    setSelectedDepartments([])
-                    setSelectedPOs([])
-                  }}
+                  onClick={() => setEditingUser(null)}
                   className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600"
                 >
                   Cancel

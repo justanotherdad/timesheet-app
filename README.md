@@ -14,6 +14,7 @@ A comprehensive timesheet management system built with Next.js, TypeScript, and 
 ### Core Functionality
 - ✅ User authentication with Supabase
 - ✅ Role-based access control
+- ✅ **Weekly timesheet PO eligibility** from **Bill Rates by Person** on each PO budget (`po_bill_rates`), not from Manage Users
 - ✅ **Weekly timesheet format** matching standard timesheet layout:
   - Daily hours breakdown (Monday through Sunday)
   - Multiple billable entries per week
@@ -32,7 +33,7 @@ A comprehensive timesheet management system built with Next.js, TypeScript, and 
 ### Manager/Supervisor Features
 - View and approve timesheets from direct reports
 - Export weekly hours for their reports
-- Export timesheets for POs assigned to them
+- Managers and admins: use **Export Timesheets** / filters to export by week, site, PO, etc. (not tied to legacy per-user PO assignments)
 
 ### Budget Detail (PO Budgets)
 - PO-level budget view: Client & PO Information (including client contact per PO), budget summary, invoices, billable hours and cost, expenses, bill rates

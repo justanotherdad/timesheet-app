@@ -88,7 +88,7 @@ After login, you see the **Timesheet Dashboard**. The cards and links you see de
 1. From the Dashboard, click **New Timesheet** (or **Create one** under Current Week).
 2. You are on **New Weekly Timesheet** for the current week.
 3. Optionally use **Copy Previous Week** to bring in rows from last week (see below).
-4. Add **billable** rows: Site/Client, PO, Task description, System/Deliverable/Activity as needed, and hours per day (Mon–Sun). The **Activity**, **Deliverable**, and **System** dropdowns only show options assigned to your user profile (sites you are assigned to).
+4. Add **billable** rows: Site/Client, PO, Task description, System/Deliverable/Activity as needed, and hours per day (Mon–Sun). **Which POs you can choose** comes from **Bill Rates by Person** on each PO’s budget (you must have at least one bill-rate row for that PO). The **Activity**, **Deliverable**, and **System** dropdowns are filtered to sites and junction rules tied to those POs (and to organization setup under Manage Organization / Manage Timesheet Options).
 5. Add or adjust **unbillable** rows (Holiday, Internal, PTO) if applicable.
 6. Click **Save as Draft** to save and continue later, or **Submit** when the week is complete.
 
@@ -181,21 +181,21 @@ You can also open **View Details** first to review the timesheet, then approve f
 
 ### 5.2 Viewing users (all roles that have access)
 
-- You see a table (or on mobile, cards) with: Name, Email, Role, Sites, Departments, Purchase Orders, Supervisor, Final Approver, and a **View** button.
-- Use **Search** (name/email) and **Role** filter to narrow the list.
+- You see a table (or on mobile, cards) with: Name, Status, Role, **Timesheet POs (bill rates)** (read-only summary: site, PO, project description), Supervisor, Final Approver, and **View**.
+- Use **Search**, **Role**, **Timesheet PO (bill rate)**, and other filters to narrow the list.
 - Click **View** (or the user name, where applicable) to open that user’s details.
 
 ### 5.3 Supervisor: view only
 
 - Supervisors see only **employees** who report to them.
-- You can open a user and see: Name, Email, Role, Supervisor, Final Approver, Sites, Departments, Purchase Orders.
+- You can open a user and see: Name, Email, Role, Supervisor, Final Approver, and the **Timesheet POs (from bill rates)** list.
 - You **cannot** add users, edit users, send password links, or delete users.
 
 ### 5.4 Manager: add and edit users
 
 - You see **employees and supervisors** who report to you.
-- **Add user:** Click **Add User**, fill in name, email, role (Employee, Supervisor, or Manager), **Supervisor** (one field), Manager, Final Approver, and site/department/PO assignments. Set **Supervisor** to yourself if they report to you. Save.
-- **Edit user:** Open the user with **View**, then use **Edit** (or the edit form). There is a single **Supervisor** field (not two). Change name, role, Supervisor, Manager, Final Approver, or assignments as allowed. Save.
+- **Add user:** Click **Add User**, fill in name, email, role (Employee, Supervisor, or Manager), **Supervisor** (one field), Manager, and Final Approver. Timesheet PO access is **not** set here — it comes from **Bill Rates by Person** on each PO budget. Set **Supervisor** to yourself if they report to you. Save.
+- **Edit user:** Open the user with **View**, then use **Edit** (or the edit form). There is a single **Supervisor** field (not two). Change name, role, Supervisor, Manager, and Final Approver as allowed. The **Timesheet POs (from bill rates)** section is read-only. Save.
 - You can **generate a password/invite link** for users who report to you and send it to them (e.g. by email).
 
 ### 5.5 Admin / Super Admin: full user management
@@ -339,12 +339,13 @@ Available only to **Managers**, **Admins**, and **Super Admins**. Employees and 
 ## Need Help?
 
 - **Login or password:** Contact your manager or an administrator.
-- **Missing options or access:** Your role or assignments (sites, reports) may need to be updated in **Manage Users** (admin/manager).
+- **Missing options or access:** Your **reporting chain** (Supervisor, Manager, Final Approver) is set in **Manage Users**. **Timesheet POs** are not set there — add them under **Budget Detail** → PO → **Bill Rates by Person**.
 - **Approval chain:** The structure is Employee → Supervisor → Manager → Final Approver. Each user’s profile has one **Supervisor** field plus **Manager** and **Final Approver**. If a field is “None,” the next person in the structure is used. Set these in **Manage Users**.
-- **Empty Activity/Deliverable/System dropdowns:** You only see options for sites you are assigned to. Ask an admin or manager to assign you to the right sites (and ensure those sites have systems, activities, and deliverables configured).
+- **Empty PO dropdown on timesheet:** You need at least one **bill rate row** for you on that PO (**Budget Detail** → PO → **Bill Rates by Person**). New weeks only list **active** POs; editing an old timesheet still shows POs already on the sheet.
+- **Empty Activity/Deliverable/System dropdowns:** Options depend on **sites tied to your bill-rate POs** and how systems/activities/deliverables are linked to departments/POs. Ensure you have bill rates on the right POs, and that **Manage Timesheet Options** / **Manage Organization** has the right rows for those sites.
 - **Budget access (Managers/Supervisors/Employees):** Only Admins can grant budget access. Ask an Admin to grant you access for a specific PO. They go to **Budget Detail** → select the PO → **Budget Access** → **Grant Access** → select your name.
-- **Bill rate dropdown empty:** Bill rates can be added for any user with a profile. If the dropdown is empty, ensure users exist in **Manage Users** with names set.
+- **Bill rate dropdown empty (on budget page):** Bill rates can be added for any user with a profile. If the dropdown is empty, ensure users exist in **Manage Users** with names set.
 
 ---
 
-*Last updated to match the current CTG Timesheet Management site: My Timesheets (own only for non-admins), Budget Balance parity for grantees, one-hour idle auto logoff, Budget Detail, Budget Access, Client Contact, Billable Cost, and bill rates for all users.*
+*Last updated to match the current CTG Timesheet Management site: My Timesheets (own only for non-admins), timesheet PO eligibility from PO budget bill rates (not Manage Users assignments), Budget Balance parity for grantees, one-hour idle auto logoff, Budget Detail, Budget Access, Client Contact, Billable Cost, and bill rates for all users.*

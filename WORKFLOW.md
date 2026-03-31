@@ -114,7 +114,7 @@ npm run dev
 git add .
 
 # 2. Commit with a short message describing the change
-git commit -m "fixes"
+git commit -m "timesheet confirmation"
 
 # 3. Push to GitHub (triggers Vercel deployment)
 git push
@@ -289,8 +289,8 @@ git push
 
 ## 📖 Related documentation
 
-- **JOB_AID.md** – How to use the site (employees through admins): timesheets, approvals, manage users, dropdowns (activities/deliverables/systems filtered by user’s assigned sites), single Supervisor field in edit user, approval chain (Supervisor → Manager → Final Approver; skip none).
-- **Access Levels.md** – Role-based access; My Timesheets (own only for non-admins); Pending Approvals / Approved Timesheets; Budget Balance API / billable labor aggregation (service-role where needed).
+- **JOB_AID.md** – How to use the site (employees through admins): timesheets, approvals, manage users, timesheet POs from **Bill Rates by Person** on each PO budget (not from user site/PO pickers), activities/deliverables/systems filtered by those POs’ sites, single Supervisor field in edit user, approval chain (Supervisor → Manager → Final Approver; skip none).
+- **Access Levels.md** – Role-based access; My Timesheets (own only for non-admins); Pending Approvals / Approved Timesheets; bill-rate–driven timesheet dropdowns; `user_sites` for org/bid sheets; Budget Balance API / billable labor aggregation (service-role where needed).
 
 ---
 
