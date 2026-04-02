@@ -31,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 
-  const { data: po } = await supabase.from('purchase_orders').select('id, budget_type').eq('id', poId).single()
+  const { data: po } = await supabase.from('purchase_orders').select('id, budget_type, site_id').eq('id', poId).single()
   if (!po) {
     return NextResponse.json({ error: 'PO not found' }, { status: 404 })
   }
@@ -52,6 +52,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
       `
       id,
       budgeted_hours,
+      description,
       system_id,
       deliverable_id,
       activity_id,
@@ -114,6 +115,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
       systemLabel: systemLabel || '—',
       deliverableName: del?.name || '—',
       activityName: act?.name || '—',
+      description: (r.description as string | null | undefined) ?? null,
       budgetedHours: budgeted,
       actualHours: actual,
       variance: budgeted - actual,
@@ -132,6 +134,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
 
   return NextResponse.json(
     {
+      siteId: po.site_id ?? null,
       rows,
       totals: {
         budgetedHours: totalBudgeted,

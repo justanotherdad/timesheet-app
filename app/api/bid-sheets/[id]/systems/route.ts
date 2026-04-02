@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
+import { deleteBidSheetItemFromProject, type BidSheetItemRow } from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,4 +94,56 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
+}
+
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: bidSheetId } = await params
+  const user = await getCurrentUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!['manager', 'admin', 'super_admin'].includes(user.profile.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const supabase = await createClient()
+  const allowed = await canAccess(supabase, user.id, user.profile.role, bidSheetId)
+  if (!allowed) return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+
+  const systemId = new URL(req.url).searchParams.get('system_id')
+  if (!systemId) return NextResponse.json({ error: 'system_id is required' }, { status: 400 })
+
+  let admin: ReturnType<typeof createAdminClient>
+  try {
+    admin = createAdminClient()
+  } catch {
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+  }
+
+  const { data: sheet } = await admin.from('bid_sheets').select('site_id, status, converted_po_id').eq('id', bidSheetId).single()
+  const { data: rows } = await admin
+    .from('bid_sheet_items')
+    .select(
+      `
+      *,
+      bid_sheet_systems (id, name, code),
+      bid_sheet_deliverables (id, name),
+      bid_sheet_activities (id, name)
+    `
+    )
+    .eq('bid_sheet_id', bidSheetId)
+    .eq('bid_sheet_system_id', systemId)
+
+  try {
+    if (sheet?.status === 'converted' && sheet.converted_po_id && sheet.site_id && rows?.length) {
+      for (const r of rows) {
+        await deleteBidSheetItemFromProject(admin, sheet.site_id, sheet.converted_po_id, r as BidSheetItemRow)
+      }
+    }
+    await admin.from('bid_sheet_items').delete().eq('bid_sheet_id', bidSheetId).eq('bid_sheet_system_id', systemId)
+    const { error } = await admin.from('bid_sheet_systems').delete().eq('id', systemId).eq('bid_sheet_id', bidSheetId)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Failed to delete system'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }

@@ -117,6 +117,8 @@ function BudgetPageClientInner({
             refreshTick={budgetRefreshKey}
             reportTitle={`${selectedPO.po_number}${selectedPO.description ? ` — ${selectedPO.description}` : selectedPO.project_name ? ` — ${selectedPO.project_name}` : ''}`}
             fileBaseName={selectedPO.po_number}
+            canEditMatrix={!hasLimitedAccess && ['manager', 'admin', 'super_admin'].includes(user.profile.role)}
+            onMatrixRefresh={() => setBudgetRefreshKey((k) => k + 1)}
           />
         </div>
       )

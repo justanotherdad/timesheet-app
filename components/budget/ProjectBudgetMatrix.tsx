@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, Printer } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Pencil, Plus, Printer, Trash2, X } from 'lucide-react'
 import { formatHours } from '@/lib/utils'
 
 /** Variance always shows numeric (0.00 when balanced); formatHours treats 0 as em dash. */
@@ -65,12 +65,14 @@ type MatrixRow = {
   systemLabel: string
   deliverableName: string
   activityName: string
+  description?: string | null
   budgetedHours: number
   actualHours: number
   variance: number
 }
 
 type MatrixPayload = {
+  siteId?: string | null
   rows: MatrixRow[]
   totals: {
     budgetedHours: number
@@ -80,7 +82,7 @@ type MatrixPayload = {
   }
 }
 
-type SortColumn = 'system' | 'deliverable' | 'activity' | 'budget' | 'actual' | 'variance' | 'pct'
+type SortColumn = 'system' | 'deliverable' | 'activity' | 'description' | 'budget' | 'actual' | 'variance' | 'pct'
 
 type ProjectBudgetMatrixProps = {
   poId: string
@@ -89,6 +91,9 @@ type ProjectBudgetMatrixProps = {
   reportTitle?: string
   /** Used for download filenames (e.g. PO number). */
   fileBaseName?: string
+  /** Manager/admin/super_admin: add rows, edit budget/description, delete rows. */
+  canEditMatrix?: boolean
+  onMatrixRefresh?: () => void
 }
 
 export default function ProjectBudgetMatrix({
@@ -96,6 +101,8 @@ export default function ProjectBudgetMatrix({
   refreshTick,
   reportTitle,
   fileBaseName,
+  canEditMatrix = false,
+  onMatrixRefresh,
 }: ProjectBudgetMatrixProps) {
   const [data, setData] = useState<MatrixPayload | null>(null)
   const [loading, setLoading] = useState(true)
@@ -109,6 +116,22 @@ export default function ProjectBudgetMatrix({
   const [filterPct, setFilterPct] = useState<PctBucket>('')
   const [sortColumn, setSortColumn] = useState<SortColumn>('system')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const [showAddRow, setShowAddRow] = useState(false)
+  const [addSys, setAddSys] = useState('')
+  const [addSysCode, setAddSysCode] = useState('')
+  const [addDel, setAddDel] = useState('')
+  const [addAct, setAddAct] = useState('')
+  const [addBudget, setAddBudget] = useState('0')
+  const [addDesc, setAddDesc] = useState('')
+  const [mutating, setMutating] = useState(false)
+  const [mutateError, setMutateError] = useState<string | null>(null)
+
+  const [editingRow, setEditingRow] = useState<MatrixRow | null>(null)
+  const [editBudget, setEditBudget] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+
+  const bumpRefresh = () => onMatrixRefresh?.()
 
   useEffect(() => {
     let cancelled = false
@@ -186,6 +209,12 @@ export default function ProjectBudgetMatrix({
         case 'activity':
           cmp = a.activityName.localeCompare(b.activityName, undefined, { sensitivity: 'base' })
           break
+        case 'description': {
+          const da = (a.description ?? '').trim()
+          const db = (b.description ?? '').trim()
+          cmp = da.localeCompare(db, undefined, { sensitivity: 'base' })
+          break
+        }
         case 'budget':
           cmp = a.budgetedHours - b.budgetedHours
           break
@@ -232,6 +261,92 @@ export default function ProjectBudgetMatrix({
     }
   }
 
+  const openEdit = (r: MatrixRow) => {
+    setMutateError(null)
+    setEditingRow(r)
+    setEditBudget(String(r.budgetedHours))
+    setEditDesc((r.description ?? '') || '')
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingRow) return
+    setMutating(true)
+    setMutateError(null)
+    try {
+      const res = await fetch(`/api/budget/${poId}/project-details`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingRow.id,
+          budgeted_hours: Number(editBudget) || 0,
+          description: editDesc.trim() || null,
+        }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Save failed')
+      setEditingRow(null)
+      bumpRefresh()
+    } catch (e) {
+      setMutateError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  const handleDeleteRow = async (r: MatrixRow) => {
+    if (!confirm(`Remove this matrix row?\n${r.systemLabel} · ${r.deliverableName} · ${r.activityName}`)) return
+    setMutating(true)
+    setMutateError(null)
+    try {
+      const res = await fetch(`/api/budget/${poId}/project-details?id=${encodeURIComponent(r.id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Delete failed')
+      bumpRefresh()
+    } catch (e) {
+      setMutateError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  const handleAddRow = async () => {
+    setMutating(true)
+    setMutateError(null)
+    try {
+      const res = await fetch(`/api/budget/${poId}/project-details`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_name: addSys.trim(),
+          system_code: addSysCode.trim() || null,
+          deliverable_name: addDel.trim(),
+          activity_name: addAct.trim(),
+          budgeted_hours: Number(addBudget) || 0,
+          description: addDesc.trim() || null,
+        }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Could not add row')
+      setAddSys('')
+      setAddSysCode('')
+      setAddDel('')
+      setAddAct('')
+      setAddBudget('0')
+      setAddDesc('')
+      setShowAddRow(false)
+      bumpRefresh()
+    } catch (e) {
+      setMutateError(e instanceof Error ? e.message : 'Could not add row')
+    } finally {
+      setMutating(false)
+    }
+  }
+
   const SortIcon = ({ col }: { col: SortColumn }) => {
     if (sortColumn !== col) return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-50" />
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1 inline" /> : <ArrowDown className="h-3 w-3 ml-1 inline" />
@@ -244,6 +359,7 @@ export default function ProjectBudgetMatrix({
       'System',
       'Deliverable',
       'Activity',
+      'Description',
       'Budget (h)',
       'Actual (h)',
       'Var (h)',
@@ -277,6 +393,7 @@ export default function ProjectBudgetMatrix({
           q(r.systemLabel),
           q(r.deliverableName),
           q(r.activityName),
+          q((r.description ?? '').trim()),
           q(r.budgetedHours.toFixed(2)),
           q(r.actualHours.toFixed(2)),
           q(r.variance.toFixed(2)),
@@ -287,6 +404,7 @@ export default function ProjectBudgetMatrix({
     lines.push(
       [
         q(filterSummary ? 'Totals (visible rows)' : 'Totals (matrix rows)'),
+        q(''),
         q(''),
         q(''),
         q(visibleTotals.budgetedHours.toFixed(2)),
@@ -349,6 +467,19 @@ export default function ProjectBudgetMatrix({
           </p>
         </div>
         <div className="flex flex-wrap gap-2 print:hidden shrink-0">
+          {canEditMatrix && (
+            <button
+              type="button"
+              onClick={() => {
+                setMutateError(null)
+                setShowAddRow((v) => !v)
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              {showAddRow ? 'Hide add row' : 'Add matrix row'}
+            </button>
+          )}
           <button
             type="button"
             onClick={exportCsv}
@@ -376,6 +507,11 @@ export default function ProjectBudgetMatrix({
           {error}
         </div>
       )}
+      {mutateError && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+          {mutateError}
+        </div>
+      )}
 
       {loading && !data && (
         <div className="flex items-center justify-center py-12">
@@ -384,9 +520,88 @@ export default function ProjectBudgetMatrix({
       )}
 
       {!loading && data && data.rows.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 py-4">
-          No project matrix rows yet. Convert a bid sheet to populate this PO, or add rows in the database.
-        </p>
+        <div className="text-sm text-gray-500 dark:text-gray-400 py-4 space-y-2">
+          <p>No project matrix rows yet. Convert a bid sheet to populate this PO{canEditMatrix ? ', or add a row below.' : '.'}</p>
+        </div>
+      )}
+
+      {canEditMatrix && showAddRow && (
+        <div className="mb-6 p-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/30 print:hidden space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Add matrix row</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Creates or reuses systems, deliverables, and activities for this site by name, then links them to this PO. If the same combination already exists, budget and description are updated.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              System name *
+              <input
+                value={addSys}
+                onChange={(e) => setAddSys(e.target.value)}
+                className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+                placeholder="e.g. HVAC"
+              />
+            </label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              System code (optional)
+              <input
+                value={addSysCode}
+                onChange={(e) => setAddSysCode(e.target.value)}
+                className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+                placeholder="e.g. TA-1320"
+              />
+            </label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Deliverable *
+              <input
+                value={addDel}
+                onChange={(e) => setAddDel(e.target.value)}
+                className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+              />
+            </label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Activity *
+              <input
+                value={addAct}
+                onChange={(e) => setAddAct(e.target.value)}
+                className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+              />
+            </label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Budget (h)
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={addBudget}
+                onChange={(e) => setAddBudget(e.target.value)}
+                className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+              />
+            </label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 sm:col-span-2 lg:col-span-3">
+              Description (optional)
+              <textarea
+                value={addDesc}
+                onChange={(e) => setAddDesc(e.target.value)}
+                rows={2}
+                className="mt-1 w-full px-2 py-1.5 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+                placeholder="Scope or notes for this line…"
+              />
+            </label>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={mutating || !addSys.trim() || !addDel.trim() || !addAct.trim()}
+              onClick={handleAddRow}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              Save row
+            </button>
+            <button type="button" onClick={() => setShowAddRow(false)} className="px-4 py-2 rounded-lg text-sm border border-gray-300 dark:border-gray-600">
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {hasRows && (
@@ -510,7 +725,7 @@ export default function ProjectBudgetMatrix({
 
       {showTable && (
         <div className="overflow-x-auto -mx-2 px-2">
-          <table className="w-full text-sm min-w-[720px]">
+          <table className="w-full text-sm min-w-[960px]">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-600">
                 <th className="text-left py-2 pr-4 font-medium text-gray-700 dark:text-gray-300">
@@ -541,6 +756,16 @@ export default function ProjectBudgetMatrix({
                   >
                     Activity
                     <SortIcon col="activity" />
+                  </button>
+                </th>
+                <th className="text-left py-2 pr-4 max-w-[220px] font-medium text-gray-700 dark:text-gray-300">
+                  <button
+                    type="button"
+                    onClick={() => handleSort('description')}
+                    className="inline-flex items-center hover:text-gray-900 dark:hover:text-gray-100"
+                  >
+                    Description
+                    <SortIcon col="description" />
                   </button>
                 </th>
                 <th className="text-right py-2 px-2 font-medium text-gray-700 dark:text-gray-300">
@@ -583,6 +808,11 @@ export default function ProjectBudgetMatrix({
                     <SortIcon col="pct" />
                   </button>
                 </th>
+                {canEditMatrix && (
+                  <th className="text-right py-2 pl-2 font-medium text-gray-700 dark:text-gray-300 print:hidden w-[1%] whitespace-nowrap">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -594,22 +824,51 @@ export default function ProjectBudgetMatrix({
                       ? 'text-red-600 dark:text-red-400'
                       : 'text-emerald-700 dark:text-emerald-400'
                     : ''
+                const descText = (r.description ?? '').trim()
                 return (
                   <tr key={r.id} className="border-b border-gray-100 dark:border-gray-700">
                     <td className="py-2 pr-4 text-gray-900 dark:text-gray-100 align-top">{r.systemLabel}</td>
                     <td className="py-2 pr-4 text-gray-800 dark:text-gray-200 align-top">{r.deliverableName}</td>
                     <td className="py-2 pr-4 text-gray-800 dark:text-gray-200 align-top">{r.activityName}</td>
+                    <td
+                      className="py-2 pr-4 text-gray-600 dark:text-gray-400 align-top max-w-[220px] text-xs"
+                      title={descText || undefined}
+                    >
+                      {descText ? <span className="line-clamp-3 whitespace-pre-wrap break-words">{descText}</span> : '—'}
+                    </td>
                     <td className="text-right py-2 px-2 tabular-nums">{formatHours(r.budgetedHours)}</td>
                     <td className="text-right py-2 px-2 tabular-nums">{formatHours(r.actualHours)}</td>
                     <td className={`text-right py-2 px-2 tabular-nums ${varCls}`}>{fmtVariance(r.variance)}</td>
                     <td className="text-right py-2 pl-2 tabular-nums text-gray-600 dark:text-gray-400">
                       {pct === null ? '—' : `${pct.toFixed(0)}%`}
                     </td>
+                    {canEditMatrix && (
+                      <td className="py-2 pl-2 print:hidden align-top whitespace-nowrap text-right">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(r)}
+                          disabled={mutating}
+                          className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline text-xs mr-2"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRow(r)}
+                          disabled={mutating}
+                          className="inline-flex items-center gap-1 text-red-600 dark:text-red-400 hover:underline text-xs"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Delete
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 )
               })}
               <tr className="font-semibold bg-gray-50 dark:bg-gray-900/40 border-t-2 border-gray-200 dark:border-gray-600">
-                <td className="py-3 pr-4" colSpan={3}>
+                <td className="py-3 pr-4" colSpan={4}>
                   {hasActiveFilters ? 'Totals (visible rows)' : 'Totals (matrix rows)'}
                 </td>
                 <td className="text-right py-3 px-2 tabular-nums">{formatHours(visibleTotals.budgetedHours)}</td>
@@ -618,9 +877,86 @@ export default function ProjectBudgetMatrix({
                 <td className="text-right py-3 pl-2 tabular-nums text-gray-600 dark:text-gray-400">
                   {visibleTotals.pct == null ? '—' : `${visibleTotals.pct.toFixed(0)}%`}
                 </td>
+                {canEditMatrix && <td className="print:hidden" />}
               </tr>
             </tbody>
           </table>
+        </div>
+      )}
+
+      {editingRow && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:hidden" onClick={() => !mutating && setEditingRow(null)}>
+          <div
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Edit matrix row</h3>
+              <button
+                type="button"
+                onClick={() => !mutating && setEditingRow(null)}
+                className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3 text-sm">
+              <p className="text-gray-600 dark:text-gray-400">
+                To rename system, deliverable, or activity, update them on the bid sheet (if linked) or in site setup. Here you can adjust budget hours and the row description.
+              </p>
+              <div>
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">System</span>
+                <p className="text-gray-900 dark:text-gray-100">{editingRow.systemLabel}</p>
+              </div>
+              <div>
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Deliverable</span>
+                <p className="text-gray-900 dark:text-gray-100">{editingRow.deliverableName}</p>
+              </div>
+              <div>
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Activity</span>
+                <p className="text-gray-900 dark:text-gray-100">{editingRow.activityName}</p>
+              </div>
+              <label className="block">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Budget (h)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={editBudget}
+                  onChange={(e) => setEditBudget(e.target.value)}
+                  className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Description (optional)</span>
+                <textarea
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  rows={4}
+                  className="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                  placeholder="Scope or notes for this line…"
+                />
+              </label>
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingRow(null)}
+                disabled={mutating}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={mutating}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

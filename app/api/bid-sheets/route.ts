@@ -95,13 +95,23 @@ export async function POST(req: Request) {
     }
     if ((srcDeliverables || []).length > 0) {
       for (const d of srcDeliverables || []) {
-        const { data: ins } = await db.from('bid_sheet_deliverables').insert({ bid_sheet_id: sheet.id, name: d.name }).select('id').single()
+        const dRow = d as { name: string; description?: string | null }
+        const { data: ins } = await db
+          .from('bid_sheet_deliverables')
+          .insert({ bid_sheet_id: sheet.id, name: dRow.name, description: dRow.description ?? null })
+          .select('id')
+          .single()
         if (ins?.id) delMap.set(d.id, ins.id)
       }
     }
     if ((srcActivities || []).length > 0) {
       for (const a of srcActivities || []) {
-        const { data: ins } = await db.from('bid_sheet_activities').insert({ bid_sheet_id: sheet.id, name: a.name }).select('id').single()
+        const aRow = a as { name: string; description?: string | null }
+        const { data: ins } = await db
+          .from('bid_sheet_activities')
+          .insert({ bid_sheet_id: sheet.id, name: aRow.name, description: aRow.description ?? null })
+          .select('id')
+          .single()
         if (ins?.id) actMap.set(a.id, ins.id)
       }
     }

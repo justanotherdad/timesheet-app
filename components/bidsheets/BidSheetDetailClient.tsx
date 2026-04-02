@@ -14,8 +14,8 @@ interface Item {
   budgeted_hours: number
   labor_id?: string | null
   bid_sheet_systems?: { id: string; name: string; code?: string }
-  bid_sheet_deliverables?: { id: string; name: string }
-  bid_sheet_activities?: { id: string; name: string }
+  bid_sheet_deliverables?: { id: string; name: string; description?: string | null }
+  bid_sheet_activities?: { id: string; name: string; description?: string | null }
 }
 
 interface Labor {
@@ -68,8 +68,8 @@ export default function BidSheetDetailClient({
   labor: Labor[]
   indirectLabor: IndirectLabor[]
   systems: Array<{ id: string; name: string; code?: string; description?: string | null }>
-  deliverables: Array<{ id: string; name: string }>
-  activities: Array<{ id: string; name: string }>
+  deliverables: Array<{ id: string; name: string; description?: string | null }>
+  activities: Array<{ id: string; name: string; description?: string | null }>
   departments?: Array<{ id: string; name: string }>
   user: { id: string; profile: { role: string } }
   readOnly?: boolean
@@ -127,7 +127,15 @@ export default function BidSheetDetailClient({
   const [addSystemCode, setAddSystemCode] = useState('')
   const [addDeliverableName, setAddDeliverableName] = useState('')
   const [addActivityName, setAddActivityName] = useState('')
+  const [addDeliverableDescription, setAddDeliverableDescription] = useState('')
+  const [addActivityDescription, setAddActivityDescription] = useState('')
   const [addSystemDescription, setAddSystemDescription] = useState('')
+  const [editingDeliverable, setEditingDeliverable] = useState<{ id: string; name: string; description?: string | null } | null>(null)
+  const [editingActivity, setEditingActivity] = useState<{ id: string; name: string; description?: string | null } | null>(null)
+  const [editDelName, setEditDelName] = useState('')
+  const [editDelDesc, setEditDelDesc] = useState('')
+  const [editActName, setEditActName] = useState('')
+  const [editActDesc, setEditActDesc] = useState('')
   const [hourDrafts, setHourDrafts] = useState<Record<string, string>>({})
   const [editingSystem, setEditingSystem] = useState<{ id: string; name: string; code?: string | null; description?: string | null } | null>(null)
   const [editSysName, setEditSysName] = useState('')
@@ -551,12 +559,13 @@ export default function BidSheetDetailClient({
       const res = await fetch(`/api/bid-sheets/${bidSheetId}/deliverables`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, description: addDeliverableDescription.trim() || undefined }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed')
       setShowAddDeliverable(false)
       setAddDeliverableName('')
+      setAddDeliverableDescription('')
       router.refresh()
     } catch (e: any) {
       setError(e.message)
@@ -574,12 +583,13 @@ export default function BidSheetDetailClient({
       const res = await fetch(`/api/bid-sheets/${bidSheetId}/activities`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, description: addActivityDescription.trim() || undefined }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed')
       setShowAddActivity(false)
       setAddActivityName('')
+      setAddActivityDescription('')
       router.refresh()
     } catch (e: any) {
       setError(e.message)
@@ -606,6 +616,104 @@ export default function BidSheetDetailClient({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed')
       setEditingSystem(null)
+      router.refresh()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSaveDeliverableEdit = async () => {
+    if (!editingDeliverable || !editDelName.trim()) return
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/deliverables`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deliverable_id: editingDeliverable.id,
+          name: editDelName.trim(),
+          description: editDelDesc.trim() || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+      setEditingDeliverable(null)
+      router.refresh()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSaveActivityEdit = async () => {
+    if (!editingActivity || !editActName.trim()) return
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/activities`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activity_id: editingActivity.id,
+          name: editActName.trim(),
+          description: editActDesc.trim() || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+      setEditingActivity(null)
+      router.refresh()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteSystem = async (systemId: string, label: string) => {
+    if (!confirm(`Delete system "${label}"? All matrix cells for this system will be removed.`)) return
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/systems?system_id=${encodeURIComponent(systemId)}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+      router.refresh()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteDeliverable = async (deliverableId: string, label: string) => {
+    if (!confirm(`Delete deliverable "${label}"? All matrix cells using it will be removed.`)) return
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/deliverables?deliverable_id=${encodeURIComponent(deliverableId)}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+      router.refresh()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteActivity = async (activityId: string, label: string) => {
+    if (!confirm(`Delete activity "${label}"? All matrix cells using it will be removed.`)) return
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/activities?activity_id=${encodeURIComponent(activityId)}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
       router.refresh()
     } catch (e: any) {
       setError(e.message)
@@ -858,18 +966,27 @@ export default function BidSheetDetailClient({
                               ) : null}
                             </span>
                             {canEditBidStructure && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingSystem(s)
-                                  setEditSysName(s.name)
-                                  setEditSysCode(s.code ?? '')
-                                  setEditSysDesc(s.description ?? '')
-                                }}
-                                className="shrink-0 text-blue-600 dark:text-blue-400 hover:underline"
-                              >
-                                Edit
-                              </button>
+                              <span className="shrink-0 flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSystem(s)
+                                    setEditSysName(s.name)
+                                    setEditSysCode(s.code ?? '')
+                                    setEditSysDesc(s.description ?? '')
+                                  }}
+                                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSystem(s.id, s.name)}
+                                  className="text-red-600 dark:text-red-400 hover:underline"
+                                >
+                                  Delete
+                                </button>
+                              </span>
                             )}
                           </li>
                         ))}
@@ -884,23 +1001,72 @@ export default function BidSheetDetailClient({
                       <Plus className="h-4 w-4" /> Add Deliverable
                     </button>
                   ) : (
-                    <div className="flex gap-2 items-center">
-                      <input
-                        type="text"
-                        value={addDeliverableName}
-                        onChange={(e) => setAddDeliverableName(e.target.value)}
-                        placeholder="Name (e.g. Design Documents)"
-                        className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-40"
+                    <div className="flex flex-col gap-2 max-w-md">
+                      <div className="flex gap-2 items-center flex-wrap">
+                        <input
+                          type="text"
+                          value={addDeliverableName}
+                          onChange={(e) => setAddDeliverableName(e.target.value)}
+                          placeholder="Name (e.g. Design Documents)"
+                          className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-40"
+                        />
+                        <button type="button" onClick={handleAddDeliverable} disabled={loading || !addDeliverableName.trim()} className="h-9 px-3 bg-blue-600 text-white rounded text-sm disabled:opacity-50 shrink-0">
+                          Add
+                        </button>
+                        <button type="button" onClick={() => { setShowAddDeliverable(false); setAddDeliverableName(''); setAddDeliverableDescription('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
+                          Cancel
+                        </button>
+                      </div>
+                      <textarea
+                        value={addDeliverableDescription}
+                        onChange={(e) => setAddDeliverableDescription(e.target.value)}
+                        placeholder="Description (optional)"
+                        rows={2}
+                        className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm"
                       />
-                      <button type="button" onClick={handleAddDeliverable} disabled={loading || !addDeliverableName.trim()} className="h-9 px-3 bg-blue-600 text-white rounded text-sm disabled:opacity-50 shrink-0">
-                        Add
-                      </button>
-                      <button type="button" onClick={() => { setShowAddDeliverable(false); setAddDeliverableName('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
-                        Cancel
-                      </button>
                     </div>
                   )}
-                  {deliverables.length > 0 && <span className="text-xs text-gray-500">{deliverables.length} deliverable(s)</span>}
+                  {deliverables.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <span className="text-xs text-gray-500">{deliverables.length} deliverable(s)</span>
+                      <ul className="text-xs text-gray-700 dark:text-gray-300 max-h-36 overflow-y-auto space-y-1 pr-1">
+                        {deliverables.map((d) => (
+                          <li key={d.id} className="flex justify-between gap-2 items-start border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0">
+                            <span className="min-w-0">
+                              <span className="font-medium">{d.name}</span>
+                              {d.description ? (
+                                <span className="block text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2" title={d.description}>
+                                  {d.description}
+                                </span>
+                              ) : null}
+                            </span>
+                            {canEditBidStructure && (
+                              <span className="shrink-0 flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingDeliverable(d)
+                                    setEditDelName(d.name)
+                                    setEditDelDesc(d.description ?? '')
+                                  }}
+                                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDeliverable(d.id, d.name)}
+                                  className="text-red-600 dark:text-red-400 hover:underline"
+                                >
+                                  Delete
+                                </button>
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col gap-2">
                   <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Activities</span>
@@ -909,23 +1075,72 @@ export default function BidSheetDetailClient({
                       <Plus className="h-4 w-4" /> Add Activity
                     </button>
                   ) : (
-                    <div className="flex gap-2 items-center">
-                      <input
-                        type="text"
-                        value={addActivityName}
-                        onChange={(e) => setAddActivityName(e.target.value)}
-                        placeholder="Name (e.g. Design)"
-                        className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-40"
+                    <div className="flex flex-col gap-2 max-w-md">
+                      <div className="flex gap-2 items-center flex-wrap">
+                        <input
+                          type="text"
+                          value={addActivityName}
+                          onChange={(e) => setAddActivityName(e.target.value)}
+                          placeholder="Name (e.g. Design)"
+                          className="h-9 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm w-40"
+                        />
+                        <button type="button" onClick={handleAddActivity} disabled={loading || !addActivityName.trim()} className="h-9 px-3 bg-blue-600 text-white rounded text-sm disabled:opacity-50 shrink-0">
+                          Add
+                        </button>
+                        <button type="button" onClick={() => { setShowAddActivity(false); setAddActivityName(''); setAddActivityDescription('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
+                          Cancel
+                        </button>
+                      </div>
+                      <textarea
+                        value={addActivityDescription}
+                        onChange={(e) => setAddActivityDescription(e.target.value)}
+                        placeholder="Description (optional)"
+                        rows={2}
+                        className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm"
                       />
-                      <button type="button" onClick={handleAddActivity} disabled={loading || !addActivityName.trim()} className="h-9 px-3 bg-blue-600 text-white rounded text-sm disabled:opacity-50 shrink-0">
-                        Add
-                      </button>
-                      <button type="button" onClick={() => { setShowAddActivity(false); setAddActivityName('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
-                        Cancel
-                      </button>
                     </div>
                   )}
-                  {activities.length > 0 && <span className="text-xs text-gray-500">{activities.length} activity(ies)</span>}
+                  {activities.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <span className="text-xs text-gray-500">{activities.length} activity(ies)</span>
+                      <ul className="text-xs text-gray-700 dark:text-gray-300 max-h-36 overflow-y-auto space-y-1 pr-1">
+                        {activities.map((a) => (
+                          <li key={a.id} className="flex justify-between gap-2 items-start border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0">
+                            <span className="min-w-0">
+                              <span className="font-medium">{a.name}</span>
+                              {a.description ? (
+                                <span className="block text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2" title={a.description}>
+                                  {a.description}
+                                </span>
+                              ) : null}
+                            </span>
+                            {canEditBidStructure && (
+                              <span className="shrink-0 flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingActivity(a)
+                                    setEditActName(a.name)
+                                    setEditActDesc(a.description ?? '')
+                                  }}
+                                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteActivity(a.id, a.name)}
+                                  className="text-red-600 dark:text-red-400 hover:underline"
+                                >
+                                  Delete
+                                </button>
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1105,7 +1320,7 @@ export default function BidSheetDetailClient({
                         }
                         return sum + getItemHours(row.systemId, d.id, row.activityId)
                       }, 0)
-                      .toFixed(1)}
+                      .toFixed(2)}
                   </span>
                   <button
                     type="button"
@@ -1233,7 +1448,7 @@ export default function BidSheetDetailClient({
                         })}
                         <div className={`${cellClass} border-l border-gray-200 dark:border-gray-600 flex items-center justify-end bg-gray-50/80 dark:bg-gray-800/50`}>
                           <span className="text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100" title="Sum of hours for this row">
-                            {rowSumHrs.toFixed(1)}
+                            {rowSumHrs.toFixed(2)}
                           </span>
                         </div>
                       </div>
@@ -1269,7 +1484,7 @@ export default function BidSheetDetailClient({
               <tr key={l.id} className="border-b border-gray-200 dark:border-gray-700">
                 <td className="py-2">{l.user_profiles?.name || l.placeholder_name || '-'}</td>
                 <td className="py-2">${Number(l.bid_rate).toFixed(2)}</td>
-                <td className="py-2 tabular-nums">{hours.toFixed(1)}</td>
+                <td className="py-2 tabular-nums">{hours.toFixed(2)}</td>
                 <td className="py-2 tabular-nums">${cost.toFixed(2)}</td>
                 {canEdit && (
                   <td>
@@ -1561,6 +1776,98 @@ export default function BidSheetDetailClient({
                 type="button"
                 onClick={handleSaveSystemEdit}
                 disabled={loading || !editSysName.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingDeliverable && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditingDeliverable(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Edit deliverable</h3>
+              <button type="button" onClick={() => setEditingDeliverable(null)} className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={editDelName}
+                  onChange={(e) => setEditDelName(e.target.value)}
+                  className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description (optional)</label>
+                <textarea
+                  value={editDelDesc}
+                  onChange={(e) => setEditDelDesc(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditingDeliverable(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDeliverableEdit}
+                disabled={loading || !editDelName.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingActivity && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditingActivity(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Edit activity</h3>
+              <button type="button" onClick={() => setEditingActivity(null)} className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={editActName}
+                  onChange={(e) => setEditActName(e.target.value)}
+                  className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description (optional)</label>
+                <textarea
+                  value={editActDesc}
+                  onChange={(e) => setEditActDesc(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditingActivity(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveActivityEdit}
+                disabled={loading || !editActName.trim()}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
               >
                 Save

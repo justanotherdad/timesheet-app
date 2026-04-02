@@ -90,9 +90,78 @@ export async function syncBidSheetItemToProject(
       deliverable_id: deliverableId,
       activity_id: activityId,
       budgeted_hours: hours,
+      description: null,
     })
     if (error) throw new Error(error.message)
   }
+}
+
+/**
+ * Create or update a project_details row from display names (e.g. Budget matrix "Add row" form).
+ */
+export async function upsertProjectDetailByNames(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  input: {
+    systemName: string
+    systemCode: string | null
+    deliverableName: string
+    activityName: string
+    budgetedHours: number
+    description?: string | null
+  }
+): Promise<{ id: string }> {
+  const sn = input.systemName.trim()
+  const dn = input.deliverableName.trim()
+  const an = input.activityName.trim()
+  if (!sn || !dn || !an) throw new Error('System, deliverable, and activity names are required')
+
+  const systemId = await findOrCreateSystem(admin, siteId, sn, input.systemCode)
+  const deliverableId = await findOrCreateDeliverable(admin, siteId, dn)
+  const activityId = await findOrCreateActivity(admin, siteId, an)
+
+  await ensurePoLink(admin, 'system_purchase_orders', 'system_id', systemId, poId)
+  await ensurePoLink(admin, 'deliverable_purchase_orders', 'deliverable_id', deliverableId, poId)
+  await ensurePoLink(admin, 'activity_purchase_orders', 'activity_id', activityId, poId)
+
+  const hours = Number(input.budgetedHours) || 0
+  let desc: string | null | undefined
+  if (input.description === undefined) desc = undefined
+  else if (input.description === null) desc = null
+  else desc = String(input.description).trim() || null
+
+  const { data: existing } = await admin
+    .from('project_details')
+    .select('id')
+    .eq('po_id', poId)
+    .eq('system_id', systemId)
+    .eq('deliverable_id', deliverableId)
+    .eq('activity_id', activityId)
+    .maybeSingle()
+
+  if (existing?.id) {
+    const upd: Record<string, unknown> = { budgeted_hours: hours }
+    if (desc !== undefined) upd.description = desc
+    const { error } = await admin.from('project_details').update(upd).eq('id', existing.id)
+    if (error) throw new Error(error.message)
+    return { id: existing.id }
+  }
+
+  const { data: ins, error } = await admin
+    .from('project_details')
+    .insert({
+      po_id: poId,
+      system_id: systemId,
+      deliverable_id: deliverableId,
+      activity_id: activityId,
+      budgeted_hours: hours,
+      description: desc !== undefined ? desc : null,
+    })
+    .select('id')
+    .single()
+  if (error || !ins?.id) throw new Error(error?.message || 'Failed to create project detail')
+  return { id: ins.id }
 }
 
 async function findSystemId(admin: SupabaseClient, siteId: string, name: string, code: string | null): Promise<string | null> {

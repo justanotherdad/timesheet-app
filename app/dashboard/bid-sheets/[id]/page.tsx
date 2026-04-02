@@ -34,8 +34,8 @@ export default async function BidSheetDetailPage({ params }: { params: Promise<{
     withQueryTimeout(() => db.from('bid_sheet_labor').select('*, user_profiles(id, name)').eq('bid_sheet_id', id)),
     withQueryTimeout(() => db.from('bid_sheet_indirect_labor').select('*').eq('bid_sheet_id', id)),
     db.from('bid_sheet_systems').select('id, name, code, description').eq('bid_sheet_id', id).order('name'),
-    db.from('bid_sheet_deliverables').select('id, name').eq('bid_sheet_id', id).order('name'),
-    db.from('bid_sheet_activities').select('id, name').eq('bid_sheet_id', id).order('name'),
+    db.from('bid_sheet_deliverables').select('id, name, description').eq('bid_sheet_id', id).order('name'),
+    db.from('bid_sheet_activities').select('id, name, description').eq('bid_sheet_id', id).order('name'),
   ])
 
   const sheet = sheetRes.data as { id: string; name?: string; site_id: string; status?: string; converted_po_id?: string; sites?: { id: string; name: string } } | null
@@ -65,8 +65,8 @@ export default async function BidSheetDetailPage({ params }: { params: Promise<{
           labor={(laborRes.data || []) as any[]}
           indirectLabor={(indirectRes.data || []) as any[]}
           systems={(sysRes.data || []) as Array<{ id: string; name: string; code?: string; description?: string | null }>}
-          deliverables={(delRes.data || []) as Array<{ id: string; name: string }>}
-          activities={(actRes.data || []) as Array<{ id: string; name: string }>}
+          deliverables={(delRes.data || []) as Array<{ id: string; name: string; description?: string | null }>}
+          activities={(actRes.data || []) as Array<{ id: string; name: string; description?: string | null }>}
           departments={(deptRes.data || []) as any[]}
           user={user}
           readOnly={user.profile.role === 'supervisor'}
