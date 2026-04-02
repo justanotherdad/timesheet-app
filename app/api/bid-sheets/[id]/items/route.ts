@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
+import { deleteBidSheetItemFromProject, syncBidSheetItemToProject, type BidSheetItemRow } from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,10 +53,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       payload,
       { onConflict: 'bid_sheet_id,bid_sheet_system_id,bid_sheet_deliverable_id,bid_sheet_activity_id' }
     )
-    .select()
+    .select(
+      `
+      *,
+      bid_sheet_systems (id, name, code),
+      bid_sheet_deliverables (id, name),
+      bid_sheet_activities (id, name)
+    `
+    )
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const { data: sheet } = await supabase
+    .from('bid_sheets')
+    .select('status, converted_po_id, site_id')
+    .eq('id', id)
+    .single()
+
+  if (sheet?.status === 'converted' && sheet.converted_po_id && sheet.site_id && data) {
+    try {
+      const admin = createAdminClient()
+      await syncBidSheetItemToProject(admin, sheet.site_id, sheet.converted_po_id, data as BidSheetItemRow)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to sync to project budget'
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  }
+
   return NextResponse.json(data)
 }
 
@@ -102,7 +128,38 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const itemId = searchParams.get('item_id')
   if (!itemId) return NextResponse.json({ error: 'item_id required' }, { status: 400 })
 
+  const { data: rowBefore } = await supabase
+    .from('bid_sheet_items')
+    .select(
+      `
+      *,
+      bid_sheet_systems (id, name, code),
+      bid_sheet_deliverables (id, name),
+      bid_sheet_activities (id, name)
+    `
+    )
+    .eq('id', itemId)
+    .eq('bid_sheet_id', id)
+    .maybeSingle()
+
+  const { data: sheet } = await supabase
+    .from('bid_sheets')
+    .select('status, converted_po_id, site_id')
+    .eq('id', id)
+    .single()
+
   const { error } = await supabase.from('bid_sheet_items').delete().eq('id', itemId).eq('bid_sheet_id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  if (sheet?.status === 'converted' && sheet.converted_po_id && sheet.site_id && rowBefore) {
+    try {
+      const admin = createAdminClient()
+      await deleteBidSheetItemFromProject(admin, sheet.site_id, sheet.converted_po_id, rowBefore as BidSheetItemRow)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to update project budget'
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }

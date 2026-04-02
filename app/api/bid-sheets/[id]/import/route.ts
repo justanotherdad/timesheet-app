@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
+import { syncBidSheetItemToProject, type BidSheetItemRow } from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,7 +54,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const allowed = await canAccess(supabase, user.id, user.profile.role, id)
   if (!allowed) return NextResponse.json({ error: 'Access denied' }, { status: 403 })
 
-  const { data: sheet } = await supabase.from('bid_sheets').select('site_id').eq('id', id).single()
+  const { data: sheet } = await supabase.from('bid_sheets').select('site_id, status, converted_po_id').eq('id', id).single()
   if (!sheet) return NextResponse.json({ error: 'Bid sheet not found' }, { status: 404 })
 
   const body = await req.json()
@@ -132,6 +133,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       onConflict: 'bid_sheet_id,bid_sheet_system_id,bid_sheet_deliverable_id,bid_sheet_activity_id',
     })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  if (sheet.status === 'converted' && sheet.converted_po_id && toInsert.length > 0) {
+    const { data: itemsWithJoins, error: syncErr } = await db
+      .from('bid_sheet_items')
+      .select(
+        `
+        *,
+        bid_sheet_systems (id, name, code),
+        bid_sheet_deliverables (id, name),
+        bid_sheet_activities (id, name)
+      `
+      )
+      .eq('bid_sheet_id', id)
+    if (syncErr) return NextResponse.json({ error: syncErr.message }, { status: 500 })
+    try {
+      for (const row of itemsWithJoins || []) {
+        await syncBidSheetItemToProject(db, sheet.site_id, sheet.converted_po_id, row as BidSheetItemRow)
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to sync to project budget'
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
   }
 
   return NextResponse.json({ inserted: toInsert.length, skipped: skipped.length, skippedRows: skipped })

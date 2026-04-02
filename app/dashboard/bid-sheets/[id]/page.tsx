@@ -33,13 +33,23 @@ export default async function BidSheetDetailPage({ params }: { params: Promise<{
     withQueryTimeout(() => db.from('bid_sheet_items').select('*, bid_sheet_systems(id, name, code), bid_sheet_deliverables(id, name), bid_sheet_activities(id, name)').eq('bid_sheet_id', id)),
     withQueryTimeout(() => db.from('bid_sheet_labor').select('*, user_profiles(id, name)').eq('bid_sheet_id', id)),
     withQueryTimeout(() => db.from('bid_sheet_indirect_labor').select('*').eq('bid_sheet_id', id)),
-    db.from('bid_sheet_systems').select('id, name, code').eq('bid_sheet_id', id).order('name'),
+    db.from('bid_sheet_systems').select('id, name, code, description').eq('bid_sheet_id', id).order('name'),
     db.from('bid_sheet_deliverables').select('id, name').eq('bid_sheet_id', id).order('name'),
     db.from('bid_sheet_activities').select('id, name').eq('bid_sheet_id', id).order('name'),
   ])
 
   const sheet = sheetRes.data as { id: string; name?: string; site_id: string; status?: string; converted_po_id?: string; sites?: { id: string; name: string } } | null
   if (!sheet) redirect('/dashboard/bid-sheets')
+
+  let linkedPo: { id: string; original_po_amount: number | null; po_balance: number | null } | null = null
+  if (sheet.converted_po_id) {
+    const { data: poRow } = await db
+      .from('purchase_orders')
+      .select('id, original_po_amount, po_balance')
+      .eq('id', sheet.converted_po_id)
+      .maybeSingle()
+    if (poRow) linkedPo = poRow as { id: string; original_po_amount: number | null; po_balance: number | null }
+  }
 
   const deptRes = sheet.site_id
     ? await db.from('departments').select('id, name').eq('site_id', sheet.site_id).order('name')
@@ -54,12 +64,13 @@ export default async function BidSheetDetailPage({ params }: { params: Promise<{
           items={(itemsRes.data || []) as any[]}
           labor={(laborRes.data || []) as any[]}
           indirectLabor={(indirectRes.data || []) as any[]}
-          systems={(sysRes.data || []) as Array<{ id: string; name: string; code?: string }>}
+          systems={(sysRes.data || []) as Array<{ id: string; name: string; code?: string; description?: string | null }>}
           deliverables={(delRes.data || []) as Array<{ id: string; name: string }>}
           activities={(actRes.data || []) as Array<{ id: string; name: string }>}
           departments={(deptRes.data || []) as any[]}
           user={user}
           readOnly={user.profile.role === 'supervisor'}
+          linkedPo={linkedPo}
         />
       </div>
     </div>

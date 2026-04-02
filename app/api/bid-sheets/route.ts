@@ -79,7 +79,17 @@ export async function POST(req: Request) {
 
     if ((srcSystems || []).length > 0) {
       for (const s of srcSystems || []) {
-        const { data: ins } = await db.from('bid_sheet_systems').insert({ bid_sheet_id: sheet.id, name: s.name, code: s.code }).select('id').single()
+        const src = s as { id: string; name: string; code?: string | null; description?: string | null }
+        const { data: ins } = await db
+          .from('bid_sheet_systems')
+          .insert({
+            bid_sheet_id: sheet.id,
+            name: src.name,
+            code: src.code,
+            description: src.description ?? null,
+          })
+          .select('id')
+          .single()
         if (ins?.id) sysMap.set(s.id, ins.id)
       }
     }

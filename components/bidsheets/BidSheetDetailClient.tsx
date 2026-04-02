@@ -47,6 +47,9 @@ const INDIRECT_CATEGORIES = [
 const ROW_HEIGHT_NORMAL = 72
 const ROW_HEIGHT_COMPACT = 52
 
+const cellKey = (systemId: string, deliverableId: string, activityId: string) =>
+  `${systemId}\t${deliverableId}\t${activityId}`
+
 export default function BidSheetDetailClient({
   sheet,
   items: initialItems,
@@ -58,17 +61,20 @@ export default function BidSheetDetailClient({
   departments,
   user,
   readOnly = false,
+  linkedPo = null,
 }: {
   sheet: any
   items: Item[]
   labor: Labor[]
   indirectLabor: IndirectLabor[]
-  systems: Array<{ id: string; name: string; code?: string }>
+  systems: Array<{ id: string; name: string; code?: string; description?: string | null }>
   deliverables: Array<{ id: string; name: string }>
   activities: Array<{ id: string; name: string }>
   departments?: Array<{ id: string; name: string }>
   user: { id: string; profile: { role: string } }
   readOnly?: boolean
+  /** Present when the bid sheet is converted; used for project $ on this page */
+  linkedPo?: { id: string; original_po_amount: number | null; po_balance: number | null } | null
 }) {
   const depts = departments ?? []
   const [items, setItems] = useState(initialItems)
@@ -99,7 +105,19 @@ export default function BidSheetDetailClient({
 
   const router = useRouter()
   const canEdit = !readOnly && ['manager', 'admin', 'super_admin'].includes(user.profile.role)
+  const canEditBidStructure =
+    canEdit && (sheet.status === 'draft' || sheet.status === 'converted')
   const bidSheetId = sheet.id
+
+  const [poAmountInput, setPoAmountInput] = useState(() =>
+    linkedPo?.original_po_amount != null ? String(linkedPo.original_po_amount) : ''
+  )
+  const [linkedPoBalance, setLinkedPoBalance] = useState<number | null>(linkedPo?.po_balance ?? null)
+
+  useEffect(() => {
+    setPoAmountInput(linkedPo?.original_po_amount != null ? String(linkedPo.original_po_amount) : '')
+    setLinkedPoBalance(linkedPo?.po_balance ?? null)
+  }, [linkedPo?.id, linkedPo?.original_po_amount, linkedPo?.po_balance])
 
   // Add system / deliverable / activity
   const [showAddSystem, setShowAddSystem] = useState(false)
@@ -109,6 +127,15 @@ export default function BidSheetDetailClient({
   const [addSystemCode, setAddSystemCode] = useState('')
   const [addDeliverableName, setAddDeliverableName] = useState('')
   const [addActivityName, setAddActivityName] = useState('')
+  const [addSystemDescription, setAddSystemDescription] = useState('')
+  const [hourDrafts, setHourDrafts] = useState<Record<string, string>>({})
+  const [editingSystem, setEditingSystem] = useState<{ id: string; name: string; code?: string | null; description?: string | null } | null>(null)
+  const [editSysName, setEditSysName] = useState('')
+  const [editSysCode, setEditSysCode] = useState('')
+  const [editSysDesc, setEditSysDesc] = useState('')
+  const hourDraftsRef = useRef<Record<string, string>>({})
+  const hoursDebounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const hoursSaveGen = useRef<Map<string, number>>(new Map())
 
   // Bid sheet access (grant/revoke)
   const [accessUsers, setAccessUsers] = useState<Array<{ id: string; name: string }>>([])
@@ -195,34 +222,135 @@ export default function BidSheetDetailClient({
     return hrs * rate
   }, [items, labor])
 
-  const setItemCell = useCallback(async (systemId: string, deliverableId: string, activityId: string, hours: number, laborId: string | null) => {
-    if (!canEdit) return
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/bid-sheets/${bidSheetId}/items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bid_sheet_system_id: systemId,
-          bid_sheet_deliverable_id: deliverableId,
-          bid_sheet_activity_id: activityId,
-          budgeted_hours: hours,
-          labor_id: laborId || undefined,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed')
-      setItems((prev) => {
-        const rest = prev.filter((i) => !(i.bid_sheet_system_id === systemId && i.bid_sheet_deliverable_id === deliverableId && i.bid_sheet_activity_id === activityId))
-        return [...rest, { ...data, bid_sheet_systems: systems.find((s) => s.id === systemId), bid_sheet_deliverables: deliverables.find((d) => d.id === deliverableId), bid_sheet_activities: activities.find((a) => a.id === activityId) }]
-      })
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
+  const persistItemCell = useCallback(
+    async (
+      systemId: string,
+      deliverableId: string,
+      activityId: string,
+      hours: number,
+      laborId: string | null,
+      opts?: { generation?: number; key?: string }
+    ) => {
+      if (!canEdit) return
+      setError(null)
+      try {
+        const res = await fetch(`/api/bid-sheets/${bidSheetId}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bid_sheet_system_id: systemId,
+            bid_sheet_deliverable_id: deliverableId,
+            bid_sheet_activity_id: activityId,
+            budgeted_hours: hours,
+            labor_id: laborId || undefined,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed')
+        const k = opts?.key ?? cellKey(systemId, deliverableId, activityId)
+        if (opts?.generation !== undefined && hoursSaveGen.current.get(k) !== opts.generation) {
+          return
+        }
+        setItems((prev) => {
+          const rest = prev.filter(
+            (i) =>
+              !(
+                i.bid_sheet_system_id === systemId &&
+                i.bid_sheet_deliverable_id === deliverableId &&
+                i.bid_sheet_activity_id === activityId
+              )
+          )
+          return [
+            ...rest,
+            {
+              ...data,
+              bid_sheet_systems: systems.find((s) => s.id === systemId),
+              bid_sheet_deliverables: deliverables.find((d) => d.id === deliverableId),
+              bid_sheet_activities: activities.find((a) => a.id === activityId),
+            },
+          ]
+        })
+        if (opts?.generation !== undefined) {
+          setHourDrafts((prev) => {
+            const next = { ...prev }
+            delete next[k]
+            return next
+          })
+          delete hourDraftsRef.current[k]
+        }
+      } catch (e: any) {
+        setError(e.message)
+      }
+    },
+    [bidSheetId, canEdit, systems, deliverables, activities]
+  )
+
+  const scheduleHoursSave = useCallback(
+    (systemId: string, deliverableId: string, activityId: string, laborId: string | null) => {
+      const key = cellKey(systemId, deliverableId, activityId)
+      const prev = hoursDebounceTimers.current.get(key)
+      if (prev) clearTimeout(prev)
+      const t = setTimeout(() => {
+        hoursDebounceTimers.current.delete(key)
+        if (!Object.prototype.hasOwnProperty.call(hourDraftsRef.current, key)) return
+        const raw = hourDraftsRef.current[key]
+        const trimmed = (raw ?? '').trim()
+        const hours = trimmed === '' || trimmed === '.' ? 0 : parseFloat(trimmed)
+        const h = Number.isFinite(hours) ? hours : 0
+        const gen = (hoursSaveGen.current.get(key) ?? 0) + 1
+        hoursSaveGen.current.set(key, gen)
+        void persistItemCell(systemId, deliverableId, activityId, h, laborId, { generation: gen, key })
+      }, 400)
+      hoursDebounceTimers.current.set(key, t)
+    },
+    [persistItemCell]
+  )
+
+  const flushHoursOnBlur = useCallback(
+    (systemId: string, deliverableId: string, activityId: string, laborId: string | null) => {
+      const key = cellKey(systemId, deliverableId, activityId)
+      const prev = hoursDebounceTimers.current.get(key)
+      if (prev) clearTimeout(prev)
+      hoursDebounceTimers.current.delete(key)
+      if (!Object.prototype.hasOwnProperty.call(hourDraftsRef.current, key)) return
+      const raw = hourDraftsRef.current[key]
+      const trimmed = (raw ?? '').trim()
+      const hours = trimmed === '' || trimmed === '.' ? 0 : parseFloat(trimmed)
+      const h = Number.isFinite(hours) ? hours : 0
+      const gen = (hoursSaveGen.current.get(key) ?? 0) + 1
+      hoursSaveGen.current.set(key, gen)
+      void persistItemCell(systemId, deliverableId, activityId, h, laborId, { generation: gen, key })
+    },
+    [persistItemCell]
+  )
+
+  const onLaborCellChange = useCallback(
+    (systemId: string, deliverableId: string, activityId: string, laborId: string | null) => {
+      const key = cellKey(systemId, deliverableId, activityId)
+      const prevT = hoursDebounceTimers.current.get(key)
+      if (prevT) clearTimeout(prevT)
+      hoursDebounceTimers.current.delete(key)
+      const raw = hourDraftsRef.current[key]
+      const hrs =
+        raw !== undefined
+          ? (() => {
+              const t = raw.trim()
+              if (t === '' || t === '.') return 0
+              const p = parseFloat(t)
+              return Number.isFinite(p) ? p : 0
+            })()
+          : getItemHours(systemId, deliverableId, activityId)
+      void persistItemCell(systemId, deliverableId, activityId, hrs, laborId, { key })
+    },
+    [persistItemCell, getItemHours]
+  )
+
+  useEffect(() => {
+    return () => {
+      hoursDebounceTimers.current.forEach((timer) => clearTimeout(timer))
+      hoursDebounceTimers.current.clear()
     }
-  }, [bidSheetId, canEdit, systems, deliverables, activities])
+  }, [])
 
   useEffect(() => {
     if (canEdit && bidSheetId) {
@@ -394,13 +522,18 @@ export default function BidSheetDetailClient({
       const res = await fetch(`/api/bid-sheets/${bidSheetId}/systems`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, code: addSystemCode.trim() || undefined }),
+        body: JSON.stringify({
+          name,
+          code: addSystemCode.trim() || undefined,
+          description: addSystemDescription.trim() || undefined,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed')
       setShowAddSystem(false)
       setAddSystemName('')
       setAddSystemCode('')
+      setAddSystemDescription('')
       router.refresh()
     } catch (e: any) {
       setError(e.message)
@@ -455,6 +588,32 @@ export default function BidSheetDetailClient({
     }
   }
 
+  const handleSaveSystemEdit = async () => {
+    if (!editingSystem || !editSysName.trim()) return
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/systems`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_id: editingSystem.id,
+          name: editSysName.trim(),
+          code: editSysCode.trim() || null,
+          description: editSysDesc.trim() || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+      setEditingSystem(null)
+      router.refresh()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleConvert = async () => {
     setError(null)
     setLoading(true)
@@ -471,6 +630,35 @@ export default function BidSheetDetailClient({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Convert failed')
       window.location.href = `/dashboard/budget?poId=${data.po_id}`
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSaveLinkedPoBudget = async () => {
+    if (!sheet.converted_po_id) return
+    setError(null)
+    const raw = poAmountInput.trim()
+    const parsed = raw === '' ? null : parseFloat(raw)
+    if (parsed != null && (Number.isNaN(parsed) || parsed < 0)) {
+      setError('Enter a valid dollar amount, or leave blank.')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/po-budget`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          original_po_amount: parsed,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+      if (typeof data.po_balance === 'number') setLinkedPoBalance(data.po_balance)
+      router.refresh()
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -524,23 +712,23 @@ export default function BidSheetDetailClient({
           >
             <Download className="h-4 w-4" /> Export CSV
           </button>
+          {canEditBidStructure && (
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              <Upload className="h-4 w-4" /> Import CSV
+            </button>
+          )}
           {canEdit && sheet.status === 'draft' && (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowImportModal(true)}
-                className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                <Upload className="h-4 w-4" /> Import CSV
-              </button>
-              <button
-                type="button"
-                onClick={() => setConvertModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
-              >
-                <FileSpreadsheet className="h-4 w-4" /> Convert to Project Budget
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => setConvertModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+            >
+              <FileSpreadsheet className="h-4 w-4" /> Convert to Project Budget
+            </button>
           )}
           {sheet.status === 'converted' && sheet.converted_po_id && (
             <Link
@@ -555,18 +743,61 @@ export default function BidSheetDetailClient({
 
       {error && <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm">{error}</div>}
 
+      {canEdit && sheet.status === 'converted' && sheet.converted_po_id && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-teal-200 dark:border-teal-800">
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Linked project budget</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Set the overall project budget (original PO amount). Matrix hours and new systems/deliverables/activities sync to the project for timesheets and the budget matrix.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Original PO amount ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={poAmountInput}
+                onChange={(e) => setPoAmountInput(e.target.value)}
+                className="h-10 w-48 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleSaveLinkedPoBudget}
+              disabled={loading}
+              className="h-10 px-4 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              Save budget
+            </button>
+            <Link
+              href={`/dashboard/budget?poId=${sheet.converted_po_id}`}
+              className="h-10 inline-flex items-center px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              Open full budget →
+            </Link>
+          </div>
+          {linkedPoBalance != null && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+              PO balance (after invoices &amp; COs): ${linkedPoBalance.toFixed(2)}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Systems/Deliverables/Activities + Control Access — 2 columns when canEdit */}
       {canEdit && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Left: Systems, Deliverables & Activities (draft only) */}
-          {sheet.status === 'draft' && (
+          {/* Left: Systems, Deliverables & Activities */}
+          {canEditBidStructure && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
               <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
                 <Layers className="h-4 w-4" />
                 Systems, Deliverables & Activities
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Add systems (rows), deliverables (columns), and activities to build your bid sheet matrix. You can also import from CSV.
+                {sheet.status === 'converted'
+                  ? 'Add rows, columns, or activity lines. New combinations sync to the linked project (timesheet options and budget matrix).'
+                  : 'Add systems (rows), deliverables (columns), and activities to build your bid sheet matrix. You can also import from CSV.'}
               </p>
               <div className="flex flex-wrap gap-4 items-center">
                 <div className="flex flex-col gap-2">
@@ -594,12 +825,57 @@ export default function BidSheetDetailClient({
                       <button type="button" onClick={handleAddSystem} disabled={loading || !addSystemName.trim()} className="h-9 px-3 bg-blue-600 text-white rounded text-sm disabled:opacity-50 shrink-0">
                         Add
                       </button>
-                      <button type="button" onClick={() => { setShowAddSystem(false); setAddSystemName(''); setAddSystemCode('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
+                      <button type="button" onClick={() => { setShowAddSystem(false); setAddSystemName(''); setAddSystemCode(''); setAddSystemDescription('') }} className="h-9 px-3 border border-gray-300 dark:border-gray-600 rounded text-sm shrink-0">
                         Cancel
                       </button>
                     </div>
                   )}
-                  {systems.length > 0 && <span className="text-xs text-gray-500">{systems.length} system(s)</span>}
+                  {showAddSystem && (
+                    <label className="block w-full max-w-md mt-2">
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Description (optional)</span>
+                      <textarea
+                        value={addSystemDescription}
+                        onChange={(e) => setAddSystemDescription(e.target.value)}
+                        placeholder="Scope or notes for this system…"
+                        rows={2}
+                        className="mt-1 w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm"
+                      />
+                    </label>
+                  )}
+                  {systems.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <span className="text-xs text-gray-500">{systems.length} system(s)</span>
+                      <ul className="text-xs text-gray-700 dark:text-gray-300 max-h-36 overflow-y-auto space-y-1 pr-1">
+                        {systems.map((s) => (
+                          <li key={s.id} className="flex justify-between gap-2 items-start border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0">
+                            <span className="min-w-0">
+                              <span className="font-medium">{s.name}</span>
+                              {s.code ? <span className="text-gray-500 dark:text-gray-400"> ({s.code})</span> : null}
+                              {s.description ? (
+                                <span className="block text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2" title={s.description}>
+                                  {s.description}
+                                </span>
+                              ) : null}
+                            </span>
+                            {canEditBidStructure && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingSystem(s)
+                                  setEditSysName(s.name)
+                                  setEditSysCode(s.code ?? '')
+                                  setEditSysDesc(s.description ?? '')
+                                }}
+                                className="shrink-0 text-blue-600 dark:text-blue-400 hover:underline"
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col gap-2">
                   <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Deliverables</span>
@@ -749,6 +1025,31 @@ export default function BidSheetDetailClient({
 
         {/* Search & Compact Toggle - Sticky */}
         <div className="sticky top-0 z-30 flex flex-wrap gap-3 items-center px-4 py-2 bg-gray-50 dark:bg-gray-700/80 border-b border-gray-200 dark:border-gray-600">
+          {canEditBidStructure && (
+            <div className="flex flex-wrap gap-1.5 items-center shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowAddSystem(true)}
+                className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <Plus className="h-3.5 w-3.5" /> System
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddDeliverable(true)}
+                className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <Plus className="h-3.5 w-3.5" /> Deliverable
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddActivity(true)}
+                className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <Plus className="h-3.5 w-3.5" /> Activity
+              </button>
+            </div>
+          )}
           <div className="flex-1 min-w-[200px] flex items-center gap-2">
             <Search className="h-4 w-4 text-gray-500 flex-shrink-0" />
             <input
@@ -789,13 +1090,31 @@ export default function BidSheetDetailClient({
                   <span className="text-gray-500 dark:text-gray-400"> · </span>
                   <span className="text-gray-500 dark:text-gray-400">{row.activityName}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setViewRow({ systemId: row.systemId, activityId: row.activityId, systemName: row.systemName, activityName: row.activityName })}
-                  className="ml-2 shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
-                >
-                  <Eye className="h-4 w-4" /> View
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-sm tabular-nums text-gray-700 dark:text-gray-300" title="Sum of hours across deliverables for this row">
+                    Σ{' '}
+                    {deliverables
+                      .reduce((sum, d) => {
+                        const k = cellKey(row.systemId, d.id, row.activityId)
+                        const draft = hourDrafts[k]
+                        if (draft !== undefined) {
+                          const t = draft.trim()
+                          if (t === '' || t === '.') return sum
+                          const p = parseFloat(t)
+                          return sum + (Number.isFinite(p) ? p : 0)
+                        }
+                        return sum + getItemHours(row.systemId, d.id, row.activityId)
+                      }, 0)
+                      .toFixed(1)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setViewRow({ systemId: row.systemId, activityId: row.activityId, systemName: row.systemName, activityName: row.activityName })}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
+                  >
+                    <Eye className="h-4 w-4" /> View
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -805,7 +1124,8 @@ export default function BidSheetDetailClient({
         {(() => {
           const sysW = compactMode ? 180 : 200
           const colW = compactMode ? 100 : 130
-          const gridCols = `${sysW}px repeat(${deliverables.length}, ${colW}px)`
+          const sumW = compactMode ? 72 : 88
+          const gridCols = `${sysW}px repeat(${deliverables.length}, ${colW}px) ${sumW}px`
           return (
             <div className="hidden md:block min-w-[600px]">
               {/* Header row - same grid as body rows */}
@@ -821,13 +1141,27 @@ export default function BidSheetDetailClient({
                     {compactMode ? (d.name.length > 12 ? d.name.slice(0, 12) + '…' : d.name) : d.name}
                   </div>
                 ))}
+                <div className="px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 text-right border-l border-gray-200 dark:border-gray-600">
+                  Sum
+                </div>
               </div>
 
               <div ref={scrollContainerRef} className="overflow-auto max-h-[60vh]" style={{ minHeight: 200 }}>
-                <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative', minWidth: sysW + deliverables.length * colW }}>
+                <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative', minWidth: sysW + deliverables.length * colW + sumW }}>
                   {rowVirtualizer.getVirtualItems().map((virtualRow: VirtualItem) => {
                     const row = filteredRows[virtualRow.index]
                     if (!row) return null
+                    const rowSumHrs = deliverables.reduce((sum, d) => {
+                      const k = cellKey(row.systemId, d.id, row.activityId)
+                      const draft = hourDrafts[k]
+                      if (draft !== undefined) {
+                        const t = draft.trim()
+                        if (t === '' || t === '.') return sum
+                        const p = parseFloat(t)
+                        return sum + (Number.isFinite(p) ? p : 0)
+                      }
+                      return sum + getItemHours(row.systemId, d.id, row.activityId)
+                    }, 0)
                     return (
                       <div
                         key={`${row.systemId}-${row.activityId}`}
@@ -852,21 +1186,30 @@ export default function BidSheetDetailClient({
                           const hrs = getItemHours(row.systemId, d.id, row.activityId)
                           const laborId = getItemLaborId(row.systemId, d.id, row.activityId)
                           const cost = getItemCost(row.systemId, d.id, row.activityId)
+                          const k = cellKey(row.systemId, d.id, row.activityId)
+                          const displayHrs =
+                            hourDrafts[k] !== undefined ? hourDrafts[k] : hrs === 0 ? '' : String(hrs)
                           return (
                             <div key={d.id} className={`${cellClass} border-r border-gray-200 dark:border-gray-600 flex flex-col gap-0.5`}>
                               <input
-                                type="number"
-                                min={0}
-                                step={0.5}
-                                value={hrs || ''}
-                                onChange={(e) => setItemCell(row.systemId, d.id, row.activityId, parseFloat(e.target.value) || 0, laborId)}
+                                type="text"
+                                inputMode="decimal"
+                                autoComplete="off"
+                                value={displayHrs}
+                                onChange={(e) => {
+                                  const v = e.target.value
+                                  hourDraftsRef.current[k] = v
+                                  setHourDrafts((prev) => ({ ...prev, [k]: v }))
+                                  scheduleHoursSave(row.systemId, d.id, row.activityId, laborId)
+                                }}
+                                onBlur={() => flushHoursOnBlur(row.systemId, d.id, row.activityId, laborId)}
                                 disabled={!canEdit}
                                 className={inputClass}
                               />
                               {canEdit ? (
                                 <select
                                   value={laborId || ''}
-                                  onChange={(e) => setItemCell(row.systemId, d.id, row.activityId, hrs, e.target.value || null)}
+                                  onChange={(e) => onLaborCellChange(row.systemId, d.id, row.activityId, e.target.value || null)}
                                   className={`w-full min-w-0 ${compactMode ? 'h-6 text-[10px] px-1 py-0 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100' : 'h-7 text-xs px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'}`}
                                   disabled={!canEdit}
                                 >
@@ -883,11 +1226,16 @@ export default function BidSheetDetailClient({
                                 </span>
                               ) : null}
                               {(hrs > 0 && laborId) ? (
-                                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">${cost.toFixed(0)}</span>
+                                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">${cost.toFixed(2)}</span>
                               ) : null}
                             </div>
                           )
                         })}
+                        <div className={`${cellClass} border-l border-gray-200 dark:border-gray-600 flex items-center justify-end bg-gray-50/80 dark:bg-gray-800/50`}>
+                          <span className="text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100" title="Sum of hours for this row">
+                            {rowSumHrs.toFixed(1)}
+                          </span>
+                        </div>
                       </div>
                     )
                   })}
@@ -921,8 +1269,8 @@ export default function BidSheetDetailClient({
               <tr key={l.id} className="border-b border-gray-200 dark:border-gray-700">
                 <td className="py-2">{l.user_profiles?.name || l.placeholder_name || '-'}</td>
                 <td className="py-2">${Number(l.bid_rate).toFixed(2)}</td>
-                <td className="py-2">{hours.toFixed(1)}</td>
-                <td className="py-2">${cost.toFixed(0)}</td>
+                <td className="py-2 tabular-nums">{hours.toFixed(1)}</td>
+                <td className="py-2 tabular-nums">${cost.toFixed(2)}</td>
                 {canEdit && (
                   <td>
                     <button type="button" onClick={() => handleDeleteLabor(l.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
@@ -1151,12 +1499,72 @@ export default function BidSheetDetailClient({
                         <td className="py-2 text-gray-900 dark:text-gray-100">{d.name}</td>
                         <td className="py-2 text-right">{hrs > 0 ? hrs : '—'}</td>
                         <td className="py-2 text-gray-600 dark:text-gray-400">{laborName}</td>
-                        <td className="py-2 text-right font-medium">{(hrs > 0 && laborId) ? `$${cost.toFixed(0)}` : '—'}</td>
+                        <td className="py-2 text-right font-medium tabular-nums">{(hrs > 0 && laborId) ? `$${cost.toFixed(2)}` : '—'}</td>
                       </tr>
                     )
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit system (name, code, description) */}
+      {editingSystem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditingSystem(null)}>
+          <div
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Edit system</h3>
+              <button type="button" onClick={() => setEditingSystem(null)} className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={editSysName}
+                  onChange={(e) => setEditSysName(e.target.value)}
+                  className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Code (optional)</label>
+                <input
+                  type="text"
+                  value={editSysCode}
+                  onChange={(e) => setEditSysCode(e.target.value)}
+                  className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description (optional)</label>
+                <textarea
+                  value={editSysDesc}
+                  onChange={(e) => setEditSysDesc(e.target.value)}
+                  rows={4}
+                  placeholder="Scope or notes for this system…"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditingSystem(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSystemEdit}
+                disabled={loading || !editSysName.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>
