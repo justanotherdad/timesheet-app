@@ -22,11 +22,19 @@ export async function GET(
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 
-  const { data: po } = await supabase
-    .from('purchase_orders')
-    .select('site_id, original_po_amount, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
-    .eq('id', poId)
-    .single()
+  let adminSupabase: ReturnType<typeof createAdminClient> | null = null
+  try {
+    adminSupabase = createAdminClient()
+  } catch {
+    /* service role optional */
+  }
+
+  const poSelect = 'site_id, original_po_amount, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate'
+  let { data: po } = await supabase.from('purchase_orders').select(poSelect).eq('id', poId).single()
+  if (!po && adminSupabase) {
+    const { data: adminPo } = await adminSupabase.from('purchase_orders').select(poSelect).eq('id', poId).single()
+    po = adminPo
+  }
 
   if (!po) {
     return NextResponse.json({ error: 'PO not found' }, { status: 404 })
@@ -55,11 +63,13 @@ export async function GET(
 
   // Use admin client for timesheet rows so Budget Balance matches billable-hours / UI.
   // RLS on timesheet_entries would otherwise hide other employees' rows for grantees.
-  let dbLabor = supabase
-  try {
-    dbLabor = createAdminClient()
-  } catch {
-    // Service role key missing in env — fall back to user client (may be RLS-restricted).
+  let dbLabor = adminSupabase ?? supabase
+  if (!adminSupabase) {
+    try {
+      dbLabor = createAdminClient()
+    } catch {
+      dbLabor = supabase
+    }
   }
 
   const { data: entries } = await dbLabor

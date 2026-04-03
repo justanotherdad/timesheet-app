@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
+import { canAccessPoBudget } from '@/lib/access'
 import { normalizePoIssueDateForDb } from '@/lib/utils'
 
 /** Normalize CO/LI date from client (YYYY-MM-DD, ISO string, etc.) for Postgres date column */
@@ -31,31 +32,10 @@ export async function GET(
 
   const supabase = await createClient()
   const role = user.profile.role as string
-  const isAdminOrAbove = ['admin', 'super_admin'].includes(role)
 
-  const { data: po, error: poError } = await supabase
-    .from('purchase_orders')
-    .select('*, sites(id, name, address_street, address_city, address_state, address_zip, contact), departments(id, name)')
-    .eq('id', poId)
-    .single()
-
-  if (poError || !po) {
-    return NextResponse.json({ error: 'PO not found' }, { status: 404 })
-  }
-
-  if (isAdminOrAbove) {
-    // Admin/Super Admin: full access to all POs
-  } else {
-    // Manager, Supervisor, Employee: must have po_budget_access grant
-    const { data: accessRow } = await supabase
-      .from('po_budget_access')
-      .select('user_id')
-      .eq('purchase_order_id', poId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-    if (!accessRow) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-    }
+  const allowed = await canAccessPoBudget(supabase, user.id, role, poId)
+  if (!allowed) {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 
   let adminSupabase: ReturnType<typeof createAdminClient> | null = null
@@ -63,6 +43,19 @@ export async function GET(
     adminSupabase = createAdminClient()
   } catch {
     // Service role key may be missing in some environments
+  }
+
+  const poSelect =
+    '*, sites(id, name, address_street, address_city, address_state, address_zip, contact), departments(id, name)'
+
+  let { data: po } = await supabase.from('purchase_orders').select(poSelect).eq('id', poId).single()
+  if (!po && adminSupabase) {
+    const { data: adminPo } = await adminSupabase.from('purchase_orders').select(poSelect).eq('id', poId).single()
+    po = adminPo
+  }
+
+  if (!po) {
+    return NextResponse.json({ error: 'PO not found' }, { status: 404 })
   }
 
   // Re-fetch PO with service role when available. Session/RLS reads can omit or null out columns (e.g. po_issue_date)
