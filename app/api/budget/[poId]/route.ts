@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -19,12 +20,19 @@ function parseCoDate(value: unknown): string | null {
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+/** Service role + full Supabase client; avoid Edge where env may omit SUPABASE_SERVICE_ROLE_KEY */
+export const runtime = 'nodejs'
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ poId: string }> }
 ) {
-  const { poId } = await params
+  const rawId = (await params).poId
+  const poId = typeof rawId === 'string' ? rawId.trim() : ''
+  if (!poId) {
+    return NextResponse.json({ error: 'Missing PO id' }, { status: 400 })
+  }
+
   const user = await getCurrentUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -45,29 +53,54 @@ export async function GET(
     // Service role key may be missing in some environments
   }
 
-  const poSelect =
+  const poSelectWithJoins =
     '*, sites(id, name, address_street, address_city, address_state, address_zip, contact), departments(id, name)'
 
-  let { data: po } = await supabase.from('purchase_orders').select(poSelect).eq('id', poId).single()
-  if (!po && adminSupabase) {
-    const { data: adminPo } = await adminSupabase.from('purchase_orders').select(poSelect).eq('id', poId).single()
-    po = adminPo
+  /** Prefer service role so RLS never hides the row; fall back to * if embeds fail (PostgREST). */
+  async function fetchPurchaseOrderRow(client: SupabaseClient): Promise<Record<string, unknown> | null> {
+    const q1 = await client.from('purchase_orders').select(poSelectWithJoins).eq('id', poId).maybeSingle()
+    if (q1.data) return q1.data as Record<string, unknown>
+    const q2 = await client.from('purchase_orders').select('*').eq('id', poId).maybeSingle()
+    if (q2.data) return q2.data as Record<string, unknown>
+    return null
+  }
+
+  let po: Record<string, unknown> | null = null
+  if (adminSupabase) {
+    po = await fetchPurchaseOrderRow(adminSupabase)
+  }
+  if (!po) {
+    po = await fetchPurchaseOrderRow(supabase)
   }
 
   if (!po) {
+    if (!adminSupabase) {
+      return NextResponse.json(
+        {
+          error:
+            'Could not load this PO (session read blocked). Set SUPABASE_SERVICE_ROLE_KEY on the server so budget APIs can read purchase orders.',
+        },
+        { status: 503 }
+      )
+    }
     return NextResponse.json({ error: 'PO not found' }, { status: 404 })
   }
 
   // Re-fetch PO with service role when available. Session/RLS reads can omit or null out columns (e.g. po_issue_date)
   // even after a successful admin PATCH, which made the UI look like saves "didn't work".
-  let mergedPo: Record<string, unknown> = po as Record<string, unknown>
+  let mergedPo: Record<string, unknown> = po
   if (adminSupabase) {
     const { data: adminPo } = await adminSupabase
       .from('purchase_orders')
-      .select('*, sites(id, name, address_street, address_city, address_state, address_zip, contact), departments(id, name)')
+      .select(poSelectWithJoins)
       .eq('id', poId)
-      .single()
-    if (adminPo) mergedPo = adminPo as Record<string, unknown>
+      .maybeSingle()
+    if (!adminPo) {
+      const { data: adminPlain } = await adminSupabase.from('purchase_orders').select('*').eq('id', poId).maybeSingle()
+      if (adminPlain) mergedPo = adminPlain as Record<string, unknown>
+    } else {
+      mergedPo = adminPo as Record<string, unknown>
+    }
   }
 
   const changeOrdersQuery = adminSupabase

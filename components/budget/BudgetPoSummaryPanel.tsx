@@ -41,9 +41,10 @@ export default function BudgetPoSummaryPanel({ poId, po, onViewDetails }: Props)
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
         }
+        const idSeg = encodeURIComponent(poId)
         const [res, balRes] = await Promise.all([
-          fetch(`/api/budget/${poId}?${t}`, fetchOpts),
-          fetch(`/api/budget/${poId}/balance?${t}`, fetchOpts),
+          fetch(`/api/budget/${idSeg}?${t}`, fetchOpts),
+          fetch(`/api/budget/${idSeg}/balance?${t}`, fetchOpts),
         ])
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))

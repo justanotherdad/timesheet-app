@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -5,12 +6,20 @@ import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 import { pickEffectiveRateForWeek } from '@/lib/po-bill-rate-utils'
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 /** Syncs po_balance from running balance and returns balance + budget_balance */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ poId: string }> }
 ) {
-  const { poId } = await params
+  const rawId = (await params).poId
+  const poId = typeof rawId === 'string' ? rawId.trim() : ''
+  if (!poId) {
+    return NextResponse.json({ error: 'Missing PO id' }, { status: 400 })
+  }
+
   const user = await getCurrentUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -30,13 +39,30 @@ export async function GET(
   }
 
   const poSelect = 'site_id, original_po_amount, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate'
-  let { data: po } = await supabase.from('purchase_orders').select(poSelect).eq('id', poId).single()
-  if (!po && adminSupabase) {
-    const { data: adminPo } = await adminSupabase.from('purchase_orders').select(poSelect).eq('id', poId).single()
-    po = adminPo
+
+  async function fetchPoRow(client: SupabaseClient) {
+    const { data } = await client.from('purchase_orders').select(poSelect).eq('id', poId).maybeSingle()
+    return data
+  }
+
+  let po = null as Awaited<ReturnType<typeof fetchPoRow>>
+  if (adminSupabase) {
+    po = await fetchPoRow(adminSupabase)
+  }
+  if (!po) {
+    po = await fetchPoRow(supabase)
   }
 
   if (!po) {
+    if (!adminSupabase) {
+      return NextResponse.json(
+        {
+          error:
+            'Could not load this PO (session read blocked). Set SUPABASE_SERVICE_ROLE_KEY on the server so budget APIs can read purchase orders.',
+        },
+        { status: 503 }
+      )
+    }
     return NextResponse.json({ error: 'PO not found' }, { status: 404 })
   }
 
