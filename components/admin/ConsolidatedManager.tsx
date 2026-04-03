@@ -197,6 +197,9 @@ export default function ConsolidatedManager({
     if (posSortColumn === 'po_number') {
       aVal = a.po_number.toLowerCase()
       bVal = b.po_number.toLowerCase()
+    } else if (posSortColumn === 'proposal_number') {
+      aVal = (a.proposal_number || '').toLowerCase()
+      bVal = (b.proposal_number || '').toLowerCase()
     } else if (posSortColumn === 'description') {
       aVal = (a.description || '').toLowerCase()
       bVal = (b.description || '').toLowerCase()
@@ -839,6 +842,12 @@ export default function ConsolidatedManager({
                       </th>
                       <th 
                         className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                        onClick={() => handleSort('pos', 'proposal_number')}
+                      >
+                        Proposal # {getSortIcon('pos', 'proposal_number')}
+                      </th>
+                      <th 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
                         onClick={() => handleSort('pos', 'description')}
                       >
                         Description {getSortIcon('pos', 'description')}
@@ -858,6 +867,7 @@ export default function ConsolidatedManager({
                       return (
                         <tr key={po.id}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{po.po_number}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{po.proposal_number?.trim() || '—'}</td>
                           <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{po.description || 'N/A'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{dept?.name || 'N/A'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

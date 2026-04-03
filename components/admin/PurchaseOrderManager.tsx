@@ -24,6 +24,7 @@ interface PurchaseOrder {
   department_id?: string
   po_number: string
   description?: string
+  proposal_number?: string | null
 }
 
 interface PurchaseOrderManagerProps {
@@ -365,6 +366,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">PO Number</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Proposal #</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Description</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Department</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
@@ -376,6 +378,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
                   return (
                     <tr key={po.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{po.po_number}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{po.proposal_number?.trim() || '—'}</td>
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{po.description || 'N/A'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{dept?.name || 'N/A'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

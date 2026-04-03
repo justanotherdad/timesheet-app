@@ -2,9 +2,10 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ChevronDown } from 'lucide-react'
 import BasicBudgetView from './BasicBudgetView'
 import ProjectBudgetMatrix from './ProjectBudgetMatrix'
+import BudgetPoSummaryPanel from './BudgetPoSummaryPanel'
 
 interface Site {
   id: string
@@ -62,6 +63,7 @@ function BudgetPageClientInner({
     return ''
   })
   const [selectedPoId, setSelectedPoId] = useState<string | null>(initialPoId)
+  const [expandedPoId, setExpandedPoId] = useState<string | null>(null)
 
   const allSitePOsForNav = selectedSiteId ? purchaseOrders.filter((p) => p.site_id === selectedSiteId) : []
   const sitePOs = allSitePOsForNav
@@ -187,6 +189,7 @@ function BudgetPageClientInner({
             onChange={(e) => {
               setSelectedSiteId(e.target.value)
               setSelectedPoId(null)
+              setExpandedPoId(null)
             }}
             className="w-full min-h-[2.5rem] px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-base"
           >
@@ -209,23 +212,52 @@ function BudgetPageClientInner({
                   {hasArchived && !showArchivedPOs ? 'No active purchase orders. Check "Show archived POs" to see archived.' : 'No purchase orders for this client.'}
                 </p>
               ) : (
-                sitePOsForSelector.map((po) => (
-                  <button
-                    key={po.id}
-                    type="button"
-                    onClick={() => handleSelectPO(po.id)}
-                    className="w-full flex items-center justify-between p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 text-left"
-                  >
-                    <span className="font-medium">
-                      {po.po_number}
-                      {(po.description || po.departments?.name) ? ` — ${po.description || po.departments?.name}` : ''}
-                      {po.active === false && <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">(Archived)</span>}
-                    </span>
-                    <span className="text-sm text-gray-500 capitalize">
-                      {po.budget_type || 'basic'} budget
-                    </span>
-                  </button>
-                ))
+                sitePOsForSelector.map((po) => {
+                  const expanded = expandedPoId === po.id
+                  return (
+                    <div
+                      key={po.id}
+                      className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-800/30"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPoId((id) => (id === po.id ? null : po.id))}
+                        aria-expanded={expanded}
+                        className="w-full flex items-center justify-between gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-left"
+                      >
+                        <span className="font-medium text-gray-900 dark:text-gray-100 min-w-0">
+                          {po.po_number}
+                          {(po.description || po.departments?.name) ? ` — ${po.description || po.departments?.name}` : ''}
+                          {po.active === false && (
+                            <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">(Archived)</span>
+                          )}
+                        </span>
+                        <span className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm text-gray-500 dark:text-gray-400 capitalize">
+                            {po.budget_type || 'basic'} budget
+                          </span>
+                          <ChevronDown
+                            className={`h-5 w-5 text-gray-400 dark:text-gray-500 transition-transform shrink-0 ${expanded ? 'rotate-180' : ''}`}
+                            aria-hidden
+                          />
+                        </span>
+                      </button>
+                      {expanded && (
+                        <BudgetPoSummaryPanel
+                          poId={po.id}
+                          po={{
+                            po_number: po.po_number,
+                            project_name: po.project_name,
+                            description: po.description,
+                            po_issue_date: po.po_issue_date,
+                            proposal_number: po.proposal_number,
+                          }}
+                          onViewDetails={() => handleSelectPO(po.id)}
+                        />
+                      )}
+                    </div>
+                  )
+                })
               )}
             </div>
           </div>
