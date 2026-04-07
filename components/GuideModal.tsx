@@ -179,8 +179,8 @@ function GuideContent() {
           <li><strong>Manage Users</strong> – Open the user management page (supervisors: view only; managers and above: add/edit as allowed).</li>
           <li><strong>Pending Approvals</strong> – Timesheets waiting for your approval (with count).</li>
           <li><strong>Approved Timesheets</strong> – Timesheets you or others have approved (supervisors can see timesheets they approved).</li>
-          <li><strong>Manage Organization</strong> – Sites, departments, purchase orders, expense types, company information (supervisors: view only).</li>
-          <li><strong>Manage Timesheet Options</strong> – Systems, activities, deliverables, delegation (supervisors: view only).</li>
+          <li><strong>Manage Organization</strong> – Sites, Departments, Purchase Orders, Expense Types, Company Information (supervisors: view only).</li>
+          <li><strong>Manage Timesheet Options</strong> – Systems, Activities, Deliverables, Delegation (supervisors: view only).</li>
         </ul>
         <h4 className="text-sm font-semibold mt-3 mb-1">Managers, Admins, and Super Admins also see</h4>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">

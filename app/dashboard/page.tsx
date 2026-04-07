@@ -332,7 +332,7 @@ export default async function DashboardPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Organization</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Sites, departments, purchase orders, expense types, company information</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Sites, Departments, Purchase orders, Expense Types, Company Information</p>
                   </div>
                 </div>
               </Link>
@@ -346,7 +346,7 @@ export default async function DashboardPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Timesheet Options</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Systems, activities, deliverables, delegation</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Systems, Activities, Deliverables, Delegation</p>
                   </div>
                 </div>
               </Link>
