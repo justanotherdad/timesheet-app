@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Pencil } from 'lucide-react'
 import { formatDate, getCalendarDateStringInAppTimezone } from '@/lib/utils'
 
 interface DelegationSelf {
@@ -11,6 +11,7 @@ interface DelegationSelf {
   start_date: string
   end_date: string
   created_at: string
+  include_delegation_note_in_approval?: boolean
 }
 
 interface DelegationAdmin extends DelegationSelf {
@@ -23,10 +24,16 @@ interface User {
   name: string
 }
 
+const emptyForm = () => ({
+  delegator_id: '',
+  delegate_id: '',
+  start_date: '',
+  end_date: '',
+  include_delegation_note_in_approval: false,
+})
+
 export interface DelegationManagerProps {
-  /** Self-service (approver delegates own authority) vs admin list of all delegations with both parties. */
   mode?: 'self' | 'admin'
-  /** Supervisor read-only view: no create/delete. */
   readOnly?: boolean
 }
 
@@ -38,12 +45,8 @@ export default function DelegationManager({ mode = 'self', readOnly = false }: D
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({
-    delegator_id: '',
-    delegate_id: '',
-    start_date: '',
-    end_date: '',
-  })
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState(emptyForm)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -70,7 +73,31 @@ export default function DelegationManager({ mode = 'self', readOnly = false }: D
     load()
   }, [load])
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const toggleAddForm = () => {
+    if (showForm) {
+      setShowForm(false)
+      setEditingId(null)
+      setForm(emptyForm())
+    } else {
+      setEditingId(null)
+      setForm(emptyForm())
+      setShowForm(true)
+    }
+  }
+
+  const startEdit = (d: DelegationSelf | DelegationAdmin) => {
+    setEditingId(d.id)
+    setForm({
+      delegator_id: isAdmin ? (d as DelegationAdmin).delegator_id : '',
+      delegate_id: d.delegate_id,
+      start_date: d.start_date.slice(0, 10),
+      end_date: d.end_date.slice(0, 10),
+      include_delegation_note_in_approval: Boolean(d.include_delegation_note_in_approval),
+    })
+    setShowForm(true)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isAdmin) {
       if (!form.delegator_id || !form.delegate_id || !form.start_date || !form.end_date) {
@@ -86,26 +113,47 @@ export default function DelegationManager({ mode = 'self', readOnly = false }: D
     setSaving(true)
     setError(null)
     try {
-      const body: Record<string, string> = {
-        delegate_id: form.delegate_id,
-        start_date: form.start_date,
-        end_date: form.end_date,
+      if (editingId) {
+        const body: Record<string, unknown> = {
+          delegate_id: form.delegate_id,
+          start_date: form.start_date,
+          end_date: form.end_date,
+          include_delegation_note_in_approval: form.include_delegation_note_in_approval,
+        }
+        if (isAdmin) {
+          body.delegator_id = form.delegator_id
+        }
+        const res = await fetch(`/api/delegations/${editingId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to update')
+      } else {
+        const body: Record<string, unknown> = {
+          delegate_id: form.delegate_id,
+          start_date: form.start_date,
+          end_date: form.end_date,
+          include_delegation_note_in_approval: form.include_delegation_note_in_approval,
+        }
+        if (isAdmin) {
+          body.delegator_id = form.delegator_id
+        }
+        const res = await fetch('/api/delegations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to create')
       }
-      if (isAdmin) {
-        body.delegator_id = form.delegator_id
-      }
-      const res = await fetch('/api/delegations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to create')
-      setForm({ delegator_id: '', delegate_id: '', start_date: '', end_date: '' })
+      setForm(emptyForm())
+      setEditingId(null)
       setShowForm(false)
       load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create')
+      setError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
       setSaving(false)
     }
@@ -119,6 +167,11 @@ export default function DelegationManager({ mode = 'self', readOnly = false }: D
       const res = await fetch(`/api/delegations/${id}`, { method: 'DELETE' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to delete')
+      if (editingId === id) {
+        setEditingId(null)
+        setShowForm(false)
+        setForm(emptyForm())
+      }
       load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to delete')
@@ -164,17 +217,20 @@ export default function DelegationManager({ mode = 'self', readOnly = false }: D
         {!readOnly && (
           <button
             type="button"
-            onClick={() => setShowForm(!showForm)}
+            onClick={toggleAddForm}
             className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium"
           >
             <Plus className="h-4 w-4" />
-            {showForm ? 'Cancel' : 'Add delegation'}
+            {showForm ? 'Close' : 'Add delegation'}
           </button>
         )}
       </div>
 
       {!readOnly && showForm && (
-        <form onSubmit={handleCreate} className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg space-y-4">
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {editingId ? 'Edit delegation' : 'New delegation'}
+          </p>
           {isAdmin && (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Delegator</label>
@@ -231,11 +287,31 @@ export default function DelegationManager({ mode = 'self', readOnly = false }: D
               />
             </div>
           </div>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.include_delegation_note_in_approval}
+              onChange={(e) => setForm((f) => ({ ...f, include_delegation_note_in_approval: e.target.checked }))}
+              className="mt-1 rounded border-gray-300 dark:border-gray-600"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Add delegation note to approval: when the delegate approves, the timesheet approval line shows the delegate’s name and that they approved on behalf of the original approver.
+            </span>
+          </label>
           <div className="flex gap-2">
             <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
-              {saving ? 'Saving…' : 'Create'}
+              {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
             </button>
-            <button type="button" onClick={() => setShowForm(false)} disabled={saving} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700">
+            <button
+              type="button"
+              onClick={() => {
+                setShowForm(false)
+                setEditingId(null)
+                setForm(emptyForm())
+              }}
+              disabled={saving}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
               Cancel
             </button>
           </div>
@@ -250,7 +326,7 @@ export default function DelegationManager({ mode = 'self', readOnly = false }: D
         </p>
       ) : (
         <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-x-auto">
-          <table className="w-full text-sm min-w-[32rem]">
+          <table className="w-full text-sm min-w-[36rem]">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
                 {isAdmin && (
@@ -260,7 +336,8 @@ export default function DelegationManager({ mode = 'self', readOnly = false }: D
                 <th className="text-left py-2 px-3 font-medium">Start</th>
                 <th className="text-left py-2 px-3 font-medium">End</th>
                 <th className="text-left py-2 px-3 font-medium">Status</th>
-                {!readOnly && <th className="w-10"></th>}
+                <th className="text-left py-2 px-3 font-medium whitespace-nowrap">Approval note</th>
+                {!readOnly && <th className="text-right py-2 px-2 font-medium w-24">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -273,17 +350,31 @@ export default function DelegationManager({ mode = 'self', readOnly = false }: D
                   <td className="py-2 px-3">{formatDate(d.start_date)}</td>
                   <td className="py-2 px-3">{formatDate(d.end_date)}</td>
                   <td className="py-2 px-3">{statusBadge(d)}</td>
+                  <td className="py-2 px-3 text-gray-700 dark:text-gray-300">
+                    {d.include_delegation_note_in_approval ? 'Yes' : 'No'}
+                  </td>
                   {!readOnly && (
-                    <td className="py-2 px-2">
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(d.id)}
-                        disabled={saving}
-                        className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                        title="Delete delegation"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                    <td className="py-2 px-2 text-right">
+                      <div className="inline-flex items-center gap-0.5 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(d)}
+                          disabled={saving}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                          title="Edit delegation"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(d.id)}
+                          disabled={saving}
+                          className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                          title="Delete delegation"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>

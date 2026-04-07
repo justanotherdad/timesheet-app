@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     const adminSupabase = createAdminClient()
     const { data: rows, error } = await adminSupabase
       .from('approval_delegations')
-      .select('id, delegator_id, delegate_id, start_date, end_date, created_at')
+      .select('id, delegator_id, delegate_id, start_date, end_date, created_at, include_delegation_note_in_approval')
       .order('start_date', { ascending: false })
 
     if (error) {
@@ -63,7 +63,7 @@ export async function GET(req: Request) {
   const supabase = await createClient()
   const { data: rows, error } = await supabase
     .from('approval_delegations')
-    .select('id, delegate_id, start_date, end_date, created_at')
+    .select('id, delegate_id, start_date, end_date, created_at, include_delegation_note_in_approval')
     .eq('delegator_id', user.id)
     .order('start_date', { ascending: false })
 
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json()
-  const { delegate_id, start_date, end_date, delegator_id: bodyDelegatorId } = body
+  const { delegate_id, start_date, end_date, delegator_id: bodyDelegatorId, include_delegation_note_in_approval } = body
 
   if (!delegate_id || !start_date || !end_date) {
     return NextResponse.json({ error: 'delegate_id, start_date, and end_date are required' }, { status: 400 })
@@ -139,6 +139,7 @@ export async function POST(req: Request) {
     delegate_id,
     start_date: start_date.slice(0, 10),
     end_date: end_date.slice(0, 10),
+    include_delegation_note_in_approval: Boolean(include_delegation_note_in_approval),
   }
 
   const useAdmin = delegatorId !== user.id
@@ -146,7 +147,7 @@ export async function POST(req: Request) {
   const { data, error } = await client
     .from('approval_delegations')
     .insert(row)
-    .select('id, delegator_id, delegate_id, start_date, end_date, created_at')
+    .select('id, delegator_id, delegate_id, start_date, end_date, created_at, include_delegation_note_in_approval')
     .single()
 
   if (error) {

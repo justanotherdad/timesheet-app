@@ -69,6 +69,7 @@ export async function POST(
     const today = getCalendarDateStringInAppTimezone()
 
     let canApprove = false
+    let delegationForDelegate: { include_delegation_note_in_approval?: boolean } | null = null
     if (isAdmin) {
       canApprove = true
     } else if (nextApproverId !== undefined) {
@@ -78,13 +79,14 @@ export async function POST(
       } else {
         const { data: activeDelegation } = await adminSupabase
           .from('approval_delegations')
-          .select('id')
+          .select('id, include_delegation_note_in_approval')
           .eq('delegator_id', nextApproverId)
           .eq('delegate_id', user.id)
           .lte('start_date', today)
           .gte('end_date', today)
           .limit(1)
           .maybeSingle()
+        delegationForDelegate = activeDelegation
         canApprove = !!activeDelegation
       }
     }
@@ -111,11 +113,16 @@ export async function POST(
       signerRole = 'supervisor'
     }
 
-    // Signer name: delegator's name when acting as delegate; admin/current user otherwise
+    // Signer name: when acting as delegate, either delegator only or "Delegate (on behalf of Delegator)" if the delegation requests it
     let signerName = user.profile?.name || 'Unknown'
     if (actingAsDelegate) {
       const { data: signerProfile } = await adminSupabase.from('user_profiles').select('name').eq('id', signerId).single()
-      signerName = signerProfile?.name ?? 'Unknown'
+      const delegatorName = signerProfile?.name ?? 'Unknown'
+      if (delegationForDelegate?.include_delegation_note_in_approval) {
+        signerName = `${user.profile?.name || 'Unknown'} (on behalf of ${delegatorName})`
+      } else {
+        signerName = delegatorName
+      }
     }
     const { error: signatureError } = await adminSupabase
       .from('timesheet_signatures')

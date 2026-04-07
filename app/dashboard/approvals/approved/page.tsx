@@ -1,6 +1,8 @@
 import { requireRole } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
+import { buildApproverDisplayNamesByNextId } from '@/lib/approval-delegation-display'
+import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 import ApprovedTimesheetsClient from './ApprovedTimesheetsClient'
@@ -156,11 +158,11 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
       if (nextId) nextApproverIds.add(nextId)
     })
     if (nextApproverIds.size > 0) {
-      const approversRes = await withQueryTimeout(() =>
-        adminSupabase.from('user_profiles').select('id, name').in('id', [...nextApproverIds])
+      approverNamesById = await buildApproverDisplayNamesByNextId(
+        adminSupabase,
+        [...nextApproverIds],
+        getCalendarDateStringInAppTimezone()
       )
-      const approvers = (approversRes.data || []) as { id: string; name: string }[]
-      approvers.forEach((a) => { approverNamesById[a.id] = a.name || 'Unknown' })
     }
   }
 
