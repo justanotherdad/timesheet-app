@@ -23,6 +23,12 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Light mode: Tailwind gray-500/600 body text often reads too faint on gray-50/white cards */
+html:not(.dark) .text-gray-500,
+html:not(.dark) .text-gray-600 {
+  color: #000000;
+}
+
 /* Consistent form input/select height across site */
 input[type="text"],
 input[type="number"],

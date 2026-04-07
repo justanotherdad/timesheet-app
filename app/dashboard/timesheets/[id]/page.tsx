@@ -3,7 +3,13 @@ import { getCurrentUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import POLinkWithBalanceTooltip from '@/components/timesheet/POLinkWithBalanceTooltip'
-import { formatWeekEnding, getWeekDates, formatDateTimeInEastern, getCalendarDateStringInAppTimezone } from '@/lib/utils'
+import {
+  formatWeekEnding,
+  getWeekDates,
+  formatDateTimeInEastern,
+  getCalendarDateStringInAppTimezone,
+  formatDateShort,
+} from '@/lib/utils'
 import { format } from 'date-fns'
 import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
@@ -314,7 +320,8 @@ export default async function TimesheetDetailPage({
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Activity</th>
                         {weekDates.days.map((day, idx) => (
                           <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
-                            {format(day, 'EEE')}
+                            <div>{format(day, 'EEE')}</div>
+                            <div className="text-xs font-normal">{formatDateShort(weekDates.days[idx])}</div>
                           </th>
                         ))}
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">Total</th>
@@ -406,7 +413,8 @@ export default async function TimesheetDetailPage({
                           <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100">Notes</th>
                           {weekDates.days.map((day, idx) => (
                             <th key={idx} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm text-gray-900 dark:text-gray-100 w-12 max-w-[3.5rem]">
-                              {format(day, 'EEE')}
+                              <div>{format(day, 'EEE')}</div>
+                              <div className="text-xs font-normal">{formatDateShort(weekDates.days[idx])}</div>
                             </th>
                           ))}
                           <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm text-gray-900 dark:text-gray-100">Total</th>
