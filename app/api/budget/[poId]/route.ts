@@ -361,12 +361,14 @@ export async function PATCH(
     // Return the full PO row from service role so the client can merge without relying on RLS-masked GET reads.
     let poAfter: Record<string, unknown> | null = null
     if (adminSupabase) {
-      const { data: freshPo } = await adminSupabase
-        .from('purchase_orders')
-        .select('*, sites(id, name, address_street, address_city, address_state, address_zip, contact), departments(id, name)')
-        .eq('id', poId)
-        .single()
+      const poSel =
+        '*, sites(id, name, address_street, address_city, address_state, address_zip, contact), departments(id, name)'
+      const { data: freshPo } = await adminSupabase.from('purchase_orders').select(poSel).eq('id', poId).maybeSingle()
       if (freshPo) poAfter = freshPo as Record<string, unknown>
+      else {
+        const { data: plain } = await adminSupabase.from('purchase_orders').select('*').eq('id', poId).maybeSingle()
+        if (plain) poAfter = plain as Record<string, unknown>
+      }
     }
 
     return NextResponse.json({ ok: true, po: poAfter })

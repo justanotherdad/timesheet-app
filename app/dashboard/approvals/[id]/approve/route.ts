@@ -96,12 +96,14 @@ export async function POST(
       )
     }
 
-    const actingAsDelegate = nextApproverId && nextApproverId !== user.id && canApprove
-    const signerId = actingAsDelegate ? nextApproverId : user.id
+    // Admins always sign as themselves (name + id), not as the "next" chain person.
+    const actingAsDelegate =
+      !isAdmin && !!nextApproverId && nextApproverId !== user.id && canApprove
+    const signerId = isAdmin ? user.id : actingAsDelegate ? nextApproverId : user.id
 
     // Determine signer role based on who is signing (delegator or self)
     let signerRole: 'manager' | 'supervisor' | 'final_approver'
-    if (signerId === profile?.final_approver_id || isAdmin) {
+    if (isAdmin || signerId === profile?.final_approver_id) {
       signerRole = 'final_approver'
     } else if (signerId === profile?.manager_id) {
       signerRole = 'manager'
@@ -109,11 +111,12 @@ export async function POST(
       signerRole = 'supervisor'
     }
 
-    // Signer name: delegator's name when acting as delegate, else current user
-    const { data: signerProfile } = actingAsDelegate
-      ? await adminSupabase.from('user_profiles').select('name').eq('id', signerId).single()
-      : { data: null }
-    const signerName = signerProfile?.name ?? (actingAsDelegate ? 'Unknown' : (user.profile?.name || 'Unknown'))
+    // Signer name: delegator's name when acting as delegate; admin/current user otherwise
+    let signerName = user.profile?.name || 'Unknown'
+    if (actingAsDelegate) {
+      const { data: signerProfile } = await adminSupabase.from('user_profiles').select('name').eq('id', signerId).single()
+      signerName = signerProfile?.name ?? 'Unknown'
+    }
     const { error: signatureError } = await adminSupabase
       .from('timesheet_signatures')
       .insert({

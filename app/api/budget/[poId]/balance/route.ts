@@ -153,7 +153,12 @@ export async function GET(
   const priorAmountSpent = po?.prior_amount_spent ?? 0
   const priorCostFromHours = priorHours * priorRate
   const totalAvailable = original + coTotal + liTotal
-  const budgetBalance = totalAvailable - priorAmountSpent - priorCostFromHours - laborCost
+
+  const aggClient = adminSupabase ?? supabase
+  const { data: expenseRows } = await aggClient.from('po_expenses').select('amount').eq('po_id', poId)
+  const expenseTotal = (expenseRows || []).reduce((s: number, e: { amount?: number }) => s + (Number(e.amount) || 0), 0)
+
+  const budgetBalance = totalAvailable - priorAmountSpent - priorCostFromHours - laborCost - expenseTotal
 
   const personnelLIs = changeOrderRows.filter((c: any) => c.type === 'li' && c.line_item_type === 'personnel' && c.user_id)
   const personnelUserIds = [...new Set(personnelLIs.map((c: any) => c.user_id))]
@@ -181,6 +186,7 @@ export async function GET(
     budgetBalance,
     lastTimesheetWe,
     totalAvailable,
+    expenseTotal,
     personnelLineItems,
   })
 }

@@ -18,9 +18,14 @@ async function canAccess(supabase: Awaited<ReturnType<typeof createClient>>, use
 
 /** Parse CSV: System_Name, System_Number, Deliverable_Name, Activity_Name (optional: Budgeted_Hours) */
 function parseCSV(text: string): Array<{ system: string; systemNumber: string; deliverable: string; activity: string; hours: number }> {
-  const lines = text.trim().split(/\r?\n/)
+  const normalized = text.replace(/^\uFEFF/, '').trim()
+  const lines = normalized.split(/\r?\n/)
   if (lines.length < 2) return []
-  const headers = lines[0].toLowerCase().replace(/_/g, ' ').split(',').map((h) => h.trim())
+  const headers = lines[0]
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .split(',')
+    .map((h) => h.trim().replace(/^\uFEFF/, ''))
   const sysIdx = headers.findIndex((h) => (h.includes('system') && !h.includes('number')) || h === 'system name')
   const numIdx = headers.findIndex((h) => (h.includes('system') && h.includes('number')) || h === 'system number')
   const delIdx = headers.findIndex((h) => h.includes('deliverable'))
@@ -46,7 +51,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!['manager', 'admin', 'super_admin'].includes(user.profile.role)) {
+  if (!['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -62,7 +67,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!csvText) return NextResponse.json({ error: 'csv or text required' }, { status: 400 })
 
   const rows = parseCSV(csvText)
-  if (rows.length === 0) return NextResponse.json({ error: 'No valid rows in CSV' }, { status: 400 })
+  if (rows.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          'No valid rows in CSV. Use the header row plus data rows with columns: System_Name, System_Number, Deliverable_Name, Activity_Name, Budgeted_Hours. Re-export from the bid sheet (Export CSV) or ensure Excel did not change the header names; remove a UTF-8 BOM if you edited the file.',
+      },
+      { status: 400 }
+    )
+  }
 
   const db = createAdminClient()
 

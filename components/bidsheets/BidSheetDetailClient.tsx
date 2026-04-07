@@ -104,7 +104,7 @@ export default function BidSheetDetailClient({
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   const router = useRouter()
-  const canEdit = !readOnly && ['manager', 'admin', 'super_admin'].includes(user.profile.role)
+  const canEdit = !readOnly && ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)
   const canEditBidStructure =
     canEdit && (sheet.status === 'draft' || sheet.status === 'converted')
   const bidSheetId = sheet.id

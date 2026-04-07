@@ -19,7 +19,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!['manager', 'admin', 'super_admin'].includes(user.profile.role)) {
+  if (!['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -44,7 +44,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       bid_rate: parseFloat(String(bid_rate)) || 0,
       notes: notes || null,
     })
-    .select()
+    .select('*, user_profiles(id, name)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -84,7 +84,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!['manager', 'admin', 'super_admin'].includes(user.profile.role)) {
+  if (!['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -107,7 +107,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .update(updates)
     .eq('id', labor_id)
     .eq('bid_sheet_id', id)
-    .select()
+    .select('*, user_profiles(id, name)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -118,7 +118,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!['manager', 'admin', 'super_admin'].includes(user.profile.role)) {
+  if (!['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

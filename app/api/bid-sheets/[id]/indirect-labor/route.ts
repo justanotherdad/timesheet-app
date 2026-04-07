@@ -20,7 +20,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!['manager', 'admin', 'super_admin'].includes(user.profile.role)) {
+  if (!['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -62,7 +62,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!['manager', 'admin', 'super_admin'].includes(user.profile.role)) {
+  if (!['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -100,6 +100,7 @@ export default function BasicBudgetView({
     budgetBalance: number
     lastTimesheetWe: string | null
     totalAvailable?: number
+    expenseTotal?: number
     personnelLineItems?: Array<{ user_id: string; userName: string; allocated: number; spent: number; remaining: number }>
   } | null>(null)
   const [budgetHealthForm, setBudgetHealthForm] = useState({ weekly_burn: '', target_end_date: '' })
@@ -209,6 +210,7 @@ export default function BasicBudgetView({
           budgetBalance: json.budgetBalance ?? 0,
           lastTimesheetWe: json.lastTimesheetWe ?? null,
           totalAvailable: json.totalAvailable,
+          expenseTotal: json.expenseTotal,
           personnelLineItems: json.personnelLineItems ?? [],
         })
       }
@@ -309,6 +311,7 @@ export default function BasicBudgetView({
             budgetBalance: balJson.budgetBalance ?? 0,
             lastTimesheetWe: balJson.lastTimesheetWe ?? null,
             totalAvailable: balJson.totalAvailable,
+            expenseTotal: balJson.expenseTotal,
             personnelLineItems: balJson.personnelLineItems ?? [],
           })
         }
@@ -416,8 +419,11 @@ export default function BasicBudgetView({
     }
   }
 
-  const budgetBalanceComputed = totalBudget - priorAmountSpent - priorCostFromHours - laborCost
+  const expenseTotalForBalance = expenses.reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0)
+  const budgetBalanceComputed =
+    totalBudget - priorAmountSpent - priorCostFromHours - laborCost - expenseTotalForBalance
   const budgetBalance = balanceData?.budgetBalance ?? budgetBalanceComputed
+  const expenseTotalShown = balanceData?.expenseTotal ?? expenseTotalForBalance
 
   const rows = billableData?.rows || []
   const weekEndings = billableData?.weekEndings || []
@@ -852,7 +858,10 @@ export default function BasicBudgetView({
             </div>
             <div className="space-y-2">
               <p><span className="font-medium text-gray-500 dark:text-gray-400">PO#:</span> {poData.po_number}</p>
-              <p><span className="font-medium text-gray-500 dark:text-gray-400">Department:</span> {poData.departments?.name || '—'}</p>
+              <p>
+                <span className="font-medium text-gray-500 dark:text-gray-400">Department:</span>{' '}
+                {siteDepartments.find((d) => d.id === poData.department_id)?.name || poData.departments?.name || '—'}
+              </p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Project:</span> {poData.description ?? poData.project_name ?? '—'}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">PO Issue Date:</span> {formatPoIssueDateForDisplay(poData.po_issue_date)}</p>
               <p><span className="font-medium text-gray-500 dark:text-gray-400">Proposal #:</span> {poData.proposal_number || '—'}</p>
@@ -1431,7 +1440,7 @@ export default function BasicBudgetView({
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Budget Balance</h2>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Based on actual labor (rates × hours). Differs from PO Balance when invoicing is scheduled or fixed amounts—PO Balance reflects invoices; Budget Balance reflects earned value from timesheets.
+          Based on actual labor (rates × hours) and PO expenses. Differs from PO Balance when invoicing is scheduled or fixed amounts—PO Balance reflects invoices; Budget Balance reflects earned value from timesheets and recorded expenses.
         </p>
         <table className="w-full text-sm">
           <thead>
@@ -1461,6 +1470,14 @@ export default function BasicBudgetView({
               <td className="py-2">Labor cost (rates × hours from timesheets)</td>
               <td className="text-right py-2">-${laborCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
             </tr>
+            {expenseTotalShown > 0 && (
+              <tr className="border-b border-gray-100 dark:border-gray-700">
+                <td className="py-2">Additional expenses (travel, equipment, etc.)</td>
+                <td className="text-right py-2">
+                  -${expenseTotalShown.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </td>
+              </tr>
+            )}
             <tr className="font-semibold bg-blue-50 dark:bg-blue-900/20">
               <td className="py-2">Budget Balance</td>
               <td className="text-right py-2">${budgetBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
