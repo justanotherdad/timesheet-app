@@ -167,8 +167,9 @@ export default function WeeklyTimesheetExport({
           ${showFinal ? `<div style="text-align: right;"><strong>Final Approver by / Date:</strong> ${sig('final_approver') || '<span style="border-bottom: 1px solid #000; display: inline-block; min-width: 180px;"></span>'}</div>` : ''}
         </div>
         <div style="margin-top: 6px;"><h3 style="font-size: 9pt; margin-bottom: 4px;">UNBILLABLE TIME</h3>
-        <table style="width: 100%; border-collapse: collapse; font-size: 8pt;">
-          <thead><tr style="background-color: #f0f0f0;"><th style="border: 1px solid #000; padding: 3px;">Description</th><th style="border: 1px solid #000; padding: 3px; text-align: left;">Notes</th>${weekDates.days.map((d, i) => `<th style="border: 1px solid #000; padding: 3px; text-align: center;"><div>${format(d, 'EEE')}</div><div style="font-size: 7pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}<th style="border: 1px solid #000; padding: 3px; text-align: center;">Total</th></tr></thead>
+        <table style="width: 100%; border-collapse: collapse; font-size: 8pt; table-layout: fixed;">
+          <colgroup><col style="width:5.5rem"/><col/>${days.map(() => '<col style="width:3rem"/>').join('')}<col style="width:4.5rem"/></colgroup>
+          <thead><tr style="background-color: #f0f0f0;"><th style="border: 1px solid #000; padding: 3px; white-space: nowrap;">Description</th><th style="border: 1px solid #000; padding: 3px; text-align: left;">Notes</th>${weekDates.days.map((d, i) => `<th style="border: 1px solid #000; padding: 3px; text-align: center;"><div>${format(d, 'EEE')}</div><div style="font-size: 7pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}<th style="border: 1px solid #000; padding: 3px; text-align: center; white-space: nowrap;">Total</th></tr></thead>
           <tbody>${unbillableToUse.map((u: any) => `<tr><td style="border: 1px solid #000; padding: 3px; font-weight: bold;">${escapeHtml(u.description)}</td><td style="border: 1px solid #000; padding: 3px;">${escapeHtml(u.notes || '')}</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${(u[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right; font-weight: bold;">${calculateTotal(u).toFixed(2)}</td></tr>`).join('')}
           <tr style="background-color: #FFFF99; font-weight: bold;"><td colspan="2" style="border: 1px solid #000; padding: 3px;">Sub Totals</td>${days.map(day => `<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableSubtotal(day, unbillableToUse).toFixed(2)}</td>`).join('')}<td style="border: 1px solid #000; padding: 3px; text-align: right;">${getUnbillableGrandTotal(unbillableToUse).toFixed(2)}</td></tr>
           </tbody></table></div>
@@ -632,10 +633,18 @@ export default function WeeklyTimesheetExport({
         {/* Unbillable Time Section */}
         <div className="unbillable-section" style={{ marginTop: '15px', color: '#000' }}>
           <h3 style={{ fontSize: '12pt', fontWeight: 'bold', marginBottom: '10px', color: '#000' }}>UNBILLABLE TIME</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as const }}>
+            <colgroup>
+              <col style={{ width: '5.5rem' }} />
+              <col />
+              {weekDates.days.map((_, idx) => (
+                <col key={idx} style={{ width: '3rem' }} />
+              ))}
+              <col style={{ width: '4.5rem' }} />
+            </colgroup>
             <thead>
               <tr style={{ backgroundColor: '#f0f0f0' }}>
-                <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Description</th>
+                <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left', whiteSpace: 'nowrap' }}>Description</th>
                 <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Notes</th>
                 {weekDates.days.map((day, idx) => (
                   <th key={idx} className="day-header" style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>
@@ -645,7 +654,7 @@ export default function WeeklyTimesheetExport({
                     </div>
                   </th>
                 ))}
-                <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>Total</th>
+                <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', whiteSpace: 'nowrap' }}>Total</th>
               </tr>
             </thead>
             <tbody>

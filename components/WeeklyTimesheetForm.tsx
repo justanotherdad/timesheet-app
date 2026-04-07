@@ -719,25 +719,41 @@ export default function WeeklyTimesheetForm({
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Unbillable Time</h2>
           
           <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
+            <table className="min-w-full w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+              <colgroup>
+                <col className="w-[5.5rem]" />
+                <col />
+                {weekDates.days.map((_, idx) => (
+                  <col key={idx} className="w-12" />
+                ))}
+                <col className="w-[4.5rem]" />
+              </colgroup>
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 w-[7rem]">Description</th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 min-w-[8rem]">Notes</th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                    Description
+                  </th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 min-w-0">
+                    Notes
+                  </th>
                   {weekDates.days.map((day, idx) => (
-                    <th key={idx} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100 w-12 max-w-[3.5rem]">
+                    <th key={idx} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                       <div>{format(day, 'EEE')}</div>
                       <div className="text-xs font-normal">{formatDateShort(weekDates.days[idx])}</div>
                     </th>
                   ))}
-                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">Total</th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                    Total
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {unbillableEntries.map((entry, entryIdx) => (
                   <tr key={entryIdx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{entry.description}</td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2">
+                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                      {entry.description}
+                    </td>
+                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 min-w-0">
                       <input
                         type="text"
                         value={entry.notes ?? ''}
@@ -747,7 +763,7 @@ export default function WeeklyTimesheetForm({
                       />
                     </td>
                     {days.map((day) => (
-                      <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2 w-12 max-w-[3.5rem]">
+                      <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2">
                         <input
                           type="number"
                           step="0.25"
@@ -759,7 +775,7 @@ export default function WeeklyTimesheetForm({
                         />
                       </td>
                     ))}
-                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center font-medium text-gray-900 dark:text-gray-100">
+                    <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-right tabular-nums font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                       {formatHours(calculateTotal(entry))}
                     </td>
                   </tr>
@@ -767,13 +783,13 @@ export default function WeeklyTimesheetForm({
                 
                 {/* Sub Totals Row */}
                 <tr className="bg-yellow-50 dark:bg-yellow-900/30 font-semibold">
-                  <td colSpan={2} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
+                  <td colSpan={2} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
                   {days.map((day) => (
                     <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-gray-900 dark:text-gray-100">
                       {formatHours(getUnbillableSubtotal(day))}
                     </td>
                   ))}
-                  <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-gray-900 dark:text-gray-100">
+                  <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-right tabular-nums text-gray-900 dark:text-gray-100 whitespace-nowrap">
                     {formatHours(unbillableEntries.reduce((sum, e) => sum + calculateTotal(e), 0))}
                   </td>
                 </tr>
