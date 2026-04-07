@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { formatDate, getCalendarDateStringInAppTimezone } from '@/lib/utils'
 
-interface Delegation {
+interface DelegationSelf {
   id: string
   delegate_id: string
   delegateName: string
@@ -13,25 +13,44 @@ interface Delegation {
   created_at: string
 }
 
+interface DelegationAdmin extends DelegationSelf {
+  delegator_id: string
+  delegatorName: string
+}
+
 interface User {
   id: string
   name: string
 }
 
-export default function DelegationManager() {
-  const [delegations, setDelegations] = useState<Delegation[]>([])
+export interface DelegationManagerProps {
+  /** Self-service (approver delegates own authority) vs admin list of all delegations with both parties. */
+  mode?: 'self' | 'admin'
+  /** Supervisor read-only view: no create/delete. */
+  readOnly?: boolean
+}
+
+export default function DelegationManager({ mode = 'self', readOnly = false }: DelegationManagerProps) {
+  const isAdmin = mode === 'admin'
+  const [delegations, setDelegations] = useState<(DelegationSelf | DelegationAdmin)[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ delegate_id: '', start_date: '', end_date: '' })
+  const [form, setForm] = useState({
+    delegator_id: '',
+    delegate_id: '',
+    start_date: '',
+    end_date: '',
+  })
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/delegations?users=1', { cache: 'no-store' })
+      const qs = isAdmin ? 'admin=1&users=1' : 'users=1'
+      const res = await fetch(`/api/delegations?${qs}`, { cache: 'no-store' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to load')
       if (Array.isArray(data)) {
@@ -45,7 +64,7 @@ export default function DelegationManager() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isAdmin])
 
   useEffect(() => {
     load()
@@ -53,25 +72,36 @@ export default function DelegationManager() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.delegate_id || !form.start_date || !form.end_date) {
-      setError('Please select a delegate and enter start and end dates.')
-      return
+    if (isAdmin) {
+      if (!form.delegator_id || !form.delegate_id || !form.start_date || !form.end_date) {
+        setError('Please select delegator, delegate, and enter start and end dates.')
+        return
+      }
+    } else {
+      if (!form.delegate_id || !form.start_date || !form.end_date) {
+        setError('Please select a delegate and enter start and end dates.')
+        return
+      }
     }
     setSaving(true)
     setError(null)
     try {
+      const body: Record<string, string> = {
+        delegate_id: form.delegate_id,
+        start_date: form.start_date,
+        end_date: form.end_date,
+      }
+      if (isAdmin) {
+        body.delegator_id = form.delegator_id
+      }
       const res = await fetch('/api/delegations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          delegate_id: form.delegate_id,
-          start_date: form.start_date,
-          end_date: form.end_date,
-        }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to create')
-      setForm({ delegate_id: '', start_date: '', end_date: '' })
+      setForm({ delegator_id: '', delegate_id: '', start_date: '', end_date: '' })
       setShowForm(false)
       load()
     } catch (e) {
@@ -99,7 +129,7 @@ export default function DelegationManager() {
 
   const today = getCalendarDateStringInAppTimezone()
 
-  const statusBadge = (d: Delegation) => {
+  const statusBadge = (d: DelegationSelf) => {
     if (d.end_date < today) return <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300">Expired</span>
     if (d.start_date > today) return <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200">Upcoming</span>
     return <span className="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200">Active</span>
@@ -110,7 +140,15 @@ export default function DelegationManager() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-600 dark:text-gray-400">
-        Delegate your timesheet approval responsibility to another person for a specified period. During that time, they can approve (and reject) timesheets on your behalf. The delegate can be any user (including employees who are not otherwise in an approver role). After the end date, the delegation automatically expires. Active dates use US Eastern time for “today” (not UTC), and are independent of a timesheet’s week ending.
+        {isAdmin ? (
+          <>
+            Manage <strong>timesheet approval</strong> delegations for any user. Each row shows who is delegating (delegator) and who may approve on their behalf (delegate). The delegate may be any user, including someone with only the employee role.
+          </>
+        ) : (
+          <>
+            Delegate your timesheet approval responsibility to another person for a specified period. During that time, they can approve (and reject) timesheets on your behalf. The delegate can be any user (including employees who are not otherwise in an approver role). After the end date, the delegation automatically expires. Active dates use US Eastern time for “today” (not UTC), and are independent of a timesheet’s week ending.
+          </>
+        )}
       </p>
 
       {error && (
@@ -120,19 +158,41 @@ export default function DelegationManager() {
       )}
 
       <div className="flex justify-between items-center">
-        <h3 className="font-medium text-gray-900 dark:text-gray-100">Your delegations</h3>
-        <button
-          type="button"
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium"
-        >
-          <Plus className="h-4 w-4" />
-          {showForm ? 'Cancel' : 'Add delegation'}
-        </button>
+        <h3 className="font-medium text-gray-900 dark:text-gray-100">
+          {isAdmin ? 'All timesheet delegations' : 'Your delegations'}
+        </h3>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium"
+          >
+            <Plus className="h-4 w-4" />
+            {showForm ? 'Cancel' : 'Add delegation'}
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {!readOnly && showForm && (
         <form onSubmit={handleCreate} className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg space-y-4">
+          {isAdmin && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Delegator</label>
+              <select
+                value={form.delegator_id}
+                onChange={(e) => setForm((f) => ({ ...f, delegator_id: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                required
+              >
+                <option value="">Select who is delegating</option>
+                {filteredUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Delegate to</label>
             <select
@@ -143,7 +203,9 @@ export default function DelegationManager() {
             >
               <option value="">Select person</option>
               {filteredUsers.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
               ))}
             </select>
           </div>
@@ -183,37 +245,47 @@ export default function DelegationManager() {
       {loading ? (
         <p className="text-sm text-gray-500">Loading…</p>
       ) : delegations.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">No delegations. Add one above to delegate your approval activity.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          {isAdmin ? 'No delegations recorded.' : 'No delegations. Add one above to delegate your approval activity.'}
+        </p>
       ) : (
-        <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-x-auto">
+          <table className="w-full text-sm min-w-[32rem]">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
-                <th className="text-left py-2 px-3 font-medium">Delegate</th>
+                {isAdmin && (
+                  <th className="text-left py-2 px-3 font-medium whitespace-nowrap">Delegator</th>
+                )}
+                <th className="text-left py-2 px-3 font-medium whitespace-nowrap">Delegate</th>
                 <th className="text-left py-2 px-3 font-medium">Start</th>
                 <th className="text-left py-2 px-3 font-medium">End</th>
                 <th className="text-left py-2 px-3 font-medium">Status</th>
-                <th className="w-10"></th>
+                {!readOnly && <th className="w-10"></th>}
               </tr>
             </thead>
             <tbody>
               {delegations.map((d) => (
                 <tr key={d.id} className="border-b border-gray-100 dark:border-gray-700 last:border-0">
-                  <td className="py-2 px-3">{d.delegateName}</td>
+                  {isAdmin && (
+                    <td className="py-2 px-3 whitespace-nowrap">{(d as DelegationAdmin).delegatorName}</td>
+                  )}
+                  <td className="py-2 px-3 whitespace-nowrap">{d.delegateName}</td>
                   <td className="py-2 px-3">{formatDate(d.start_date)}</td>
                   <td className="py-2 px-3">{formatDate(d.end_date)}</td>
                   <td className="py-2 px-3">{statusBadge(d)}</td>
-                  <td className="py-2 px-2">
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(d.id)}
-                      disabled={saving}
-                      className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                      title="Delete delegation"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
+                  {!readOnly && (
+                    <td className="py-2 px-2">
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(d.id)}
+                        disabled={saving}
+                        className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                        title="Delete delegation"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

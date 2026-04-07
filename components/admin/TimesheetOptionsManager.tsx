@@ -13,11 +13,17 @@ interface Site {
 interface TimesheetOptionsManagerProps {
   sites: Site[]
   readOnly?: boolean
+  /** Admin/super_admin: Delegation tab lists all delegations with delegator + delegate; others use self-service only. */
+  delegationAdminMode?: boolean
 }
 
 type TabType = 'systems' | 'activities' | 'deliverables' | 'delegation'
 
-export default function TimesheetOptionsManager({ sites, readOnly = false }: TimesheetOptionsManagerProps) {
+export default function TimesheetOptionsManager({
+  sites,
+  readOnly = false,
+  delegationAdminMode = false,
+}: TimesheetOptionsManagerProps) {
   const [activeTab, setActiveTab] = useState<TabType>('systems')
 
   return (
@@ -102,7 +108,7 @@ export default function TimesheetOptionsManager({ sites, readOnly = false }: Tim
         />
       )}
       {activeTab === 'delegation' && (
-        <DelegationManager />
+        <DelegationManager mode={delegationAdminMode ? 'admin' : 'self'} readOnly={readOnly} />
       )}
     </div>
   )

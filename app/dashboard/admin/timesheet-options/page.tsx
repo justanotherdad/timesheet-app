@@ -22,6 +22,7 @@ export default async function TimesheetOptionsAdminPage() {
   }
 
   const readOnly = role === 'supervisor'
+  const delegationAdminMode = role === 'admin' || role === 'super_admin'
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -33,7 +34,7 @@ export default async function TimesheetOptionsAdminPage() {
       />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          <TimesheetOptionsManager sites={sites} readOnly={readOnly} />
+          <TimesheetOptionsManager sites={sites} readOnly={readOnly} delegationAdminMode={delegationAdminMode} />
         </div>
       </div>
     </div>
