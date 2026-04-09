@@ -26,6 +26,76 @@ function sumEntryHours(e: Record<string, unknown>): number {
   return days.reduce((s, k) => s + (Number(e[k]) || 0), 0)
 }
 
+const EPS = 1e-6
+
+function nk(s: string | null | undefined): string {
+  return (s ?? '').trim()
+}
+
+/** Match bid sheet matrix rows to project_details (same names after conversion). */
+function matrixMatchKey(
+  sysName: string,
+  sysCode: string | null | undefined,
+  delName: string,
+  actName: string
+): string {
+  return [nk(sysName), nk(sysCode ?? ''), nk(delName), nk(actName)].join('|').toLowerCase()
+}
+
+type BidLineAgg = { hours: number; lineCost: number }
+
+/**
+ * When this PO came from a bid sheet conversion, each matrix cell had hours × bid_sheet_labor.bid_rate.
+ * po_bill_rates may omit placeholders or differ from bid rates — use bid sheet as source of truth for Est. budget $.
+ */
+async function loadBidSheetLineCostMap(db: any, poId: string): Promise<Map<string, BidLineAgg>> {
+  const { data: sheet } = await db.from('bid_sheets').select('id').eq('converted_po_id', poId).maybeSingle()
+  const sheetRow = sheet as { id?: string } | null
+  if (!sheetRow?.id) return new Map()
+
+  const { data: items, error: itemsErr } = await db
+    .from('bid_sheet_items')
+    .select(
+      `
+      budgeted_hours,
+      labor_id,
+      bid_sheet_systems (name, code),
+      bid_sheet_deliverables (name),
+      bid_sheet_activities (name)
+    `
+    )
+    .eq('bid_sheet_id', sheetRow.id)
+
+  if (itemsErr || !items?.length) return new Map()
+
+  const laborIds = [...new Set((items as { labor_id?: string | null }[]).map((i) => i.labor_id).filter(Boolean))] as string[]
+  const { data: labRows } =
+    laborIds.length > 0
+      ? await db.from('bid_sheet_labor').select('id, bid_rate').in('id', laborIds)
+      : { data: [] as { id: string; bid_rate?: number | null }[] }
+
+  const rateByLabor = new Map<string, number>(
+    (labRows || []).map((l: { id: string; bid_rate?: number | null }) => [l.id, Number(l.bid_rate) || 0])
+  )
+
+  const map = new Map<string, BidLineAgg>()
+  for (const it of items as any[]) {
+    const sys = it.bid_sheet_systems as { name?: string; code?: string | null } | null
+    const del = it.bid_sheet_deliverables as { name?: string } | null
+    const act = it.bid_sheet_activities as { name?: string } | null
+    if (!sys?.name || !del?.name || !act?.name) continue
+    const key = matrixMatchKey(sys.name, sys.code ?? null, del.name, act.name)
+    const hrs = Number(it.budgeted_hours) || 0
+    const rate = it.labor_id ? rateByLabor.get(it.labor_id as string) ?? 0 : 0
+    const line = hrs * rate
+    const cur = map.get(key) ?? { hours: 0, lineCost: 0 }
+    cur.hours += hrs
+    cur.lineCost += line
+    map.set(key, cur)
+  }
+  return map
+}
+
 /** Average of each person’s current PO bill rate (active as of `asOf`), one rate per user. */
 function blendedBudgetRate(rows: BillRateRow[], asOf: string): number {
   const byUser = new Map<string, BillRateRow[]>()
@@ -75,6 +145,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
   } catch {
     /* fall back to user client */
   }
+
+  const bidSheetLineCosts = await loadBidSheetLineCostMap(db, poId)
 
   const { data: billRateRows } = await db
     .from('po_bill_rates')
@@ -175,7 +247,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
     const systemLabel = code
       ? `${name}${name ? ' ' : ''}(${code})`.trim()
       : name || '—'
-    const budgetCost = budgeted * blendedRate
+    const matchKey = matrixMatchKey(name, code ?? null, del?.name || '', act?.name || '')
+    const bidInfo = bidSheetLineCosts.get(matchKey)
+    const budgetCost =
+      bidInfo && bidInfo.hours > EPS
+        ? budgeted * (bidInfo.lineCost / bidInfo.hours)
+        : budgeted * blendedRate
     const actualCost = actualCostMap.get(key) || 0
     return {
       id: r.id as string,
@@ -204,13 +281,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
   const totalBudgetCost = rows.reduce((s, r) => s + r.budgetCost, 0)
   const totalActualCost = rows.reduce((s, r) => s + r.actualCost, 0)
 
+  const budgetCostLabel =
+    bidSheetLineCosts.size > 0
+      ? 'Est. budget $ uses the same effective labor rate as the source bid sheet (hours × bid rate per cell), scaled to current budgeted hours per line. Rows without a bid-sheet match use budgeted hours × the average of each team member’s bill rate on this PO. Actual $ sums approved timesheet hours × that person’s effective rate for each week.'
+      : 'Est. budget $ uses budgeted hours × the average of each team member’s current bill rate on this PO. Actual $ sums approved timesheet hours × that person’s effective rate for each week.'
+
   return NextResponse.json(
     {
       siteId: po.site_id ?? null,
       costModel: {
         blendedBudgetRate: blendedRate,
-        budgetCostLabel:
-          'Est. budget $ uses budgeted hours × the average of each team member’s current bill rate on this PO. Actual $ sums approved timesheet hours × that person’s effective rate for each week.',
+        budgetCostLabel,
       },
       rows,
       totals: {
