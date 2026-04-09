@@ -48,3 +48,12 @@ This guide covers manual security configuration and app-level security features.
 - Applied automatically via `next.config.ts`
 - CSP, HSTS, X-Frame-Options, etc.
 
+### Cloudflare Turnstile (login + forgot password)
+- **Env vars:**
+  - `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — site key from Cloudflare Turnstile (widget)
+  - `TURNSTILE_SECRET_KEY` — secret key (server only; never expose to the client)
+- Sign-in uses `POST /api/auth/login` (server verifies Turnstile, then Supabase session cookies).
+- Forgot password uses `POST /api/auth/forgot-password` with the same verification.
+- **Development:** If `TURNSTILE_SECRET_KEY` is unset, verification is skipped so local dev can run without keys. **Production** requires the secret.
+- **Production:** Set both keys; CSP allows `https://challenges.cloudflare.com` for scripts, frames, and connect.
+

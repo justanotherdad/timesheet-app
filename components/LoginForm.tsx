@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
+
+const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
 export default function LoginForm() {
   const [email, setEmail] = useState('')
@@ -15,38 +17,48 @@ export default function LoginForm() {
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('')
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false)
   const [forgotPasswordSuccess, setForgotPasswordSuccess] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileInstance | null>(null)
   const router = useRouter()
-  const supabase = createClient()
+
+  const resetTurnstile = () => {
+    setTurnstileToken(null)
+    turnstileRef.current?.reset()
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+
+    if (siteKey && !turnstileToken) {
+      setError('Please complete the verification challenge.')
+      return
+    }
+
     setLoading(true)
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          email,
+          password,
+          turnstileToken: turnstileToken || undefined,
+        }),
       })
 
-      if (error) {
-        // Log full error for debugging (Supabase may not always log failed attempts)
-        console.error('Sign-in error:', { message: error.message, code: (error as { code?: string }).code, status: (error as { status?: number }).status })
-        throw error
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : 'Sign-in failed')
       }
 
-      // Sign-in succeeded - verify profile exists and check must_change_password
-      if (data?.user) {
-        const { data: profile } = await supabase.from('user_profiles').select('id, must_change_password').eq('id', data.user.id).single()
-        if (!profile) {
-          setError('Your account is not fully set up. Please contact your administrator to complete your profile.')
-          return
-        }
-        if ((profile as { must_change_password?: boolean }).must_change_password) {
-          router.push('/dashboard/change-password?required=1')
-          router.refresh()
-          return
-        }
+      if (data.mustChangePassword) {
+        router.push('/dashboard/change-password?required=1')
+        router.refresh()
+        return
       }
 
       router.push('/dashboard')
@@ -54,6 +66,7 @@ export default function LoginForm() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'An error occurred'
       setError(msg)
+      resetTurnstile()
     } finally {
       setLoading(false)
     }
@@ -62,38 +75,60 @@ export default function LoginForm() {
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+
+    if (siteKey && !turnstileToken) {
+      setError('Please complete the verification challenge.')
+      return
+    }
+
     setForgotPasswordLoading(true)
     setForgotPasswordSuccess(false)
 
     try {
-      const redirectTo = `${window.location.origin}/auth/callback?next=/auth/setup-password`
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail, {
-        redirectTo,
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: forgotPasswordEmail,
+          turnstileToken: turnstileToken || undefined,
+        }),
       })
 
-      if (error) throw error
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to send reset email')
+      }
 
       setForgotPasswordSuccess(true)
+      resetTurnstile()
     } catch (err: unknown) {
       let msg = 'Failed to send reset email'
       if (err instanceof Error && err.message) {
         msg = err.message
-      } else if (err && typeof err === 'object') {
-        const o = err as Record<string, unknown>
-        const extracted = (o.message || o.msg || o.error_description || (typeof o.error === 'string' ? o.error : null)) as string | undefined
-        msg = extracted && extracted !== '{}' ? extracted : 'Failed to send reset email. Check Supabase SMTP settings and Redirect URLs.'
       }
       setError(msg)
+      resetTurnstile()
     } finally {
       setForgotPasswordLoading(false)
     }
   }
+
+  const turnstileConfigured = Boolean(siteKey)
+  const showTurnstileConfigError = process.env.NODE_ENV === 'production' && !turnstileConfigured
 
   return (
     <>
       {error && (
         <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-4">
           {error}
+        </div>
+      )}
+
+      {showTurnstileConfigError && (
+        <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 px-4 py-3 rounded mb-4 text-sm">
+          Sign-in verification is not configured. Set <code className="text-xs">NEXT_PUBLIC_TURNSTILE_SITE_KEY</code> and{' '}
+          <code className="text-xs">TURNSTILE_SECRET_KEY</code>.
         </div>
       )}
 
@@ -128,10 +163,21 @@ export default function LoginForm() {
                   autoComplete="email"
                 />
               </div>
+              {turnstileConfigured && (
+                <div className="flex justify-center">
+                  <Turnstile
+                    ref={turnstileRef}
+                    siteKey={siteKey!}
+                    onSuccess={(token) => setTurnstileToken(token)}
+                    onExpire={() => setTurnstileToken(null)}
+                    options={{ theme: 'auto' }}
+                  />
+                </div>
+              )}
               <div className="flex gap-2">
                 <button
                   type="submit"
-                  disabled={forgotPasswordLoading}
+                  disabled={forgotPasswordLoading || showTurnstileConfigError}
                   className="flex-1 bg-blue-600 text-white py-2.5 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {forgotPasswordLoading ? 'Sending...' : 'Send Reset Link'}
@@ -142,6 +188,7 @@ export default function LoginForm() {
                     setShowForgotPassword(false)
                     setError(null)
                     setForgotPasswordSuccess(false)
+                    resetTurnstile()
                   }}
                   className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
@@ -176,7 +223,11 @@ export default function LoginForm() {
               </label>
               <button
                 type="button"
-                onClick={() => setShowForgotPassword(true)}
+                onClick={() => {
+                  setShowForgotPassword(true)
+                  setError(null)
+                  resetTurnstile()
+                }}
                 className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
               >
                 Forgot password?
@@ -204,9 +255,21 @@ export default function LoginForm() {
             </div>
           </div>
 
+          {turnstileConfigured && (
+            <div className="flex justify-center pt-1">
+              <Turnstile
+                ref={turnstileRef}
+                siteKey={siteKey!}
+                onSuccess={(token) => setTurnstileToken(token)}
+                onExpire={() => setTurnstileToken(null)}
+                options={{ theme: 'auto' }}
+              />
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || showTurnstileConfigError}
             className="w-full min-h-[44px] bg-blue-600 text-white py-2.5 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-4 text-base"
           >
             {loading ? 'Signing in...' : 'Sign In'}
