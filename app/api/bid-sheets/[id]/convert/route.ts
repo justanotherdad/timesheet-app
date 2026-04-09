@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
+import { decodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,24 @@ async function canAccess(supabase: Awaited<ReturnType<typeof createClient>>, use
   if (!sheet) return false
   const { data: siteAccess } = await supabase.from('user_sites').select('site_id').eq('user_id', userId).eq('site_id', sheet.site_id).maybeSingle()
   return !!siteAccess
+}
+
+const PRESET_INDIRECT_LABEL: Record<string, string> = {
+  project_management: 'Indirect — Project Management',
+  document_coordinator: 'Indirect — Document Coordinator',
+  project_controls: 'Indirect — Project Controls',
+  travel_living_project: 'Indirect — Travel & Living (Project by Person)',
+  travel_living_fat: 'Indirect — Travel & Living (FAT)',
+  additional_indirect: 'Indirect — Additional Indirect Costs',
+}
+
+function indirectExpenseTitle(category: string, notes: string | null | undefined): string {
+  if (category.startsWith('custom_')) {
+    const meta = decodeIndirectNotes(notes)
+    const name = meta.label?.trim()
+    return name ? `Indirect — ${name}` : 'Indirect — Additional line'
+  }
+  return PRESET_INDIRECT_LABEL[category] || `Indirect — ${category}`
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -36,6 +55,59 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const adminSupabase = createAdminClient()
 
+  const { data: items } = await adminSupabase
+    .from('bid_sheet_items')
+    .select('*, bid_sheet_systems(id, name, code), bid_sheet_deliverables(id, name), bid_sheet_activities(id, name)')
+    .eq('bid_sheet_id', id)
+
+  const { data: laborRows } = await adminSupabase.from('bid_sheet_labor').select('*').eq('bid_sheet_id', id)
+  const laborById = new Map((laborRows || []).map((l: { id: string }) => [l.id, l]))
+
+  for (const it of items || []) {
+    const row = it as { budgeted_hours?: number | null; labor_id?: string | null }
+    const hrs = Number(row.budgeted_hours) || 0
+    if (hrs <= 0) continue
+    if (!row.labor_id) {
+      return NextResponse.json(
+        {
+          error:
+            'Every matrix cell with hours must have a resource or placeholder. Add people under Labor & Rates, then assign one per cell before converting.',
+        },
+        { status: 400 }
+      )
+    }
+    const lab = laborById.get(row.labor_id) as { user_id?: string | null; placeholder_name?: string | null; bid_rate?: number | null } | undefined
+    if (!lab) {
+      return NextResponse.json({ error: 'Matrix references a missing labor row. Refresh the bid sheet and try again.' }, { status: 400 })
+    }
+    const hasPerson = (lab.user_id != null && String(lab.user_id).trim() !== '') || (lab.placeholder_name != null && String(lab.placeholder_name).trim() !== '')
+    if (!hasPerson) {
+      return NextResponse.json(
+        { error: 'Each labor row must be an existing user or a placeholder name before converting.' },
+        { status: 400 }
+      )
+    }
+  }
+
+  let matrixLaborCost = 0
+  for (const it of items || []) {
+    const row = it as { budgeted_hours?: number | null; labor_id?: string | null }
+    const hrs = Number(row.budgeted_hours) || 0
+    if (hrs <= 0) continue
+    const lab = laborById.get(row.labor_id!) as { bid_rate?: number | null }
+    matrixLaborCost += hrs * (Number(lab?.bid_rate) || 0)
+  }
+
+  const { data: indirectRows } = await adminSupabase.from('bid_sheet_indirect_labor').select('*').eq('bid_sheet_id', id)
+
+  let indirectTotal = 0
+  for (const row of indirectRows || []) {
+    indirectTotal += indirectLineDollarTotal(Number(row.hours) || 0, Number(row.rate) || 0, row.category, row.notes)
+  }
+
+  const grandTotal = matrixLaborCost + indirectTotal
+  const today = new Date().toISOString().slice(0, 10)
+
   const { data: po, error: poErr } = await adminSupabase
     .from('purchase_orders')
     .insert({
@@ -45,17 +117,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       description: project_name || sheet.name,
       project_name: project_name || sheet.name,
       budget_type: 'project',
-      original_po_amount: null,
+      original_po_amount: grandTotal,
+      po_balance: grandTotal,
     })
     .select()
     .single()
 
   if (poErr || !po) return NextResponse.json({ error: poErr?.message || 'Failed to create PO' }, { status: 500 })
-
-  const { data: items } = await adminSupabase
-    .from('bid_sheet_items')
-    .select('*, bid_sheet_systems(id, name, code), bid_sheet_deliverables(id, name), bid_sheet_activities(id, name)')
-    .eq('bid_sheet_id', id)
 
   if ((items || []).length > 0) {
     const siteId = sheet.site_id
@@ -143,9 +211,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  const { data: labor } = await adminSupabase.from('bid_sheet_labor').select('*').eq('bid_sheet_id', id)
-  if ((labor || []).length > 0) {
-    for (const l of labor || []) {
+  if ((laborRows || []).length > 0) {
+    for (const l of laborRows || []) {
       if (l.user_id) {
         await adminSupabase.from('po_bill_rates').insert({
           po_id: po.id,
@@ -155,6 +222,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         })
       }
     }
+  }
+
+  for (const row of indirectRows || []) {
+    const amt = indirectLineDollarTotal(Number(row.hours) || 0, Number(row.rate) || 0, row.category, row.notes)
+    if (amt <= 0) continue
+    const title = indirectExpenseTitle(row.category, row.notes)
+    const { error: expErr } = await adminSupabase.from('po_expenses').insert({
+      po_id: po.id,
+      amount: amt,
+      expense_date: today,
+      custom_type_name: title,
+      notes: `Imported from bid sheet indirect (${row.category})`,
+      created_by: user.id,
+    })
+    if (expErr) {
+      console.error('convert: po_expenses insert failed', expErr)
+      return NextResponse.json({ error: expErr.message || 'Failed to copy indirect costs to the project budget' }, { status: 500 })
+    }
+  }
+
+  const { error: accessErr } = await adminSupabase.from('po_budget_access').insert({
+    user_id: user.id,
+    purchase_order_id: po.id,
+  })
+  if (accessErr && accessErr.code !== '23505') {
+    console.error('convert: po_budget_access insert failed', accessErr)
+  }
+
+  const { error: upoErr } = await adminSupabase.from('user_purchase_orders').insert({
+    user_id: user.id,
+    purchase_order_id: po.id,
+  })
+  if (upoErr && upoErr.code !== '23505') {
+    console.warn('convert: user_purchase_orders insert skipped', upoErr.message)
   }
 
   await adminSupabase.from('bid_sheets').update({ status: 'converted', converted_po_id: po.id }).eq('id', id)

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
 import { Upload, Plus, Trash2, X, FileSpreadsheet, Search, Info, Download, Layers, Eye, Users } from 'lucide-react'
+import { decodeIndirectNotes, encodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
 
 interface Item {
   id: string
@@ -386,7 +387,59 @@ export default function BidSheetDetailClient({
     })
   }, [systemActivityRows, systemSearch])
 
-  const totalBudgetedHours = items.reduce((s, i) => s + (i.budgeted_hours || 0), 0)
+  const getEffectiveHours = useCallback(
+    (systemId: string, deliverableId: string, activityId: string) => {
+      const k = cellKey(systemId, deliverableId, activityId)
+      const draft = hourDrafts[k]
+      if (draft !== undefined) {
+        const t = draft.trim()
+        if (t === '' || t === '.') return 0
+        const p = parseFloat(t)
+        return Number.isFinite(p) ? p : 0
+      }
+      return getItemHours(systemId, deliverableId, activityId)
+    },
+    [hourDrafts, getItemHours]
+  )
+
+  const matrixAggregates = useMemo(() => {
+    const columnCosts: Record<string, number> = {}
+    for (const d of deliverables) columnCosts[d.id] = 0
+    let matrixGrandCost = 0
+    let footerTotalHours = 0
+    const rowCostByKey = new Map<string, number>()
+
+    for (const row of filteredRows) {
+      const rk = `${row.systemId}-${row.activityId}`
+      let rowC = 0
+      let rowH = 0
+      for (const d of deliverables) {
+        const hrs = getEffectiveHours(row.systemId, d.id, row.activityId)
+        const laborId = getItemLaborId(row.systemId, d.id, row.activityId)
+        const lab = laborId ? labor.find((l) => l.id === laborId) : null
+        const c = hrs * (lab?.bid_rate ?? 0)
+        rowC += c
+        rowH += hrs
+        columnCosts[d.id] = (columnCosts[d.id] || 0) + c
+      }
+      rowCostByKey.set(rk, rowC)
+      footerTotalHours += rowH
+      matrixGrandCost += rowC
+    }
+    return { columnCosts, matrixGrandCost, footerTotalHours, rowCostByKey }
+  }, [filteredRows, deliverables, getEffectiveHours, getItemLaborId, labor])
+
+  const totalBudgetedHours = useMemo(() => {
+    let s = 0
+    for (const sys of systems) {
+      for (const d of deliverables) {
+        for (const act of activities) {
+          s += getEffectiveHours(sys.id, d.id, act.id)
+        }
+      }
+    }
+    return s
+  }, [systems, deliverables, activities, getEffectiveHours])
 
   // Per-person totals for Labor & Rates
   const laborHoursAndCost = useMemo(() => {
@@ -398,20 +451,32 @@ export default function BidSheetDetailClient({
       if (!i.labor_id) continue
       const entry = map.get(i.labor_id)
       if (!entry) continue
-      const hrs = i.budgeted_hours || 0
+      const hrs = getEffectiveHours(i.bid_sheet_system_id, i.bid_sheet_deliverable_id, i.bid_sheet_activity_id)
       const lab = labor.find((l) => l.id === i.labor_id)
       const rate = lab?.bid_rate ?? 0
       entry.hours += hrs
       entry.cost += hrs * rate
     }
     return map
-  }, [items, labor])
-  const totalLaborCost = items.reduce((s, i) => {
-    const lab = i.labor_id ? labor.find((l) => l.id === i.labor_id) : null
-    const rate = lab?.bid_rate ?? 0
-    return s + (i.budgeted_hours || 0) * rate
-  }, 0)
-  const totalIndirectCost = indirectLabor.reduce((s, i) => s + (i.hours || 0) * (i.rate || 0), 0)
+  }, [items, labor, getEffectiveHours])
+  const totalLaborCost = useMemo(() => {
+    let s = 0
+    for (const sys of systems) {
+      for (const d of deliverables) {
+        for (const act of activities) {
+          const hrs = getEffectiveHours(sys.id, d.id, act.id)
+          const laborId = getItemLaborId(sys.id, d.id, act.id)
+          const lab = laborId ? labor.find((l) => l.id === laborId) : null
+          s += hrs * (lab?.bid_rate ?? 0)
+        }
+      }
+    }
+    return s
+  }, [systems, deliverables, activities, getEffectiveHours, getItemLaborId, labor])
+  const totalIndirectCost = indirectLabor.reduce(
+    (s, i) => s + indirectLineDollarTotal(i.hours || 0, i.rate || 0, i.category, i.notes),
+    0
+  )
   const grandTotal = totalLaborCost + totalIndirectCost
 
   const rowHeight = compactMode ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_NORMAL
@@ -496,13 +561,19 @@ export default function BidSheetDetailClient({
   }
 
   const handleIndirectChange = async (category: string, hours: number, rate: number, notes?: string) => {
-    const res = await fetch(`/api/bid-sheets/${bidSheetId}/indirect-labor`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category, hours, rate, notes }),
-    })
-    const data = await res.json()
-    if (res.ok) setIndirectLabor((prev) => prev.filter((i) => i.category !== category).concat([data]))
+    setError(null)
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/indirect-labor`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category, hours, rate, notes }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to save indirect cost')
+      setIndirectLabor((prev) => prev.filter((i) => i.category !== category).concat([data]))
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to save indirect cost')
+    }
   }
 
   const handleAddIndirect = async () => {
@@ -510,10 +581,11 @@ export default function BidSheetDetailClient({
     const res = await fetch(`/api/bid-sheets/${bidSheetId}/indirect-labor`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category, hours: 0, rate: 0, notes: 'Custom' }),
+      body: JSON.stringify({ category, hours: 0, rate: 0, notes: encodeIndirectNotes({ label: '' }) }),
     })
     const data = await res.json()
     if (res.ok) setIndirectLabor((prev) => [...prev, data])
+    else setError(data.error || 'Failed to add indirect line')
   }
 
   const handleDeleteIndirect = async (indirectId: string) => {
@@ -724,6 +796,22 @@ export default function BidSheetDetailClient({
 
   const handleConvert = async () => {
     setError(null)
+    if (Object.keys(hourDrafts).length > 0) {
+      setError('Finish editing matrix hours (click outside hour fields so values save) before converting.')
+      return
+    }
+    for (const sys of systems) {
+      for (const d of deliverables) {
+        for (const act of activities) {
+          const hrs = getEffectiveHours(sys.id, d.id, act.id)
+          if (hrs <= 0) continue
+          if (!getItemLaborId(sys.id, d.id, act.id)) {
+            setError('Every cell with hours must have a resource or placeholder assigned before converting.')
+            return
+          }
+        }
+      }
+    }
     setLoading(true)
     try {
       const res = await fetch(`/api/bid-sheets/${bidSheetId}/convert`, {
@@ -1340,7 +1428,8 @@ export default function BidSheetDetailClient({
           const sysW = compactMode ? 180 : 200
           const colW = compactMode ? 100 : 130
           const sumW = compactMode ? 72 : 88
-          const gridCols = `${sysW}px repeat(${deliverables.length}, ${colW}px) ${sumW}px`
+          const costW = compactMode ? 88 : 104
+          const gridCols = `${sysW}px repeat(${deliverables.length}, ${colW}px) ${sumW}px ${costW}px`
           return (
             <div className="hidden md:block min-w-[600px]">
               {/* Header row - same grid as body rows */}
@@ -1357,26 +1446,27 @@ export default function BidSheetDetailClient({
                   </div>
                 ))}
                 <div className="px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 text-right border-l border-gray-200 dark:border-gray-600">
-                  Sum
+                  Sum (hrs)
+                </div>
+                <div className="px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 text-right border-l border-gray-200 dark:border-gray-600">
+                  Row cost
                 </div>
               </div>
 
               <div ref={scrollContainerRef} className="overflow-auto max-h-[60vh]" style={{ minHeight: 200 }}>
-                <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative', minWidth: sysW + deliverables.length * colW + sumW }}>
+                <div
+                  style={{
+                    height: `${rowVirtualizer.getTotalSize()}px`,
+                    position: 'relative',
+                    minWidth: sysW + deliverables.length * colW + sumW + costW,
+                  }}
+                >
                   {rowVirtualizer.getVirtualItems().map((virtualRow: VirtualItem) => {
                     const row = filteredRows[virtualRow.index]
                     if (!row) return null
-                    const rowSumHrs = deliverables.reduce((sum, d) => {
-                      const k = cellKey(row.systemId, d.id, row.activityId)
-                      const draft = hourDrafts[k]
-                      if (draft !== undefined) {
-                        const t = draft.trim()
-                        if (t === '' || t === '.') return sum
-                        const p = parseFloat(t)
-                        return sum + (Number.isFinite(p) ? p : 0)
-                      }
-                      return sum + getItemHours(row.systemId, d.id, row.activityId)
-                    }, 0)
+                    const rowKey = `${row.systemId}-${row.activityId}`
+                    const rowSumHrs = deliverables.reduce((sum, d) => sum + getEffectiveHours(row.systemId, d.id, row.activityId), 0)
+                    const rowSumCost = matrixAggregates.rowCostByKey.get(rowKey) ?? 0
                     return (
                       <div
                         key={`${row.systemId}-${row.activityId}`}
@@ -1400,7 +1490,6 @@ export default function BidSheetDetailClient({
                         {deliverables.map((d) => {
                           const hrs = getItemHours(row.systemId, d.id, row.activityId)
                           const laborId = getItemLaborId(row.systemId, d.id, row.activityId)
-                          const cost = getItemCost(row.systemId, d.id, row.activityId)
                           const k = cellKey(row.systemId, d.id, row.activityId)
                           const displayHrs =
                             hourDrafts[k] !== undefined ? hourDrafts[k] : hrs === 0 ? '' : String(hrs)
@@ -1440,9 +1529,6 @@ export default function BidSheetDetailClient({
                                   {labor.find((l) => l.id === laborId)?.user_profiles?.name || labor.find((l) => l.id === laborId)?.placeholder_name || '?'}
                                 </span>
                               ) : null}
-                              {(hrs > 0 && laborId) ? (
-                                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">${cost.toFixed(2)}</span>
-                              ) : null}
                             </div>
                           )
                         })}
@@ -1451,9 +1537,41 @@ export default function BidSheetDetailClient({
                             {rowSumHrs.toFixed(2)}
                           </span>
                         </div>
+                        <div className={`${cellClass} border-l border-gray-200 dark:border-gray-600 flex items-center justify-end bg-gray-50/80 dark:bg-gray-800/50`}>
+                          <span className="text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100" title="Sum of labor cost for this row">
+                            ${rowSumCost.toFixed(2)}
+                          </span>
+                        </div>
                       </div>
                     )
                   })}
+                </div>
+              </div>
+
+              <div
+                className="flex border-t-2 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-900/50"
+                style={{ display: 'grid', gridTemplateColumns: gridCols }}
+              >
+                <div className="sticky left-0 z-[5] border-r border-gray-200 dark:border-gray-600 px-3 py-2 text-xs font-semibold text-gray-800 dark:text-gray-100 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+                  Column totals
+                </div>
+                {deliverables.map((d) => (
+                  <div
+                    key={d.id}
+                    className="border-r border-gray-200 dark:border-gray-600 px-2 py-2 text-right text-xs font-medium tabular-nums text-gray-900 dark:text-gray-100"
+                  >
+                    ${(matrixAggregates.columnCosts[d.id] || 0).toFixed(2)}
+                  </div>
+                ))}
+                <div className={`${cellClass} border-l border-gray-200 dark:border-gray-600 flex items-center justify-end`}>
+                  <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-gray-100" title="Total hours (matrix)">
+                    {matrixAggregates.footerTotalHours.toFixed(2)}
+                  </span>
+                </div>
+                <div className={`${cellClass} flex items-center justify-end border-l border-gray-200 dark:border-gray-600`}>
+                  <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-gray-100" title="Grand total labor cost (matrix)">
+                    ${matrixAggregates.matrixGrandCost.toFixed(2)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1593,19 +1711,26 @@ export default function BidSheetDetailClient({
                   className="h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <span className="text-gray-600 dark:text-gray-400">
-                  = ${((ind?.hours || 0) * (ind?.rate || 0)).toFixed(2)}
+                  = $
+                  {indirectLineDollarTotal(ind?.hours || 0, ind?.rate || 0, cat.id, ind?.notes).toFixed(2)}
                 </span>
               </div>
             )
           })}
-          {indirectLabor.filter((i) => i.category.startsWith('custom_')).map((ind) => (
-            <div key={ind.id} className="flex flex-wrap gap-4 items-center">
+          {indirectLabor.filter((i) => i.category.startsWith('custom_')).map((ind) => {
+            const meta = decodeIndirectNotes(ind.notes)
+            const lineTotal = indirectLineDollarTotal(ind.hours || 0, ind.rate || 0, ind.category, ind.notes)
+            const persistMeta = (patch: Partial<typeof meta>) => encodeIndirectNotes({ ...meta, ...patch }) ?? undefined
+            return (
+            <div key={ind.id} className="flex flex-wrap gap-3 items-center">
               <input
                 type="text"
-                value={ind.notes || 'Custom'}
-                onChange={(e) => handleIndirectChange(ind.category, ind.hours ?? 0, ind.rate ?? 0, e.target.value)}
+                value={meta.label ?? ''}
+                onChange={(e) =>
+                  void handleIndirectChange(ind.category, ind.hours ?? 0, ind.rate ?? 0, persistMeta({ label: e.target.value }))
+                }
                 disabled={!canEdit}
-                placeholder="Label"
+                placeholder="Name"
                 className="h-9 w-48 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 font-medium"
               />
               <input
@@ -1613,7 +1738,14 @@ export default function BidSheetDetailClient({
                 min={0}
                 step={0.5}
                 value={ind.hours ?? ''}
-                onChange={(e) => handleIndirectChange(ind.category, parseFloat(e.target.value) || 0, ind.rate ?? 0, ind.notes ?? undefined)}
+                onChange={(e) =>
+                  void handleIndirectChange(
+                    ind.category,
+                    parseFloat(e.target.value) || 0,
+                    ind.rate ?? 0,
+                    persistMeta({})
+                  )
+                }
                 disabled={!canEdit}
                 placeholder="Hours"
                 className="h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -1623,13 +1755,63 @@ export default function BidSheetDetailClient({
                 min={0}
                 step={0.01}
                 value={ind.rate ?? ''}
-                onChange={(e) => handleIndirectChange(ind.category, ind.hours ?? 0, parseFloat(e.target.value) || 0, ind.notes ?? undefined)}
+                onChange={(e) =>
+                  void handleIndirectChange(
+                    ind.category,
+                    ind.hours ?? 0,
+                    parseFloat(e.target.value) || 0,
+                    persistMeta({})
+                  )
+                }
                 disabled={!canEdit}
                 placeholder="Rate ($/hr)"
                 className="h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-xs text-gray-500 dark:text-gray-400">Contingency</label>
+                <select
+                  value={meta.contingencyType === 'fixed' || meta.contingencyType === 'percent' ? meta.contingencyType : 'none'}
+                  onChange={(e) => {
+                    const v = e.target.value as 'none' | 'fixed' | 'percent'
+                    void handleIndirectChange(
+                      ind.category,
+                      ind.hours ?? 0,
+                      ind.rate ?? 0,
+                      persistMeta({
+                        contingencyType: v,
+                        contingencyValue: v === 'none' ? 0 : meta.contingencyValue ?? 0,
+                      })
+                    )
+                  }}
+                  disabled={!canEdit}
+                  className="h-9 px-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+                >
+                  <option value="none">None</option>
+                  <option value="fixed">Add $</option>
+                  <option value="percent">Add %</option>
+                </select>
+                {(meta.contingencyType === 'fixed' || meta.contingencyType === 'percent') && (
+                  <input
+                    type="number"
+                    min={0}
+                    step={meta.contingencyType === 'percent' ? 0.1 : 0.01}
+                    value={meta.contingencyValue ?? ''}
+                    onChange={(e) =>
+                      void handleIndirectChange(
+                        ind.category,
+                        ind.hours ?? 0,
+                        ind.rate ?? 0,
+                        persistMeta({ contingencyValue: parseFloat(e.target.value) || 0 })
+                      )
+                    }
+                    disabled={!canEdit}
+                    placeholder={meta.contingencyType === 'percent' ? '%' : '$'}
+                    className="h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                )}
+              </div>
               <span className="text-gray-600 dark:text-gray-400">
-                = ${((ind.hours || 0) * (ind.rate || 0)).toFixed(2)}
+                = ${lineTotal.toFixed(2)}
               </span>
               {canEdit && (
                 <button type="button" onClick={() => handleDeleteIndirect(ind.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
@@ -1637,7 +1819,8 @@ export default function BidSheetDetailClient({
                 </button>
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
         {canEdit && (
           <button
