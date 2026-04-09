@@ -54,10 +54,15 @@ export async function updateSession(request: NextRequest) {
     const publicPaths = ['/', '/login', '/signup', '/auth/setup-password']
     const isPublicPath = publicPaths.includes(request.nextUrl.pathname)
 
+    // Session is created by these routes — must not require an existing user
+    const publicAuthApiPaths = ['/api/auth/login', '/api/auth/forgot-password']
+    const isPublicAuthApi = publicAuthApiPaths.includes(request.nextUrl.pathname)
+
     if (
       !user &&
       !isPublicPath &&
-      !request.nextUrl.pathname.startsWith('/auth')
+      !request.nextUrl.pathname.startsWith('/auth') &&
+      !isPublicAuthApi
     ) {
       // API routes: return 401 JSON so the client gets a proper error, not an HTML redirect
       if (request.nextUrl.pathname.startsWith('/api/')) {
@@ -76,7 +81,10 @@ export async function updateSession(request: NextRequest) {
     const publicPaths = ['/', '/login', '/signup', '/auth/setup-password', '/auth/invite']
     const isPublicPath = publicPaths.includes(request.nextUrl.pathname)
     
-    if (isPublicPath || request.nextUrl.pathname.startsWith('/auth')) {
+    const publicAuthApiPaths = ['/api/auth/login', '/api/auth/forgot-password']
+    const isPublicAuthApi = publicAuthApiPaths.includes(request.nextUrl.pathname)
+
+    if (isPublicPath || request.nextUrl.pathname.startsWith('/auth') || isPublicAuthApi) {
       return supabaseResponse
     }
     
