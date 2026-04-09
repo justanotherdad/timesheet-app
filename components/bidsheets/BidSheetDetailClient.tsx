@@ -36,6 +36,22 @@ interface IndirectLabor {
   notes?: string
 }
 
+/** Local typing state before debounced save (avoids API round-trips overwriting fast input). */
+type IndirectFieldDraft = {
+  hours?: string
+  rate?: string
+  label?: string
+  contVal?: string
+}
+
+function parseIndirectDraftNum(s: string | undefined, fallback: number): number {
+  if (s === undefined) return fallback
+  const t = s.trim()
+  if (t === '' || t === '.') return 0
+  const p = parseFloat(t)
+  return Number.isFinite(p) ? p : fallback
+}
+
 const INDIRECT_CATEGORIES = [
   { id: 'project_management', label: 'Project Management' },
   { id: 'document_coordinator', label: 'Document Coordinator' },
@@ -81,6 +97,18 @@ export default function BidSheetDetailClient({
   const [items, setItems] = useState(initialItems)
   const [labor, setLabor] = useState(initialLabor)
   const [indirectLabor, setIndirectLabor] = useState(initialIndirect)
+  const [indirectDrafts, setIndirectDrafts] = useState<Record<string, IndirectFieldDraft>>({})
+  const indirectLaborRef = useRef(initialIndirect)
+  const indirectDraftsRef = useRef<Record<string, IndirectFieldDraft>>({})
+  const indirectDebounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const indirectPersistSeq = useRef<Map<string, number>>(new Map())
+
+  useEffect(() => {
+    indirectLaborRef.current = indirectLabor
+  }, [indirectLabor])
+  useEffect(() => {
+    indirectDraftsRef.current = indirectDrafts
+  }, [indirectDrafts])
   const [showImportModal, setShowImportModal] = useState(false)
   const [importCsv, setImportCsv] = useState('')
   const [importFileName, setImportFileName] = useState<string | null>(null)
@@ -362,6 +390,13 @@ export default function BidSheetDetailClient({
   }, [])
 
   useEffect(() => {
+    return () => {
+      indirectDebounceTimers.current.forEach((timer) => clearTimeout(timer))
+      indirectDebounceTimers.current.clear()
+    }
+  }, [])
+
+  useEffect(() => {
     if (canEdit && bidSheetId) {
       fetch(`/api/bid-sheets/${bidSheetId}/users`)
         .then((r) => r.ok ? r.json() : [])
@@ -473,10 +508,32 @@ export default function BidSheetDetailClient({
     }
     return s
   }, [systems, deliverables, activities, getEffectiveHours, getItemLaborId, labor])
-  const totalIndirectCost = indirectLabor.reduce(
-    (s, i) => s + indirectLineDollarTotal(i.hours || 0, i.rate || 0, i.category, i.notes),
-    0
-  )
+  const totalIndirectCost = useMemo(() => {
+    let s = 0
+    for (const cat of INDIRECT_CATEGORIES) {
+      const ind = indirectLabor.find((i) => i.category === cat.id)
+      const d = indirectDrafts[cat.id]
+      const h = parseIndirectDraftNum(d?.hours, ind?.hours ?? 0)
+      const r = parseIndirectDraftNum(d?.rate, ind?.rate ?? 0)
+      s += indirectLineDollarTotal(h, r, cat.id, ind?.notes)
+    }
+    for (const ind of indirectLabor) {
+      if (!ind.category.startsWith('custom_')) continue
+      const d = indirectDrafts[ind.category]
+      const h = parseIndirectDraftNum(d?.hours, ind.hours ?? 0)
+      const r = parseIndirectDraftNum(d?.rate, ind.rate ?? 0)
+      const meta = decodeIndirectNotes(ind.notes)
+      const notes =
+        encodeIndirectNotes({
+          label: d?.label !== undefined ? d.label : meta.label,
+          contingencyType: meta.contingencyType || 'none',
+          contingencyValue:
+            d?.contVal !== undefined ? parseIndirectDraftNum(d.contVal, meta.contingencyValue ?? 0) : meta.contingencyValue ?? 0,
+        }) ?? ind.notes
+      s += indirectLineDollarTotal(h, r, ind.category, notes)
+    }
+    return s
+  }, [indirectLabor, indirectDrafts])
   const grandTotal = totalLaborCost + totalIndirectCost
 
   const rowHeight = compactMode ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_NORMAL
@@ -560,21 +617,129 @@ export default function BidSheetDetailClient({
     }
   }
 
-  const handleIndirectChange = async (category: string, hours: number, rate: number, notes?: string) => {
-    setError(null)
-    try {
-      const res = await fetch(`/api/bid-sheets/${bidSheetId}/indirect-labor`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, hours, rate, notes }),
+  const clearIndirectTimer = useCallback((category: string) => {
+    const t = indirectDebounceTimers.current.get(category)
+    if (t) clearTimeout(t)
+    indirectDebounceTimers.current.delete(category)
+  }, [])
+
+  const persistIndirectLaborNow = useCallback(
+    async (category: string) => {
+      const seq = (indirectPersistSeq.current.get(category) ?? 0) + 1
+      indirectPersistSeq.current.set(category, seq)
+
+      const row = indirectLaborRef.current.find((i) => i.category === category)
+      const draft = indirectDraftsRef.current[category] || {}
+
+      const hours = parseIndirectDraftNum(draft.hours, row?.hours ?? 0)
+      const rate = parseIndirectDraftNum(draft.rate, row?.rate ?? 0)
+
+      let notes: string | null | undefined = row?.notes ?? undefined
+      if (category.startsWith('custom_')) {
+        const meta = decodeIndirectNotes(row?.notes)
+        const mergedNotes = encodeIndirectNotes({
+          label: draft.label !== undefined ? draft.label : meta.label,
+          contingencyType: meta.contingencyType || 'none',
+          contingencyValue:
+            draft.contVal !== undefined ? parseIndirectDraftNum(draft.contVal, meta.contingencyValue ?? 0) : meta.contingencyValue ?? 0,
+        })
+        notes = mergedNotes ?? undefined
+      }
+
+      setError(null)
+      try {
+        const res = await fetch(`/api/bid-sheets/${bidSheetId}/indirect-labor`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category, hours, rate, notes }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to save indirect cost')
+        if (indirectPersistSeq.current.get(category) !== seq) return
+
+        setIndirectLabor((prev) => prev.filter((i) => i.category !== category).concat([data]))
+        setIndirectDrafts((prev) => {
+          const { [category]: _, ...rest } = prev
+          indirectDraftsRef.current = rest
+          return rest
+        })
+      } catch (e: unknown) {
+        if (indirectPersistSeq.current.get(category) === seq) {
+          setError(e instanceof Error ? e.message : 'Failed to save indirect cost')
+        }
+      }
+    },
+    [bidSheetId]
+  )
+
+  const scheduleIndirectPersist = useCallback(
+    (category: string) => {
+      clearIndirectTimer(category)
+      const t = setTimeout(() => {
+        indirectDebounceTimers.current.delete(category)
+        void persistIndirectLaborNow(category)
+      }, 450)
+      indirectDebounceTimers.current.set(category, t)
+    },
+    [clearIndirectTimer, persistIndirectLaborNow]
+  )
+
+  const patchIndirectDraft = useCallback(
+    (category: string, patch: Partial<IndirectFieldDraft>) => {
+      setIndirectDrafts((prev) => {
+        const next = { ...prev, [category]: { ...prev[category], ...patch } }
+        indirectDraftsRef.current = next
+        return next
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to save indirect cost')
-      setIndirectLabor((prev) => prev.filter((i) => i.category !== category).concat([data]))
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to save indirect cost')
-    }
-  }
+      scheduleIndirectPersist(category)
+    },
+    [scheduleIndirectPersist]
+  )
+
+  const flushIndirectOnBlur = useCallback(
+    (category: string) => {
+      clearIndirectTimer(category)
+      void persistIndirectLaborNow(category)
+    },
+    [clearIndirectTimer, persistIndirectLaborNow]
+  )
+
+  /** Immediate save (e.g. contingency type) — cancels pending debounce so drafts merge correctly. */
+  const saveIndirectImmediate = useCallback(
+    async (category: string, payload: { hours: number; rate: number; notes?: string | null }) => {
+      clearIndirectTimer(category)
+      const seq = (indirectPersistSeq.current.get(category) ?? 0) + 1
+      indirectPersistSeq.current.set(category, seq)
+      setError(null)
+      try {
+        const res = await fetch(`/api/bid-sheets/${bidSheetId}/indirect-labor`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category,
+            hours: payload.hours,
+            rate: payload.rate,
+            notes: payload.notes,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to save indirect cost')
+        if (indirectPersistSeq.current.get(category) !== seq) return
+
+        setIndirectLabor((prev) => prev.filter((i) => i.category !== category).concat([data]))
+        setIndirectDrafts((prev) => {
+          const { [category]: _, ...rest } = prev
+          indirectDraftsRef.current = rest
+          return rest
+        })
+      } catch (e: unknown) {
+        if (indirectPersistSeq.current.get(category) === seq) {
+          setError(e instanceof Error ? e.message : 'Failed to save indirect cost')
+        }
+      }
+    },
+    [bidSheetId, clearIndirectTimer]
+  )
 
   const handleAddIndirect = async () => {
     const category = `custom_${Date.now()}`
@@ -589,6 +754,15 @@ export default function BidSheetDetailClient({
   }
 
   const handleDeleteIndirect = async (indirectId: string) => {
+    const row = indirectLabor.find((i) => i.id === indirectId)
+    if (row) {
+      clearIndirectTimer(row.category)
+      setIndirectDrafts((prev) => {
+        const { [row.category]: _, ...rest } = prev
+        indirectDraftsRef.current = rest
+        return rest
+      })
+    }
     const res = await fetch(`/api/bid-sheets/${bidSheetId}/indirect-labor?id=${indirectId}`, { method: 'DELETE' })
     if (res.ok) setIndirectLabor((prev) => prev.filter((i) => i.id !== indirectId))
   }
@@ -1687,101 +1861,112 @@ export default function BidSheetDetailClient({
         <div className="space-y-4">
           {INDIRECT_CATEGORIES.map((cat) => {
             const ind = indirectLabor.find((i) => i.category === cat.id)
+            const d = indirectDrafts[cat.id]
+            const hNum = parseIndirectDraftNum(d?.hours, ind?.hours ?? 0)
+            const rNum = parseIndirectDraftNum(d?.rate, ind?.rate ?? 0)
+            const hoursDisplay = d?.hours !== undefined ? d.hours : ind == null ? '' : String(ind.hours)
+            const rateDisplay = d?.rate !== undefined ? d.rate : ind == null ? '' : String(ind.rate ?? '')
             return (
               <div key={cat.id} className="flex flex-wrap gap-4 items-center">
                 <span className="w-48 font-medium">{cat.label}</span>
                 <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={ind?.hours ?? ''}
-                  onChange={(e) => handleIndirectChange(cat.id, parseFloat(e.target.value) || 0, ind?.rate ?? 0)}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={hoursDisplay}
+                  onChange={(e) => patchIndirectDraft(cat.id, { hours: e.target.value })}
+                  onBlur={() => flushIndirectOnBlur(cat.id)}
                   disabled={!canEdit}
                   placeholder="Hours"
-                  className="h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
                 />
                 <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={ind?.rate ?? ''}
-                  onChange={(e) => handleIndirectChange(cat.id, ind?.hours ?? 0, parseFloat(e.target.value) || 0)}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={rateDisplay}
+                  onChange={(e) => patchIndirectDraft(cat.id, { rate: e.target.value })}
+                  onBlur={() => flushIndirectOnBlur(cat.id)}
                   disabled={!canEdit}
                   placeholder="Rate ($/hr)"
-                  className="h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className={`h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
                 />
                 <span className="text-gray-600 dark:text-gray-400">
-                  = $
-                  {indirectLineDollarTotal(ind?.hours || 0, ind?.rate || 0, cat.id, ind?.notes).toFixed(2)}
+                  = ${indirectLineDollarTotal(hNum, rNum, cat.id, ind?.notes).toFixed(2)}
                 </span>
               </div>
             )
           })}
           {indirectLabor.filter((i) => i.category.startsWith('custom_')).map((ind) => {
             const meta = decodeIndirectNotes(ind.notes)
-            const lineTotal = indirectLineDollarTotal(ind.hours || 0, ind.rate || 0, ind.category, ind.notes)
-            const persistMeta = (patch: Partial<typeof meta>) => encodeIndirectNotes({ ...meta, ...patch }) ?? undefined
+            const d = indirectDrafts[ind.category] || {}
+            const hNum = parseIndirectDraftNum(d.hours, ind.hours ?? 0)
+            const rNum = parseIndirectDraftNum(d.rate, ind.rate ?? 0)
+            const notesForLine =
+              encodeIndirectNotes({
+                label: d.label !== undefined ? d.label : meta.label,
+                contingencyType: meta.contingencyType || 'none',
+                contingencyValue:
+                  d.contVal !== undefined ? parseIndirectDraftNum(d.contVal, meta.contingencyValue ?? 0) : meta.contingencyValue ?? 0,
+              }) ?? ind.notes
+            const lineTotal = indirectLineDollarTotal(hNum, rNum, ind.category, notesForLine)
+            const hoursDisplay = d.hours !== undefined ? d.hours : String(ind.hours)
+            const rateDisplay = d.rate !== undefined ? d.rate : String(ind.rate ?? '')
+            const labelDisplay = d.label !== undefined ? d.label : meta.label ?? ''
+            const contValDisplay =
+              d.contVal !== undefined ? d.contVal : meta.contingencyValue != null ? String(meta.contingencyValue) : ''
+            const effectiveContingency =
+              meta.contingencyType === 'fixed' || meta.contingencyType === 'percent' ? meta.contingencyType : 'none'
             return (
             <div key={ind.id} className="flex flex-wrap gap-3 items-center">
               <input
                 type="text"
-                value={meta.label ?? ''}
-                onChange={(e) =>
-                  void handleIndirectChange(ind.category, ind.hours ?? 0, ind.rate ?? 0, persistMeta({ label: e.target.value }))
-                }
+                value={labelDisplay}
+                onChange={(e) => patchIndirectDraft(ind.category, { label: e.target.value })}
+                onBlur={() => flushIndirectOnBlur(ind.category)}
                 disabled={!canEdit}
                 placeholder="Name"
                 className="h-9 w-48 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 font-medium"
               />
               <input
-                type="number"
-                min={0}
-                step={0.5}
-                value={ind.hours ?? ''}
-                onChange={(e) =>
-                  void handleIndirectChange(
-                    ind.category,
-                    parseFloat(e.target.value) || 0,
-                    ind.rate ?? 0,
-                    persistMeta({})
-                  )
-                }
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={hoursDisplay}
+                onChange={(e) => patchIndirectDraft(ind.category, { hours: e.target.value })}
+                onBlur={() => flushIndirectOnBlur(ind.category)}
                 disabled={!canEdit}
                 placeholder="Hours"
-                className="h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
               />
               <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={ind.rate ?? ''}
-                onChange={(e) =>
-                  void handleIndirectChange(
-                    ind.category,
-                    ind.hours ?? 0,
-                    parseFloat(e.target.value) || 0,
-                    persistMeta({})
-                  )
-                }
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={rateDisplay}
+                onChange={(e) => patchIndirectDraft(ind.category, { rate: e.target.value })}
+                onBlur={() => flushIndirectOnBlur(ind.category)}
                 disabled={!canEdit}
                 placeholder="Rate ($/hr)"
-                className="h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className={`h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
               />
               <div className="flex flex-wrap items-center gap-2">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Contingency</label>
                 <select
-                  value={meta.contingencyType === 'fixed' || meta.contingencyType === 'percent' ? meta.contingencyType : 'none'}
+                  value={effectiveContingency}
                   onChange={(e) => {
                     const v = e.target.value as 'none' | 'fixed' | 'percent'
-                    void handleIndirectChange(
-                      ind.category,
-                      ind.hours ?? 0,
-                      ind.rate ?? 0,
-                      persistMeta({
-                        contingencyType: v,
-                        contingencyValue: v === 'none' ? 0 : meta.contingencyValue ?? 0,
-                      })
-                    )
+                    const row = indirectLaborRef.current.find((x) => x.category === ind.category)
+                    const draft = indirectDraftsRef.current[ind.category] || {}
+                    const hours = parseIndirectDraftNum(draft.hours, row?.hours ?? 0)
+                    const rate = parseIndirectDraftNum(draft.rate, row?.rate ?? 0)
+                    const m = decodeIndirectNotes(row?.notes)
+                    const notes = encodeIndirectNotes({
+                      label: draft.label !== undefined ? draft.label : m.label,
+                      contingencyType: v,
+                      contingencyValue: v === 'none' ? 0 : m.contingencyValue ?? 0,
+                    })
+                    void saveIndirectImmediate(ind.category, { hours, rate, notes: notes ?? undefined })
                   }}
                   disabled={!canEdit}
                   className="h-9 px-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
@@ -1790,23 +1975,17 @@ export default function BidSheetDetailClient({
                   <option value="fixed">Add $</option>
                   <option value="percent">Add %</option>
                 </select>
-                {(meta.contingencyType === 'fixed' || meta.contingencyType === 'percent') && (
+                {(effectiveContingency === 'fixed' || effectiveContingency === 'percent') && (
                   <input
-                    type="number"
-                    min={0}
-                    step={meta.contingencyType === 'percent' ? 0.1 : 0.01}
-                    value={meta.contingencyValue ?? ''}
-                    onChange={(e) =>
-                      void handleIndirectChange(
-                        ind.category,
-                        ind.hours ?? 0,
-                        ind.rate ?? 0,
-                        persistMeta({ contingencyValue: parseFloat(e.target.value) || 0 })
-                      )
-                    }
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={contValDisplay}
+                    onChange={(e) => patchIndirectDraft(ind.category, { contVal: e.target.value })}
+                    onBlur={() => flushIndirectOnBlur(ind.category)}
                     disabled={!canEdit}
-                    placeholder={meta.contingencyType === 'percent' ? '%' : '$'}
-                    className="h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    placeholder={effectiveContingency === 'percent' ? '%' : '$'}
+                    className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
                   />
                 )}
               </div>

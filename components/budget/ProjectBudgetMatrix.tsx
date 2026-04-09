@@ -9,6 +9,10 @@ function fmtVariance(n: number): string {
   return n.toFixed(2)
 }
 
+function fmtMoney(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 function safeFileBase(name: string): string {
   const s = name.replace(/[^\w.\-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
   return s.slice(0, 80) || 'project-matrix'
@@ -69,20 +73,43 @@ type MatrixRow = {
   budgetedHours: number
   actualHours: number
   variance: number
+  /** budgetedHours × blended PO bill rate (est.) */
+  budgetCost: number
+  /** Sum of (hours × effective user rate) from approved timesheets for this matrix row */
+  actualCost: number
+  costVariance: number
 }
 
 type MatrixPayload = {
   siteId?: string | null
+  costModel?: {
+    blendedBudgetRate: number
+    budgetCostLabel: string
+  }
   rows: MatrixRow[]
   totals: {
     budgetedHours: number
     actualHoursInMatrix: number
     actualHoursAllEntries: number
     unmatchedActualHours: number
+    budgetCost: number
+    actualCost: number
+    costVariance: number
   }
 }
 
-type SortColumn = 'system' | 'deliverable' | 'activity' | 'description' | 'budget' | 'actual' | 'variance' | 'pct'
+type SortColumn =
+  | 'system'
+  | 'deliverable'
+  | 'activity'
+  | 'description'
+  | 'budget'
+  | 'actual'
+  | 'variance'
+  | 'pct'
+  | 'budgetCost'
+  | 'actualCost'
+  | 'costVariance'
 
 type ProjectBudgetMatrixProps = {
   poId: string
@@ -233,6 +260,15 @@ export default function ProjectBudgetMatrix({
           else cmp = va - vb
           break
         }
+        case 'budgetCost':
+          cmp = a.budgetCost - b.budgetCost
+          break
+        case 'actualCost':
+          cmp = a.actualCost - b.actualCost
+          break
+        case 'costVariance':
+          cmp = a.costVariance - b.costVariance
+          break
         default:
           cmp = 0
       }
@@ -244,11 +280,16 @@ export default function ProjectBudgetMatrix({
   const visibleTotals = useMemo(() => {
     const budgetedHours = sortedRows.reduce((s, r) => s + r.budgetedHours, 0)
     const actualHoursInMatrix = sortedRows.reduce((s, r) => s + r.actualHours, 0)
+    const budgetCost = sortedRows.reduce((s, r) => s + (r.budgetCost ?? 0), 0)
+    const actualCost = sortedRows.reduce((s, r) => s + (r.actualCost ?? 0), 0)
     return {
       budgetedHours,
       actualHoursInMatrix,
       variance: budgetedHours - actualHoursInMatrix,
       pct: budgetedHours > 0 ? (actualHoursInMatrix / budgetedHours) * 100 : null,
+      budgetCost,
+      actualCost,
+      costVariance: budgetCost - actualCost,
     }
   }, [sortedRows])
 
@@ -257,7 +298,17 @@ export default function ProjectBudgetMatrix({
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     } else {
       setSortColumn(col)
-      setSortDir(col === 'budget' || col === 'actual' || col === 'variance' || col === 'pct' ? 'desc' : 'asc')
+      setSortDir(
+        col === 'budget' ||
+          col === 'actual' ||
+          col === 'variance' ||
+          col === 'pct' ||
+          col === 'budgetCost' ||
+          col === 'actualCost' ||
+          col === 'costVariance'
+          ? 'desc'
+          : 'asc'
+      )
     }
   }
 
@@ -364,6 +415,9 @@ export default function ProjectBudgetMatrix({
       'Actual (h)',
       'Var (h)',
       'Budget %',
+      'Est. budget ($)',
+      'Actual ($)',
+      'Var ($)',
     ]
     const lines: string[] = []
     if (reportTitle) {
@@ -388,6 +442,9 @@ export default function ProjectBudgetMatrix({
     lines.push(headers.join(','))
     for (const r of sortedRows) {
       const pct = r.budgetedHours > 0 ? (r.actualHours / r.budgetedHours) * 100 : ''
+      const bc = r.budgetCost ?? 0
+      const ac = r.actualCost ?? 0
+      const vc = r.costVariance ?? bc - ac
       lines.push(
         [
           q(r.systemLabel),
@@ -398,6 +455,9 @@ export default function ProjectBudgetMatrix({
           q(r.actualHours.toFixed(2)),
           q(r.variance.toFixed(2)),
           pct === '' ? q('') : q(Number(pct.toFixed(2))),
+          q(bc.toFixed(2)),
+          q(ac.toFixed(2)),
+          q(vc.toFixed(2)),
         ].join(',')
       )
     }
@@ -411,6 +471,9 @@ export default function ProjectBudgetMatrix({
         q(visibleTotals.actualHoursInMatrix.toFixed(2)),
         q(visibleTotals.variance.toFixed(2)),
         visibleTotals.pct == null ? q('') : q(Number(visibleTotals.pct.toFixed(2))),
+        q(visibleTotals.budgetCost.toFixed(2)),
+        q(visibleTotals.actualCost.toFixed(2)),
+        q(visibleTotals.costVariance.toFixed(2)),
       ].join(',')
     )
     const t = data.totals
@@ -464,6 +527,16 @@ export default function ProjectBudgetMatrix({
           <p className="text-sm text-gray-500 dark:text-gray-400 print:hidden">
             Budgeted hours from bid conversion vs actual hours from approved timesheets on this PO (matched by system, deliverable, and activity).
             <span className="block mt-1">Var (h) = budget − actual (positive means under budget).</span>
+            {data?.costModel && (
+              <>
+                <span className="block mt-1">{data.costModel.budgetCostLabel}</span>
+                {data.costModel.blendedBudgetRate > 0 && (
+                  <span className="block mt-1 text-gray-600 dark:text-gray-400">
+                    Blended rate for budget $ estimate: ${fmtMoney(data.costModel.blendedBudgetRate)}/hr
+                  </span>
+                )}
+              </>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 print:hidden shrink-0">
@@ -725,7 +798,7 @@ export default function ProjectBudgetMatrix({
 
       {showTable && (
         <div className="overflow-x-auto -mx-2 px-2">
-          <table className="w-full text-sm min-w-[960px]">
+          <table className="w-full text-sm min-w-[1180px]">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-600">
                 <th className="text-left py-2 pr-4 font-medium text-gray-700 dark:text-gray-300">
@@ -808,6 +881,38 @@ export default function ProjectBudgetMatrix({
                     <SortIcon col="pct" />
                   </button>
                 </th>
+                <th className="text-right py-2 px-2 font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => handleSort('budgetCost')}
+                    className="inline-flex items-center justify-end w-full hover:text-gray-900 dark:hover:text-gray-100"
+                    title="Budgeted hours × blended PO bill rate"
+                  >
+                    Est. budget ($)
+                    <SortIcon col="budgetCost" />
+                  </button>
+                </th>
+                <th className="text-right py-2 px-2 font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => handleSort('actualCost')}
+                    className="inline-flex items-center justify-end w-full hover:text-gray-900 dark:hover:text-gray-100"
+                    title="Approved timesheet hours × each person’s rate"
+                  >
+                    Actual ($)
+                    <SortIcon col="actualCost" />
+                  </button>
+                </th>
+                <th className="text-right py-2 pl-2 font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => handleSort('costVariance')}
+                    className="inline-flex items-center justify-end w-full hover:text-gray-900 dark:hover:text-gray-100"
+                  >
+                    Var ($)
+                    <SortIcon col="costVariance" />
+                  </button>
+                </th>
                 {canEditMatrix && (
                   <th className="text-right py-2 pl-2 font-medium text-gray-700 dark:text-gray-300 print:hidden w-[1%] whitespace-nowrap">
                     Actions
@@ -821,6 +926,15 @@ export default function ProjectBudgetMatrix({
                 const varCls =
                   r.budgetedHours > 0
                     ? r.variance < 0
+                      ? 'text-red-600 dark:text-red-400'
+                      : 'text-emerald-700 dark:text-emerald-400'
+                    : ''
+                const budgetCost = r.budgetCost ?? 0
+                const actualCost = r.actualCost ?? 0
+                const costVar = r.costVariance ?? budgetCost - actualCost
+                const costVarCls =
+                  budgetCost > 0 || actualCost > 0
+                    ? costVar < 0
                       ? 'text-red-600 dark:text-red-400'
                       : 'text-emerald-700 dark:text-emerald-400'
                     : ''
@@ -842,6 +956,9 @@ export default function ProjectBudgetMatrix({
                     <td className="text-right py-2 pl-2 tabular-nums text-gray-600 dark:text-gray-400">
                       {pct === null ? '—' : `${pct.toFixed(0)}%`}
                     </td>
+                    <td className="text-right py-2 px-2 tabular-nums text-gray-800 dark:text-gray-200">${fmtMoney(budgetCost)}</td>
+                    <td className="text-right py-2 px-2 tabular-nums text-gray-800 dark:text-gray-200">${fmtMoney(actualCost)}</td>
+                    <td className={`text-right py-2 pl-2 tabular-nums ${costVarCls}`}>${fmtMoney(costVar)}</td>
                     {canEditMatrix && (
                       <td className="py-2 pl-2 print:hidden align-top whitespace-nowrap text-right">
                         <button
@@ -877,6 +994,9 @@ export default function ProjectBudgetMatrix({
                 <td className="text-right py-3 pl-2 tabular-nums text-gray-600 dark:text-gray-400">
                   {visibleTotals.pct == null ? '—' : `${visibleTotals.pct.toFixed(0)}%`}
                 </td>
+                <td className="text-right py-3 px-2 tabular-nums">${fmtMoney(visibleTotals.budgetCost)}</td>
+                <td className="text-right py-3 px-2 tabular-nums">${fmtMoney(visibleTotals.actualCost)}</td>
+                <td className="text-right py-3 pl-2 tabular-nums">${fmtMoney(visibleTotals.costVariance)}</td>
                 {canEditMatrix && <td className="print:hidden" />}
               </tr>
             </tbody>
