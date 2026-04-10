@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { canAccessPoBudget } from '@/lib/access'
 import { billRateIsActiveOnDate, pickEffectiveRateForWeek } from '@/lib/po-bill-rate-utils'
+import { decodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,6 +95,55 @@ async function loadBidSheetLineCostMap(db: any, poId: string): Promise<Map<strin
     map.set(key, cur)
   }
   return map
+}
+
+const PRESET_INDIRECT_LABEL: Record<string, string> = {
+  project_management: 'Indirect — Project Management',
+  document_coordinator: 'Indirect — Document Coordinator',
+  project_controls: 'Indirect — Project Controls',
+  travel_living_project: 'Indirect — Travel & Living (Project by Person)',
+  travel_living_fat: 'Indirect — Travel & Living (FAT)',
+  additional_indirect: 'Indirect — Additional Indirect Costs',
+}
+
+function bidIndirectRowLabel(category: string, notes: string | null | undefined): string {
+  if (category.startsWith('custom_')) {
+    const meta = decodeIndirectNotes(notes)
+    const name = meta.label?.trim()
+    return name ? `Indirect — ${name}` : 'Indirect — Additional line'
+  }
+  return PRESET_INDIRECT_LABEL[category] || `Indirect — ${category}`
+}
+
+/**
+ * If po_expenses is empty or all zeros (RLS, or conversion gap), derive the same indirect $ as the bid sheet
+ * from bid_sheet_indirect_labor for the sheet that converted to this PO.
+ */
+async function loadIndirectLinesFromBidSheetFallback(db: any, poId: string) {
+  const { data: sheet } = await db.from('bid_sheets').select('id').eq('converted_po_id', poId).maybeSingle()
+  const sid = (sheet as { id?: string } | null)?.id
+  if (!sid) return [] as Array<{ id: string; label: string; budgetCost: number; actualCost: number }>
+
+  const { data: indirectRows } = await db.from('bid_sheet_indirect_labor').select('*').eq('bid_sheet_id', sid)
+  const out: Array<{ id: string; label: string; budgetCost: number; actualCost: number }> = []
+  for (const row of indirectRows || []) {
+    const r = row as {
+      id: string
+      category: string
+      notes?: string | null
+      hours?: number | null
+      rate?: number | null
+    }
+    const amt = indirectLineDollarTotal(Number(r.hours) || 0, Number(r.rate) || 0, r.category, r.notes)
+    if (amt <= EPS) continue
+    out.push({
+      id: `bid-sheet-indirect:${r.id}`,
+      label: bidIndirectRowLabel(r.category, r.notes),
+      budgetCost: amt,
+      actualCost: amt,
+    })
+  }
+  return out
 }
 
 /** Average of each person’s current PO bill rate (active as of `asOf`), one rate per user. */
@@ -281,10 +331,36 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
   const totalBudgetCost = rows.reduce((s, r) => s + r.budgetCost, 0)
   const totalActualCost = rows.reduce((s, r) => s + r.actualCost, 0)
 
-  const budgetCostLabel =
+  const { data: expenseRows } = await db.from('po_expenses').select('id, amount, custom_type_name').eq('po_id', poId)
+
+  let indirectLines = (expenseRows || []).map((e: Record<string, unknown>) => {
+    const amt = Number(e.amount) || 0
+    const label = String(e.custom_type_name || 'Expense').trim() || 'Expense'
+    return {
+      id: e.id as string,
+      label,
+      budgetCost: amt,
+      actualCost: amt,
+    }
+  })
+  const poIndirectSum = indirectLines.reduce((s, x) => s + x.budgetCost, 0)
+  if (poIndirectSum <= EPS) {
+    indirectLines = await loadIndirectLinesFromBidSheetFallback(db, poId)
+  }
+  const indirectBudgetTotal = indirectLines.reduce((s, x) => s + x.budgetCost, 0)
+  const indirectActualTotal = indirectLines.reduce((s, x) => s + x.actualCost, 0)
+
+  const grandBudgetCost = totalBudgetCost + indirectBudgetTotal
+  const grandActualCost = totalActualCost + indirectActualTotal
+
+  let budgetCostLabel =
     bidSheetLineCosts.size > 0
       ? 'Est. budget $ uses the same effective labor rate as the source bid sheet (hours × bid rate per cell), scaled to current budgeted hours per line. Rows without a bid-sheet match use budgeted hours × the average of each team member’s bill rate on this PO. Actual $ sums approved timesheet hours × that person’s effective rate for each week.'
       : 'Est. budget $ uses budgeted hours × the average of each team member’s current bill rate on this PO. Actual $ sums approved timesheet hours × that person’s effective rate for each week.'
+  if (indirectBudgetTotal > EPS) {
+    budgetCostLabel +=
+      ' Indirect / expense lines from this PO (e.g. imported from the bid sheet) appear below the labor matrix and are included in the grand total.'
+  }
 
   return NextResponse.json(
     {
@@ -294,14 +370,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
         budgetCostLabel,
       },
       rows,
+      indirectLines,
       totals: {
         budgetedHours: totalBudgeted,
         actualHoursInMatrix: totalActualMatrix,
         actualHoursAllEntries: totalAllEntries,
         unmatchedActualHours,
-        budgetCost: totalBudgetCost,
-        actualCost: totalActualCost,
-        costVariance: totalBudgetCost - totalActualCost,
+        matrixBudgetCost: totalBudgetCost,
+        matrixActualCost: totalActualCost,
+        indirectBudgetCost: indirectBudgetTotal,
+        indirectActualCost: indirectActualTotal,
+        budgetCost: grandBudgetCost,
+        actualCost: grandActualCost,
+        costVariance: grandBudgetCost - grandActualCost,
       },
     },
     noStore

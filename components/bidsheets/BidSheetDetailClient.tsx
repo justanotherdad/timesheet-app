@@ -1604,8 +1604,10 @@ export default function BidSheetDetailClient({
           const sumW = compactMode ? 72 : 88
           const costW = compactMode ? 88 : 104
           const gridCols = `${sysW}px repeat(${deliverables.length}, ${colW}px) ${sumW}px ${costW}px`
+          const totalGridWidth = sysW + deliverables.length * colW + sumW + costW
           return (
-            <div className="hidden md:block min-w-[600px]">
+            <div className="hidden md:block w-full min-w-0 overflow-x-auto">
+              <div style={{ width: totalGridWidth, minWidth: Math.max(totalGridWidth, 600) }}>
               {/* Header row - same grid as body rows */}
               <div
                 className="flex border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700"
@@ -1627,12 +1629,12 @@ export default function BidSheetDetailClient({
                 </div>
               </div>
 
-              <div ref={scrollContainerRef} className="overflow-auto max-h-[60vh]" style={{ minHeight: 200 }}>
+              <div ref={scrollContainerRef} className="overflow-y-auto max-h-[60vh] overflow-x-hidden" style={{ minHeight: 200 }}>
                 <div
                   style={{
                     height: `${rowVirtualizer.getTotalSize()}px`,
                     position: 'relative',
-                    minWidth: sysW + deliverables.length * colW + sumW + costW,
+                    width: '100%',
                   }}
                 >
                   {rowVirtualizer.getVirtualItems().map((virtualRow: VirtualItem) => {
@@ -1726,7 +1728,8 @@ export default function BidSheetDetailClient({
                 className="flex border-t-2 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-900/50"
                 style={{ display: 'grid', gridTemplateColumns: gridCols }}
               >
-                <div className="sticky left-0 z-[5] border-r border-gray-200 dark:border-gray-600 px-3 py-2 text-xs font-semibold text-gray-800 dark:text-gray-100 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+                {/* No sticky here — sticky would pin this cell while other footer cells scroll horizontally */}
+                <div className="border-r border-gray-200 dark:border-gray-600 px-3 py-2 text-xs font-semibold text-gray-800 dark:text-gray-100">
                   Column totals
                 </div>
                 {deliverables.map((d) => (
@@ -1747,6 +1750,7 @@ export default function BidSheetDetailClient({
                     ${matrixAggregates.matrixGrandCost.toFixed(2)}
                   </span>
                 </div>
+              </div>
               </div>
             </div>
           )

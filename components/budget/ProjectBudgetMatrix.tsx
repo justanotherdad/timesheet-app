@@ -80,6 +80,13 @@ type MatrixRow = {
   costVariance: number
 }
 
+type IndirectLineRow = {
+  id: string
+  label: string
+  budgetCost: number
+  actualCost: number
+}
+
 type MatrixPayload = {
   siteId?: string | null
   costModel?: {
@@ -87,11 +94,18 @@ type MatrixPayload = {
     budgetCostLabel: string
   }
   rows: MatrixRow[]
+  indirectLines?: IndirectLineRow[]
   totals: {
     budgetedHours: number
     actualHoursInMatrix: number
     actualHoursAllEntries: number
     unmatchedActualHours: number
+    /** Labor matrix only (same as summing row Est. budget $ before indirect). */
+    matrixBudgetCost?: number
+    matrixActualCost?: number
+    indirectBudgetCost?: number
+    indirectActualCost?: number
+    /** Labor + indirect (matches bid sheet grand total when fully converted). */
     budgetCost: number
     actualCost: number
     costVariance: number
@@ -277,6 +291,10 @@ export default function ProjectBudgetMatrix({
     return rows
   }, [filteredRows, sortColumn, sortDir])
 
+  const indirectLines = data?.indirectLines ?? []
+  const indirectBudgetTotal = data?.totals.indirectBudgetCost ?? indirectLines.reduce((s, r) => s + r.budgetCost, 0)
+  const indirectActualTotal = data?.totals.indirectActualCost ?? indirectLines.reduce((s, r) => s + r.actualCost, 0)
+
   const visibleTotals = useMemo(() => {
     const budgetedHours = sortedRows.reduce((s, r) => s + r.budgetedHours, 0)
     const actualHoursInMatrix = sortedRows.reduce((s, r) => s + r.actualHours, 0)
@@ -292,6 +310,17 @@ export default function ProjectBudgetMatrix({
       costVariance: budgetCost - actualCost,
     }
   }, [sortedRows])
+
+  const laborPlusIndirectTotals = useMemo(() => {
+    const grandBudget = visibleTotals.budgetCost + indirectBudgetTotal
+    const grandActual = visibleTotals.actualCost + indirectActualTotal
+    return {
+      grandBudget,
+      grandActual,
+      grandCostVar: grandBudget - grandActual,
+      indirectVar: indirectBudgetTotal - indirectActualTotal,
+    }
+  }, [visibleTotals, indirectBudgetTotal, indirectActualTotal])
 
   const handleSort = (col: SortColumn) => {
     if (sortColumn === col) {
@@ -404,7 +433,7 @@ export default function ProjectBudgetMatrix({
   }
 
   const exportCsv = () => {
-    if (!data || sortedRows.length === 0) return
+    if (!data || (sortedRows.length === 0 && indirectLines.length === 0)) return
     const q = (cell: string | number) => `"${String(cell).replace(/"/g, '""')}"`
     const headers = [
       'System',
@@ -461,9 +490,27 @@ export default function ProjectBudgetMatrix({
         ].join(',')
       )
     }
+    for (const ir of indirectLines) {
+      const vc = ir.budgetCost - ir.actualCost
+      lines.push(
+        [
+          q('Indirect (PO expense)'),
+          q(ir.label),
+          q('—'),
+          q(''),
+          q(''),
+          q(''),
+          q(''),
+          q(''),
+          q(ir.budgetCost.toFixed(2)),
+          q(ir.actualCost.toFixed(2)),
+          q(vc.toFixed(2)),
+        ].join(',')
+      )
+    }
     lines.push(
       [
-        q(filterSummary ? 'Totals (visible rows)' : 'Totals (matrix rows)'),
+        q(filterSummary ? 'Totals (visible labor rows)' : 'Totals (labor matrix)'),
         q(''),
         q(''),
         q(''),
@@ -476,6 +523,41 @@ export default function ProjectBudgetMatrix({
         q(visibleTotals.costVariance.toFixed(2)),
       ].join(',')
     )
+    if (indirectBudgetTotal > EPS) {
+      const iv = indirectBudgetTotal - indirectActualTotal
+      lines.push(
+        [
+          q('Indirect (PO expenses, subtotal)'),
+          q(''),
+          q(''),
+          q(''),
+          q(''),
+          q(''),
+          q(''),
+          q(''),
+          q(indirectBudgetTotal.toFixed(2)),
+          q(indirectActualTotal.toFixed(2)),
+          q(iv.toFixed(2)),
+        ].join(',')
+      )
+      const gb = visibleTotals.budgetCost + indirectBudgetTotal
+      const ga = visibleTotals.actualCost + indirectActualTotal
+      lines.push(
+        [
+          q('Grand total (labor + indirect)'),
+          q(''),
+          q(''),
+          q(''),
+          q(visibleTotals.budgetedHours.toFixed(2)),
+          q(visibleTotals.actualHoursInMatrix.toFixed(2)),
+          q(visibleTotals.variance.toFixed(2)),
+          visibleTotals.pct == null ? q('') : q(Number(visibleTotals.pct.toFixed(2))),
+          q(gb.toFixed(2)),
+          q(ga.toFixed(2)),
+          q((gb - ga).toFixed(2)),
+        ].join(',')
+      )
+    }
     const t = data.totals
     lines.push([q('Total hours on PO (all approved entries)'), q(t.actualHoursAllEntries.toFixed(2))].join(','))
     if (t.unmatchedActualHours > 0) {
@@ -499,7 +581,7 @@ export default function ProjectBudgetMatrix({
     window.print()
   }
 
-  const hasRows = data && data.rows.length > 0
+  const hasRows = data && (data.rows.length > 0 || indirectLines.length > 0)
   const hasActiveFilters = Boolean(
     filterSystem ||
       filterDeliverable ||
@@ -509,7 +591,7 @@ export default function ProjectBudgetMatrix({
       filterVariance ||
       filterPct
   )
-  const showTable = hasRows && sortedRows.length > 0
+  const showTable = hasRows && (sortedRows.length > 0 || indirectLines.length > 0)
 
   return (
     <div className="report-print-container bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -556,7 +638,7 @@ export default function ProjectBudgetMatrix({
           <button
             type="button"
             onClick={exportCsv}
-            disabled={!hasRows || sortedRows.length === 0}
+            disabled={!hasRows || (sortedRows.length === 0 && indirectLines.length === 0)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="h-4 w-4" />
@@ -565,7 +647,7 @@ export default function ProjectBudgetMatrix({
           <button
             type="button"
             onClick={handlePrint}
-            disabled={!hasRows || sortedRows.length === 0}
+            disabled={!hasRows || (sortedRows.length === 0 && indirectLines.length === 0)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Use your browser print dialog to save as PDF"
           >
@@ -592,7 +674,7 @@ export default function ProjectBudgetMatrix({
         </div>
       )}
 
-      {!loading && data && data.rows.length === 0 && (
+      {!loading && data && data.rows.length === 0 && indirectLines.length === 0 && (
         <div className="text-sm text-gray-500 dark:text-gray-400 py-4 space-y-2">
           <p>No project matrix rows yet. Convert a bid sheet to populate this PO{canEditMatrix ? ', or add a row below.' : '.'}</p>
         </div>
@@ -677,7 +759,7 @@ export default function ProjectBudgetMatrix({
         </div>
       )}
 
-      {hasRows && (
+      {hasRows && data && data.rows.length > 0 && (
         <div className="mb-4 print:hidden space-y-3">
           <div className="flex flex-wrap gap-4 items-center">
             <label className="flex items-center gap-2">
@@ -984,9 +1066,42 @@ export default function ProjectBudgetMatrix({
                   </tr>
                 )
               })}
+              {indirectLines.map((ir) => {
+                const costVar = ir.budgetCost - ir.actualCost
+                const costVarCls =
+                  ir.budgetCost > 0 || ir.actualCost > 0
+                    ? costVar < 0
+                      ? 'text-red-600 dark:text-red-400'
+                      : 'text-emerald-700 dark:text-emerald-400'
+                    : ''
+                return (
+                  <tr key={`indirect-${ir.id}`} className="border-b border-gray-100 dark:border-gray-700 bg-amber-50/40 dark:bg-amber-950/15">
+                    <td className="py-2 pr-4 text-gray-800 dark:text-gray-200 align-top">Indirect</td>
+                    <td className="py-2 pr-4 text-gray-800 dark:text-gray-200 align-top" title={ir.label}>
+                      {ir.label}
+                    </td>
+                    <td className="py-2 pr-4 text-gray-500 dark:text-gray-500 align-top">—</td>
+                    <td className="py-2 pr-4 text-gray-500 dark:text-gray-500 align-top max-w-[220px] text-xs">PO expense</td>
+                    <td className="text-right py-2 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
+                    <td className="text-right py-2 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
+                    <td className="text-right py-2 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
+                    <td className="text-right py-2 pl-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
+                    <td className="text-right py-2 px-2 tabular-nums text-gray-800 dark:text-gray-200">${fmtMoney(ir.budgetCost)}</td>
+                    <td className="text-right py-2 px-2 tabular-nums text-gray-800 dark:text-gray-200">${fmtMoney(ir.actualCost)}</td>
+                    <td className={`text-right py-2 pl-2 tabular-nums ${costVarCls}`}>${fmtMoney(costVar)}</td>
+                    {canEditMatrix && <td className="print:hidden py-2 pl-2 text-gray-500 dark:text-gray-500 text-xs">—</td>}
+                  </tr>
+                )
+              })}
               <tr className="font-semibold bg-gray-50 dark:bg-gray-900/40 border-t-2 border-gray-200 dark:border-gray-600">
                 <td className="py-3 pr-4" colSpan={4}>
-                  {hasActiveFilters ? 'Totals (visible rows)' : 'Totals (matrix rows)'}
+                  {indirectLines.length > 0
+                    ? hasActiveFilters
+                      ? 'Totals (visible labor rows)'
+                      : 'Totals (labor matrix)'
+                    : hasActiveFilters
+                      ? 'Totals (visible rows)'
+                      : 'Totals (matrix rows)'}
                 </td>
                 <td className="text-right py-3 px-2 tabular-nums">{formatHours(visibleTotals.budgetedHours)}</td>
                 <td className="text-right py-3 px-2 tabular-nums">{formatHours(visibleTotals.actualHoursInMatrix)}</td>
@@ -999,6 +1114,39 @@ export default function ProjectBudgetMatrix({
                 <td className="text-right py-3 pl-2 tabular-nums">${fmtMoney(visibleTotals.costVariance)}</td>
                 {canEditMatrix && <td className="print:hidden" />}
               </tr>
+              {indirectBudgetTotal > EPS && (
+                <>
+                  <tr className="font-semibold bg-amber-50/60 dark:bg-amber-950/25 border-t border-amber-200/80 dark:border-amber-900/50">
+                    <td className="py-3 pr-4" colSpan={4}>
+                      Indirect subtotal (PO expenses){hasActiveFilters ? ' — full PO, not filtered' : ''}
+                    </td>
+                    <td className="text-right py-3 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
+                    <td className="text-right py-3 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
+                    <td className="text-right py-3 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
+                    <td className="text-right py-3 pl-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
+                    <td className="text-right py-3 px-2 tabular-nums">${fmtMoney(indirectBudgetTotal)}</td>
+                    <td className="text-right py-3 px-2 tabular-nums">${fmtMoney(indirectActualTotal)}</td>
+                    <td className="text-right py-3 pl-2 tabular-nums">${fmtMoney(laborPlusIndirectTotals.indirectVar)}</td>
+                    {canEditMatrix && <td className="print:hidden" />}
+                  </tr>
+                  <tr className="font-bold bg-gray-100 dark:bg-gray-900/70 border-t-2 border-gray-300 dark:border-gray-600">
+                    <td className="py-3 pr-4" colSpan={4}>
+                      Grand total (labor + indirect)
+                      {hasActiveFilters && sortedRows.length > 0 ? ' — labor uses visible rows; indirect is full PO' : ''}
+                    </td>
+                    <td className="text-right py-3 px-2 tabular-nums">{formatHours(visibleTotals.budgetedHours)}</td>
+                    <td className="text-right py-3 px-2 tabular-nums">{formatHours(visibleTotals.actualHoursInMatrix)}</td>
+                    <td className="text-right py-3 px-2 tabular-nums">{fmtVariance(visibleTotals.variance)}</td>
+                    <td className="text-right py-3 pl-2 tabular-nums text-gray-600 dark:text-gray-400">
+                      {visibleTotals.pct == null ? '—' : `${visibleTotals.pct.toFixed(0)}%`}
+                    </td>
+                    <td className="text-right py-3 px-2 tabular-nums">${fmtMoney(laborPlusIndirectTotals.grandBudget)}</td>
+                    <td className="text-right py-3 px-2 tabular-nums">${fmtMoney(laborPlusIndirectTotals.grandActual)}</td>
+                    <td className="text-right py-3 pl-2 tabular-nums">${fmtMoney(laborPlusIndirectTotals.grandCostVar)}</td>
+                    {canEditMatrix && <td className="print:hidden" />}
+                  </tr>
+                </>
+              )}
             </tbody>
           </table>
         </div>
