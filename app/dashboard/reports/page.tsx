@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { requireRole } from '@/lib/auth'
 import Header from '@/components/Header'
 import ReportsPageClient from '@/components/reports/ReportsPageClient'

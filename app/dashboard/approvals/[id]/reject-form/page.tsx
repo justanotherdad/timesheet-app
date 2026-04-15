@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { redirect } from 'next/navigation'
 import { APPROVAL_PARTICIPANT_ROLES } from '@/lib/approval-access'
 import { requireRole } from '@/lib/auth'
