@@ -111,13 +111,13 @@ npm run dev
 ### Deploy Changes
 ```bash
 # 1. Stage all changed files
-git add .
+    git add .
 
-# 2. Commit with a short message describing the change
-git commit -m "fixes"
+    # 2. Commit with a short message describing the change
+    git commit -m "fixes and notes"
 
-# 3. Push to GitHub (triggers Vercel deployment)
-git push
+    # 3. Push to GitHub (triggers Vercel deployment)
+    git push
 ```
 After pushing, Vercel will build and deploy; usually 2–3 minutes.
 
