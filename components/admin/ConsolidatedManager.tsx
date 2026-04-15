@@ -37,6 +37,7 @@ interface PurchaseOrder {
   po_balance?: number
   proposal_number?: string
   project_name?: string
+  active?: boolean
 }
 
 interface ConsolidatedManagerProps {
