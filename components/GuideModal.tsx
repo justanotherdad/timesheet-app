@@ -349,7 +349,7 @@ function GuideContent() {
           7. Budget Detail
         </h3>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
-          The <strong>Budget Detail</strong> page shows PO-level budgets: client and PO information, budget summary, invoices, billable hours and cost, expenses, and bill rates.
+          The <strong>Budget Detail</strong> Page shows PO-level budgets: Client and PO information, budget summary, invoices, billable hours and cost, expenses, and bill rates.
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">7.1 Who can access Budget Detail</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">

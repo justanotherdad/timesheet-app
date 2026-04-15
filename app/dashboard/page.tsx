@@ -297,7 +297,7 @@ export default async function DashboardPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Budget Detail</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">View PO budgets, invoices, and billable hours</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">View PO budgets, Invoices, and Billable Hours</p>
                 </div>
               </div>
             </Link>
@@ -314,7 +314,7 @@ export default async function DashboardPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Bid Sheets</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Create and manage bid sheets, convert to project budgets</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Create and Manage Bid Sheets, Convert to Project Budgets</p>
                 </div>
               </div>
             </Link>
@@ -332,7 +332,7 @@ export default async function DashboardPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-gray-100">Manage Organization</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Sites, Departments, Purchase orders, Expense Types, Company Information</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Sites, Departments, Purchase Orders, Expense Types, Company Information</p>
                   </div>
                 </div>
               </Link>
