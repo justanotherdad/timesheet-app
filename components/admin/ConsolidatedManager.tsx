@@ -721,8 +721,6 @@ export default function ConsolidatedManager({
                   </button>
                 )}
               </div>
-              {!readOnly && (
-
               {!readOnly && showAddForm && (
                 <form onSubmit={handleAddPO} className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-4">
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Add New Purchase Order</h3>
