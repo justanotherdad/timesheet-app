@@ -1004,12 +1004,14 @@ export default function UserManagement({
                       if (!isArchived && !confirm(`Deactivate ${editingUser.name}? They will lose access to the website. Admins can still view and reactivate them.`)) return
                       setLoading(true)
                       setError(null)
-                      const result = await updateUserProfile(editingUser.id, { active: !isArchived })
+                      // isArchived = true means currently inactive → reactivate (set active: true)
+                      // isArchived = false means currently active  → deactivate (set active: false)
+                      const result = await updateUserProfile(editingUser.id, { active: isArchived })
                       if (result?.error) {
                         setError(result.error)
                       } else {
-                        setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, active: !isArchived } : u))
-                        setEditingUser({ ...editingUser, active: !isArchived } as any)
+                        setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, active: isArchived } : u))
+                        setEditingUser({ ...editingUser, active: isArchived } as any)
                         setSuccess(isArchived ? 'User reactivated' : 'User deactivated')
                         setTimeout(() => setSuccess(null), 3000)
                       }

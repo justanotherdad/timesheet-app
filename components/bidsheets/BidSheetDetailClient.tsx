@@ -1859,10 +1859,20 @@ export default function BidSheetDetailClient({
         )}
       </div>
 
-      {/* Indirect Costs */}
+      {/* Indirect Costs + Totals: side-by-side on large screens */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+
+      {/* Left column: Indirect Costs */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">Indirect Costs</h3>
-        <div className="space-y-4">
+        <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Indirect Costs</h3>
+        {/* Column headers */}
+        <div className="flex gap-4 items-center mb-2 px-1">
+          <span className="w-48 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Category</span>
+          <span className="w-24 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-center">Hours</span>
+          <span className="w-28 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-center">Rate ($/hr)</span>
+          <span className="w-24 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-right">Total</span>
+        </div>
+        <div className="space-y-3">
           {INDIRECT_CATEGORIES.map((cat) => {
             const ind = indirectLabor.find((i) => i.category === cat.id)
             const d = indirectDrafts[cat.id]
@@ -1872,7 +1882,7 @@ export default function BidSheetDetailClient({
             const rateDisplay = d?.rate !== undefined ? d.rate : ind == null ? '' : String(ind.rate ?? '')
             return (
               <div key={cat.id} className="flex flex-wrap gap-4 items-center">
-                <span className="w-48 font-medium">{cat.label}</span>
+                <span className="w-48 text-sm font-medium text-gray-800 dark:text-gray-200">{cat.label}</span>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -1881,7 +1891,7 @@ export default function BidSheetDetailClient({
                   onChange={(e) => patchIndirectDraft(cat.id, { hours: e.target.value })}
                   onBlur={() => flushIndirectOnBlur(cat.id)}
                   disabled={!canEdit}
-                  placeholder="Hours"
+                  placeholder="0"
                   className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
                 />
                 <input
@@ -1892,10 +1902,10 @@ export default function BidSheetDetailClient({
                   onChange={(e) => patchIndirectDraft(cat.id, { rate: e.target.value })}
                   onBlur={() => flushIndirectOnBlur(cat.id)}
                   disabled={!canEdit}
-                  placeholder="Rate ($/hr)"
+                  placeholder="0"
                   className={`h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
                 />
-                <span className="text-gray-600 dark:text-gray-400">
+                <span className="w-24 text-right text-sm text-gray-700 dark:text-gray-300">
                   = ${indirectLineDollarTotal(hNum, rNum, cat.id, ind?.notes).toFixed(2)}
                 </span>
               </div>
@@ -2014,12 +2024,12 @@ export default function BidSheetDetailClient({
             <Plus className="h-4 w-4" /> Add Indirect Cost
           </button>
         )}
-      </div>
+      </div>{/* end Indirect Costs */}
 
-      {/* Totals */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+      {/* Right column: Totals */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 self-start">
         <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">Totals</h3>
-        <div className="space-y-2 max-w-md">
+        <div className="space-y-2">
           <div className="flex justify-between">
             <span>Total Budgeted Hours</span>
             <span className="font-medium">{totalBudgetedHours.toFixed(2)}</span>
@@ -2046,6 +2056,8 @@ export default function BidSheetDetailClient({
           </div>
         </div>
       </div>
+
+      </div>{/* end 2-column grid */}
 
       {/* View Deliverables Modal (mobile) */}
       {viewRow && (

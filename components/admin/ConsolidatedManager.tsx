@@ -65,6 +65,7 @@ export default function ConsolidatedManager({
   const [activeTab, setActiveTab] = useState<TabType>('sites')
   const [selectedSite, setSelectedSite] = useState<string>('')
   const [selectedDepartment, setSelectedDepartment] = useState<string>('')
+  const [showArchivedPOs, setShowArchivedPOs] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -140,9 +141,12 @@ export default function ConsolidatedManager({
     ? departments.filter(d => d.site_id === selectedSite)
     : []
 
+  const hasArchivedPOs = purchaseOrders.some(po => po.active === false)
   const filteredPOs = purchaseOrders.filter(po => {
     if (selectedSite && po.site_id !== selectedSite) return false
     if (selectedDepartment && po.department_id !== selectedDepartment) return false
+    // Show ONLY archived when toggle is on, ONLY active when off
+    if (showArchivedPOs ? po.active !== false : po.active === false) return false
     return true
   })
 
@@ -694,18 +698,30 @@ export default function ConsolidatedManager({
 
           {selectedSite && (
             <>
-              {!readOnly && (
               <div className="flex justify-between items-center mb-4">
-                <div></div>
-                <button
-                  onClick={() => setShowAddForm(!showAddForm)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 flex items-center gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Purchase Order
-                </button>
+                {hasArchivedPOs && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showArchivedPOs}
+                      onChange={(e) => setShowArchivedPOs(e.target.checked)}
+                      className="rounded border-gray-300 dark:border-gray-600"
+                    />
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Show archived POs only</span>
+                  </label>
+                )}
+                {!hasArchivedPOs && <div />}
+                {!readOnly && (
+                  <button
+                    onClick={() => setShowAddForm(!showAddForm)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 flex items-center gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Purchase Order
+                  </button>
+                )}
               </div>
-              )}
+              {!readOnly && (
 
               {!readOnly && showAddForm && (
                 <form onSubmit={handleAddPO} className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-4">

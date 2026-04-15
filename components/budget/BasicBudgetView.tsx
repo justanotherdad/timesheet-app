@@ -400,6 +400,8 @@ export default function BasicBudgetView({
   const priorHoursBilledRate = poData.prior_hours_billed_rate ?? 0
   const priorCostFromHours = priorHoursBilled * priorHoursBilledRate
   const invoiceTotal = invoices.reduce((s: number, inv: any) => s + (inv.amount || 0), 0)
+  const invoicedAndPaid = invoices.filter((inv: any) => inv.payment_received_date).reduce((s: number, inv: any) => s + (inv.amount || 0), 0)
+  const invoicedNotPaid = invoices.filter((inv: any) => !inv.payment_received_date).reduce((s: number, inv: any) => s + (inv.amount || 0), 0)
   const hasAnyNotes = invoices.some((inv: any) => inv.notes && String(inv.notes).trim() !== '')
   const runningBalance = totalBudget - invoiceTotal
 
@@ -1379,6 +1381,8 @@ export default function BasicBudgetView({
                   </tr>
                 ))
               )}
+              <tr className="bg-gray-50 dark:bg-gray-700/50"><td colSpan={2} className="py-2 px-2 text-sm">Invoiced and paid</td><td className="text-right py-2 px-2 text-sm">${invoicedAndPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td></tr>
+              <tr className="bg-gray-50 dark:bg-gray-700/50"><td colSpan={2} className="py-2 px-2 text-sm">Invoiced, not paid</td><td className="text-right py-2 px-2 text-sm">${invoicedNotPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td></tr>
               <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50"><td colSpan={2} className="py-2 px-2">Total Invoiced</td><td className="text-right py-2 px-2 font-medium">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td></tr>
               <tr className="font-semibold bg-green-50 dark:bg-green-900/20"><td colSpan={2} className="py-2 px-2">Running Balance</td><td className="text-right py-2 px-2 font-medium">${runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td></tr>
             </tbody>
@@ -1421,6 +1425,14 @@ export default function BasicBudgetView({
                   </tr>
                 ))
               )}
+              <tr className="bg-gray-50 dark:bg-gray-700/50">
+                <td colSpan={(hasAnyNotes ? 5 : 4) + (isAdmin ? 1 : 0)} className="py-2 px-3 text-sm">Invoiced and paid</td>
+                <td className="text-right py-2 px-3 text-sm">${invoicedAndPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              </tr>
+              <tr className="bg-gray-50 dark:bg-gray-700/50">
+                <td colSpan={(hasAnyNotes ? 5 : 4) + (isAdmin ? 1 : 0)} className="py-2 px-3 text-sm">Invoiced, not paid</td>
+                <td className="text-right py-2 px-3 text-sm">${invoicedNotPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              </tr>
               <tr className="font-semibold bg-gray-50 dark:bg-gray-700/50">
                 <td colSpan={(hasAnyNotes ? 5 : 4) + (isAdmin ? 1 : 0)} className="py-2 px-3">Total Invoiced</td>
                 <td className="text-right py-2 px-3">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
@@ -2032,6 +2044,8 @@ export default function BasicBudgetView({
                     {timesheetId && (employeePopup.mode || 'hours') === 'hours' && (
                       <Link
                         href={`/dashboard/timesheets/${timesheetId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 text-sm shrink-0"
                       >
                         View timesheet <ExternalLink className="h-3 w-3" />

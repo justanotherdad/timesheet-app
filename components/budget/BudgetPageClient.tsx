@@ -68,7 +68,12 @@ function BudgetPageClientInner({
   const allSitePOsForNav = selectedSiteId ? purchaseOrders.filter((p) => p.site_id === selectedSiteId) : []
   const sitePOs = allSitePOsForNav
   const sitePOsForSelector = selectedSiteId
-    ? purchaseOrders.filter((p) => p.site_id === selectedSiteId && (showArchivedPOs || p.active !== false))
+    ? purchaseOrders.filter((p) => {
+        if (p.site_id !== selectedSiteId) return false
+        // When showArchivedPOs is true, show ONLY archived (active === false)
+        // When false, show only active (active !== false)
+        return showArchivedPOs ? p.active === false : p.active !== false
+      })
     : []
 
   const selectedPO = selectedPoId
@@ -209,7 +214,7 @@ function BudgetPageClientInner({
             <div className="space-y-2">
               {sitePOsForSelector.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {hasArchived && !showArchivedPOs ? 'No active purchase orders. Check "Show archived POs" to see archived.' : 'No purchase orders for this client.'}
+                  {showArchivedPOs ? 'No archived purchase orders for this client.' : hasArchived ? 'No active purchase orders. Check "Show archived POs" to view archived ones.' : 'No purchase orders for this client.'}
                 </p>
               ) : (
                 sitePOsForSelector.map((po) => {

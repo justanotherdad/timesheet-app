@@ -20,8 +20,27 @@ export default async function AdminExportPage() {
     .order('created_at', { ascending: false })
     .limit(1000)
 
+  // Deduplicate: when a user has both a draft and a non-draft for the same week_ending,
+  // keep only the highest-precedence one (approved > pending > rejected > draft).
+  const STATUS_RANK: Record<string, number> = { approved: 4, pending: 3, rejected: 2, draft: 1 }
+  const deduplicatedTimesheets = (() => {
+    const seen = new Map<string, any>()
+    for (const ts of (timesheets || [])) {
+      const key = `${ts.user_id}__${ts.week_ending}`
+      const existing = seen.get(key)
+      if (!existing) {
+        seen.set(key, ts)
+      } else {
+        const existingRank = STATUS_RANK[existing.status] ?? 0
+        const newRank = STATUS_RANK[ts.status] ?? 0
+        if (newRank > existingRank) seen.set(key, ts)
+      }
+    }
+    return Array.from(seen.values())
+  })()
+
   // Get all timesheet entries to calculate hours
-  const timesheetIds = (timesheets || []).map((ts: any) => ts.id)
+  const timesheetIds = deduplicatedTimesheets.map((ts: any) => ts.id)
   let entriesData: any[] = []
   
   if (timesheetIds.length > 0) {
@@ -34,7 +53,7 @@ export default async function AdminExportPage() {
   }
 
   // Calculate total hours for each timesheet and get site/PO info
-  const timesheetsWithHours = (timesheets || []).map((ts: any) => {
+  const timesheetsWithHours = deduplicatedTimesheets.map((ts: any) => {
     const entries = entriesData.filter((e: any) => e.timesheet_id === ts.id)
     const totalHours = entries.reduce((sum: number, entry: any) => {
       return sum + (entry.mon_hours || 0) + (entry.tue_hours || 0) + 

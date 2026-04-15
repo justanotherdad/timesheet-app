@@ -23,10 +23,40 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Light mode: Tailwind gray-500/600 body text often reads too faint on gray-50/white cards */
+/* Light mode: ensure all gray text classes use near-black so text is readable on white/light backgrounds */
+html:not(.dark) .text-gray-400,
 html:not(.dark) .text-gray-500,
-html:not(.dark) .text-gray-600 {
-  color: #000000;
+html:not(.dark) .text-gray-600,
+html:not(.dark) .text-gray-700,
+html:not(.dark) .text-gray-800,
+html:not(.dark) .text-gray-900 {
+  color: #111827;
+}
+
+/* Light mode: card/panel backgrounds */
+html:not(.dark) .bg-gray-800,
+html:not(.dark) .bg-gray-900 {
+  background-color: #ffffff;
+}
+html:not(.dark) .bg-gray-700 {
+  background-color: #f3f4f6;
+}
+
+/* Light mode: borders */
+html:not(.dark) .border-gray-600,
+html:not(.dark) .border-gray-700 {
+  border-color: #d1d5db;
+}
+
+/* Light mode: table/row alternates */
+html:not(.dark) .dark\:bg-gray-800 {
+  background-color: #ffffff;
+}
+html:not(.dark) .dark\:text-gray-100,
+html:not(.dark) .dark\:text-gray-200,
+html:not(.dark) .dark\:text-gray-300,
+html:not(.dark) .dark\:text-gray-400 {
+  color: #111827;
 }
 
 /* Consistent form input/select height across site */
