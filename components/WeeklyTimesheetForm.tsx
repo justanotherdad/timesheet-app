@@ -24,6 +24,7 @@ interface WeeklyTimesheetFormProps {
   timesheetId?: string
   timesheetStatus?: string
   rejectionReason?: string
+  timesheetNotes?: string
   previousWeekData?: {
     entries?: Array<{
       client_project_id?: string
@@ -132,6 +133,7 @@ export default function WeeklyTimesheetForm({
   timesheetId,
   timesheetStatus = 'draft',
   rejectionReason,
+  timesheetNotes: initialTimesheetNotes = '',
   initialData,
   previousWeekData,
 }: WeeklyTimesheetFormProps) {
@@ -152,6 +154,8 @@ export default function WeeklyTimesheetForm({
   const [billableEntries, setBillableEntries] = useState<BillableEntry[]>(
     initialData?.entries || []
   )
+
+  const [timesheetNotes, setTimesheetNotes] = useState<string>(initialTimesheetNotes)
 
   const [unbillableEntries, setUnbillableEntries] = useState<UnbillableEntry[]>(
     initialData?.unbillable || [
@@ -277,6 +281,7 @@ export default function WeeklyTimesheetForm({
         const updateData: any = {
           week_ending: weekEnding,
           week_starting: formatDateForInput(weekDates.start),
+          notes: timesheetNotes.trim() || null,
           updated_at: new Date().toISOString(),
         }
 
@@ -311,6 +316,7 @@ export default function WeeklyTimesheetForm({
           week_ending: weekEnding,
           week_starting: formatDateForInput(weekDates.start),
           status: newStatus,
+          notes: timesheetNotes.trim() || null,
         }
 
         if (shouldSubmit) {
@@ -615,10 +621,26 @@ export default function WeeklyTimesheetForm({
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
           
           <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
+            {/* table-fixed so <col> widths are respected. Day columns use the same
+                w-[3.5rem] as the unbillable table so both grids stay visually consistent. */}
+            <table className="min-w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+              <colgroup>
+                <col className="w-10" />         {/* edit btn */}
+                <col />                           {/* Client — fills remaining space */}
+                <col className="w-28" />          {/* PO# */}
+                <col />                           {/* Task Description — fills remaining space */}
+                <col className="w-24" />          {/* System */}
+                <col className="w-24" />          {/* Deliverable */}
+                <col className="w-24" />          {/* Activity */}
+                {weekDates.days.map((_, idx) => (
+                  <col key={idx} className="w-[3.5rem]" />  /* day columns */
+                ))}
+                <col className="w-[4.5rem]" />   {/* Total */}
+                <col className="w-10" />          {/* delete btn */}
+              </colgroup>
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100 w-12"></th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100"></th>
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Client / Project #</th>
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">PO#</th>
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Task Description</th>
@@ -626,12 +648,12 @@ export default function WeeklyTimesheetForm({
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Deliverable</th>
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Activity</th>
                   {weekDates.days.map((day, idx) => (
-                    <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <th key={idx} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                       <div>{format(day, 'EEE')}</div>
                       <div className="text-xs font-normal">{formatDateShort(weekDates.days[idx])}</div>
                     </th>
                   ))}
-                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">Total</th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">Total</th>
                   <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">Actions</th>
                 </tr>
               </thead>
@@ -642,6 +664,8 @@ export default function WeeklyTimesheetForm({
                       <button
                         type="button"
                         onClick={() => handleOpenEditModal(entryIdx)}
+                        aria-label={`Edit row ${entryIdx + 1}`}
+                        title="Edit row"
                         className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
                       >
                         <Edit2 className="h-4 w-4" />
@@ -677,6 +701,7 @@ export default function WeeklyTimesheetForm({
                       <button
                         type="button"
                         onClick={() => handleRemoveEntry(entryIdx)}
+                        aria-label={`Delete row ${entryIdx + 1}`}
                         title="Delete row"
                         className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
                       >
@@ -719,12 +744,13 @@ export default function WeeklyTimesheetForm({
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Unbillable Time</h2>
           
           <div className="overflow-x-auto">
+            {/* table-fixed + w-[3.5rem] day columns matches the billable table above. */}
             <table className="min-w-full w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
               <colgroup>
                 <col className="w-[5.5rem]" />
                 <col />
                 {weekDates.days.map((_, idx) => (
-                  <col key={idx} className="w-12" />
+                  <col key={idx} className="w-[3.5rem]" />
                 ))}
                 <col className="w-[4.5rem]" />
               </colgroup>
@@ -770,7 +796,10 @@ export default function WeeklyTimesheetForm({
                           min="0"
                           max="24"
                           value={entry[`${day}_hours`] || ''}
-                          onChange={(e) => updateUnbillableEntry(entryIdx, day, parseFloat(e.target.value) || 0)}
+                          onChange={(e) => {
+                            const parsed = e.target.valueAsNumber
+                            updateUnbillableEntry(entryIdx, day, isNaN(parsed) ? entry[`${day}_hours`] : parsed)
+                          }}
                           className="w-full max-w-[3.25rem] min-w-[3rem] mx-auto px-1 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                         />
                       </td>
@@ -796,6 +825,25 @@ export default function WeeklyTimesheetForm({
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Notes Section */}
+        <div>
+          <label
+            htmlFor="timesheet-notes"
+            className="block text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2"
+          >
+            Notes
+          </label>
+          <textarea
+            id="timesheet-notes"
+            value={timesheetNotes}
+            onChange={(e) => setTimesheetNotes(e.target.value)}
+            placeholder="Optional — add any notes or comments for this timesheet"
+            rows={3}
+            disabled={currentStatus !== 'draft' && currentStatus !== 'rejected'}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 resize-y disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
 
         {/* Grand Total */}
@@ -1025,7 +1073,10 @@ export default function WeeklyTimesheetForm({
                         min="0"
                         max="24"
                         value={editingEntry[`${day}_hours`] || ''}
-                        onChange={(e) => setEditingEntry({ ...editingEntry, [`${day}_hours`]: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => {
+                          const parsed = e.target.valueAsNumber
+                          setEditingEntry({ ...editingEntry, [`${day}_hours`]: isNaN(parsed) ? editingEntry[`${day}_hours`] : parsed })
+                        }}
                         className="w-full h-9 min-h-9 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-base focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white box-border"
                       />
                     </div>

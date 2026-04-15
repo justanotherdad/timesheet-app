@@ -29,9 +29,18 @@ export default async function TimesheetDetailPage({
 }) {
   const { id } = await params
   const { returnTo } = await searchParams
-  const safeReturnTo = returnTo && returnTo.startsWith('/dashboard') && !returnTo.includes('//')
-    ? returnTo
-    : '/dashboard/timesheets'
+  // Validate returnTo against known safe paths only — prevents open-redirect attacks.
+  // Rejects anything with double slashes, backslashes, or encoded characters that
+  // could be used to bypass the startsWith('/dashboard') check.
+  const ALLOWED_RETURN_PREFIXES = ['/dashboard/timesheets', '/dashboard/approvals', '/dashboard']
+  const safeReturnTo =
+    returnTo &&
+    ALLOWED_RETURN_PREFIXES.some((prefix) => returnTo === prefix || returnTo.startsWith(prefix + '/')) &&
+    !returnTo.includes('//') &&
+    !returnTo.includes('\\') &&
+    !returnTo.includes('%')
+      ? returnTo
+      : '/dashboard/timesheets'
   const user = await getCurrentUser()
   if (!user) redirect('/login')
 

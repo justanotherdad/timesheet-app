@@ -232,6 +232,7 @@ export default async function EditTimesheetPage({
               timesheetId={timesheet.id}
               timesheetStatus={timesheet.status}
               rejectionReason={timesheet.rejection_reason ?? undefined}
+              timesheetNotes={timesheet.notes ?? ''}
               initialData={{
                 entries: entries || [],
                 unbillable: unbillable || [],

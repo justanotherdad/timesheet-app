@@ -33,6 +33,8 @@ export interface WeeklyTimesheet {
   rejected_at?: string
   rejection_reason?: string
   employee_signed_at?: string
+  /** Free-text notes added by the employee at the bottom of the timesheet. */
+  notes?: string | null
   created_at: string
   updated_at: string
 }

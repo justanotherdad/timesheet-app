@@ -22,7 +22,9 @@ export const metadata: Metadata = {
   },
 };
 
-export const dynamic = 'force-dynamic'
+// Removed force-dynamic — this root layout contains no dynamic data fetching.
+// Individual pages that require live data (e.g. auth checks) set their own
+// export const dynamic = 'force-dynamic' as needed.
 
 export default function RootLayout({
   children,

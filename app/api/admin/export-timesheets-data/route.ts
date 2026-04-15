@@ -69,11 +69,35 @@ export async function POST(request: NextRequest) {
       }, {})
     }
 
-    // Attach sites and POs to entries
+    // Fetch systems, deliverables, activities so the PDF shows those columns
+    const systemIds = Array.from(new Set((entries || []).map((e: any) => e.system_id).filter(Boolean)))
+    const deliverableIds = Array.from(new Set((entries || []).map((e: any) => e.deliverable_id).filter(Boolean)))
+    const activityIds = Array.from(new Set((entries || []).map((e: any) => e.activity_id).filter(Boolean)))
+
+    let systemsMap: Record<string, any> = {}
+    if (systemIds.length > 0) {
+      const { data: sysData } = await supabase.from('systems').select('id, name').in('id', systemIds)
+      systemsMap = (sysData || []).reduce((acc: Record<string, any>, s: any) => { acc[s.id] = s; return acc }, {})
+    }
+    let deliverablesMap: Record<string, any> = {}
+    if (deliverableIds.length > 0) {
+      const { data: delData } = await supabase.from('deliverables').select('id, name').in('id', deliverableIds)
+      deliverablesMap = (delData || []).reduce((acc: Record<string, any>, d: any) => { acc[d.id] = d; return acc }, {})
+    }
+    let activitiesMap: Record<string, any> = {}
+    if (activityIds.length > 0) {
+      const { data: actData } = await supabase.from('activities').select('id, name').in('id', activityIds)
+      activitiesMap = (actData || []).reduce((acc: Record<string, any>, a: any) => { acc[a.id] = a; return acc }, {})
+    }
+
+    // Attach sites, POs, systems, deliverables, and activities to entries
     const entriesWithRelations = (entries || []).map((entry: any) => ({
       ...entry,
       sites: entry.client_project_id ? sitesMap[entry.client_project_id] : null,
-      purchase_orders: entry.po_id ? posMap[entry.po_id] : null
+      purchase_orders: entry.po_id ? posMap[entry.po_id] : null,
+      systems: entry.system_id ? systemsMap[entry.system_id] : null,
+      deliverables: entry.deliverable_id ? deliverablesMap[entry.deliverable_id] : null,
+      activities: entry.activity_id ? activitiesMap[entry.activity_id] : null,
     }))
 
     if (entriesError) throw entriesError

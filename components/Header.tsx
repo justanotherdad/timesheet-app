@@ -45,7 +45,8 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
           pending: typeof j.pendingCount === 'number' ? j.pendingCount : 0,
         })
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn('Failed to load timesheet confirmation nav count:', err)
         if (!cancelled) setTimesheetConfirmNav({ show: false, pending: 0 })
       })
     return () => {
@@ -56,7 +57,11 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
   const toggleTheme = () => {
     const isDark = !document.documentElement.classList.contains('dark')
     document.documentElement.classList.toggle('dark', isDark)
-    localStorage.setItem('theme', isDark ? 'dark' : 'light')
+    try {
+      localStorage.setItem('theme', isDark ? 'dark' : 'light')
+    } catch {
+      // localStorage unavailable (e.g. storage quota exceeded or private browsing restriction)
+    }
     setDarkMode(isDark)
   }
 

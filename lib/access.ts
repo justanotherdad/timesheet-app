@@ -45,7 +45,14 @@ export async function getAccessibleSiteIds(
     .from('user_sites')
     .select('site_id')
     .in('user_id', userIdsToCheck)
-  if (error || !data) return []
+  if (error) {
+    // Return null (not []) so callers can distinguish a DB failure from a user
+    // who genuinely has no site assignments. Returning [] on error would silently
+    // deny access to everyone when the query fails.
+    console.error('getAccessibleSiteIds query failed:', error)
+    return null
+  }
+  if (!data) return []
   const siteIds = [...new Set((data as { site_id: string }[]).map((r) => r.site_id))]
   return siteIds
 }
