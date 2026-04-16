@@ -24,7 +24,14 @@ ${reason}
 Please review the note, make the necessary changes, and resubmit your timesheet.`
 
     const mailtoUrl = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    window.location.href = mailtoUrl
+    // Do not assign window.location.href — navigating to mailto: unloads this document and often leaves a
+    // blank/light page or drops theme when returning. A synthetic <a> click opens the client without leaving the app.
+    const a = document.createElement('a')
+    a.href = mailtoUrl
+    a.style.display = 'none'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
   }, [email, reason, weekEnding])
 
   return (
