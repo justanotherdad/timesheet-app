@@ -37,8 +37,13 @@ function coerceBillRate(value: unknown): number {
 
 /**
  * Picks the PO bill rate for a week-ending date. Postgres / JSON may return `rate` as a string — always coerced.
- * If no row strictly covers the week (gap between effective_to and the next effective_from), falls back to the
- * latest rate with effective_from on or before that week so UI cost stays aligned with hours after rate edits.
+ *
+ * Resolution order:
+ * 1. Rows whose effective window strictly includes this week (per billRateAppliesToWeekEnding), newest effective_from wins.
+ * 2. Latest row with effective_from on or before this week (covers gaps between ended rates and the next row).
+ * 3. Earliest row with effective_from on or after this week — weeks **before** the first bill-rate row still have hours
+ *    on the PO; use the first scheduled rate so cost aligns with activities (common after reject/re-submit or backdated hours).
+ * 4. Any row for this user on the PO (newest effective_from) as a last resort.
  */
 export function pickEffectiveRateForWeek<
   T extends {
@@ -67,5 +72,20 @@ export function pickEffectiveRateForWeek<
     .sort((a: any, b: any) =>
       (b.effective_from_date || '').localeCompare(a.effective_from_date || '')
     )[0]
-  return prior ? coerceBillRate(prior.rate) : 0
+  if (prior) return coerceBillRate(prior.rate)
+
+  const forward = rows
+    .filter((br: any) => {
+      const from = (br.effective_from_date || '').slice(0, 10)
+      return from && from >= we
+    })
+    .sort((a: any, b: any) =>
+      (a.effective_from_date || '').localeCompare(b.effective_from_date || '')
+    )[0]
+  if (forward) return coerceBillRate(forward.rate)
+
+  const anyRow = [...rows].sort((a: any, b: any) =>
+    (b.effective_from_date || '').localeCompare(a.effective_from_date || '')
+  )[0]
+  return anyRow ? coerceBillRate(anyRow.rate) : 0
 }
