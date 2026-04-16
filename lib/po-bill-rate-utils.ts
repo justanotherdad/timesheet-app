@@ -29,15 +29,43 @@ export function billRateIsActiveOnDate(
   return true
 }
 
-export function pickEffectiveRateForWeek<T extends { rate?: number; effective_from_date?: string | null }>(
-  rows: T[],
-  weekEnding: string
-): number {
+function coerceBillRate(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+/**
+ * Picks the PO bill rate for a week-ending date. Postgres / JSON may return `rate` as a string — always coerced.
+ * If no row strictly covers the week (gap between effective_to and the next effective_from), falls back to the
+ * latest rate with effective_from on or before that week so UI cost stays aligned with hours after rate edits.
+ */
+export function pickEffectiveRateForWeek<
+  T extends {
+    rate?: number | string | null
+    effective_from_date?: string | null
+    effective_to_date?: string | null
+  }
+>(rows: T[], weekEnding: string): number {
+  const we = (weekEnding || '').slice(0, 10)
+  if (!we) return 0
+
   const applicable = rows
-    .filter((br: any) => billRateAppliesToWeekEnding(br, weekEnding))
+    .filter((br: any) => billRateAppliesToWeekEnding(br, we))
     .sort((a: any, b: any) =>
       (b.effective_from_date || '').localeCompare(a.effective_from_date || '')
     )
-  const r = applicable[0]?.rate
-  return typeof r === 'number' && !Number.isNaN(r) ? r : 0
+  if (applicable.length > 0) {
+    return coerceBillRate(applicable[0]?.rate)
+  }
+
+  const prior = rows
+    .filter((br: any) => {
+      const from = (br.effective_from_date || '').slice(0, 10)
+      return from && from <= we
+    })
+    .sort((a: any, b: any) =>
+      (b.effective_from_date || '').localeCompare(a.effective_from_date || '')
+    )[0]
+  return prior ? coerceBillRate(prior.rate) : 0
 }

@@ -4,6 +4,13 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { getWeekEndingsForMonth } from '@/lib/utils'
 
+/** Timesheet week_ending from DB may include time/TZ; column keys must match UI + bill-rate helpers (YYYY-MM-DD). */
+function normWeekEnding(v: unknown): string {
+  return String(v ?? '')
+    .trim()
+    .slice(0, 10)
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ poId: string }> }
@@ -90,7 +97,7 @@ export async function GET(
       .eq('id', po.site_id)
       .single()
     const weekStartsOn = site?.week_starting_day ?? 1
-    weekEndings = getWeekEndingsForMonth(yearNum, monthNum, weekStartsOn)
+    weekEndings = getWeekEndingsForMonth(yearNum, monthNum, weekStartsOn).map(normWeekEnding)
   }
 
   const { data: timesheets } = await db
@@ -120,7 +127,8 @@ export async function GET(
     }, 0)
     if (totalHours > 0) {
       const uid = ts.user_id
-      const we = ts.week_ending
+      const we = normWeekEnding(ts.week_ending)
+      if (!we) continue
       weekSet.add(we)
       if (!hoursByUserWeek[uid]) hoursByUserWeek[uid] = {}
       if (!hoursByUserWeek[uid][we]) {
@@ -131,9 +139,9 @@ export async function GET(
   }
 
   if (!useAllWeeksInMonth) {
-    weekEndings = Array.from(weekSet).sort()
+    weekEndings = Array.from(weekSet).map(normWeekEnding).sort()
   } else {
-    weekEndings = [...new Set([...weekEndings, ...Array.from(weekSet)])].sort()
+    weekEndings = [...new Set([...weekEndings, ...Array.from(weekSet).map(normWeekEnding)])].sort()
   }
 
   const userIds = Object.keys(hoursByUserWeek)

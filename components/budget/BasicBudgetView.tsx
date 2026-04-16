@@ -406,8 +406,9 @@ export default function BasicBudgetView({
   const runningBalance = totalBudget - invoiceTotal
 
   const getEffectiveRate = (userId: string, dateStr: string) => {
+    const we = String(dateStr ?? '').slice(0, 10)
     const userRows = (billRatesRaw || []).filter((br: any) => br.user_id === userId)
-    return pickEffectiveRateForWeek(userRows, dateStr)
+    return pickEffectiveRateForWeek(userRows, we)
   }
 
   let laborCost = 0
