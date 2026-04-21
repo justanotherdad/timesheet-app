@@ -37,10 +37,42 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** Format hours for display: show "—" when 0, else "X.XX" */
+/**
+ * Format a numeric hour value: 2 decimal places by default; 3 when the thousandths digit is non-zero
+ * (avoids showing ".000" noise unless the value has real thousandths precision).
+ */
+export function formatHoursDigits(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return '0.00'
+  const rounded = Math.round(n * 1000) / 1000
+  const mills = Math.round(rounded * 1000)
+  const thirdDigit = ((mills % 10) + 10) % 10
+  if (thirdDigit !== 0) return rounded.toFixed(3)
+  return rounded.toFixed(2)
+}
+
+/** Format hours for UI tables: show "—" when 0, else smart 2–3 decimals (see formatHoursDigits). */
 export function formatHours(val: number | null | undefined): string {
   if (val == null || val === 0) return '—'
-  return val.toFixed(2)
+  const n = Number(val)
+  if (!Number.isFinite(n) || n === 0) return '—'
+  return formatHoursDigits(n)
+}
+
+/**
+ * Same decimal rules as formatHours but 0 renders as "0.00" (read-only detail, PDF/CSV exports).
+ */
+export function formatHoursAmount(val: number | null | undefined): string {
+  if (val == null || !Number.isFinite(Number(val))) return '0.00'
+  const n = Number(val)
+  if (n === 0) return '0.00'
+  return formatHoursDigits(n)
+}
+
+/** Clamp to [0, 24] and round to thousandths for timesheet day-hour inputs and saves. */
+export function normalizeTimesheetHours(val: number): number {
+  if (!Number.isFinite(val)) return 0
+  const clamped = Math.min(24, Math.max(0, val))
+  return Math.round(clamped * 1000) / 1000
 }
 
 export function getWeekEnding(date?: Date, weekStartsOn: number = 1): Date {

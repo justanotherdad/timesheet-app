@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import SearchableSelect from './SearchableSelect'
 import SystemInput from './SystemInput'
 import DeleteTimesheetButton from './DeleteTimesheetButton'
-import { getWeekDates, formatDate, formatDateShort, formatDateForInput, formatHours } from '@/lib/utils'
+import { getWeekDates, formatDate, formatDateShort, formatDateForInput, formatHours, normalizeTimesheetHours } from '@/lib/utils'
 import { format } from 'date-fns'
 import { Plus, Trash2, Edit2, X } from 'lucide-react'
 
@@ -351,13 +351,13 @@ export default function WeeklyTimesheetForm({
           system_name: e.system_name || null, // Custom system name (not in systems table)
           deliverable_id: e.deliverable_id || null,
           activity_id: e.activity_id || null,
-          mon_hours: e.mon_hours || 0,
-          tue_hours: e.tue_hours || 0,
-          wed_hours: e.wed_hours || 0,
-          thu_hours: e.thu_hours || 0,
-          fri_hours: e.fri_hours || 0,
-          sat_hours: e.sat_hours || 0,
-          sun_hours: e.sun_hours || 0,
+          mon_hours: normalizeTimesheetHours(Number(e.mon_hours) || 0),
+          tue_hours: normalizeTimesheetHours(Number(e.tue_hours) || 0),
+          wed_hours: normalizeTimesheetHours(Number(e.wed_hours) || 0),
+          thu_hours: normalizeTimesheetHours(Number(e.thu_hours) || 0),
+          fri_hours: normalizeTimesheetHours(Number(e.fri_hours) || 0),
+          sat_hours: normalizeTimesheetHours(Number(e.sat_hours) || 0),
+          sun_hours: normalizeTimesheetHours(Number(e.sun_hours) || 0),
         }))
 
       if (entriesToInsert.length > 0) {
@@ -373,13 +373,13 @@ export default function WeeklyTimesheetForm({
         timesheet_id: currentTimesheetId!,
         description: e.description,
         notes: (e.notes && e.notes.trim()) ? e.notes.trim() : null,
-        mon_hours: e.mon_hours || 0,
-        tue_hours: e.tue_hours || 0,
-        wed_hours: e.wed_hours || 0,
-        thu_hours: e.thu_hours || 0,
-        fri_hours: e.fri_hours || 0,
-        sat_hours: e.sat_hours || 0,
-        sun_hours: e.sun_hours || 0,
+        mon_hours: normalizeTimesheetHours(Number(e.mon_hours) || 0),
+        tue_hours: normalizeTimesheetHours(Number(e.tue_hours) || 0),
+        wed_hours: normalizeTimesheetHours(Number(e.wed_hours) || 0),
+        thu_hours: normalizeTimesheetHours(Number(e.thu_hours) || 0),
+        fri_hours: normalizeTimesheetHours(Number(e.fri_hours) || 0),
+        sat_hours: normalizeTimesheetHours(Number(e.sat_hours) || 0),
+        sun_hours: normalizeTimesheetHours(Number(e.sun_hours) || 0),
       }))
 
       const { error: unbillableError } = await supabase
@@ -416,7 +416,7 @@ export default function WeeklyTimesheetForm({
 
   const updateUnbillableEntry = (index: number, day: typeof days[number], value: number) => {
     const updated = [...unbillableEntries]
-    updated[index] = { ...updated[index], [`${day}_hours`]: value }
+    updated[index] = { ...updated[index], [`${day}_hours`]: normalizeTimesheetHours(value) }
     setUnbillableEntries(updated)
   }
 
@@ -792,13 +792,17 @@ export default function WeeklyTimesheetForm({
                       <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2">
                         <input
                           type="number"
-                          step="0.25"
+                          step="0.001"
                           min="0"
                           max="24"
                           value={entry[`${day}_hours`] || ''}
                           onChange={(e) => {
                             const parsed = e.target.valueAsNumber
-                            updateUnbillableEntry(entryIdx, day, isNaN(parsed) ? entry[`${day}_hours`] : parsed)
+                            updateUnbillableEntry(
+                              entryIdx,
+                              day,
+                              isNaN(parsed) ? entry[`${day}_hours`] : normalizeTimesheetHours(parsed)
+                            )
                           }}
                           className="w-full max-w-[3.25rem] min-w-[3rem] mx-auto px-1 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                         />
@@ -1069,13 +1073,18 @@ export default function WeeklyTimesheetForm({
                       </label>
                       <input
                         type="number"
-                        step="0.25"
+                        step="0.001"
                         min="0"
                         max="24"
                         value={editingEntry[`${day}_hours`] || ''}
                         onChange={(e) => {
                           const parsed = e.target.valueAsNumber
-                          setEditingEntry({ ...editingEntry, [`${day}_hours`]: isNaN(parsed) ? editingEntry[`${day}_hours`] : parsed })
+                          setEditingEntry({
+                            ...editingEntry,
+                            [`${day}_hours`]: isNaN(parsed)
+                              ? editingEntry[`${day}_hours`]
+                              : normalizeTimesheetHours(parsed),
+                          })
                         }}
                         className="w-full h-9 min-h-9 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-base focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white box-border"
                       />

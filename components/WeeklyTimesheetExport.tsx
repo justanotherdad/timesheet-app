@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { Download, Printer, Filter } from 'lucide-react'
-import { formatDate, formatDateShort, formatDateInEastern, getWeekDates } from '@/lib/utils'
+import { formatDate, formatDateShort, formatDateInEastern, formatHoursAmount, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 
 // SVG: Rotate phone to landscape (instructional icon - no external assets)
@@ -189,8 +189,8 @@ export default function WeeklyTimesheetExport({
               <td style="border:1px solid #000;padding:2px 3px;overflow:hidden;">${escapeHtml(e.system_name || e.systems?.name || '—')}</td>
               <td style="border:1px solid #000;padding:2px 3px;overflow:hidden;">${escapeHtml(e.deliverables?.name || '—')}</td>
               <td style="border:1px solid #000;padding:2px 3px;overflow:hidden;">${escapeHtml(e.activities?.name || '—')}</td>
-              ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${(e[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}
-              <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${calculateTotal(e).toFixed(2)}</td>
+              ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(Number(e[`${day}_hours`]) || 0)}</td>`).join('')}
+              <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${formatHoursAmount(calculateTotal(e))}</td>
             </tr>`).join('')}
             ${Array.from({ length: Math.max(0, 3 - entriesToUse.length) }).map(() => `<tr>
               ${[1,2,3,4,5,6].map(() => '<td style="border:1px solid #000;padding:2px 3px;"></td>').join('')}
@@ -199,8 +199,8 @@ export default function WeeklyTimesheetExport({
             </tr>`).join('')}
             <tr style="background-color:#FFFF99;font-weight:bold;">
               <td colspan="6" style="border:1px solid #000;padding:2px 3px;">Sub Totals</td>
-              ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${getBillableSubtotal(day, entriesToUse).toFixed(2)}</td>`).join('')}
-              <td style="border:1px solid #000;padding:2px 3px;text-align:right;">${getBillableGrandTotal(entriesToUse).toFixed(2)}</td>
+              ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(getBillableSubtotal(day, entriesToUse))}</td>`).join('')}
+              <td style="border:1px solid #000;padding:2px 3px;text-align:right;">${formatHoursAmount(getBillableGrandTotal(entriesToUse))}</td>
             </tr>
           </tbody>
         </table>
@@ -233,20 +233,20 @@ export default function WeeklyTimesheetExport({
               ${unbillableToUse.map((u: any) => `<tr>
                 <td style="border:1px solid #000;padding:2px 3px;font-weight:bold;">${escapeHtml(u.description)}</td>
                 <td style="border:1px solid #000;padding:2px 3px;">${escapeHtml(u.notes || '')}</td>
-                ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${(u[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}
-                <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${calculateTotal(u).toFixed(2)}</td>
+                ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(Number(u[`${day}_hours`]) || 0)}</td>`).join('')}
+                <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${formatHoursAmount(calculateTotal(u))}</td>
               </tr>`).join('')}
               <tr style="background-color:#FFFF99;font-weight:bold;">
                 <td colspan="2" style="border:1px solid #000;padding:2px 3px;">Sub Totals</td>
-                ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${getUnbillableSubtotal(day, unbillableToUse).toFixed(2)}</td>`).join('')}
-                <td style="border:1px solid #000;padding:2px 3px;text-align:right;">${getUnbillableGrandTotal(unbillableToUse).toFixed(2)}</td>
+                ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(getUnbillableSubtotal(day, unbillableToUse))}</td>`).join('')}
+                <td style="border:1px solid #000;padding:2px 3px;text-align:right;">${formatHoursAmount(getUnbillableGrandTotal(unbillableToUse))}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
         ${notesSection}
-        <div style="background-color:#90EE90;font-weight:bold;padding:5px;margin-top:5px;text-align:right;font-size:8.5pt;">GRAND TOTAL &nbsp; ${getGrandTotal(entriesToUse, unbillableToUse).toFixed(2)}</div>
+        <div style="background-color:#90EE90;font-weight:bold;padding:5px;margin-top:5px;text-align:right;font-size:8.5pt;">GRAND TOTAL &nbsp; ${formatHoursAmount(getGrandTotal(entriesToUse, unbillableToUse))}</div>
       </div>
     `
   }
@@ -604,11 +604,11 @@ export default function WeeklyTimesheetExport({
                 </td>
                 {days.map((day) => (
                   <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                    {(entry[`${day}_hours`] || 0).toFixed(2)}
+                    {formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}
                   </td>
                 ))}
                 <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', fontWeight: 'bold', color: '#000' }}>
-                  {calculateTotal(entry).toFixed(2)}
+                  {formatHoursAmount(calculateTotal(entry))}
                 </td>
               </tr>
             ))}
@@ -634,11 +634,11 @@ export default function WeeklyTimesheetExport({
               <td colSpan={6} style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>Sub Totals</td>
               {days.map((day) => (
                 <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                  {getBillableSubtotal(day).toFixed(2)}
+                  {formatHoursAmount(getBillableSubtotal(day))}
                 </td>
               ))}
               <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                {getBillableGrandTotal().toFixed(2)}
+                {formatHoursAmount(getBillableGrandTotal())}
               </td>
             </tr>
           </tbody>
@@ -735,11 +735,11 @@ export default function WeeklyTimesheetExport({
                   </td>
                   {days.map((day) => (
                     <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                      {(entry[`${day}_hours`] || 0).toFixed(2)}
+                      {formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}
                     </td>
                   ))}
                   <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', fontWeight: 'bold', color: '#000' }}>
-                    {calculateTotal(entry).toFixed(2)}
+                    {formatHoursAmount(calculateTotal(entry))}
                   </td>
                 </tr>
               ))}
@@ -749,11 +749,11 @@ export default function WeeklyTimesheetExport({
                 <td colSpan={2} style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>Sub Totals</td>
                 {days.map((day) => (
                   <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                    {getUnbillableSubtotal(day).toFixed(2)}
+                    {formatHoursAmount(getUnbillableSubtotal(day))}
                   </td>
                 ))}
                 <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                  {getUnbillableGrandTotal().toFixed(2)}
+                  {formatHoursAmount(getUnbillableGrandTotal())}
                 </td>
               </tr>
             </tbody>
@@ -773,7 +773,7 @@ export default function WeeklyTimesheetExport({
         {/* Grand Total */}
         <div className="grand-total-row" style={{ backgroundColor: '#90EE90', fontWeight: 'bold', padding: '10px', marginTop: '15px', textAlign: 'right', fontSize: '12pt', color: '#000' }}>
           <span style={{ marginRight: '20px', color: '#000' }}>GRAND TOTAL</span>
-          <span style={{ color: '#000' }}>{getGrandTotal().toFixed(2)}</span>
+          <span style={{ color: '#000' }}>{formatHoursAmount(getGrandTotal())}</span>
         </div>
           </div>
         </div>

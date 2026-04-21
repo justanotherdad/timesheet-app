@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { Download, FileText, FileSpreadsheet, File, ArrowUpDown, ArrowUp, ArrowDown, X, Filter } from 'lucide-react'
-import { formatWeekEnding, formatDate, formatDateShort, formatDateInEastern, getWeekDates } from '@/lib/utils'
+import { formatWeekEnding, formatDate, formatDateShort, formatDateInEastern, formatHoursAmount, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 
 interface Site { id: string; name: string }
@@ -375,8 +375,8 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                     <td style="border:1px solid #000;padding:2px 3px;overflow:hidden;">${escapeHtml(entry.deliverables?.name || '—')}</td>
                     <td style="border:1px solid #000;padding:2px 3px;overflow:hidden;">${escapeHtml(entry.activities?.name || '—')}</td>
                     ${days.map(day => `
-                      <td style="border:1px solid #000;padding:2px 1px;text-align:right;">${(entry[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}
-                    <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${calculateTotal(entry).toFixed(2)}</td>
+                      <td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}</td>`).join('')}
+                    <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${formatHoursAmount(calculateTotal(entry))}</td>
                   </tr>`).join('')}
                 ${Array.from({ length: Math.max(0, 3 - entries.length) }).map(() => `
                   <tr>
@@ -386,8 +386,8 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                   </tr>`).join('')}
                 <tr style="background-color:#FFFF99;font-weight:bold;">
                   <td colspan="6" style="border:1px solid #000;padding:2px 3px;">Sub Totals</td>
-                  ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${getBillableSubtotal(day).toFixed(2)}</td>`).join('')}
-                  <td style="border:1px solid #000;padding:2px 3px;text-align:right;">${getBillableGrandTotal().toFixed(2)}</td>
+                  ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(getBillableSubtotal(day))}</td>`).join('')}
+                  <td style="border:1px solid #000;padding:2px 3px;text-align:right;">${formatHoursAmount(getBillableGrandTotal())}</td>
                 </tr>
               </tbody>
             </table>
@@ -432,13 +432,13 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                     <tr>
                       <td style="border:1px solid #000;padding:2px 3px;font-weight:bold;">${entry.description}</td>
                       <td style="border:1px solid #000;padding:2px 3px;">${escapeHtml(entry.notes || '')}</td>
-                      ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${(entry[`${day}_hours`] || 0).toFixed(2)}</td>`).join('')}
-                      <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${calculateTotal(entry).toFixed(2)}</td>
+                      ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}</td>`).join('')}
+                      <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${formatHoursAmount(calculateTotal(entry))}</td>
                     </tr>`).join('')}
                   <tr style="background-color:#FFFF99;font-weight:bold;">
                     <td colspan="2" style="border:1px solid #000;padding:2px 3px;">Sub Totals</td>
-                    ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${getUnbillableSubtotal(day).toFixed(2)}</td>`).join('')}
-                    <td style="border:1px solid #000;padding:2px 3px;text-align:right;">${getUnbillableGrandTotal().toFixed(2)}</td>
+                    ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(getUnbillableSubtotal(day))}</td>`).join('')}
+                    <td style="border:1px solid #000;padding:2px 3px;text-align:right;">${formatHoursAmount(getUnbillableGrandTotal())}</td>
                   </tr>
                 </tbody>
               </table>
@@ -449,7 +449,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
             <!-- Grand Total -->
             <div style="background-color:#90EE90;font-weight:bold;padding:5px;margin-top:5px;text-align:right;font-size:8.5pt;">
               <span style="margin-right:16px;">GRAND TOTAL</span>
-              <span>${getGrandTotal().toFixed(2)}</span>
+              <span>${formatHoursAmount(getGrandTotal())}</span>
             </div>
           </div>
         `

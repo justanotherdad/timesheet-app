@@ -11,6 +11,7 @@ import {
   formatDateTimeInEastern,
   getCalendarDateStringInAppTimezone,
   formatDateShort,
+  formatHoursAmount,
 } from '@/lib/utils'
 import { format } from 'date-fns'
 import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
@@ -368,11 +369,11 @@ export default async function TimesheetDetailPage({
                           </td>
                           {days.map((day) => (
                             <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
-                              {(entry[`${day}_hours`] || 0).toFixed(2)}
+                              {formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}
                             </td>
                           ))}
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-right font-medium text-gray-900 dark:text-gray-100">
-                            {calculateTotal(entry).toFixed(2)}
+                            {formatHoursAmount(calculateTotal(entry))}
                           </td>
                         </tr>
                       ))}
@@ -380,18 +381,18 @@ export default async function TimesheetDetailPage({
                         <td colSpan={6} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">Sub Totals</td>
                         {days.map((day) => (
                           <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
-                            {(entries?.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0) || 0).toFixed(2)}
+                            {formatHoursAmount(entries?.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0) || 0)}
                           </td>
                         ))}
                         <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-right font-medium text-gray-900 dark:text-gray-100">
-                          {billableTotal.toFixed(2)}
+                          {formatHoursAmount(billableTotal)}
                         </td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                  Billable Total: {billableTotal.toFixed(2)} hours
+                  Billable Total: {formatHoursAmount(billableTotal)} hours
                   {entries.length > 6 && (
                     <a href="#unbillable-section" className="ml-3 text-blue-600 dark:text-blue-400 hover:underline text-sm">
                       ↓ Jump to Unbillable Time
@@ -456,18 +457,18 @@ export default async function TimesheetDetailPage({
                             </td>
                             {days.map((day) => (
                               <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-sm text-right tabular-nums text-gray-900 dark:text-gray-100">
-                                {(entry[`${day}_hours`] || 0).toFixed(2)}
+                                {formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}
                               </td>
                             ))}
                             <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-sm text-right tabular-nums font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
-                              {calculateTotal(entry).toFixed(2)}
+                              {formatHoursAmount(calculateTotal(entry))}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Unbillable Total: {displayUnbillableTotal.toFixed(2)} hours</p>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Unbillable Total: {formatHoursAmount(displayUnbillableTotal)} hours</p>
                 </div>
               )
             })()}
@@ -476,7 +477,7 @@ export default async function TimesheetDetailPage({
             <div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-lg mb-6">
               <div className="flex justify-between items-center">
                 <span className="text-lg font-bold text-gray-900 dark:text-gray-100">GRAND TOTAL</span>
-                <span className="text-lg font-bold text-gray-900 dark:text-gray-100">{(billableTotal + unbillableTotal).toFixed(2)} hours</span>
+                <span className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatHoursAmount(billableTotal + unbillableTotal)} hours</span>
               </div>
             </div>
 
