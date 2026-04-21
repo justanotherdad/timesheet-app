@@ -16,12 +16,23 @@ function getSafeReturnTo(request: Request, formData: FormData): string {
     : '/dashboard/approvals'
 }
 
+function wantsJsonResponse(request: Request): boolean {
+  return (request.headers.get('accept') || '').includes('application/json')
+}
+
+function approvalSuccess(request: Request, formData: FormData, wantsJson: boolean) {
+  const path = getSafeReturnTo(request, formData)
+  if (wantsJson) return NextResponse.json({ ok: true as const, returnTo: path })
+  return NextResponse.redirect(new URL(path, request.url))
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const formData = await request.formData()
+    const wantsJson = wantsJsonResponse(request)
     const user = await requireRole(APPROVAL_PARTICIPANT_ROLES)
     const adminSupabase = createAdminClient()
     const { id } = await params
@@ -60,7 +71,7 @@ export async function POST(
 
     // If delegator has already signed (or user acting as self), treat as success (idempotent)
     if (signedIds.includes(user.id)) {
-      return NextResponse.redirect(new URL(getSafeReturnTo(request, formData), request.url))
+      return approvalSuccess(request, formData, wantsJson)
     }
 
     // Next approver is first in chain who hasn't signed; admins can always approve (treated as final)
@@ -136,7 +147,7 @@ export async function POST(
     if (signatureError) {
       if (signatureError.code === '23505' || signatureError.message?.includes('duplicate key')) {
         // Already signed (e.g. auto-approve ran, or double-click) - redirect as success
-        return NextResponse.redirect(new URL(getSafeReturnTo(request, formData), request.url))
+        return approvalSuccess(request, formData, wantsJson)
       }
       return NextResponse.json({ error: signatureError.message }, { status: 500 })
     }
@@ -163,7 +174,7 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    return NextResponse.redirect(new URL(getSafeReturnTo(request, formData), request.url))
+    return approvalSuccess(request, formData, wantsJson)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

@@ -20,6 +20,7 @@ import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
 import { parseConfirmationAssigneeIds, loadCompanySettingsMap } from '@/lib/timesheet-confirmation'
 import Header from '@/components/Header'
+import ApproveTimesheetButton from '@/components/approvals/ApproveTimesheetButton'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
 
@@ -554,15 +555,16 @@ export default async function TimesheetDetailPage({
               )}
               {timesheet.status === 'submitted' && canShowApproverActions && (
                 <>
-                  <form action={`/dashboard/approvals/${timesheet.id}/approve`} method="post" className="inline">
-                    <button
-                      type="submit"
-                      className="min-h-[44px] sm:min-h-0 bg-green-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
-                    >
+                  <ApproveTimesheetButton
+                    timesheetId={timesheet.id}
+                    returnTo="/dashboard/approvals"
+                    className="min-h-[44px] sm:min-h-0 bg-green-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <>
                       <CheckCircle className="h-4 w-4 shrink-0" />
                       Approve
-                    </button>
-                  </form>
+                    </>
+                  </ApproveTimesheetButton>
                   <Link
                     href={`/dashboard/approvals/${timesheet.id}/reject-form`}
                     className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 gap-2 bg-red-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-red-700 transition-colors"

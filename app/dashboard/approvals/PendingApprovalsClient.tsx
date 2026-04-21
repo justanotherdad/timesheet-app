@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { formatWeekEnding } from '@/lib/utils'
+import ApproveTimesheetButton from '@/components/approvals/ApproveTimesheetButton'
 import { CheckCircle, Clock, X } from 'lucide-react'
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
@@ -25,6 +26,8 @@ export default function PendingApprovalsClient({
   const router = useRouter()
   const searchParams = useSearchParams()
   const [selectedTimesheet, setSelectedTimesheet] = useState<any>(null)
+
+  const approvalsReturnTo = `/dashboard/approvals${searchParams.toString() ? '?' + searchParams.toString() : ''}`
 
   const buildUrl = (updates: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -179,15 +182,11 @@ export default function PendingApprovalsClient({
                     </td>
                     <td className="px-3 lg:px-6 py-3 text-sm font-medium">
                       <div className="flex flex-wrap gap-2">
-                        <form action={`/dashboard/approvals/${ts.id}/approve`} method="post" className="inline">
-                          <input type="hidden" name="returnTo" value={`/dashboard/approvals${searchParams.toString() ? '?' + searchParams.toString() : ''}`} />
-                          <button
-                            type="submit"
-                            className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
-                          >
-                            Approve
-                          </button>
-                        </form>
+                        <ApproveTimesheetButton
+                          timesheetId={ts.id}
+                          returnTo={approvalsReturnTo}
+                          className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
+                        />
                         <Link
                           href={`/dashboard/approvals/${ts.id}/reject-form`}
                           className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
@@ -273,15 +272,12 @@ export default function PendingApprovalsClient({
                 <p className="font-medium text-gray-900 dark:text-gray-100">{currentUserName}</p>
               </div>
               <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2">
-                <form action={`/dashboard/approvals/${selectedTimesheet.id}/approve`} method="post" className="inline">
-                  <input type="hidden" name="returnTo" value={`/dashboard/approvals${searchParams.toString() ? '?' + searchParams.toString() : ''}`} />
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700"
-                  >
-                    Approve
-                  </button>
-                </form>
+                <ApproveTimesheetButton
+                  timesheetId={selectedTimesheet.id}
+                  returnTo={approvalsReturnTo}
+                  onAfterSuccess={() => setSelectedTimesheet(null)}
+                  className="px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700"
+                />
                 <Link
                   href={`/dashboard/approvals/${selectedTimesheet.id}/reject-form`}
                   className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700"
