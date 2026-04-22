@@ -901,7 +901,11 @@ export default function WeeklyTimesheetForm({
               status={currentStatus}
               variant="button"
               onDeleted={() => {
-                window.location.href = '/dashboard/timesheets'
+                // Client-side navigation preserves the applied theme (dark/light
+                // class on <html>). A full window.location reload can flash to
+                // light mode before ThemeScript re-reads localStorage.
+                router.push('/dashboard/timesheets')
+                router.refresh()
               }}
             />
           )}

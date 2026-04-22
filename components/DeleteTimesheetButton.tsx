@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Trash2 } from 'lucide-react'
 import { deleteTimesheet } from '@/app/actions/delete-timesheet'
 
@@ -13,6 +14,7 @@ interface DeleteTimesheetButtonProps {
 }
 
 export default function DeleteTimesheetButton({ timesheetId, status, userRole, onDeleted, variant = 'link' }: DeleteTimesheetButtonProps) {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -26,14 +28,19 @@ export default function DeleteTimesheetButton({ timesheetId, status, userRole, o
 
     try {
       const result = await deleteTimesheet(timesheetId)
-      
+
       if (result.error) {
         setError(result.error)
       } else {
         if (onDeleted) {
           onDeleted()
         } else {
-          window.location.href = '/dashboard/timesheets'
+          // Client-side navigation keeps React state (including the current theme
+          // applied to <html>) intact. Using window.location.href would trigger a
+          // full reload and can cause a visible light-mode flash before the inline
+          // ThemeScript re-applies the saved preference.
+          router.push('/dashboard/timesheets')
+          router.refresh()
         }
       }
     } catch (err: any) {
