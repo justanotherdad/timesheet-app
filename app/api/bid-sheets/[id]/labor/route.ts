@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
+import { ensureLaborBillRate } from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,22 +55,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (sheet?.status === 'converted' && sheet.converted_po_id) {
       try {
         const admin = createAdminClient()
-        const poId = sheet.converted_po_id
-        const { data: existing } = await admin
-          .from('po_bill_rates')
-          .select('id')
-          .eq('po_id', poId)
-          .eq('user_id', data.user_id)
-          .limit(1)
-          .maybeSingle()
-        if (!existing) {
-          await admin.from('po_bill_rates').insert({
-            po_id: poId,
-            user_id: data.user_id,
-            rate: data.bid_rate,
-            effective_from_date: new Date().toISOString().slice(0, 10),
-          })
-        }
+        await ensureLaborBillRate(
+          admin,
+          sheet.converted_po_id,
+          data.user_id,
+          Number(data.bid_rate) || 0,
+          new Date().toISOString().slice(0, 10)
+        )
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to sync labor rate to project'
         return NextResponse.json({ error: msg }, { status: 500 })
@@ -111,6 +103,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  if (data?.user_id) {
+    const { data: sheet } = await supabase.from('bid_sheets').select('status, converted_po_id').eq('id', id).single()
+    if (sheet?.status === 'converted' && sheet.converted_po_id) {
+      try {
+        const admin = createAdminClient()
+        await ensureLaborBillRate(
+          admin,
+          sheet.converted_po_id,
+          data.user_id,
+          Number(data.bid_rate) || 0,
+          new Date().toISOString().slice(0, 10)
+        )
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to sync labor rate to project'
+        return NextResponse.json({ error: msg }, { status: 500 })
+      }
+    }
+  }
+
   return NextResponse.json(data)
 }
 

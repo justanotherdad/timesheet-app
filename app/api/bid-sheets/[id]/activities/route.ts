@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
-import { deleteBidSheetItemFromProject, type BidSheetItemRow } from '@/lib/syncBidSheetToProject'
+import {
+  deleteBidSheetItemFromProject,
+  renameActivityForProject,
+  type BidSheetItemRow,
+} from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,6 +80,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
   }
 
+  const { data: before } = await supabase
+    .from('bid_sheet_activities')
+    .select('name')
+    .eq('id', activity_id)
+    .eq('bid_sheet_id', id)
+    .maybeSingle()
+
   const { data, error } = await supabase
     .from('bid_sheet_activities')
     .update(updates)
@@ -85,6 +96,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  if (before) {
+    const { data: sheet } = await supabase
+      .from('bid_sheets')
+      .select('status, converted_po_id, site_id')
+      .eq('id', id)
+      .single()
+    if (sheet?.status === 'converted' && sheet.converted_po_id && sheet.site_id) {
+      try {
+        const admin = createAdminClient()
+        await renameActivityForProject(
+          admin,
+          sheet.site_id,
+          sheet.converted_po_id,
+          before.name,
+          data.name
+        )
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to sync activity rename to project budget'
+        return NextResponse.json({ error: msg }, { status: 500 })
+      }
+    }
+  }
+
   return NextResponse.json(data)
 }
 

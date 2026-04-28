@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { decodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
+import { composeIndirectExpenseNotes } from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
@@ -233,7 +234,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       amount: amt,
       expense_date: today,
       custom_type_name: title,
-      notes: `Imported from bid sheet indirect (${row.category})`,
+      notes: composeIndirectExpenseNotes(row.category),
       created_by: user.id,
     })
     if (expErr) {
@@ -242,20 +243,39 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  const { error: accessErr } = await adminSupabase.from('po_budget_access').insert({
-    user_id: user.id,
-    purchase_order_id: po.id,
-  })
-  if (accessErr && accessErr.code !== '23505') {
-    console.error('convert: po_budget_access insert failed', accessErr)
+  // Grant budget access to everyone who already had access to the bid sheet:
+  // the converter, the bid sheet creator, and anyone with an explicit
+  // bid_sheet_access grant. Without this, a non-admin who creates and converts
+  // their own bid sheet (or is a teammate listed on Access) loses sight of the
+  // resulting PO budget because po_budget_access is the only thing that gates
+  // /dashboard/budget for non-admins.
+  const accessUserIds = new Set<string>([user.id])
+  if (sheet.created_by) accessUserIds.add(sheet.created_by as string)
+
+  const { data: bidSheetAccessRows } = await adminSupabase
+    .from('bid_sheet_access')
+    .select('user_id')
+    .eq('bid_sheet_id', id)
+  for (const r of bidSheetAccessRows || []) {
+    if (r.user_id) accessUserIds.add(r.user_id as string)
   }
 
-  const { error: upoErr } = await adminSupabase.from('user_purchase_orders').insert({
-    user_id: user.id,
-    purchase_order_id: po.id,
-  })
-  if (upoErr && upoErr.code !== '23505') {
-    console.warn('convert: user_purchase_orders insert skipped', upoErr.message)
+  for (const accessUserId of accessUserIds) {
+    const { error: accessErr } = await adminSupabase.from('po_budget_access').insert({
+      user_id: accessUserId,
+      purchase_order_id: po.id,
+    })
+    if (accessErr && accessErr.code !== '23505') {
+      console.error('convert: po_budget_access insert failed', { accessUserId, error: accessErr })
+    }
+
+    const { error: upoErr } = await adminSupabase.from('user_purchase_orders').insert({
+      user_id: accessUserId,
+      purchase_order_id: po.id,
+    })
+    if (upoErr && upoErr.code !== '23505') {
+      console.warn('convert: user_purchase_orders insert skipped', { accessUserId, message: upoErr.message })
+    }
   }
 
   await adminSupabase.from('bid_sheets').update({ status: 'converted', converted_po_id: po.id }).eq('id', id)

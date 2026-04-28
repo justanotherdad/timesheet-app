@@ -207,3 +207,221 @@ export async function deleteBidSheetItemFromProject(
     .eq('deliverable_id', deliverableId)
     .eq('activity_id', activityId)
 }
+
+/**
+ * Migrate project_details rows for a converted bid sheet's PO when a bid sheet
+ * system is renamed (or its code changed). Finds the original `systems` row by
+ * the prior name/code, looks up or creates a new `systems` row matching the
+ * updated name/code at the same site, and re-points project_details + the
+ * `system_purchase_orders` junction to the new system. The old system row is
+ * left alone (it may still be in use elsewhere).
+ */
+export async function renameSystemForProject(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  oldName: string,
+  oldCode: string | null,
+  newName: string,
+  newCode: string | null
+): Promise<void> {
+  if (oldName === newName && (oldCode || null) === (newCode || null)) return
+
+  const oldSystemId = await findSystemId(admin, siteId, oldName, oldCode)
+  if (!oldSystemId) return
+
+  const newSystemId = await findOrCreateSystem(admin, siteId, newName, newCode)
+  if (newSystemId === oldSystemId) return
+
+  await admin
+    .from('project_details')
+    .update({ system_id: newSystemId })
+    .eq('po_id', poId)
+    .eq('system_id', oldSystemId)
+
+  await ensurePoLink(admin, 'system_purchase_orders', 'system_id', newSystemId, poId)
+
+  const { count: remaining } = await admin
+    .from('project_details')
+    .select('id', { count: 'exact', head: true })
+    .eq('po_id', poId)
+    .eq('system_id', oldSystemId)
+  if (!remaining || remaining === 0) {
+    await admin
+      .from('system_purchase_orders')
+      .delete()
+      .eq('purchase_order_id', poId)
+      .eq('system_id', oldSystemId)
+  }
+}
+
+/** Same as renameSystemForProject but for deliverables (no code column). */
+export async function renameDeliverableForProject(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  oldName: string,
+  newName: string
+): Promise<void> {
+  if (oldName === newName) return
+
+  const oldId = await findDeliverableId(admin, siteId, oldName)
+  if (!oldId) return
+
+  const newId = await findOrCreateDeliverable(admin, siteId, newName)
+  if (newId === oldId) return
+
+  await admin
+    .from('project_details')
+    .update({ deliverable_id: newId })
+    .eq('po_id', poId)
+    .eq('deliverable_id', oldId)
+
+  await ensurePoLink(admin, 'deliverable_purchase_orders', 'deliverable_id', newId, poId)
+
+  const { count: remaining } = await admin
+    .from('project_details')
+    .select('id', { count: 'exact', head: true })
+    .eq('po_id', poId)
+    .eq('deliverable_id', oldId)
+  if (!remaining || remaining === 0) {
+    await admin
+      .from('deliverable_purchase_orders')
+      .delete()
+      .eq('purchase_order_id', poId)
+      .eq('deliverable_id', oldId)
+  }
+}
+
+/** Same as renameSystemForProject but for activities. */
+export async function renameActivityForProject(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  oldName: string,
+  newName: string
+): Promise<void> {
+  if (oldName === newName) return
+
+  const oldId = await findActivityId(admin, siteId, oldName)
+  if (!oldId) return
+
+  const newId = await findOrCreateActivity(admin, siteId, newName)
+  if (newId === oldId) return
+
+  await admin
+    .from('project_details')
+    .update({ activity_id: newId })
+    .eq('po_id', poId)
+    .eq('activity_id', oldId)
+
+  await ensurePoLink(admin, 'activity_purchase_orders', 'activity_id', newId, poId)
+
+  const { count: remaining } = await admin
+    .from('project_details')
+    .select('id', { count: 'exact', head: true })
+    .eq('po_id', poId)
+    .eq('activity_id', oldId)
+  if (!remaining || remaining === 0) {
+    await admin
+      .from('activity_purchase_orders')
+      .delete()
+      .eq('purchase_order_id', poId)
+      .eq('activity_id', oldId)
+  }
+}
+
+/**
+ * Stable marker stored inside `po_expenses.notes` so we can find the row
+ * later when a bid sheet's indirect-labor row is edited or deleted. The
+ * marker survives user edits as long as they leave it intact; edits that
+ * remove it will simply orphan the link (manual cleanup needed).
+ */
+export function indirectExpenseMarker(category: string): string {
+  return `[bs-indirect:${category}]`
+}
+
+export function composeIndirectExpenseNotes(category: string): string {
+  return `${indirectExpenseMarker(category)} Imported from bid sheet indirect (${category})`
+}
+
+/** Insert or update the po_expense row that mirrors a bid sheet indirect-labor line. */
+export async function upsertIndirectExpenseForProject(
+  admin: SupabaseClient,
+  poId: string,
+  category: string,
+  amount: number,
+  title: string,
+  expenseDate: string,
+  createdBy: string
+): Promise<void> {
+  const marker = indirectExpenseMarker(category)
+  const { data: existing } = await admin
+    .from('po_expenses')
+    .select('id')
+    .eq('po_id', poId)
+    .like('notes', `%${marker}%`)
+    .limit(1)
+    .maybeSingle()
+
+  const payload = {
+    po_id: poId,
+    amount,
+    expense_date: expenseDate,
+    custom_type_name: title,
+    notes: composeIndirectExpenseNotes(category),
+  }
+
+  if (existing?.id) {
+    const { error } = await admin.from('po_expenses').update(payload).eq('id', existing.id)
+    if (error) throw new Error(error.message)
+    return
+  }
+
+  const { error } = await admin
+    .from('po_expenses')
+    .insert({ ...payload, created_by: createdBy })
+  if (error) throw new Error(error.message)
+}
+
+/** Delete the linked po_expense row for a bid sheet indirect-labor category, if present. */
+export async function deleteIndirectExpenseForProject(
+  admin: SupabaseClient,
+  poId: string,
+  category: string
+): Promise<void> {
+  const marker = indirectExpenseMarker(category)
+  await admin
+    .from('po_expenses')
+    .delete()
+    .eq('po_id', poId)
+    .like('notes', `%${marker}%`)
+}
+
+/**
+ * Make sure `po_bill_rates` has an entry for `userId` on this PO. Mirrors the
+ * convert flow: only insert when no row exists yet so we don't overwrite the
+ * rate history a manager may have curated on the project budget.
+ */
+export async function ensureLaborBillRate(
+  admin: SupabaseClient,
+  poId: string,
+  userId: string,
+  rate: number,
+  effectiveDate: string
+): Promise<void> {
+  const { data: existing } = await admin
+    .from('po_bill_rates')
+    .select('id')
+    .eq('po_id', poId)
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle()
+  if (existing) return
+  await admin.from('po_bill_rates').insert({
+    po_id: poId,
+    user_id: userId,
+    rate,
+    effective_from_date: effectiveDate,
+  })
+}

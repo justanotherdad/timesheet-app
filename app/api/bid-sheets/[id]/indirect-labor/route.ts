@@ -1,10 +1,34 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
+import { decodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
+import {
+  deleteIndirectExpenseForProject,
+  upsertIndirectExpenseForProject,
+} from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
 const CATEGORIES = ['project_management', 'document_coordinator', 'project_controls', 'travel_living_project', 'travel_living_fat', 'additional_indirect'] as const
+
+const PRESET_INDIRECT_LABEL: Record<string, string> = {
+  project_management: 'Indirect — Project Management',
+  document_coordinator: 'Indirect — Document Coordinator',
+  project_controls: 'Indirect — Project Controls',
+  travel_living_project: 'Indirect — Travel & Living (Project by Person)',
+  travel_living_fat: 'Indirect — Travel & Living (FAT)',
+  additional_indirect: 'Indirect — Additional Indirect Costs',
+}
+
+function indirectExpenseTitle(category: string, notes: string | null | undefined): string {
+  if (category.startsWith('custom_')) {
+    const meta = decodeIndirectNotes(notes)
+    const name = meta.label?.trim()
+    return name ? `Indirect — ${name}` : 'Indirect — Additional line'
+  }
+  return PRESET_INDIRECT_LABEL[category] || `Indirect — ${category}`
+}
 
 async function canAccess(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, role: string, bidSheetId: string): Promise<boolean> {
   if (role === 'admin' || role === 'super_admin') return true
@@ -55,6 +79,43 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const { data: sheet } = await supabase
+    .from('bid_sheets')
+    .select('status, converted_po_id')
+    .eq('id', id)
+    .single()
+
+  if (sheet?.status === 'converted' && sheet.converted_po_id && data) {
+    try {
+      const admin = createAdminClient()
+      const amt = indirectLineDollarTotal(
+        Number(data.hours) || 0,
+        Number(data.rate) || 0,
+        data.category,
+        data.notes
+      )
+      if (amt > 0) {
+        await upsertIndirectExpenseForProject(
+          admin,
+          sheet.converted_po_id,
+          data.category,
+          amt,
+          indirectExpenseTitle(data.category, data.notes),
+          new Date().toISOString().slice(0, 10),
+          user.id
+        )
+      } else {
+        // Zeroed-out indirect line: remove the linked po_expense so the project
+        // budget doesn't keep a stale dollar amount around.
+        await deleteIndirectExpenseForProject(admin, sheet.converted_po_id, data.category)
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to sync indirect cost to project budget'
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  }
+
   return NextResponse.json(data)
 }
 
@@ -74,6 +135,15 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const indirectId = searchParams.get('id')
   if (!indirectId) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
+  // Look up the row first so we know which category's po_expense to remove
+  // when the bid sheet has already been converted to a project budget.
+  const { data: rowBefore } = await supabase
+    .from('bid_sheet_indirect_labor')
+    .select('category')
+    .eq('id', indirectId)
+    .eq('bid_sheet_id', id)
+    .maybeSingle()
+
   const { error } = await supabase
     .from('bid_sheet_indirect_labor')
     .delete()
@@ -81,5 +151,23 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     .eq('bid_sheet_id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  if (rowBefore?.category) {
+    const { data: sheet } = await supabase
+      .from('bid_sheets')
+      .select('status, converted_po_id')
+      .eq('id', id)
+      .single()
+    if (sheet?.status === 'converted' && sheet.converted_po_id) {
+      try {
+        const admin = createAdminClient()
+        await deleteIndirectExpenseForProject(admin, sheet.converted_po_id, rowBefore.category)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to remove indirect cost from project budget'
+        return NextResponse.json({ error: msg }, { status: 500 })
+      }
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }

@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
-import { deleteBidSheetItemFromProject, type BidSheetItemRow } from '@/lib/syncBidSheetToProject'
+import {
+  deleteBidSheetItemFromProject,
+  renameSystemForProject,
+  type BidSheetItemRow,
+} from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,6 +88,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
   }
 
+  // Capture the old name/code so we can migrate project_details if the bid
+  // sheet has already been converted (rename/code edits would otherwise leave
+  // the converted PO pointing at the old system).
+  const { data: before } = await supabase
+    .from('bid_sheet_systems')
+    .select('name, code')
+    .eq('id', system_id)
+    .eq('bid_sheet_id', id)
+    .maybeSingle()
+
   const { data, error } = await supabase
     .from('bid_sheet_systems')
     .update(updates)
@@ -93,6 +107,32 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  if (before) {
+    const { data: sheet } = await supabase
+      .from('bid_sheets')
+      .select('status, converted_po_id, site_id')
+      .eq('id', id)
+      .single()
+    if (sheet?.status === 'converted' && sheet.converted_po_id && sheet.site_id) {
+      try {
+        const admin = createAdminClient()
+        await renameSystemForProject(
+          admin,
+          sheet.site_id,
+          sheet.converted_po_id,
+          before.name,
+          before.code ?? null,
+          data.name,
+          data.code ?? null
+        )
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to sync system rename to project budget'
+        return NextResponse.json({ error: msg }, { status: 500 })
+      }
+    }
+  }
+
   return NextResponse.json(data)
 }
 

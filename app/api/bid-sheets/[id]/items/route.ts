@@ -105,10 +105,34 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .update({ budgeted_hours: Number(budgeted_hours) ?? 0 })
     .eq('id', item_id)
     .eq('bid_sheet_id', id)
-    .select()
+    .select(
+      `
+      *,
+      bid_sheet_systems (id, name, code),
+      bid_sheet_deliverables (id, name),
+      bid_sheet_activities (id, name)
+    `
+    )
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const { data: sheet } = await supabase
+    .from('bid_sheets')
+    .select('status, converted_po_id, site_id')
+    .eq('id', id)
+    .single()
+
+  if (sheet?.status === 'converted' && sheet.converted_po_id && sheet.site_id && data) {
+    try {
+      const admin = createAdminClient()
+      await syncBidSheetItemToProject(admin, sheet.site_id, sheet.converted_po_id, data as BidSheetItemRow)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to sync to project budget'
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  }
+
   return NextResponse.json(data)
 }
 
