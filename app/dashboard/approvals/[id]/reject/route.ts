@@ -61,6 +61,23 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
+    const baseUrl = new URL(request.url).origin
+
+    // Idempotent short-circuit: a double-submitted reject form (e.g. user clicks
+    // the button twice, browser auto-retry) used to fail on the second POST with
+    // "Timesheet must be submitted or approved to reject" and never redirected,
+    // which also meant the email-draft popup never opened. If the timesheet is
+    // already in the 'rejected' state we treat the request as a no-op success
+    // and head straight to the rejected page so the mailto handler still fires.
+    if (timesheet.status === 'rejected') {
+      const queryParams = new URLSearchParams({
+        email: ownerProfile?.email || '',
+        reason: timesheet.rejection_reason || '',
+        week_ending: timesheet.week_ending || '',
+      })
+      return NextResponse.redirect(new URL(`/dashboard/approvals/rejected?${queryParams.toString()}`, baseUrl))
+    }
+
     if (!['submitted', 'approved'].includes(timesheet.status)) {
       return NextResponse.json({ error: 'Timesheet must be submitted or approved to reject' }, { status: 400 })
     }
@@ -104,8 +121,7 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    // Redirect to rejected page which opens default email client with pre-filled draft which opens default email client with pre-filled draft
-    const baseUrl = new URL(request.url).origin
+    // Redirect to rejected page which opens default email client with pre-filled draft
     const queryParams = new URLSearchParams({
       email: ownerProfile?.email || '',
       reason: rejectionReason,

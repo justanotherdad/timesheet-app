@@ -9,7 +9,7 @@ import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 import { formatWeekEnding } from '@/lib/utils'
-import Link from 'next/link'
+import RejectTimesheetForm from './RejectTimesheetForm'
 
 export const maxDuration = 10
 
@@ -105,35 +105,7 @@ export default async function RejectTimesheetPage({
               ? 'This will revert the timesheet to editable status. The employee will see your note and must edit and resubmit, then it will go through the full approval workflow again (Supervisor → Manager → Final Approver).'
               : 'Add a note for the employee describing the necessary change. They will see this when they open the timesheet.'}
           </p>
-          <form action={`/dashboard/approvals/${id}/reject`} method="post" className="space-y-4">
-            <div>
-              <label htmlFor="reason" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Note for employee (required change)
-              </label>
-              <textarea
-                id="reason"
-                name="reason"
-                rows={4}
-                required
-                placeholder="e.g. Please correct Monday hours for Project X to 8.0"
-                className="w-full px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 min-h-[120px]"
-              />
-            </div>
-            <div className="flex flex-col-reverse sm:flex-row gap-2">
-              <Link
-                href="/dashboard/approvals"
-                className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2.5 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-              >
-                Cancel
-              </Link>
-              <button
-                type="submit"
-                className="min-h-[44px] sm:min-h-0 bg-red-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-red-700 transition-colors"
-              >
-                Reject Timesheet
-              </button>
-            </div>
-          </form>
+          <RejectTimesheetForm timesheetId={id} />
         </div>
       </div>
     </div>
