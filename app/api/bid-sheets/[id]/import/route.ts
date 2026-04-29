@@ -121,25 +121,45 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return ''
   }
 
-  const toInsert: Array<{ bid_sheet_id: string; bid_sheet_system_id: string; bid_sheet_deliverable_id: string; bid_sheet_activity_id: string; budgeted_hours: number }> = []
+  // Collapse duplicate cells before upserting. The matrix cell key is
+  // (bid_sheet_id, system, deliverable, activity) and Postgres aborts a bulk
+  // INSERT…ON CONFLICT DO UPDATE with "cannot affect row a second time" when
+  // the same key appears more than once in a single statement. CSVs exported
+  // from Excel often repeat the same combo (e.g. one (system, deliverable,
+  // activity) listed in multiple groups). When that happens we sum the
+  // budgeted hours so the imported total still matches the source file.
+  const cellMap = new Map<
+    string,
+    { bid_sheet_id: string; bid_sheet_system_id: string; bid_sheet_deliverable_id: string; bid_sheet_activity_id: string; budgeted_hours: number }
+  >()
   const skipped: string[] = []
+  let mergedDuplicates = 0
 
   for (const r of rows) {
     const sysId = await findOrCreateSystem(r.system || r.systemNumber, r.systemNumber)
     const delId = await findOrCreateDeliverable(r.deliverable)
     const actId = await findOrCreateActivity(r.activity)
-    if (sysId && delId && actId) {
-      toInsert.push({
+    if (!sysId || !delId || !actId) {
+      skipped.push(`${r.system || r.systemNumber}/${r.deliverable}/${r.activity}`)
+      continue
+    }
+    const cellKey = `${sysId}|${delId}|${actId}`
+    const existing = cellMap.get(cellKey)
+    if (existing) {
+      existing.budgeted_hours += Number(r.hours) || 0
+      mergedDuplicates += 1
+    } else {
+      cellMap.set(cellKey, {
         bid_sheet_id: id,
         bid_sheet_system_id: sysId,
         bid_sheet_deliverable_id: delId,
         bid_sheet_activity_id: actId,
-        budgeted_hours: r.hours,
+        budgeted_hours: Number(r.hours) || 0,
       })
-    } else {
-      skipped.push(`${r.system || r.systemNumber}/${r.deliverable}/${r.activity}`)
     }
   }
+
+  const toInsert = [...cellMap.values()]
 
   if (toInsert.length > 0) {
     const { error } = await db.from('bid_sheet_items').upsert(toInsert, {
@@ -171,5 +191,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  return NextResponse.json({ inserted: toInsert.length, skipped: skipped.length, skippedRows: skipped })
+  return NextResponse.json({
+    inserted: toInsert.length,
+    skipped: skipped.length,
+    skippedRows: skipped,
+    merged: mergedDuplicates,
+  })
 }

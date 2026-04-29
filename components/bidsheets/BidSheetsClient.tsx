@@ -93,7 +93,12 @@ export default function BidSheetsClient({
         name: createMode === 'import' ? importName : createName,
         description: createDescription || null,
       }
-      if (createMode === 'clone' && cloneFromId) body.clone_from_id = cloneFromId
+      // Both the dedicated "Clone from existing" mode and the optional
+      // "Copy from existing bid sheet" picker on the regular Create modal
+      // route through clone_from_id; the server validates access for both.
+      if ((createMode === 'clone' || createMode === 'new') && cloneFromId) {
+        body.clone_from_id = cloneFromId
+      }
 
       const res = await fetch('/api/bid-sheets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const data = await res.json()
@@ -468,6 +473,24 @@ export default function BidSheetsClient({
                       placeholder="Optional"
                       className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Copy from existing bid sheet (optional)</label>
+                    <select
+                      value={cloneFromId}
+                      onChange={(e) => setCloneFromId(e.target.value)}
+                      className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+                    >
+                      <option value="">-- Start blank --</option>
+                      {sheets.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.sites?.name}){s.status === 'converted' ? ' — converted' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Pick a bid sheet you have access to. Its systems, deliverables, activities, labor rates, indirect costs, and matrix cells will be copied into the new sheet. You can edit everything afterwards.
+                    </p>
                   </div>
                 </>
               )}

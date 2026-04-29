@@ -48,6 +48,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'site_id and name are required' }, { status: 400 })
   }
 
+  // Verify the caller is actually allowed to read clone_from_id before we
+  // copy any of its rows into the new sheet. Admins can clone any sheet;
+  // everyone else has to be in the same access list used by /dashboard/bid-sheets.
+  if (clone_from_id) {
+    const supabase = await createClient()
+    const role = user.profile.role as 'manager' | 'admin' | 'super_admin'
+    if (role !== 'admin' && role !== 'super_admin') {
+      const accessibleIds = await getAccessibleBidSheetIds(supabase, user.id, role)
+      if (!accessibleIds || !accessibleIds.includes(clone_from_id)) {
+        return NextResponse.json(
+          { error: 'You do not have access to the bid sheet you are trying to clone.' },
+          { status: 403 }
+        )
+      }
+    }
+  }
+
   // Use admin client to bypass RLS (avoids "infinite recursion" in bid_sheets policy)
   const db = createAdminClient()
   const { data: sheet, error: insertErr } = await db
