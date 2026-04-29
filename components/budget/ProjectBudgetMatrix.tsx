@@ -393,6 +393,36 @@ export default function ProjectBudgetMatrix({
     }
   }
 
+  /**
+   * Delete an indirect / PO-expense line straight from the matrix view. The
+   * indirect lines render from `po_expenses` (or, when none exist, from the
+   * bid sheet's `bid_sheet_indirect_labor` fallback — those rows have ids
+   * prefixed with `bid-sheet-indirect:` and aren't deletable here). After a
+   * successful delete we call bumpRefresh so the matrix re-fetches and the
+   * Indirect subtotal / Grand total rows update without a page reload.
+   */
+  const handleDeleteIndirect = async (id: string, label: string) => {
+    if (id.startsWith('bid-sheet-indirect:')) return
+    if (!confirm(`Delete this expense from the PO budget?\n${label}`)) return
+    setMutating(true)
+    setMutateError(null)
+    try {
+      const res = await fetch(`/api/budget/${poId}/expenses/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error((body as { error?: string }).error || 'Delete failed')
+      }
+      bumpRefresh()
+    } catch (e) {
+      setMutateError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setMutating(false)
+    }
+  }
+
   const handleAddRow = async () => {
     setMutating(true)
     setMutateError(null)
@@ -1074,6 +1104,10 @@ export default function ProjectBudgetMatrix({
                       ? 'text-red-600 dark:text-red-400'
                       : 'text-emerald-700 dark:text-emerald-400'
                     : ''
+                // Fallback rows synthesized from bid_sheet_indirect_labor
+                // when the PO has no real po_expenses; these aren't deletable
+                // because there's nothing in po_expenses to remove.
+                const isFallbackRow = ir.id.startsWith('bid-sheet-indirect:')
                 return (
                   <tr key={`indirect-${ir.id}`} className="border-b border-gray-100 dark:border-gray-700 bg-amber-50/40 dark:bg-amber-950/15">
                     <td className="py-2 pr-4 text-gray-800 dark:text-gray-200 align-top">Indirect</td>
@@ -1089,7 +1123,27 @@ export default function ProjectBudgetMatrix({
                     <td className="text-right py-2 px-2 tabular-nums text-gray-800 dark:text-gray-200">${fmtMoney(ir.budgetCost)}</td>
                     <td className="text-right py-2 px-2 tabular-nums text-gray-800 dark:text-gray-200">${fmtMoney(ir.actualCost)}</td>
                     <td className={`text-right py-2 pl-2 tabular-nums ${costVarCls}`}>${fmtMoney(costVar)}</td>
-                    {canEditMatrix && <td className="print:hidden py-2 pl-2 text-gray-500 dark:text-gray-500 text-xs">—</td>}
+                    {canEditMatrix && (
+                      <td className="print:hidden py-2 pl-2 text-xs whitespace-nowrap">
+                        {isFallbackRow ? (
+                          <span
+                            className="text-gray-500 dark:text-gray-500"
+                            title="This line is computed from the bid sheet because no PO expense exists yet — there's nothing here to delete."
+                          >
+                            —
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteIndirect(ir.id, ir.label)}
+                            disabled={mutating}
+                            className="text-red-600 dark:text-red-400 hover:underline disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 )
               })}
