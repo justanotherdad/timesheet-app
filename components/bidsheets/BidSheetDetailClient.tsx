@@ -42,6 +42,14 @@ type IndirectFieldDraft = {
   rate?: string
   label?: string
   contVal?: string
+  /**
+   * Single dollar amount used for expense-style indirect lines (Travel &
+   * Living, plus Additional / Custom rows toggled to Expense). Stored on
+   * the row as hours=1 / rate=<amount> so hours × rate continues to equal
+   * the amount and indirectLineDollarTotal / convert / sync logic don't have
+   * to special-case the expense path.
+   */
+  amount?: string
 }
 
 function parseIndirectDraftNum(s: string | undefined, fallback: number): number {
@@ -659,9 +667,30 @@ export default function BidSheetDetailClient({
 
       const row = indirectLaborRef.current.find((i) => i.category === category)
       const draft = indirectDraftsRef.current[category] || {}
+      // Snapshot at request time. We compare against the live draft on
+      // response and only clear the draft if it hasn't changed — otherwise
+      // the user typed more characters during the API round-trip and
+      // wiping the draft would jump the input value back to the saved
+      // value mid-typing ("the rate cell keeps refreshing").
+      const draftSnapshot = JSON.stringify(draft)
 
-      const hours = parseIndirectDraftNum(draft.hours, row?.hours ?? 0)
-      const rate = parseIndirectDraftNum(draft.rate, row?.rate ?? 0)
+      // Resolve effective treatAs from saved row + any pending notes patch
+      // (used so an in-flight Type flip on a custom_* row applies before we
+      // decide whether this is an Hours×Rate or Amount save).
+      const treatAs = effectiveIndirectTreatAs(category, row?.notes)
+
+      let hours: number
+      let rate: number
+      if (treatAs === 'expense' && draft.amount !== undefined) {
+        // Expense rows: the user typed a dollar amount into the "Amount"
+        // field; persist as hours=1 / rate=amount so hours×rate (and every
+        // downstream calc) still equals the amount.
+        hours = 1
+        rate = parseIndirectDraftNum(draft.amount, row?.rate ?? 0)
+      } else {
+        hours = parseIndirectDraftNum(draft.hours, row?.hours ?? 0)
+        rate = parseIndirectDraftNum(draft.rate, row?.rate ?? 0)
+      }
 
       let notes: string | null | undefined = row?.notes ?? undefined
       if (category.startsWith('custom_')) {
@@ -690,11 +719,17 @@ export default function BidSheetDetailClient({
         if (indirectPersistSeq.current.get(category) !== seq) return
 
         setIndirectLabor((prev) => prev.filter((i) => i.category !== category).concat([data]))
-        setIndirectDrafts((prev) => {
-          const { [category]: _, ...rest } = prev
-          indirectDraftsRef.current = rest
-          return rest
-        })
+        // Clear the draft only if nothing has changed since we sent the
+        // request. If the user has typed more (or flipped a dropdown),
+        // leave the draft alone so their in-progress edit isn't reverted.
+        const liveDraft = indirectDraftsRef.current[category]
+        if (JSON.stringify(liveDraft || {}) === draftSnapshot) {
+          setIndirectDrafts((prev) => {
+            const { [category]: _, ...rest } = prev
+            indirectDraftsRef.current = rest
+            return rest
+          })
+        }
       } catch (e: unknown) {
         if (indirectPersistSeq.current.get(category) === seq) {
           setError(e instanceof Error ? e.message : 'Failed to save indirect cost')
@@ -802,6 +837,10 @@ export default function BidSheetDetailClient({
       clearIndirectTimer(category)
       const seq = (indirectPersistSeq.current.get(category) ?? 0) + 1
       indirectPersistSeq.current.set(category, seq)
+      // Same race protection as persistIndirectLaborNow: snapshot the draft
+      // when the request goes out and only clear if the user hasn't typed
+      // anything new while we were waiting on the API.
+      const draftSnapshot = JSON.stringify(indirectDraftsRef.current[category] || {})
       setError(null)
       try {
         const res = await fetch(`/api/bid-sheets/${bidSheetId}/indirect-labor`, {
@@ -819,11 +858,14 @@ export default function BidSheetDetailClient({
         if (indirectPersistSeq.current.get(category) !== seq) return
 
         setIndirectLabor((prev) => prev.filter((i) => i.category !== category).concat([data]))
-        setIndirectDrafts((prev) => {
-          const { [category]: _, ...rest } = prev
-          indirectDraftsRef.current = rest
-          return rest
-        })
+        const liveDraft = indirectDraftsRef.current[category]
+        if (JSON.stringify(liveDraft || {}) === draftSnapshot) {
+          setIndirectDrafts((prev) => {
+            const { [category]: _, ...rest } = prev
+            indirectDraftsRef.current = rest
+            return rest
+          })
+        }
       } catch (e: unknown) {
         if (indirectPersistSeq.current.get(category) === seq) {
           setError(e instanceof Error ? e.message : 'Failed to save indirect cost')
@@ -2087,34 +2129,68 @@ export default function BidSheetDetailClient({
             const rateDisplay = d?.rate !== undefined ? d.rate : ind == null ? '' : String(ind.rate ?? '')
             const treatAs = effectiveIndirectTreatAs(cat.id, ind?.notes)
             const isPickable = cat.id === 'additional_indirect'
+            // For expense rows we collapse Hours + Rate into one Amount input.
+            // The amount displayed equals the saved row's hours × rate so
+            // legacy data with hours != 1 keeps showing the correct dollar
+            // amount; on save we force hours=1 so future edits stay clean.
+            const isExpense = treatAs === 'expense'
+            const savedAmount = ind ? indirectLineDollarTotal(ind.hours ?? 0, ind.rate ?? 0, cat.id, ind.notes) : 0
+            const amountDisplay =
+              d?.amount !== undefined ? d.amount : ind == null ? '' : savedAmount === 0 ? '' : String(savedAmount)
+            const liveAmountForTotal =
+              d?.amount !== undefined
+                ? parseIndirectDraftNum(d.amount, savedAmount)
+                : savedAmount
             return (
               <div key={cat.id} className="flex flex-wrap gap-4 items-center">
                 <span className="w-48 text-sm font-medium text-gray-800 dark:text-gray-200">{cat.label}</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={hoursDisplay}
-                  onChange={(e) => patchIndirectDraft(cat.id, { hours: e.target.value })}
-                  onBlur={() => flushIndirectOnBlur(cat.id)}
-                  disabled={!canEdit}
-                  placeholder="0"
-                  className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
-                />
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={rateDisplay}
-                  onChange={(e) => patchIndirectDraft(cat.id, { rate: e.target.value })}
-                  onBlur={() => flushIndirectOnBlur(cat.id)}
-                  disabled={!canEdit}
-                  placeholder="0"
-                  className={`h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
-                />
-                <span className="w-24 text-right text-sm text-gray-700 dark:text-gray-300">
-                  = ${indirectLineDollarTotal(hNum, rNum, cat.id, ind?.notes).toFixed(2)}
-                </span>
+                {isExpense ? (
+                  <>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={amountDisplay}
+                      onChange={(e) => patchIndirectDraft(cat.id, { amount: e.target.value })}
+                      onBlur={() => flushIndirectOnBlur(cat.id)}
+                      disabled={!canEdit}
+                      placeholder="$ amount"
+                      title="Dollar amount for this expense line"
+                      className={`h-9 w-56 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
+                    />
+                    <span className="w-24 text-right text-sm text-gray-700 dark:text-gray-300">
+                      = ${liveAmountForTotal.toFixed(2)}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={hoursDisplay}
+                      onChange={(e) => patchIndirectDraft(cat.id, { hours: e.target.value })}
+                      onBlur={() => flushIndirectOnBlur(cat.id)}
+                      disabled={!canEdit}
+                      placeholder="0"
+                      className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
+                    />
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={rateDisplay}
+                      onChange={(e) => patchIndirectDraft(cat.id, { rate: e.target.value })}
+                      onBlur={() => flushIndirectOnBlur(cat.id)}
+                      disabled={!canEdit}
+                      placeholder="0"
+                      className={`h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
+                    />
+                    <span className="w-24 text-right text-sm text-gray-700 dark:text-gray-300">
+                      = ${indirectLineDollarTotal(hNum, rNum, cat.id, ind?.notes).toFixed(2)}
+                    </span>
+                  </>
+                )}
                 {/* Type indicator: preset PM / Doc Coord / Proj Controls and
                     T&L are fixed; only Additional Indirect Costs is pickable. */}
                 {isPickable ? (
@@ -2152,6 +2228,7 @@ export default function BidSheetDetailClient({
                 contingencyType: meta.contingencyType || 'none',
                 contingencyValue:
                   d.contVal !== undefined ? parseIndirectDraftNum(d.contVal, meta.contingencyValue ?? 0) : meta.contingencyValue ?? 0,
+                treatAs: meta.treatAs,
               }) ?? ind.notes
             const lineTotal = indirectLineDollarTotal(hNum, rNum, ind.category, notesForLine)
             const hoursDisplay = d.hours !== undefined ? d.hours : String(ind.hours)
@@ -2161,6 +2238,13 @@ export default function BidSheetDetailClient({
               d.contVal !== undefined ? d.contVal : meta.contingencyValue != null ? String(meta.contingencyValue) : ''
             const effectiveContingency =
               meta.contingencyType === 'fixed' || meta.contingencyType === 'percent' ? meta.contingencyType : 'none'
+            const customTreatAs = effectiveIndirectTreatAs(ind.category, ind.notes)
+            const customIsExpense = customTreatAs === 'expense'
+            const customSavedAmount = indirectLineDollarTotal(ind.hours ?? 0, ind.rate ?? 0, ind.category, ind.notes)
+            const customAmountDisplay =
+              d.amount !== undefined ? d.amount : customSavedAmount === 0 ? '' : String(customSavedAmount)
+            const customLiveAmount =
+              d.amount !== undefined ? parseIndirectDraftNum(d.amount, customSavedAmount) : customSavedAmount
             return (
             <div key={ind.id} className="flex flex-wrap gap-3 items-center">
               <input
@@ -2172,32 +2256,49 @@ export default function BidSheetDetailClient({
                 placeholder="Name"
                 className="h-9 w-48 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 font-medium"
               />
-              <input
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                value={hoursDisplay}
-                onChange={(e) => patchIndirectDraft(ind.category, { hours: e.target.value })}
-                onBlur={() => flushIndirectOnBlur(ind.category)}
-                disabled={!canEdit}
-                placeholder="Hours"
-                className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
-              />
-              <input
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                value={rateDisplay}
-                onChange={(e) => patchIndirectDraft(ind.category, { rate: e.target.value })}
-                onBlur={() => flushIndirectOnBlur(ind.category)}
-                disabled={!canEdit}
-                placeholder="Rate ($/hr)"
-                className={`h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
-              />
+              {customIsExpense ? (
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={customAmountDisplay}
+                  onChange={(e) => patchIndirectDraft(ind.category, { amount: e.target.value })}
+                  onBlur={() => flushIndirectOnBlur(ind.category)}
+                  disabled={!canEdit}
+                  placeholder="$ amount"
+                  title="Dollar amount for this expense line"
+                  className={`h-9 w-56 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
+                />
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={hoursDisplay}
+                    onChange={(e) => patchIndirectDraft(ind.category, { hours: e.target.value })}
+                    onBlur={() => flushIndirectOnBlur(ind.category)}
+                    disabled={!canEdit}
+                    placeholder="Hours"
+                    className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
+                  />
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={rateDisplay}
+                    onChange={(e) => patchIndirectDraft(ind.category, { rate: e.target.value })}
+                    onBlur={() => flushIndirectOnBlur(ind.category)}
+                    disabled={!canEdit}
+                    placeholder="Rate ($/hr)"
+                    className={`h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
+                  />
+                </>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Type</label>
                 <select
-                  value={effectiveIndirectTreatAs(ind.category, ind.notes)}
+                  value={customTreatAs}
                   onChange={(e) => void saveIndirectTreatAs(ind.category, e.target.value as 'activity' | 'expense')}
                   disabled={!canEdit}
                   className="h-9 px-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
@@ -2205,49 +2306,56 @@ export default function BidSheetDetailClient({
                   <option value="expense">Expense</option>
                   <option value="activity">Loggable activity</option>
                 </select>
-                <label className="text-xs text-gray-500 dark:text-gray-400 ml-2">Contingency</label>
-                <select
-                  value={effectiveContingency}
-                  onChange={(e) => {
-                    const v = e.target.value as 'none' | 'fixed' | 'percent'
-                    const row = indirectLaborRef.current.find((x) => x.category === ind.category)
-                    const draft = indirectDraftsRef.current[ind.category] || {}
-                    const hours = parseIndirectDraftNum(draft.hours, row?.hours ?? 0)
-                    const rate = parseIndirectDraftNum(draft.rate, row?.rate ?? 0)
-                    const m = decodeIndirectNotes(row?.notes)
-                    const notes = encodeIndirectNotes({
-                      label: draft.label !== undefined ? draft.label : m.label,
-                      contingencyType: v,
-                      contingencyValue: v === 'none' ? 0 : m.contingencyValue ?? 0,
-                      // Preserve treatAs so flipping contingency doesn't reset the
-                      // user's loggable/expense choice.
-                      treatAs: m.treatAs,
-                    })
-                    void saveIndirectImmediate(ind.category, { hours, rate, notes: notes ?? undefined })
-                  }}
-                  disabled={!canEdit}
-                  className="h-9 px-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
-                >
-                  <option value="none">None</option>
-                  <option value="fixed">Add $</option>
-                  <option value="percent">Add %</option>
-                </select>
-                {(effectiveContingency === 'fixed' || effectiveContingency === 'percent') && (
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoComplete="off"
-                    value={contValDisplay}
-                    onChange={(e) => patchIndirectDraft(ind.category, { contVal: e.target.value })}
-                    onBlur={() => flushIndirectOnBlur(ind.category)}
-                    disabled={!canEdit}
-                    placeholder={effectiveContingency === 'percent' ? '%' : '$'}
-                    className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
-                  />
+                {/* Contingency adds $ or % on top of hours×rate, so it only
+                    applies to loggable activity rows. Hidden when the line
+                    is being treated as a flat expense. */}
+                {!customIsExpense && (
+                  <>
+                    <label className="text-xs text-gray-500 dark:text-gray-400 ml-2">Contingency</label>
+                    <select
+                      value={effectiveContingency}
+                      onChange={(e) => {
+                        const v = e.target.value as 'none' | 'fixed' | 'percent'
+                        const row = indirectLaborRef.current.find((x) => x.category === ind.category)
+                        const draft = indirectDraftsRef.current[ind.category] || {}
+                        const hours = parseIndirectDraftNum(draft.hours, row?.hours ?? 0)
+                        const rate = parseIndirectDraftNum(draft.rate, row?.rate ?? 0)
+                        const m = decodeIndirectNotes(row?.notes)
+                        const notes = encodeIndirectNotes({
+                          label: draft.label !== undefined ? draft.label : m.label,
+                          contingencyType: v,
+                          contingencyValue: v === 'none' ? 0 : m.contingencyValue ?? 0,
+                          // Preserve treatAs so flipping contingency doesn't reset
+                          // the user's loggable/expense choice.
+                          treatAs: m.treatAs,
+                        })
+                        void saveIndirectImmediate(ind.category, { hours, rate, notes: notes ?? undefined })
+                      }}
+                      disabled={!canEdit}
+                      className="h-9 px-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+                    >
+                      <option value="none">None</option>
+                      <option value="fixed">Add $</option>
+                      <option value="percent">Add %</option>
+                    </select>
+                    {(effectiveContingency === 'fixed' || effectiveContingency === 'percent') && (
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        value={contValDisplay}
+                        onChange={(e) => patchIndirectDraft(ind.category, { contVal: e.target.value })}
+                        onBlur={() => flushIndirectOnBlur(ind.category)}
+                        disabled={!canEdit}
+                        placeholder={effectiveContingency === 'percent' ? '%' : '$'}
+                        className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
+                      />
+                    )}
+                  </>
                 )}
               </div>
               <span className="text-gray-600 dark:text-gray-400">
-                = ${lineTotal.toFixed(2)}
+                = ${(customIsExpense ? customLiveAmount : lineTotal).toFixed(2)}
               </span>
               {canEdit && (
                 <button type="button" onClick={() => handleDeleteIndirect(ind.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
@@ -2259,17 +2367,14 @@ export default function BidSheetDetailClient({
           })}
         </div>
         {(() => {
-          // Sum hours and dollar totals across every indirect-labor row,
-          // both the preset categories (Project Management, etc.) and any
-          // user-added custom_* lines. We use the same indirectLineDollarTotal
-          // helper that powers each row's = $X line so contingencies are
-          // included consistently.
+          // Sum hours (activity rows only — expense rows store a synthetic
+          // hours=1 / rate=amount so adding their hours into the total
+          // would be misleading) and dollar totals across every indirect-
+          // labor row.
           let totalHours = 0
           let totalDollar = 0
           for (const ind of indirectLabor) {
             const draft = indirectDrafts[ind.category] || {}
-            const hNum = parseIndirectDraftNum(draft.hours, ind.hours ?? 0)
-            const rNum = parseIndirectDraftNum(draft.rate, ind.rate ?? 0)
             const meta = decodeIndirectNotes(ind.notes)
             const notesForLine =
               encodeIndirectNotes({
@@ -2279,9 +2384,20 @@ export default function BidSheetDetailClient({
                   draft.contVal !== undefined
                     ? parseIndirectDraftNum(draft.contVal, meta.contingencyValue ?? 0)
                     : meta.contingencyValue ?? 0,
+                treatAs: meta.treatAs,
               }) ?? ind.notes
-            totalHours += hNum
-            totalDollar += indirectLineDollarTotal(hNum, rNum, ind.category, notesForLine)
+            const rowTreatAs = effectiveIndirectTreatAs(ind.category, ind.notes)
+            if (rowTreatAs === 'expense') {
+              const savedAmount = indirectLineDollarTotal(ind.hours ?? 0, ind.rate ?? 0, ind.category, ind.notes)
+              const liveAmount =
+                draft.amount !== undefined ? parseIndirectDraftNum(draft.amount, savedAmount) : savedAmount
+              totalDollar += liveAmount
+            } else {
+              const hNum = parseIndirectDraftNum(draft.hours, ind.hours ?? 0)
+              const rNum = parseIndirectDraftNum(draft.rate, ind.rate ?? 0)
+              totalHours += hNum
+              totalDollar += indirectLineDollarTotal(hNum, rNum, ind.category, notesForLine)
+            }
           }
           return (
             <div className="mt-4 pt-3 border-t-2 border-gray-300 dark:border-gray-600 flex gap-4 items-center font-semibold">
