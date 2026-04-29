@@ -114,6 +114,15 @@ export default function BidSheetDetailClient({
   const [importFileName, setImportFileName] = useState<string | null>(null)
   const [importDragOver, setImportDragOver] = useState(false)
   const importFileRef = useRef<HTMLInputElement>(null)
+  const [importResult, setImportResult] = useState<{
+    inserted: number
+    skipped: number
+    skippedRows: Array<{ line: number; row: string; reason: string; hours: number }>
+    merged: number
+    csvRowCount: number
+    csvHoursTotal: number
+    importedHoursTotal: number
+  } | null>(null)
   const [showAddLabor, setShowAddLabor] = useState(false)
   const [laborUserId, setLaborUserId] = useState('')
   const [laborPlaceholderFirst, setLaborPlaceholderFirst] = useState('')
@@ -562,6 +571,7 @@ export default function BidSheetDetailClient({
 
   const handleImport = async () => {
     setError(null)
+    setImportResult(null)
     setLoading(true)
     try {
       const res = await fetch(`/api/bid-sheets/${bidSheetId}/import`, {
@@ -571,7 +581,10 @@ export default function BidSheetDetailClient({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Import failed')
-      window.location.reload()
+      // Show the summary (inserted/merged/skipped counts, CSV vs imported
+      // hour totals, and any skipped rows with the reason) so the user can
+      // confirm the matrix matches the source spreadsheet before reloading.
+      setImportResult(data)
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -2362,9 +2375,68 @@ export default function BidSheetDetailClient({
                 </div>
               </div>
             </div>
+            {importResult && (
+              <div className="px-4 pb-4">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-4 text-sm">
+                  <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Import summary</h4>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-700 dark:text-gray-300">
+                    <div>CSV rows read</div>
+                    <div className="text-right font-medium">{importResult.csvRowCount}</div>
+                    <div>Cells inserted</div>
+                    <div className="text-right font-medium">{importResult.inserted}</div>
+                    <div>Duplicates merged (hours summed)</div>
+                    <div className="text-right font-medium">{importResult.merged}</div>
+                    <div>Rows skipped</div>
+                    <div className={`text-right font-medium ${importResult.skipped > 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{importResult.skipped}</div>
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-1 mt-1">CSV hours total</div>
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-1 mt-1 text-right font-medium">{importResult.csvHoursTotal.toFixed(2)}</div>
+                    <div>Imported hours total</div>
+                    <div className={`text-right font-medium ${Math.abs(importResult.csvHoursTotal - importResult.importedHoursTotal) > 0.001 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                      {importResult.importedHoursTotal.toFixed(2)}
+                    </div>
+                  </div>
+                  {Math.abs(importResult.csvHoursTotal - importResult.importedHoursTotal) > 0.001 && (
+                    <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+                      Discrepancy of {(importResult.csvHoursTotal - importResult.importedHoursTotal).toFixed(2)} hours between CSV and imported total. See skipped rows below.
+                    </p>
+                  )}
+                  {importResult.skippedRows.length > 0 && (
+                    <div className="mt-3">
+                      <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-1">Skipped rows</h5>
+                      <ul className="max-h-48 overflow-y-auto text-xs space-y-1 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-2">
+                        {importResult.skippedRows.map((r, idx) => (
+                          <li key={idx} className="text-gray-700 dark:text-gray-300">
+                            <span className="font-mono text-gray-500 dark:text-gray-400">L{r.line}</span> – {r.row}
+                            <span className="text-amber-700 dark:text-amber-300"> ({r.reason}{r.hours ? `, ${r.hours.toFixed(2)} hrs` : ''})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="p-4 border-t flex justify-end gap-2">
-              <button type="button" onClick={() => { setShowImportModal(false); setImportCsv(''); setImportFileName(null) }} className="px-4 py-2 border rounded-lg">Cancel</button>
-              <button type="button" onClick={handleImport} disabled={loading || !importCsv.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50">Import</button>
+              {importResult ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowImportModal(false)
+                    setImportCsv('')
+                    setImportFileName(null)
+                    setImportResult(null)
+                    window.location.reload()
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+                >
+                  Done
+                </button>
+              ) : (
+                <>
+                  <button type="button" onClick={() => { setShowImportModal(false); setImportCsv(''); setImportFileName(null); setImportResult(null) }} className="px-4 py-2 border rounded-lg">Cancel</button>
+                  <button type="button" onClick={handleImport} disabled={loading || !importCsv.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50">Import</button>
+                </>
+              )}
             </div>
           </div>
         </div>
