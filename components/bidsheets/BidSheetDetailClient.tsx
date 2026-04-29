@@ -1171,6 +1171,10 @@ export default function BidSheetDetailClient({
   }
 
   const numInputClass = '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
+  // Select the current value when an indirect numeric input gains focus so
+  // clicking into a populated rate / hours / amount cell and typing replaces
+  // the existing value (instead of appending — i.e. "125" + "200" → "125200").
+  const selectAllOnFocus = (e: React.FocusEvent<HTMLInputElement>) => e.currentTarget.select()
   const inputClass = compactMode
     ? `w-full min-w-[60px] h-6 px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs ${numInputClass}`
     : `w-full min-w-[80px] h-7 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm ${numInputClass}`
@@ -2153,6 +2157,7 @@ export default function BidSheetDetailClient({
                       value={amountDisplay}
                       onChange={(e) => patchIndirectDraft(cat.id, { amount: e.target.value })}
                       onBlur={() => flushIndirectOnBlur(cat.id)}
+                      onFocus={selectAllOnFocus}
                       disabled={!canEdit}
                       placeholder="$ amount"
                       title="Dollar amount for this expense line"
@@ -2171,6 +2176,7 @@ export default function BidSheetDetailClient({
                       value={hoursDisplay}
                       onChange={(e) => patchIndirectDraft(cat.id, { hours: e.target.value })}
                       onBlur={() => flushIndirectOnBlur(cat.id)}
+                      onFocus={selectAllOnFocus}
                       disabled={!canEdit}
                       placeholder="0"
                       className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
@@ -2182,6 +2188,7 @@ export default function BidSheetDetailClient({
                       value={rateDisplay}
                       onChange={(e) => patchIndirectDraft(cat.id, { rate: e.target.value })}
                       onBlur={() => flushIndirectOnBlur(cat.id)}
+                      onFocus={selectAllOnFocus}
                       disabled={!canEdit}
                       placeholder="0"
                       className={`h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
@@ -2264,6 +2271,7 @@ export default function BidSheetDetailClient({
                   value={customAmountDisplay}
                   onChange={(e) => patchIndirectDraft(ind.category, { amount: e.target.value })}
                   onBlur={() => flushIndirectOnBlur(ind.category)}
+                  onFocus={selectAllOnFocus}
                   disabled={!canEdit}
                   placeholder="$ amount"
                   title="Dollar amount for this expense line"
@@ -2278,6 +2286,7 @@ export default function BidSheetDetailClient({
                     value={hoursDisplay}
                     onChange={(e) => patchIndirectDraft(ind.category, { hours: e.target.value })}
                     onBlur={() => flushIndirectOnBlur(ind.category)}
+                    onFocus={selectAllOnFocus}
                     disabled={!canEdit}
                     placeholder="Hours"
                     className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
@@ -2289,6 +2298,7 @@ export default function BidSheetDetailClient({
                     value={rateDisplay}
                     onChange={(e) => patchIndirectDraft(ind.category, { rate: e.target.value })}
                     onBlur={() => flushIndirectOnBlur(ind.category)}
+                    onFocus={selectAllOnFocus}
                     disabled={!canEdit}
                     placeholder="Rate ($/hr)"
                     className={`h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
@@ -2346,6 +2356,7 @@ export default function BidSheetDetailClient({
                         value={contValDisplay}
                         onChange={(e) => patchIndirectDraft(ind.category, { contVal: e.target.value })}
                         onBlur={() => flushIndirectOnBlur(ind.category)}
+                        onFocus={selectAllOnFocus}
                         disabled={!canEdit}
                         placeholder={effectiveContingency === 'percent' ? '%' : '$'}
                         className={`h-9 w-24 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
