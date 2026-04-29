@@ -2,11 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
-import { decodeIndirectNotes, effectiveIndirectTreatAs, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
-import {
-  composeIndirectExpenseNotes,
-  upsertIndirectActivityForProject,
-} from '@/lib/syncBidSheetToProject'
+import { effectiveIndirectTreatAs, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
+import { upsertIndirectActivityForProject } from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,24 +15,6 @@ async function canAccess(supabase: Awaited<ReturnType<typeof createClient>>, use
   if (!sheet) return false
   const { data: siteAccess } = await supabase.from('user_sites').select('site_id').eq('user_id', userId).eq('site_id', sheet.site_id).maybeSingle()
   return !!siteAccess
-}
-
-const PRESET_INDIRECT_LABEL: Record<string, string> = {
-  project_management: 'Indirect — Project Management',
-  document_coordinator: 'Indirect — Document Coordinator',
-  project_controls: 'Indirect — Project Controls',
-  travel_living_project: 'Indirect — Travel & Living (Project by Person)',
-  travel_living_fat: 'Indirect — Travel & Living (FAT)',
-  additional_indirect: 'Indirect — Additional Indirect Costs',
-}
-
-function indirectExpenseTitle(category: string, notes: string | null | undefined): string {
-  if (category.startsWith('custom_')) {
-    const meta = decodeIndirectNotes(notes)
-    const name = meta.label?.trim()
-    return name ? `Indirect — ${name}` : 'Indirect — Additional line'
-  }
-  return PRESET_INDIRECT_LABEL[category] || `Indirect — ${category}`
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -110,7 +89,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const grandTotal = matrixLaborCost + indirectTotal
-  const today = new Date().toISOString().slice(0, 10)
 
   const { data: po, error: poErr } = await adminSupabase
     .from('purchase_orders')
@@ -228,51 +206,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  // Each indirect row converts to either a project_details row (loggable
-  // activity in the timesheet) or a po_expenses row (fixed dollar expense),
-  // depending on the category and the user-picked treatAs flag for additional/
-  // custom rows. PM / Doc Coord / Proj Controls always become activities;
-  // T&L always stays an expense; additional_indirect / custom_* honor the
-  // notes JSON, defaulting to expense.
+  // Each indirect row that's marked as a loggable activity (PM, Doc Coord,
+  // Proj Controls, plus any Additional / Custom rows the user flagged as
+  // activity) gets a project_details row so people can log time against it
+  // from a timesheet. Expense-style indirect rows (Travel & Living, plus
+  // Additional / Custom rows flagged as expense) only contribute to the
+  // bid sheet's grand total / PO amount — we deliberately do NOT create
+  // po_expenses for them, because the project budget is supposed to track
+  // *actual* expenses incurred during the project, not pre-budgeted ones.
+  // Adding them as expenses on day 1 would double-count the dollar against
+  // the PO total and make the budget look already-spent before any work.
   for (const row of indirectRows || []) {
     const treatAs = effectiveIndirectTreatAs(row.category, row.notes)
+    if (treatAs !== 'activity') continue
     const hrs = Number(row.hours) || 0
-
-    if (treatAs === 'activity') {
-      // Skip lines with zero hours — there's nothing to budget. Same intent
-      // as the expense branch's `if (amt <= 0) continue`.
-      if (hrs <= 0) continue
-      try {
-        await upsertIndirectActivityForProject(
-          adminSupabase,
-          sheet.site_id,
-          po.id,
-          row.category,
-          hrs,
-          row.notes
-        )
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Failed to copy indirect labor to the project budget'
-        console.error('convert: indirect activity sync failed', e)
-        return NextResponse.json({ error: msg }, { status: 500 })
-      }
-      continue
-    }
-
-    const amt = indirectLineDollarTotal(hrs, Number(row.rate) || 0, row.category, row.notes)
-    if (amt <= 0) continue
-    const title = indirectExpenseTitle(row.category, row.notes)
-    const { error: expErr } = await adminSupabase.from('po_expenses').insert({
-      po_id: po.id,
-      amount: amt,
-      expense_date: today,
-      custom_type_name: title,
-      notes: composeIndirectExpenseNotes(row.category),
-      created_by: user.id,
-    })
-    if (expErr) {
-      console.error('convert: po_expenses insert failed', expErr)
-      return NextResponse.json({ error: expErr.message || 'Failed to copy indirect costs to the project budget' }, { status: 500 })
+    if (hrs <= 0) continue
+    try {
+      await upsertIndirectActivityForProject(
+        adminSupabase,
+        sheet.site_id,
+        po.id,
+        row.category,
+        hrs,
+        row.notes
+      )
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to copy indirect labor to the project budget'
+      console.error('convert: indirect activity sync failed', e)
+      return NextResponse.json({ error: msg }, { status: 500 })
     }
   }
 

@@ -2,39 +2,15 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
-import {
-  decodeIndirectNotes,
-  effectiveIndirectTreatAs,
-  indirectLineDollarTotal,
-} from '@/lib/bid-sheet-indirect'
+import { effectiveIndirectTreatAs } from '@/lib/bid-sheet-indirect'
 import {
   deleteIndirectActivityForProject,
-  deleteIndirectExpenseForProject,
   upsertIndirectActivityForProject,
-  upsertIndirectExpenseForProject,
 } from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
 const CATEGORIES = ['project_management', 'document_coordinator', 'project_controls', 'travel_living_project', 'travel_living_fat', 'additional_indirect'] as const
-
-const PRESET_INDIRECT_LABEL: Record<string, string> = {
-  project_management: 'Indirect — Project Management',
-  document_coordinator: 'Indirect — Document Coordinator',
-  project_controls: 'Indirect — Project Controls',
-  travel_living_project: 'Indirect — Travel & Living (Project by Person)',
-  travel_living_fat: 'Indirect — Travel & Living (FAT)',
-  additional_indirect: 'Indirect — Additional Indirect Costs',
-}
-
-function indirectExpenseTitle(category: string, notes: string | null | undefined): string {
-  if (category.startsWith('custom_')) {
-    const meta = decodeIndirectNotes(notes)
-    const name = meta.label?.trim()
-    return name ? `Indirect — ${name}` : 'Indirect — Additional line'
-  }
-  return PRESET_INDIRECT_LABEL[category] || `Indirect — ${category}`
-}
 
 async function canAccess(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, role: string, bidSheetId: string): Promise<boolean> {
   if (role === 'admin' || role === 'super_admin') return true
@@ -98,11 +74,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       const treatAs = effectiveIndirectTreatAs(data.category, data.notes)
       const hrs = Number(data.hours) || 0
 
+      // We only sync the loggable-activity side of the indirect ↔ project
+      // relationship. Expense-style indirect lines on the bid sheet are
+      // proposal estimates that roll up into the PO total — actual expenses
+      // get added to the project budget manually as they're incurred during
+      // the project, so we deliberately don't touch po_expenses here.
       if (treatAs === 'activity') {
-        // Make sure the project_details row exists / is up-to-date AND that
-        // any prior po_expenses row (e.g. an Additional Indirect line that
-        // was previously flipped from Expense to Activity) is removed so we
-        // don't double-count the same line.
         if (hrs > 0) {
           await upsertIndirectActivityForProject(
             admin,
@@ -121,29 +98,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
             data.notes
           )
         }
-        await deleteIndirectExpenseForProject(admin, sheet.converted_po_id, data.category)
       } else {
-        // Inverse: make sure the po_expenses row reflects the current dollar
-        // total, and remove any prior project_details row for this category.
-        const amt = indirectLineDollarTotal(
-          hrs,
-          Number(data.rate) || 0,
-          data.category,
-          data.notes
-        )
-        if (amt > 0) {
-          await upsertIndirectExpenseForProject(
-            admin,
-            sheet.converted_po_id,
-            data.category,
-            amt,
-            indirectExpenseTitle(data.category, data.notes),
-            new Date().toISOString().slice(0, 10),
-            user.id
-          )
-        } else {
-          await deleteIndirectExpenseForProject(admin, sheet.converted_po_id, data.category)
-        }
+        // Flipped Activity → Expense (or row is now a flat expense): drop
+        // the project_details row so people can't keep logging time to a
+        // line that's no longer a loggable activity. Any pre-existing
+        // po_expenses row stays in place — it's user-managed budget data.
         await deleteIndirectActivityForProject(
           admin,
           sheet.site_id,
@@ -200,22 +159,21 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       .select('status, converted_po_id, site_id')
       .eq('id', id)
       .single()
-    if (sheet?.status === 'converted' && sheet.converted_po_id) {
+    if (sheet?.status === 'converted' && sheet.converted_po_id && sheet.site_id) {
       try {
         const admin = createAdminClient()
-        // Try removing both representations so we leave no orphan if the
-        // category had been flipped between activity and expense at some
-        // point, or if the row predates the treatAs feature.
-        await deleteIndirectExpenseForProject(admin, sheet.converted_po_id, rowBefore.category)
-        if (sheet.site_id) {
-          await deleteIndirectActivityForProject(
-            admin,
-            sheet.site_id,
-            sheet.converted_po_id,
-            rowBefore.category,
-            rowBefore.notes
-          )
-        }
+        // Drop the linked project_details row so people can't keep logging
+        // time to an indirect activity that no longer exists on the bid
+        // sheet. We deliberately leave po_expenses alone — those are user
+        // -managed budget data, and indirect-expense bid sheet lines never
+        // create them automatically.
+        await deleteIndirectActivityForProject(
+          admin,
+          sheet.site_id,
+          sheet.converted_po_id,
+          rowBefore.category,
+          rowBefore.notes
+        )
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to remove indirect cost from project budget'
         return NextResponse.json({ error: msg }, { status: 500 })
