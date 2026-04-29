@@ -2,9 +2,15 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
-import { decodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
 import {
+  decodeIndirectNotes,
+  effectiveIndirectTreatAs,
+  indirectLineDollarTotal,
+} from '@/lib/bid-sheet-indirect'
+import {
+  deleteIndirectActivityForProject,
   deleteIndirectExpenseForProject,
+  upsertIndirectActivityForProject,
   upsertIndirectExpenseForProject,
 } from '@/lib/syncBidSheetToProject'
 
@@ -82,33 +88,69 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const { data: sheet } = await supabase
     .from('bid_sheets')
-    .select('status, converted_po_id')
+    .select('status, converted_po_id, site_id')
     .eq('id', id)
     .single()
 
-  if (sheet?.status === 'converted' && sheet.converted_po_id && data) {
+  if (sheet?.status === 'converted' && sheet.converted_po_id && sheet.site_id && data) {
     try {
       const admin = createAdminClient()
-      const amt = indirectLineDollarTotal(
-        Number(data.hours) || 0,
-        Number(data.rate) || 0,
-        data.category,
-        data.notes
-      )
-      if (amt > 0) {
-        await upsertIndirectExpenseForProject(
+      const treatAs = effectiveIndirectTreatAs(data.category, data.notes)
+      const hrs = Number(data.hours) || 0
+
+      if (treatAs === 'activity') {
+        // Make sure the project_details row exists / is up-to-date AND that
+        // any prior po_expenses row (e.g. an Additional Indirect line that
+        // was previously flipped from Expense to Activity) is removed so we
+        // don't double-count the same line.
+        if (hrs > 0) {
+          await upsertIndirectActivityForProject(
+            admin,
+            sheet.site_id,
+            sheet.converted_po_id,
+            data.category,
+            hrs,
+            data.notes
+          )
+        } else {
+          await deleteIndirectActivityForProject(
+            admin,
+            sheet.site_id,
+            sheet.converted_po_id,
+            data.category,
+            data.notes
+          )
+        }
+        await deleteIndirectExpenseForProject(admin, sheet.converted_po_id, data.category)
+      } else {
+        // Inverse: make sure the po_expenses row reflects the current dollar
+        // total, and remove any prior project_details row for this category.
+        const amt = indirectLineDollarTotal(
+          hrs,
+          Number(data.rate) || 0,
+          data.category,
+          data.notes
+        )
+        if (amt > 0) {
+          await upsertIndirectExpenseForProject(
+            admin,
+            sheet.converted_po_id,
+            data.category,
+            amt,
+            indirectExpenseTitle(data.category, data.notes),
+            new Date().toISOString().slice(0, 10),
+            user.id
+          )
+        } else {
+          await deleteIndirectExpenseForProject(admin, sheet.converted_po_id, data.category)
+        }
+        await deleteIndirectActivityForProject(
           admin,
+          sheet.site_id,
           sheet.converted_po_id,
           data.category,
-          amt,
-          indirectExpenseTitle(data.category, data.notes),
-          new Date().toISOString().slice(0, 10),
-          user.id
+          data.notes
         )
-      } else {
-        // Zeroed-out indirect line: remove the linked po_expense so the project
-        // budget doesn't keep a stale dollar amount around.
-        await deleteIndirectExpenseForProject(admin, sheet.converted_po_id, data.category)
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to sync indirect cost to project budget'
@@ -135,11 +177,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const indirectId = searchParams.get('id')
   if (!indirectId) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-  // Look up the row first so we know which category's po_expense to remove
+  // Look up the row first so we know which category to clean up downstream
   // when the bid sheet has already been converted to a project budget.
   const { data: rowBefore } = await supabase
     .from('bid_sheet_indirect_labor')
-    .select('category')
+    .select('category, notes')
     .eq('id', indirectId)
     .eq('bid_sheet_id', id)
     .maybeSingle()
@@ -155,13 +197,25 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (rowBefore?.category) {
     const { data: sheet } = await supabase
       .from('bid_sheets')
-      .select('status, converted_po_id')
+      .select('status, converted_po_id, site_id')
       .eq('id', id)
       .single()
     if (sheet?.status === 'converted' && sheet.converted_po_id) {
       try {
         const admin = createAdminClient()
+        // Try removing both representations so we leave no orphan if the
+        // category had been flipped between activity and expense at some
+        // point, or if the row predates the treatAs feature.
         await deleteIndirectExpenseForProject(admin, sheet.converted_po_id, rowBefore.category)
+        if (sheet.site_id) {
+          await deleteIndirectActivityForProject(
+            admin,
+            sheet.site_id,
+            sheet.converted_po_id,
+            rowBefore.category,
+            rowBefore.notes
+          )
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to remove indirect cost from project budget'
         return NextResponse.json({ error: msg }, { status: 500 })

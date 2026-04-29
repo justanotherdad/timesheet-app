@@ -1,4 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  INDIRECT_DELIVERABLE_NAME,
+  INDIRECT_SYSTEM_NAME,
+  indirectActivityName,
+} from '@/lib/bid-sheet-indirect'
 
 export type BidSheetItemRow = {
   budgeted_hours: number | null
@@ -396,6 +401,89 @@ export async function deleteIndirectExpenseForProject(
     .delete()
     .eq('po_id', poId)
     .like('notes', `%${marker}%`)
+}
+
+/**
+ * Create / update a project_details row that represents a bid-sheet indirect
+ * line as a loggable activity (Indirect / Indirect / <category>). PM, Doc
+ * Coord, Proj Controls, and any user-flagged Additional/Custom rows go through
+ * here on convert and on subsequent edits to the bid sheet's indirect-labor
+ * section, so people can log time against them in the timesheet form.
+ */
+export async function upsertIndirectActivityForProject(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  category: string,
+  hours: number,
+  notes: string | null | undefined
+): Promise<void> {
+  const activityName = indirectActivityName(category, notes)
+
+  const systemId = await findOrCreateSystem(admin, siteId, INDIRECT_SYSTEM_NAME, null)
+  const deliverableId = await findOrCreateDeliverable(admin, siteId, INDIRECT_DELIVERABLE_NAME)
+  const activityId = await findOrCreateActivity(admin, siteId, activityName)
+
+  await ensurePoLink(admin, 'system_purchase_orders', 'system_id', systemId, poId)
+  await ensurePoLink(admin, 'deliverable_purchase_orders', 'deliverable_id', deliverableId, poId)
+  await ensurePoLink(admin, 'activity_purchase_orders', 'activity_id', activityId, poId)
+
+  const { data: existing } = await admin
+    .from('project_details')
+    .select('id')
+    .eq('po_id', poId)
+    .eq('system_id', systemId)
+    .eq('deliverable_id', deliverableId)
+    .eq('activity_id', activityId)
+    .maybeSingle()
+
+  if (existing?.id) {
+    const { error } = await admin
+      .from('project_details')
+      .update({ budgeted_hours: hours })
+      .eq('id', existing.id)
+    if (error) throw new Error(error.message)
+    return
+  }
+
+  const { error } = await admin.from('project_details').insert({
+    po_id: poId,
+    system_id: systemId,
+    deliverable_id: deliverableId,
+    activity_id: activityId,
+    budgeted_hours: hours,
+    description: null,
+  })
+  if (error) throw new Error(error.message)
+}
+
+/**
+ * Inverse of `upsertIndirectActivityForProject` — drop the project_details
+ * row written for a converted indirect category. Catalog system/deliverable/
+ * activity rows are left in place because they may still be referenced by
+ * other bid sheets / POs on the same site.
+ */
+export async function deleteIndirectActivityForProject(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  category: string,
+  notes: string | null | undefined
+): Promise<void> {
+  const activityName = indirectActivityName(category, notes)
+
+  const systemId = await findSystemId(admin, siteId, INDIRECT_SYSTEM_NAME, null)
+  const deliverableId = await findDeliverableId(admin, siteId, INDIRECT_DELIVERABLE_NAME)
+  const activityId = await findActivityId(admin, siteId, activityName)
+  if (!systemId || !deliverableId || !activityId) return
+
+  await admin
+    .from('project_details')
+    .delete()
+    .eq('po_id', poId)
+    .eq('system_id', systemId)
+    .eq('deliverable_id', deliverableId)
+    .eq('activity_id', activityId)
 }
 
 /**

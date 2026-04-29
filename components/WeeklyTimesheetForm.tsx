@@ -494,6 +494,48 @@ export default function WeeklyTimesheetForm({
     code: a.code,
   }))
 
+  // Auto-select Deliverable / Activity when there's only one valid option and
+  // the user hasn't already chosen one. This makes "Indirect" rows (created
+  // when a bid sheet's PM/DocCoord/ProjControls indirect line converts to a
+  // loggable activity) feel like one click instead of three: pick the PO,
+  // and the System/Deliverable/Activity collapse to their only choices. It's
+  // also a general nicety — any PO that maps to a single S/D/A combination
+  // pre-fills it. We only fill empty fields so the user's manual picks win.
+  useEffect(() => {
+    if (!editingEntry) return
+    const patch: Partial<BillableEntry> = {}
+
+    if (
+      !editingEntry.deliverable_id &&
+      filteredDeliverables.length === 1 &&
+      filteredDeliverables[0]?.id
+    ) {
+      patch.deliverable_id = filteredDeliverables[0].id
+    }
+    if (
+      !editingEntry.activity_id &&
+      filteredActivities.length === 1 &&
+      filteredActivities[0]?.id
+    ) {
+      patch.activity_id = filteredActivities[0].id
+    }
+    if (Object.keys(patch).length > 0) {
+      setEditingEntry({ ...editingEntry, ...patch })
+    }
+    // We intentionally watch the *inputs* that determine which dropdown values
+    // are valid (PO, site) plus current ID state so we re-run after the user
+    // narrows the form, without looping when the patch we just applied flows
+    // back through editingEntry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    editingEntry?.po_id,
+    editingEntry?.client_project_id,
+    editingEntry?.deliverable_id,
+    editingEntry?.activity_id,
+    filteredDeliverables.length,
+    filteredActivities.length,
+  ])
+
   return (
     <>
       <form onSubmit={handleSave} className="space-y-6">

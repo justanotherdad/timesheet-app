@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
-import { decodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
-import { composeIndirectExpenseNotes } from '@/lib/syncBidSheetToProject'
+import { decodeIndirectNotes, effectiveIndirectTreatAs, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
+import {
+  composeIndirectExpenseNotes,
+  upsertIndirectActivityForProject,
+} from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
@@ -225,8 +228,38 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
+  // Each indirect row converts to either a project_details row (loggable
+  // activity in the timesheet) or a po_expenses row (fixed dollar expense),
+  // depending on the category and the user-picked treatAs flag for additional/
+  // custom rows. PM / Doc Coord / Proj Controls always become activities;
+  // T&L always stays an expense; additional_indirect / custom_* honor the
+  // notes JSON, defaulting to expense.
   for (const row of indirectRows || []) {
-    const amt = indirectLineDollarTotal(Number(row.hours) || 0, Number(row.rate) || 0, row.category, row.notes)
+    const treatAs = effectiveIndirectTreatAs(row.category, row.notes)
+    const hrs = Number(row.hours) || 0
+
+    if (treatAs === 'activity') {
+      // Skip lines with zero hours — there's nothing to budget. Same intent
+      // as the expense branch's `if (amt <= 0) continue`.
+      if (hrs <= 0) continue
+      try {
+        await upsertIndirectActivityForProject(
+          adminSupabase,
+          sheet.site_id,
+          po.id,
+          row.category,
+          hrs,
+          row.notes
+        )
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to copy indirect labor to the project budget'
+        console.error('convert: indirect activity sync failed', e)
+        return NextResponse.json({ error: msg }, { status: 500 })
+      }
+      continue
+    }
+
+    const amt = indirectLineDollarTotal(hrs, Number(row.rate) || 0, row.category, row.notes)
     if (amt <= 0) continue
     const title = indirectExpenseTitle(row.category, row.notes)
     const { error: expErr } = await adminSupabase.from('po_expenses').insert({

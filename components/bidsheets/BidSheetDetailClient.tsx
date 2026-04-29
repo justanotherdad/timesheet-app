@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
 import { Upload, Plus, Trash2, X, FileSpreadsheet, Search, Info, Download, Layers, Eye, Users } from 'lucide-react'
-import { decodeIndirectNotes, encodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
+import { decodeIndirectNotes, effectiveIndirectTreatAs, encodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
 
 interface Item {
   id: string
@@ -671,6 +671,9 @@ export default function BidSheetDetailClient({
           contingencyType: meta.contingencyType || 'none',
           contingencyValue:
             draft.contVal !== undefined ? parseIndirectDraftNum(draft.contVal, meta.contingencyValue ?? 0) : meta.contingencyValue ?? 0,
+          // Preserve the user's loggable-vs-expense choice through debounced
+          // saves driven by hours/rate/label edits.
+          treatAs: meta.treatAs,
         })
         notes = mergedNotes ?? undefined
       }
@@ -731,6 +734,66 @@ export default function BidSheetDetailClient({
       void persistIndirectLaborNow(category)
     },
     [clearIndirectTimer, persistIndirectLaborNow]
+  )
+
+  /**
+   * Persist a "Type" (loggable activity / expense) flip immediately for an
+   * `additional_indirect` or `custom_*` row. We re-encode the notes JSON so
+   * the existing `treatAs` field round-trips with the row's other metadata
+   * (label, contingency) and let the indirect-labor PUT handler do the work
+   * of moving project_details ↔ po_expenses on the converted PO.
+   */
+  const saveIndirectTreatAs = useCallback(
+    async (category: string, treatAs: 'activity' | 'expense') => {
+      const row = indirectLaborRef.current.find((x) => x.category === category)
+      const draft = indirectDraftsRef.current[category] || {}
+      const meta = decodeIndirectNotes(row?.notes)
+      const hours = parseIndirectDraftNum(draft.hours, row?.hours ?? 0)
+      const rate = parseIndirectDraftNum(draft.rate, row?.rate ?? 0)
+      const notes = encodeIndirectNotes({
+        label: draft.label !== undefined ? draft.label : meta.label,
+        contingencyType: meta.contingencyType || 'none',
+        contingencyValue:
+          draft.contVal !== undefined
+            ? parseIndirectDraftNum(draft.contVal, meta.contingencyValue ?? 0)
+            : meta.contingencyValue ?? 0,
+        treatAs,
+      })
+      // saveIndirectImmediate is declared just below; use the ref-stable
+      // `void` Promise so we don't need to wait for a forward-declared
+      // dependency in this hook.
+      await persistIndirectLaborForTreatAs(category, { hours, rate, notes: notes ?? undefined })
+    },
+    // saveIndirectImmediate isn't in scope yet; we forward through a small
+    // wrapper we'll create in a moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  )
+
+  // Tiny shim that reuses the same network logic saveIndirectImmediate uses.
+  // Defined separately so saveIndirectTreatAs can reference it without a
+  // forward-declaration warning.
+  const persistIndirectLaborForTreatAs = useCallback(
+    async (category: string, payload: { hours: number; rate: number; notes?: string | null }) => {
+      try {
+        const res = await fetch(`/api/bid-sheets/${bidSheetId}/indirect-labor`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category,
+            hours: payload.hours,
+            rate: payload.rate,
+            notes: payload.notes,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to save indirect cost')
+        setIndirectLabor((prev) => prev.filter((i) => i.category !== category).concat([data]))
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to save indirect cost')
+      }
+    },
+    [bidSheetId]
   )
 
   /** Immediate save (e.g. contingency type) — cancels pending debounce so drafts merge correctly. */
@@ -2022,6 +2085,8 @@ export default function BidSheetDetailClient({
             const rNum = parseIndirectDraftNum(d?.rate, ind?.rate ?? 0)
             const hoursDisplay = d?.hours !== undefined ? d.hours : ind == null ? '' : String(ind.hours)
             const rateDisplay = d?.rate !== undefined ? d.rate : ind == null ? '' : String(ind.rate ?? '')
+            const treatAs = effectiveIndirectTreatAs(cat.id, ind?.notes)
+            const isPickable = cat.id === 'additional_indirect'
             return (
               <div key={cat.id} className="flex flex-wrap gap-4 items-center">
                 <span className="w-48 text-sm font-medium text-gray-800 dark:text-gray-200">{cat.label}</span>
@@ -2050,6 +2115,29 @@ export default function BidSheetDetailClient({
                 <span className="w-24 text-right text-sm text-gray-700 dark:text-gray-300">
                   = ${indirectLineDollarTotal(hNum, rNum, cat.id, ind?.notes).toFixed(2)}
                 </span>
+                {/* Type indicator: preset PM / Doc Coord / Proj Controls and
+                    T&L are fixed; only Additional Indirect Costs is pickable. */}
+                {isPickable ? (
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Type</label>
+                    <select
+                      value={treatAs}
+                      onChange={(e) => void saveIndirectTreatAs(cat.id, e.target.value as 'activity' | 'expense')}
+                      disabled={!canEdit}
+                      className="h-9 px-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+                    >
+                      <option value="expense">Expense</option>
+                      <option value="activity">Loggable activity</option>
+                    </select>
+                  </div>
+                ) : (
+                  <span
+                    className={`text-xs px-2 py-1 rounded ${treatAs === 'activity' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
+                    title={treatAs === 'activity' ? 'Logged via timesheet on the converted PO' : 'Tracked as a fixed expense on the converted PO'}
+                  >
+                    {treatAs === 'activity' ? 'Loggable activity' : 'Expense'}
+                  </span>
+                )}
               </div>
             )
           })}
@@ -2107,7 +2195,17 @@ export default function BidSheetDetailClient({
                 className={`h-9 w-28 px-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${numInputClass}`}
               />
               <div className="flex flex-wrap items-center gap-2">
-                <label className="text-xs text-gray-500 dark:text-gray-400">Contingency</label>
+                <label className="text-xs text-gray-500 dark:text-gray-400">Type</label>
+                <select
+                  value={effectiveIndirectTreatAs(ind.category, ind.notes)}
+                  onChange={(e) => void saveIndirectTreatAs(ind.category, e.target.value as 'activity' | 'expense')}
+                  disabled={!canEdit}
+                  className="h-9 px-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+                >
+                  <option value="expense">Expense</option>
+                  <option value="activity">Loggable activity</option>
+                </select>
+                <label className="text-xs text-gray-500 dark:text-gray-400 ml-2">Contingency</label>
                 <select
                   value={effectiveContingency}
                   onChange={(e) => {
@@ -2121,6 +2219,9 @@ export default function BidSheetDetailClient({
                       label: draft.label !== undefined ? draft.label : m.label,
                       contingencyType: v,
                       contingencyValue: v === 'none' ? 0 : m.contingencyValue ?? 0,
+                      // Preserve treatAs so flipping contingency doesn't reset the
+                      // user's loggable/expense choice.
+                      treatAs: m.treatAs,
                     })
                     void saveIndirectImmediate(ind.category, { hours, rate, notes: notes ?? undefined })
                   }}
