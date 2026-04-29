@@ -1712,7 +1712,11 @@ export default function BidSheetDetailClient({
                           className={`${stickyLeftFirstCellClass} z-20 ${bodyLeftBg} ${cellClass} flex flex-col justify-center min-w-0 overflow-hidden`}
                           title={labelTitle}
                         >
-                          <span className={`block truncate font-medium ${compactMode ? 'text-xs' : 'text-sm'} text-gray-900 dark:text-gray-100 leading-tight`}>
+                          {/* line-clamp-2 lets the system name wrap to two
+                              lines so long names like "Delta V Process Control
+                              System (PCS) - Paddle Dryer" stay readable; the
+                              row height was sized for 2 lines + 1-line activity. */}
+                          <span className={`block font-medium ${compactMode ? 'text-xs' : 'text-sm'} text-gray-900 dark:text-gray-100 leading-tight line-clamp-2`}>
                             {row.systemName}
                             {row.systemCode && (
                               <span className="text-gray-500 dark:text-gray-400 ml-1 font-normal">({row.systemCode})</span>
