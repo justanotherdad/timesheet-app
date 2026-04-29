@@ -171,6 +171,12 @@ export default function ProjectBudgetMatrix({
   const [editingRow, setEditingRow] = useState<MatrixRow | null>(null)
   const [editBudget, setEditBudget] = useState('')
   const [editDesc, setEditDesc] = useState('')
+  // Editing state for indirect / PO-expense lines (the rows below the labor
+  // matrix). Mirrors editingRow but for po_expenses, so an admin can fix the
+  // label / amount / notes without leaving the matrix view.
+  const [editingIndirect, setEditingIndirect] = useState<IndirectLineRow | null>(null)
+  const [editIndirectLabel, setEditIndirectLabel] = useState('')
+  const [editIndirectAmount, setEditIndirectAmount] = useState('')
 
   const bumpRefresh = () => onMatrixRefresh?.()
 
@@ -388,6 +394,54 @@ export default function ProjectBudgetMatrix({
       bumpRefresh()
     } catch (e) {
       setMutateError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  /**
+   * Open the edit modal for an indirect / PO-expense line. We only allow
+   * editing rows backed by a real po_expenses record — the bid_sheet
+   * fallback rows aren't writable from this view (their ids are prefixed
+   * with `bid-sheet-indirect:`).
+   */
+  const startEditIndirect = (ir: IndirectLineRow) => {
+    if (ir.id.startsWith('bid-sheet-indirect:')) return
+    setEditingIndirect(ir)
+    setEditIndirectLabel(ir.label || '')
+    setEditIndirectAmount(String(ir.budgetCost ?? 0))
+  }
+
+  const handleSaveIndirect = async () => {
+    if (!editingIndirect) return
+    const trimmed = editIndirectLabel.trim()
+    if (!trimmed) {
+      setMutateError('Label is required')
+      return
+    }
+    const amt = Number(editIndirectAmount)
+    if (!Number.isFinite(amt) || amt < 0) {
+      setMutateError('Amount must be a non-negative number')
+      return
+    }
+    setMutating(true)
+    setMutateError(null)
+    try {
+      const res = await fetch(`/api/budget/${poId}/expenses/${encodeURIComponent(editingIndirect.id)}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          custom_type_name: trimmed,
+          amount: amt,
+        }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Save failed')
+      setEditingIndirect(null)
+      bumpRefresh()
+    } catch (e) {
+      setMutateError(e instanceof Error ? e.message : 'Save failed')
     } finally {
       setMutating(false)
     }
@@ -1128,19 +1182,29 @@ export default function ProjectBudgetMatrix({
                         {isFallbackRow ? (
                           <span
                             className="text-gray-500 dark:text-gray-500"
-                            title="This line is computed from the bid sheet because no PO expense exists yet — there's nothing here to delete."
+                            title="This line is computed from the bid sheet because no PO expense exists yet — there's nothing here to edit."
                           >
                             —
                           </span>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteIndirect(ir.id, ir.label)}
-                            disabled={mutating}
-                            className="text-red-600 dark:text-red-400 hover:underline disabled:opacity-50"
-                          >
-                            Delete
-                          </button>
+                          <span className="inline-flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => startEditIndirect(ir)}
+                              disabled={mutating}
+                              className="text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteIndirect(ir.id, ir.label)}
+                              disabled={mutating}
+                              className="text-red-600 dark:text-red-400 hover:underline disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          </span>
                         )}
                       </td>
                     )}
@@ -1203,6 +1267,75 @@ export default function ProjectBudgetMatrix({
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {editingIndirect && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:hidden"
+          onClick={() => !mutating && setEditingIndirect(null)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Edit indirect / expense line</h3>
+              <button
+                type="button"
+                onClick={() => !mutating && setEditingIndirect(null)}
+                className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3 text-sm">
+              <p className="text-gray-600 dark:text-gray-400">
+                This is a PO-level expense. For richer fields (date, expense type, notes), edit it from the budget detail page&apos;s Additional Expenses panel.
+              </p>
+              <label className="block">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Label</span>
+                <input
+                  type="text"
+                  value={editIndirectLabel}
+                  onChange={(e) => setEditIndirectLabel(e.target.value)}
+                  className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Amount ($)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={editIndirectAmount}
+                  onChange={(e) => setEditIndirectAmount(e.target.value)}
+                  className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                />
+              </label>
+              {mutateError && (
+                <p className="text-sm text-red-600 dark:text-red-400">{mutateError}</p>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingIndirect(null)}
+                disabled={mutating}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveIndirect}
+                disabled={mutating}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
