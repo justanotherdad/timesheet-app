@@ -137,6 +137,9 @@ export default function BidSheetDetailClient({
   const [convertProjectName, setConvertProjectName] = useState(sheet.name || '')
   const [convertDepartmentId, setConvertDepartmentId] = useState('')
   const [systemSearch, setSystemSearch] = useState('')
+  // Filter the matrix to rows where at least one cell is assigned to this
+  // labor row. Empty string = "all resources". Stored as the labor.id.
+  const [laborFilter, setLaborFilter] = useState('')
   const [compactMode, setCompactMode] = useState(false)
   const [viewRow, setViewRow] = useState<{ systemId: string; activityId: string; systemName: string; activityName: string } | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -422,14 +425,27 @@ export default function BidSheetDetailClient({
   )
 
   const filteredRows = useMemo(() => {
-    if (!systemSearch.trim()) return systemActivityRows
     const q = systemSearch.trim().toLowerCase()
+    const hasSearch = q.length > 0
+    const hasLaborFilter = !!laborFilter
+    if (!hasSearch && !hasLaborFilter) return systemActivityRows
     return systemActivityRows.filter((row) => {
-      const nameMatch = (row.systemName || '').toLowerCase().includes(q)
-      const codeMatch = (row.systemCode || '').toLowerCase().includes(q)
-      return nameMatch || codeMatch
+      if (hasSearch) {
+        const nameMatch = (row.systemName || '').toLowerCase().includes(q)
+        const codeMatch = (row.systemCode || '').toLowerCase().includes(q)
+        if (!nameMatch && !codeMatch) return false
+      }
+      if (hasLaborFilter) {
+        // Keep this (system, activity) row only if at least one deliverable
+        // cell on the row is assigned to the selected labor entry.
+        const hasAssigned = deliverables.some(
+          (d) => getItemLaborId(row.systemId, d.id, row.activityId) === laborFilter
+        )
+        if (!hasAssigned) return false
+      }
+      return true
     })
-  }, [systemActivityRows, systemSearch])
+  }, [systemActivityRows, systemSearch, laborFilter, deliverables, getItemLaborId])
 
   const getEffectiveHours = useCallback(
     (systemId: string, deliverableId: string, activityId: string) => {
@@ -1550,6 +1566,34 @@ export default function BidSheetDetailClient({
               className="flex-1 h-9 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
             />
           </div>
+          {/* Show only rows where at least one cell is assigned to a given
+              resource; combines with the systems search above. */}
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-gray-500 flex-shrink-0" />
+            <select
+              value={laborFilter}
+              onChange={(e) => setLaborFilter(e.target.value)}
+              className="h-9 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              title="Filter rows by assigned resource"
+            >
+              <option value="">All resources</option>
+              {labor.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.user_profiles?.name || l.placeholder_name || '(unnamed)'}
+                </option>
+              ))}
+            </select>
+            {laborFilter && (
+              <button
+                type="button"
+                onClick={() => setLaborFilter('')}
+                className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                title="Clear resource filter"
+              >
+                Clear
+              </button>
+            )}
+          </div>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -1559,7 +1603,7 @@ export default function BidSheetDetailClient({
             />
             <span className="text-sm">Compact Mode</span>
           </label>
-          {systemSearch && (
+          {(systemSearch || laborFilter) && (
             <span className="text-xs text-gray-500 dark:text-gray-400">
               Showing {filteredRows.length} of {systemActivityRows.length} rows
             </span>
@@ -1866,6 +1910,30 @@ export default function BidSheetDetailClient({
               </tr>
             )})}
           </tbody>
+          {labor.length > 0 && (() => {
+            // Roll up Total Hours and Total Cost across every labor row so the
+            // table footer mirrors the pattern in the matrix (which has its
+            // own column totals). Per-row hours/cost come from the same
+            // laborHoursAndCost map the rows render.
+            let totalHours = 0
+            let totalCost = 0
+            for (const l of labor) {
+              const { hours, cost } = laborHoursAndCost.get(l.id) || { hours: 0, cost: 0 }
+              totalHours += hours
+              totalCost += cost
+            }
+            return (
+              <tfoot>
+                <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/40 font-semibold">
+                  <td className="py-2 text-sm text-gray-800 dark:text-gray-100">Totals</td>
+                  <td className="py-2"></td>
+                  <td className="py-2 tabular-nums text-gray-900 dark:text-gray-100">{totalHours.toFixed(2)}</td>
+                  <td className="py-2 tabular-nums text-gray-900 dark:text-gray-100">${totalCost.toFixed(2)}</td>
+                  {canEdit && <td></td>}
+                </tr>
+              </tfoot>
+            )
+          })()}
         </table>
         {canEdit && (
           <div className="mt-4">
@@ -2089,6 +2157,44 @@ export default function BidSheetDetailClient({
             )
           })}
         </div>
+        {(() => {
+          // Sum hours and dollar totals across every indirect-labor row,
+          // both the preset categories (Project Management, etc.) and any
+          // user-added custom_* lines. We use the same indirectLineDollarTotal
+          // helper that powers each row's = $X line so contingencies are
+          // included consistently.
+          let totalHours = 0
+          let totalDollar = 0
+          for (const ind of indirectLabor) {
+            const draft = indirectDrafts[ind.category] || {}
+            const hNum = parseIndirectDraftNum(draft.hours, ind.hours ?? 0)
+            const rNum = parseIndirectDraftNum(draft.rate, ind.rate ?? 0)
+            const meta = decodeIndirectNotes(ind.notes)
+            const notesForLine =
+              encodeIndirectNotes({
+                label: draft.label !== undefined ? draft.label : meta.label,
+                contingencyType: meta.contingencyType || 'none',
+                contingencyValue:
+                  draft.contVal !== undefined
+                    ? parseIndirectDraftNum(draft.contVal, meta.contingencyValue ?? 0)
+                    : meta.contingencyValue ?? 0,
+              }) ?? ind.notes
+            totalHours += hNum
+            totalDollar += indirectLineDollarTotal(hNum, rNum, ind.category, notesForLine)
+          }
+          return (
+            <div className="mt-4 pt-3 border-t-2 border-gray-300 dark:border-gray-600 flex gap-4 items-center font-semibold">
+              <span className="w-48 text-sm text-gray-800 dark:text-gray-100">Totals</span>
+              <span className="w-24 text-center text-sm tabular-nums text-gray-900 dark:text-gray-100">
+                {totalHours.toFixed(2)}
+              </span>
+              <span className="w-28"></span>
+              <span className="w-24 text-right text-sm tabular-nums text-gray-900 dark:text-gray-100">
+                = ${totalDollar.toFixed(2)}
+              </span>
+            </div>
+          )
+        })()}
         {canEdit && (
           <button
             type="button"
