@@ -61,8 +61,8 @@ const INDIRECT_CATEGORIES = [
   { id: 'additional_indirect', label: 'Additional Indirect Costs' },
 ] as const
 
-const ROW_HEIGHT_NORMAL = 72
-const ROW_HEIGHT_COMPACT = 52
+const ROW_HEIGHT_NORMAL = 80
+const ROW_HEIGHT_COMPACT = 60
 
 const cellKey = (systemId: string, deliverableId: string, activityId: string) =>
   `${systemId}\t${deliverableId}\t${activityId}`
@@ -1610,39 +1610,75 @@ export default function BidSheetDetailClient({
           </div>
         </div>
 
-        {/* Desktop: full matrix with horizontal scroll */}
+        {/* Desktop: full matrix in a single scroll container so we can freeze the
+            left System/Activity column and the right-side Sum (hrs) / Row cost
+            columns, plus the header on top and the footer on bottom. The previous
+            layout used two stacked scroll contexts (outer overflow-x-auto + inner
+            overflow-y-auto/x-hidden) which broke `position: sticky` on the body's
+            first cell and prevented sticky on header/footer entirely. */}
         {(() => {
-          const sysW = compactMode ? 180 : 200
+          const sysW = compactMode ? 200 : 240
           const colW = compactMode ? 100 : 130
           const sumW = compactMode ? 72 : 88
           const costW = compactMode ? 88 : 104
           const gridCols = `${sysW}px repeat(${deliverables.length}, ${colW}px) ${sumW}px ${costW}px`
           const totalGridWidth = sysW + deliverables.length * colW + sumW + costW
+          // Tailwind dynamic class strings + arbitrary `right-[Xpx]` aren't
+          // safelisted, so we apply pixel offsets via inline style instead.
+          const stickyLeftFirstCellClass =
+            'sticky left-0 border-r border-gray-200 dark:border-gray-600 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]'
+          const stickyRightSumStyle = { right: costW }
+          const stickyRightCostStyle = { right: 0 }
+          // bg color tokens for sticky cells; sticky cells must paint over the
+          // content scrolling behind them, so backgrounds need to be opaque.
+          const headerBg = 'bg-gray-50 dark:bg-gray-700'
+          const footerBg = 'bg-gray-100 dark:bg-gray-900'
+          const bodyLeftBg = 'bg-white dark:bg-gray-800'
+          const bodyRightBg = 'bg-gray-50 dark:bg-gray-800'
           return (
-            <div className="hidden md:block w-full min-w-0 overflow-x-auto">
-              <div style={{ width: totalGridWidth, minWidth: Math.max(totalGridWidth, 600) }}>
-              {/* Header row - same grid as body rows */}
+            <div
+              ref={scrollContainerRef}
+              className="hidden md:block w-full min-w-0 max-h-[60vh] overflow-auto"
+              style={{ minHeight: 200 }}
+            >
               <div
-                className="flex border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700"
-                style={{ display: 'grid', gridTemplateColumns: gridCols }}
+                style={{
+                  width: totalGridWidth,
+                  minWidth: Math.max(totalGridWidth, 600),
+                  position: 'relative',
+                }}
               >
-                <div className="border-r border-gray-200 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-                  System / Activity
-                </div>
-                {deliverables.map((d) => (
-                  <div key={d.id} className="border-r border-gray-200 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {compactMode ? (d.name.length > 12 ? d.name.slice(0, 12) + '…' : d.name) : d.name}
+                {/* Header — sticky to top of the unified scroll container.
+                    First cell sticky-left, last two cells sticky-right so the
+                    frozen panes' headers stay in place horizontally too. */}
+                <div
+                  className={`sticky top-0 z-30 ${headerBg} border-b border-gray-200 dark:border-gray-600`}
+                  style={{ display: 'grid', gridTemplateColumns: gridCols }}
+                >
+                  <div className={`${stickyLeftFirstCellClass} z-40 ${headerBg} px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100`}>
+                    System / Activity
                   </div>
-                ))}
-                <div className="px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 text-right border-l border-gray-200 dark:border-gray-600">
-                  Sum (hrs)
+                  {deliverables.map((d) => (
+                    <div key={d.id} className={`${headerBg} border-r border-gray-200 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100`}>
+                      {compactMode ? (d.name.length > 12 ? d.name.slice(0, 12) + '…' : d.name) : d.name}
+                    </div>
+                  ))}
+                  <div
+                    className={`sticky z-40 ${headerBg} px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 text-right border-l border-gray-200 dark:border-gray-600 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.15)]`}
+                    style={stickyRightSumStyle}
+                  >
+                    Sum (hrs)
+                  </div>
+                  <div
+                    className={`sticky z-40 ${headerBg} px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 text-right border-l border-gray-200 dark:border-gray-600 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.15)]`}
+                    style={stickyRightCostStyle}
+                  >
+                    Row cost
+                  </div>
                 </div>
-                <div className="px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 text-right border-l border-gray-200 dark:border-gray-600">
-                  Row cost
-                </div>
-              </div>
 
-              <div ref={scrollContainerRef} className="overflow-y-auto max-h-[60vh] overflow-x-hidden" style={{ minHeight: 200 }}>
+                {/* Virtualized body. Each row is fixed-height (rowHeight) so the
+                    estimateSize value matches reality and rows don't overlap. */}
                 <div
                   style={{
                     height: `${rowVirtualizer.getTotalSize()}px`,
@@ -1656,25 +1692,35 @@ export default function BidSheetDetailClient({
                     const rowKey = `${row.systemId}-${row.activityId}`
                     const rowSumHrs = deliverables.reduce((sum, d) => sum + getEffectiveHours(row.systemId, d.id, row.activityId), 0)
                     const rowSumCost = matrixAggregates.rowCostByKey.get(rowKey) ?? 0
+                    const labelTitle = `${row.systemName}${row.systemCode ? ` (${row.systemCode})` : ''} · ${row.activityName}`
                     return (
                       <div
-                        key={`${row.systemId}-${row.activityId}`}
+                        key={rowKey}
                         style={{
                           position: 'absolute',
                           top: 0,
                           left: 0,
                           width: '100%',
+                          height: rowHeight,
                           transform: `translateY(${virtualRow.start}px)`,
                           display: 'grid',
                           gridTemplateColumns: gridCols,
                         }}
                         className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30"
                       >
-                        <div className="sticky left-0 z-[5] border-r border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
-                          <span className={`font-medium ${labelClass}`} title={row.systemName}>{row.systemName}</span>
-                          {row.systemCode && <span className="text-gray-500 dark:text-gray-400 ml-1">({row.systemCode})</span>}
-                          <span className="text-gray-500 dark:text-gray-400"> · </span>
-                          <span className={`text-gray-500 dark:text-gray-400 ${labelClass}`} title={row.activityName}>{row.activityName}</span>
+                        <div
+                          className={`${stickyLeftFirstCellClass} z-20 ${bodyLeftBg} ${cellClass} flex flex-col justify-center min-w-0 overflow-hidden`}
+                          title={labelTitle}
+                        >
+                          <span className={`block truncate font-medium ${compactMode ? 'text-xs' : 'text-sm'} text-gray-900 dark:text-gray-100 leading-tight`}>
+                            {row.systemName}
+                            {row.systemCode && (
+                              <span className="text-gray-500 dark:text-gray-400 ml-1 font-normal">({row.systemCode})</span>
+                            )}
+                          </span>
+                          <span className={`block truncate ${compactMode ? 'text-[10px]' : 'text-xs'} text-gray-500 dark:text-gray-400 leading-tight mt-0.5`}>
+                            {row.activityName}
+                          </span>
                         </div>
                         {deliverables.map((d) => {
                           const hrs = getItemHours(row.systemId, d.id, row.activityId)
@@ -1683,7 +1729,7 @@ export default function BidSheetDetailClient({
                           const displayHrs =
                             hourDrafts[k] !== undefined ? hourDrafts[k] : hrs === 0 ? '' : String(hrs)
                           return (
-                            <div key={d.id} className={`${cellClass} border-r border-gray-200 dark:border-gray-600 flex flex-col gap-0.5`}>
+                            <div key={d.id} className={`${cellClass} border-r border-gray-200 dark:border-gray-600 flex flex-col justify-center gap-0.5 min-w-0 overflow-hidden`}>
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -1721,12 +1767,18 @@ export default function BidSheetDetailClient({
                             </div>
                           )
                         })}
-                        <div className={`${cellClass} border-l border-gray-200 dark:border-gray-600 flex items-center justify-end bg-gray-50/80 dark:bg-gray-800/50`}>
+                        <div
+                          className={`sticky z-20 ${bodyRightBg} ${cellClass} border-l border-gray-200 dark:border-gray-600 flex items-center justify-end shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]`}
+                          style={stickyRightSumStyle}
+                        >
                           <span className="text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100" title="Sum of hours for this row">
                             {rowSumHrs.toFixed(2)}
                           </span>
                         </div>
-                        <div className={`${cellClass} border-l border-gray-200 dark:border-gray-600 flex items-center justify-end bg-gray-50/80 dark:bg-gray-800/50`}>
+                        <div
+                          className={`sticky z-20 ${bodyRightBg} ${cellClass} border-l border-gray-200 dark:border-gray-600 flex items-center justify-end shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]`}
+                          style={stickyRightCostStyle}
+                        >
                           <span className="text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100" title="Sum of labor cost for this row">
                             ${rowSumCost.toFixed(2)}
                           </span>
@@ -1735,35 +1787,40 @@ export default function BidSheetDetailClient({
                     )
                   })}
                 </div>
-              </div>
 
-              <div
-                className="flex border-t-2 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-900/50"
-                style={{ display: 'grid', gridTemplateColumns: gridCols }}
-              >
-                {/* No sticky here — sticky would pin this cell while other footer cells scroll horizontally */}
-                <div className="border-r border-gray-200 dark:border-gray-600 px-3 py-2 text-xs font-semibold text-gray-800 dark:text-gray-100">
-                  Column totals
-                </div>
-                {deliverables.map((d) => (
-                  <div
-                    key={d.id}
-                    className="border-r border-gray-200 dark:border-gray-600 px-2 py-2 text-right text-xs font-medium tabular-nums text-gray-900 dark:text-gray-100"
-                  >
-                    ${(matrixAggregates.columnCosts[d.id] || 0).toFixed(2)}
+                {/* Footer — sticky to bottom + same frozen left/right columns. */}
+                <div
+                  className={`sticky bottom-0 z-30 ${footerBg} border-t-2 border-gray-300 dark:border-gray-600`}
+                  style={{ display: 'grid', gridTemplateColumns: gridCols }}
+                >
+                  <div className={`${stickyLeftFirstCellClass} z-40 ${footerBg} px-3 py-2 text-xs font-semibold text-gray-800 dark:text-gray-100`}>
+                    Column totals
                   </div>
-                ))}
-                <div className={`${cellClass} border-l border-gray-200 dark:border-gray-600 flex items-center justify-end`}>
-                  <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-gray-100" title="Total hours (matrix)">
-                    {matrixAggregates.footerTotalHours.toFixed(2)}
-                  </span>
+                  {deliverables.map((d) => (
+                    <div
+                      key={d.id}
+                      className={`${footerBg} border-r border-gray-200 dark:border-gray-600 px-2 py-2 text-right text-xs font-medium tabular-nums text-gray-900 dark:text-gray-100`}
+                    >
+                      ${(matrixAggregates.columnCosts[d.id] || 0).toFixed(2)}
+                    </div>
+                  ))}
+                  <div
+                    className={`sticky z-40 ${footerBg} ${cellClass} border-l border-gray-200 dark:border-gray-600 flex items-center justify-end shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.15)]`}
+                    style={stickyRightSumStyle}
+                  >
+                    <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-gray-100" title="Total hours (matrix)">
+                      {matrixAggregates.footerTotalHours.toFixed(2)}
+                    </span>
+                  </div>
+                  <div
+                    className={`sticky z-40 ${footerBg} ${cellClass} flex items-center justify-end border-l border-gray-200 dark:border-gray-600 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.15)]`}
+                    style={stickyRightCostStyle}
+                  >
+                    <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-gray-100" title="Grand total labor cost (matrix)">
+                      ${matrixAggregates.matrixGrandCost.toFixed(2)}
+                    </span>
+                  </div>
                 </div>
-                <div className={`${cellClass} flex items-center justify-end border-l border-gray-200 dark:border-gray-600`}>
-                  <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-gray-100" title="Grand total labor cost (matrix)">
-                    ${matrixAggregates.matrixGrandCost.toFixed(2)}
-                  </span>
-                </div>
-              </div>
               </div>
             </div>
           )
