@@ -38,6 +38,11 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
     systemIds: string[]
     includeNonBillable: boolean
   }>({ clientIds: [], poIds: [], systemIds: [], includeNonBillable: true })
+  // Pre-fetched entries for the currently selected timesheets. Populated when
+  // the user clicks Export → PDF so the filter modal can list the actual
+  // sites/POs/systems present in those timesheets (not the page's
+  // pre-aggregated `_site_ids` arrays which can come up empty for fresh data).
+  const [filterEntriesData, setFilterEntriesData] = useState<any[] | null>(null)
 
   // Cascading filters: each filter narrows the options in the others
   const filteredSites = useMemo(() => {
@@ -226,7 +231,10 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
       .replace(/'/g, '&#039;')
   }
 
-  const handleExportPDF = async (filter?: { clientIds: string[]; poIds: string[]; systemIds: string[]; includeNonBillable: boolean }) => {
+  const handleExportPDF = async (
+    filter?: { clientIds: string[]; poIds: string[]; systemIds: string[]; includeNonBillable: boolean },
+    preloadedData?: any[]
+  ) => {
     const toExport = getExportData()
     if (toExport.length === 0) {
       alert('No timesheets selected')
@@ -237,16 +245,20 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
     const f = filter || { clientIds: [], poIds: [], systemIds: [], includeNonBillable: true }
 
     try {
-      const timesheetIds = toExport.map(ts => ts.id)
-      const response = await fetch('/api/admin/export-timesheets-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ timesheetIds })
-      })
-
-      if (!response.ok) throw new Error('Failed to fetch timesheet data')
-
-      const timesheetData = await response.json()
+      // Reuse data the filter-modal pre-fetch already loaded so we don't make
+      // a second round-trip just to render the same PDF.
+      let timesheetData = preloadedData
+      if (!timesheetData) {
+        const timesheetIds = toExport.map(ts => ts.id)
+        const response = await fetch('/api/admin/export-timesheets-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ timesheetIds })
+        })
+        if (!response.ok) throw new Error('Failed to fetch timesheet data')
+        timesheetData = await response.json()
+      }
+      if (!timesheetData) throw new Error('No timesheet data')
       const origin = window.location.origin
 
       const printWindow = window.open('', '_blank')
@@ -510,14 +522,39 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
     }
   }
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const toExport = getExportData()
     if (toExport.length === 0) {
       alert('No timesheets selected')
       return
     }
     if (exportFormat === 'pdf') {
-      setShowExportFilter(true)
+      // Pre-fetch entries for the selected timesheets so the filter modal can
+      // populate Client / PO / System options from the actual data. Without
+      // this, the modal had to fall back to the page's pre-aggregated
+      // `_site_ids` arrays which were often empty (especially right after a
+      // timesheet was edited or for any selection that included an "empty"
+      // dedup-survivor row), so the modal looked broken.
+      setExporting(true)
+      try {
+        const timesheetIds = toExport.map(ts => ts.id)
+        const response = await fetch('/api/admin/export-timesheets-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ timesheetIds })
+        })
+        if (!response.ok) throw new Error('Failed to load timesheet data')
+        const data = await response.json()
+        setFilterEntriesData(data)
+        // Reset prior filter selections so options that no longer apply don't linger
+        setExportFilter({ clientIds: [], poIds: [], systemIds: [], includeNonBillable: true })
+        setShowExportFilter(true)
+      } catch (e) {
+        console.error('Pre-fetch for filter modal failed:', e)
+        alert('Could not load filter options. Please try again.')
+      } finally {
+        setExporting(false)
+      }
     } else {
       switch (exportFormat) {
         case 'csv':
@@ -532,8 +569,52 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
 
   const handleExportWithFilter = () => {
     setShowExportFilter(false)
-    handleExportPDF(exportFilter)
+    // Pass the pre-fetched data so handleExportPDF doesn't have to fetch again.
+    handleExportPDF(exportFilter, filterEntriesData ?? undefined)
   }
+
+  // Build filter options from the actual entries we just fetched. Falls back
+  // to empty lists (modal renders the "No clients in selected timesheets"
+  // helper) when nothing has been fetched yet — but in practice we only
+  // open the modal after data has loaded, so this stays populated.
+  const pdfFilterOptions = useMemo(() => {
+    if (!filterEntriesData) return { clients: [], pos: [], systems: [] }
+    const siteNameById = new Map(sites.map(s => [s.id, s.name] as const))
+    const poNumberById = new Map(purchaseOrders.map(p => [p.id, p.po_number] as const))
+    const systemNameById = new Map((systems || []).map(s => [s.id, s.name] as const))
+    const clients = new Map<string, string>()
+    const pos = new Map<string, string>()
+    const sys = new Map<string, string>()
+    for (const ts of filterEntriesData) {
+      for (const e of ts.entries || []) {
+        if (e.client_project_id) {
+          clients.set(
+            e.client_project_id,
+            e.sites?.name || siteNameById.get(e.client_project_id) || e.client_project_id
+          )
+        }
+        if (e.po_id) {
+          pos.set(
+            e.po_id,
+            e.purchase_orders?.po_number || poNumberById.get(e.po_id) || e.po_id
+          )
+        }
+        if (e.system_id) {
+          sys.set(
+            e.system_id,
+            e.systems?.name || systemNameById.get(e.system_id) || '—'
+          )
+        } else if (e.system_name) {
+          sys.set(`custom:${e.system_name}`, e.system_name)
+        }
+      }
+    }
+    return {
+      clients: Array.from(clients, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+      pos: Array.from(pos, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+      systems: Array.from(sys, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+    }
+  }, [filterEntriesData, sites, purchaseOrders, systems])
 
   const clearFiltersAndSelection = () => setSelectedTimesheets([])
 
@@ -827,7 +908,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Client / Site</label>
                 <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {sites.filter(s => getExportData().some(ts => (ts._site_ids || []).includes(s.id))).map(s => (
+                  {pdfFilterOptions.clients.map(s => (
                     <label key={s.id} className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -841,7 +922,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                       <span>{s.name}</span>
                     </label>
                   ))}
-                  {sites.filter(s => getExportData().some(ts => (ts._site_ids || []).includes(s.id))).length === 0 && (
+                  {pdfFilterOptions.clients.length === 0 && (
                     <p className="text-sm text-gray-500">No clients in selected timesheets</p>
                   )}
                 </div>
@@ -849,7 +930,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">PO</label>
                 <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {purchaseOrders.filter(p => getExportData().some(ts => (ts._po_ids || []).includes(p.id))).map(p => (
+                  {pdfFilterOptions.pos.map(p => (
                     <label key={p.id} className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -860,10 +941,10 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                         }))}
                         className="rounded"
                       />
-                      <span>{p.po_number}</span>
+                      <span>{p.name}</span>
                     </label>
                   ))}
-                  {purchaseOrders.filter(p => getExportData().some(ts => (ts._po_ids || []).includes(p.id))).length === 0 && (
+                  {pdfFilterOptions.pos.length === 0 && (
                     <p className="text-sm text-gray-500">No POs in selected timesheets</p>
                   )}
                 </div>
@@ -871,9 +952,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Systems</label>
                 <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {systems.filter(s => getExportData().some(ts => 
-                    (ts._system_ids || []).includes(s.id) || (s.id.startsWith('custom:') && (ts._system_names || []).includes(s.name))
-                  )).map(s => (
+                  {pdfFilterOptions.systems.map(s => (
                     <label key={s.id} className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -887,9 +966,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                       <span>{s.name}</span>
                     </label>
                   ))}
-                  {systems.filter(s => getExportData().some(ts => 
-                    (ts._system_ids || []).includes(s.id) || (s.id.startsWith('custom:') && (ts._system_names || []).includes(s.name))
-                  )).length === 0 && (
+                  {pdfFilterOptions.systems.length === 0 && (
                     <p className="text-sm text-gray-500">No systems in selected timesheets</p>
                   )}
                 </div>

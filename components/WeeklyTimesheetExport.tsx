@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Download, Printer, Filter } from 'lucide-react'
 import { formatDate, formatDateShort, formatDateInEastern, formatHoursAmount, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
@@ -26,15 +26,6 @@ interface WeeklyTimesheetExportProps {
   entries: any[]
   unbillable: any[]
   user: any
-  companyInfo?: {
-    name?: string
-    address?: string
-    phone?: string
-    fax?: string
-    website?: string
-    services?: string[]
-  }
-  /** Shared colgroup widths applied to BOTH tables so day columns stay aligned. */
 }
 
 /** Explicit column widths for the billable table that sum to ≤10.5in (landscape minus margins).
@@ -55,9 +46,7 @@ export default function WeeklyTimesheetExport({
   entries, 
   unbillable, 
   user,
-  companyInfo = {}
 }: WeeklyTimesheetExportProps) {
-  const exportRef = useRef<HTMLDivElement>(null)
   const [isPortrait, setIsPortrait] = useState(false)
   const [showExportFilter, setShowExportFilter] = useState(false)
   const [exportFilter, setExportFilter] = useState<{
@@ -118,8 +107,78 @@ export default function WeeklyTimesheetExport({
     return getBillableGrandTotal(entriesToUse) + getUnbillableGrandTotal(unbillableToUse)
   }
 
+  /**
+   * Wrap the timesheet HTML in a full document with the @page landscape CSS
+   * and the zoom-fit script. We use this for BOTH the on-page preview
+   * (rendered into an iframe) and the popup window that opens for Print /
+   * Download — same HTML in both places so the saved PDF matches exactly
+   * what the user sees on screen, no more JSX-vs-HTML drift.
+   */
+  const buildFullExportDoc = (
+    entriesToUse: any[],
+    unbillableToUse: any[],
+    options: { autoPrint: boolean }
+  ): string => {
+    const html = buildExportHtml(entriesToUse, unbillableToUse)
+    const printHint = options.autoPrint
+      ? `<div class="print-hide">
+          <strong>Before printing:</strong> In the print dialog, open &quot;More settings&quot;
+          and <strong>uncheck &quot;Headers and footers&quot;</strong> to remove the URL and page numbers.
+        </div>`
+      : ''
+    const autoPrintScript = options.autoPrint ? `setTimeout(function() { window.print(); }, 250);` : ''
+    return `<!DOCTYPE html>
+<html>
+  <head>
+    <title>Weekly Time Sheet - ${formatDate(weekDates.end)}</title>
+    <style>
+      @page { size: landscape; margin: 0.25in; }
+      @media print {
+        @page { size: landscape; margin: 0.25in; }
+        html, body { margin: 0; padding: 0; }
+        .print-hide { display: none !important; }
+        /* Safety net: never let content bleed past the page boundary */
+        .timesheet-page { overflow: hidden; }
+      }
+      body { font-family: Arial, sans-serif; font-size: 8pt; margin: 0.1in; padding: 0; color: #000; }
+      .print-hide {
+        background: #fef3c7; padding: 8px 12px; margin-bottom: 12px;
+        font-size: 11px; border: 1px solid #f59e0b; border-radius: 6px;
+      }
+    </style>
+    <script>
+      // Auto-fit: scale the timesheet down via CSS zoom so it never overflows
+      // the printable area of one landscape page. Same target as the bulk
+      // admin export so output matches across paths.
+      var FIT_TARGET_H = 720;
+      function fitPages() {
+        var pages = document.querySelectorAll('.timesheet-page');
+        pages.forEach(function(page) {
+          var h = page.scrollHeight;
+          if (h > FIT_TARGET_H) {
+            page.style.zoom = (FIT_TARGET_H / h).toFixed(4);
+            page.style.overflow = 'hidden';
+          }
+        });
+      }
+      window.addEventListener('load', function() {
+        fitPages();
+        ${autoPrintScript}
+      });
+    </script>
+  </head>
+  <body>
+    ${printHint}
+    ${html}
+  </body>
+</html>`
+  }
+
   const handlePrint = () => {
-    window.print()
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    printWindow.document.write(buildFullExportDoc(entries, unbillable, { autoPrint: true }))
+    printWindow.document.close()
   }
 
   const escapeHtml = (text: string | null | undefined): string => {
@@ -261,65 +320,10 @@ export default function WeeklyTimesheetExport({
     return true
   }
 
-  const handleDownload = (entriesToUse = entries, unbillableToUse = unbillable) => {
+  const handleDownload = (entriesToUse: any[] = entries, unbillableToUse: any[] = unbillable) => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
-
-    const html = buildExportHtml(entriesToUse, unbillableToUse)
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Weekly Time Sheet - ${formatDate(weekDates.end)}</title>
-          <style>
-            @page { size: landscape; margin: 0.25in; }
-            @media print {
-              @page { size: landscape; margin: 0.25in; }
-              html, body { margin: 0; padding: 0; }
-              .print-hide { display: none !important; }
-              /* Safety net: never let content bleed past the page boundary */
-              .timesheet-page { overflow: hidden; }
-            }
-            body { font-family: Arial, sans-serif; font-size: 8pt; margin: 0.1in; padding: 0; color: #000; }
-            .print-hide {
-              background: #fef3c7; padding: 8px 12px; margin-bottom: 12px;
-              font-size: 11px; border: 1px solid #f59e0b; border-radius: 6px;
-            }
-          </style>
-          <script>
-            // Auto-fit: scale each .timesheet-page down via CSS zoom so it never
-            // overflows onto a second page.  zoom (unlike transform:scale) collapses
-            // the layout box, so page-break logic stays correct.
-            //
-            // Target = landscape 8.5in − 0.5in @page margins − 0.2in body margins
-            //        = 7.8in × 96ppi = 748.8px.  We use 720 for a safe buffer.
-            var FIT_TARGET_H = 720;
-            function fitPages() {
-              var pages = document.querySelectorAll('.timesheet-page');
-              pages.forEach(function(page) {
-                var h = page.scrollHeight;
-                if (h > FIT_TARGET_H) {
-                  page.style.zoom = (FIT_TARGET_H / h).toFixed(4);
-                  page.style.overflow = 'hidden';
-                }
-              });
-            }
-            // Run once images are loaded so scrollHeight is accurate
-            window.addEventListener('load', function() {
-              fitPages();
-              setTimeout(function() { window.print(); }, 250);
-            });
-          <\/script>
-        </head>
-        <body>
-          <div class="print-hide">
-            <strong>Before printing:</strong> In the print dialog, open &quot;More settings&quot;
-            and <strong>uncheck &quot;Headers and footers&quot;</strong> to remove the URL and page numbers.
-          </div>
-          ${html}
-        </body>
-      </html>
-    `)
+    printWindow.document.write(buildFullExportDoc(entriesToUse, unbillableToUse, { autoPrint: true }))
     printWindow.document.close()
   }
 
@@ -336,6 +340,20 @@ export default function WeeklyTimesheetExport({
     const filteredUnbillable = f.includeNonBillable ? unbillable : []
     handleDownload(filteredEntries, filteredUnbillable)
   }
+
+  // The preview iframe shows ALL data unconditionally — the export-time filter
+  // (clientIds / poIds / systemIds / includeNonBillable) is applied only when
+  // the user actually clicks Export PDF. Re-running buildFullExportDoc on
+  // every keystroke would reload the iframe and steal focus, so memoize.
+  const previewDoc = useMemo(
+    () => buildFullExportDoc(entries, unbillable, { autoPrint: false }),
+    // buildFullExportDoc closes over `timesheet`, `weekDates`, `user`, etc., but
+    // for this component those are static for the lifetime of the page. We only
+    // want to re-render the iframe when the underlying entries/unbillable
+    // change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, unbillable]
+  )
 
   const filterClients = Array.from(new Map(
     entries.filter((e: any) => e.client_project_id).map((e: any) => [
@@ -493,7 +511,11 @@ export default function WeeklyTimesheetExport({
         </div>
       )}
 
-      {/* Mobile: portrait shows rotate prompt; landscape shows scrollable timesheet with pinch zoom */}
+      {/* Preview iframe — renders the EXACT same HTML that the Print/Download
+          popups write, so what the user sees here matches what gets saved
+          (Option B: tight one-page-per-timesheet layout). The zoom-fit script
+          inside the iframe shrinks oversized timesheets to fit a single page,
+          mirroring the saved PDF. */}
       <div className={`relative ${isPortrait ? 'min-h-[400px]' : ''}`}>
         {isPortrait && (
           <div className="md:hidden absolute inset-0 z-20 flex flex-col items-center justify-center py-12 px-4 bg-gray-100 dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
@@ -506,277 +528,15 @@ export default function WeeklyTimesheetExport({
             </p>
           </div>
         )}
-        <div
-          className={`overflow-auto overscroll-contain touch-pan-x touch-pan-y print:overflow-visible ${isPortrait ? 'md:block max-md:invisible max-md:absolute max-md:inset-0 max-md:opacity-0' : 'max-md:min-h-[60vh]'}`}
-          style={{ WebkitOverflowScrolling: 'touch' }}
-        >
-          <div ref={exportRef} className={`timesheet-print-content bg-white p-8 print:p-0 ${!isPortrait ? 'md:min-w-0 min-w-max' : ''}`} style={{ fontFamily: 'Arial, sans-serif', fontSize: '10pt', color: '#000' }}>
-        {/* Header Logo */}
-        <div className="header-logo mb-5">
-          <img 
-            src={`${typeof window !== 'undefined' ? window.location.origin : ''}/ctg-header-logo.png`}
-            alt="Compliance Technology Group, Inc." 
-            style={{ width: '100%', height: 'auto', display: 'block', maxHeight: '150px', objectFit: 'contain' }}
-            onError={(e) => {
-              // Fallback if image doesn't exist - show text header
-              const target = e.target as HTMLImageElement
-              target.style.display = 'none'
-              const fallback = target.nextElementSibling as HTMLElement
-              if (fallback) fallback.style.display = 'block'
-            }}
-          />
-          <div style={{ display: 'none', color: '#000' }}>
-            <div style={{ fontSize: '14pt', fontWeight: 'bold', marginBottom: '5px', color: '#000' }}>
-              {companyInfo.name || 'COMPLIANCE TECHNOLOGY GROUP, INC.'}
-            </div>
-            <div style={{ fontSize: '9pt', color: '#000' }}>
-              {companyInfo.address || '505 South Franklin Street, West Chester, PA 19382'}
-            </div>
-            <div style={{ fontSize: '9pt', color: '#000' }}>
-              {companyInfo.phone && `Phone ${companyInfo.phone}`}
-              {companyInfo.fax && ` | Fax ${companyInfo.fax}`}
-              {companyInfo.website && ` | ${companyInfo.website}`}
-            </div>
-            <div style={{ textAlign: 'right', fontSize: '9pt', color: '#000' }}>
-              {(companyInfo.services || [
-                'Commissioning & Validation',
-                'Steam Quality Testing',
-                'Controlled Environment Services'
-              ]).map((service, idx) => (
-                <div key={idx}>{service}</div>
-              ))}
-            </div>
-            <div style={{ backgroundColor: '#0066CC', color: 'white', textAlign: 'center', padding: '10px', fontSize: '18pt', fontWeight: 'bold', margin: '20px 0' }}>
-              Weekly Time Sheet
-            </div>
-          </div>
-        </div>
-
-        {/* Timesheet Info */}
-        <div className="timesheet-info mb-2" style={{ color: '#000' }}>
-          <div style={{ color: '#000' }}><strong style={{ color: '#000' }}>Time Sheet For:</strong> {user.name}</div>
-          <div style={{ color: '#000' }}>
-            <strong style={{ color: '#000' }}>From:</strong> {formatDate(weekDates.start)} <strong style={{ color: '#000' }}>To:</strong> {formatDate(weekDates.end)}
-          </div>
-        </div>
-
-        {/* Billable Time Table */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#f0f0f0' }}>
-              <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Client / Project #</th>
-              <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>PO#</th>
-              <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Task Description</th>
-              <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>System</th>
-              <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Deliverable</th>
-              <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Activity</th>
-              {weekDates.days.map((day, idx) => (
-                <th key={idx} className="day-header" style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>
-                  <div>{format(day, 'EEE')}</div>
-                  <div className="day-date" style={{ fontSize: '8pt', fontWeight: 'normal' }}>
-                    {formatDateShort(weekDates.days[idx])}
-                  </div>
-                </th>
-              ))}
-              <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry, idx) => (
-              <tr key={idx}>
-                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
-                  {entry.sites?.name || entry.client_project_id || ''}
-                </td>
-                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
-                  {entry.purchase_orders?.po_number || entry.po_id || ''}
-                </td>
-                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
-                  {entry.task_description || ''}
-                </td>
-                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
-                  {entry.system_name || entry.systems?.name || '—'}
-                </td>
-                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
-                  {entry.deliverables?.name || '—'}
-                </td>
-                <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
-                  {entry.activities?.name || '—'}
-                </td>
-                {days.map((day) => (
-                  <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                    {formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}
-                  </td>
-                ))}
-                <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', fontWeight: 'bold', color: '#000' }}>
-                  {formatHoursAmount(calculateTotal(entry))}
-                </td>
-              </tr>
-            ))}
-            
-            {/* Add empty rows if needed */}
-            {entries.length < 5 && Array.from({ length: 5 - entries.length }).map((_, idx) => (
-              <tr key={`empty-${idx}`}>
-                <td style={{ border: '1px solid #000', padding: '5px' }}></td>
-                <td style={{ border: '1px solid #000', padding: '5px' }}></td>
-                <td style={{ border: '1px solid #000', padding: '5px' }}></td>
-                <td style={{ border: '1px solid #000', padding: '5px' }}></td>
-                <td style={{ border: '1px solid #000', padding: '5px' }}></td>
-                <td style={{ border: '1px solid #000', padding: '5px' }}></td>
-                {days.map((day) => (
-                  <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right' }}>0.00</td>
-                ))}
-                <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right' }}>0.00</td>
-              </tr>
-            ))}
-
-            {/* Sub Totals */}
-            <tr className="subtotal-row" style={{ backgroundColor: '#FFFF99', fontWeight: 'bold', color: '#000' }}>
-              <td colSpan={6} style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>Sub Totals</td>
-              {days.map((day) => (
-                <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                  {formatHoursAmount(getBillableSubtotal(day))}
-                </td>
-              ))}
-              <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                {formatHoursAmount(getBillableGrandTotal())}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
-        {/* Signature Section - only show approval lines that exist on the user profile */}
-        <div className="signature-section" style={{ marginTop: '15px', color: '#000' }}>
-          <div style={{ marginBottom: '8px', color: '#000' }}>
-            <strong style={{ color: '#000' }}>Employee Signature / Date:</strong>
-            {timesheet.employee_signed_at ? (
-              <span style={{ marginLeft: '10px', color: '#000' }}>
-                {user.name} {formatDateInEastern(timesheet.employee_signed_at)}
-              </span>
-            ) : (
-              <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
-            )}
-          </div>
-          {(user.supervisor_id != null && user.supervisor_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'supervisor') ? (
-            <div style={{ marginBottom: '8px', color: '#000', textAlign: 'right' }}>
-              <strong style={{ color: '#000' }}>Supervisor Approval by / Date:</strong>
-              {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'supervisor') ? (
-                <span style={{ marginLeft: '10px', color: '#000' }}>
-                  {(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').signer_name) || timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').user_profiles?.name}{' '}
-                  {formatDateInEastern(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'supervisor').signed_at)}
-                </span>
-              ) : (
-                <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
-              )}
-            </div>
-          ) : null}
-          {(user.manager_id != null && user.manager_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'manager') ? (
-            <div style={{ marginBottom: '8px', color: '#000', textAlign: 'right' }}>
-              <strong style={{ color: '#000' }}>Manager Approval by / Date:</strong>
-              {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'manager') ? (
-                <span style={{ marginLeft: '10px', color: '#000' }}>
-                  {(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').signer_name) || timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').user_profiles?.name}{' '}
-                  {formatDateInEastern(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'manager').signed_at)}
-                </span>
-              ) : (
-                <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
-              )}
-            </div>
-          ) : null}
-          {(user.final_approver_id != null && user.final_approver_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'final_approver') ? (
-            <div style={{ color: '#000', textAlign: 'right' }}>
-              <strong style={{ color: '#000' }}>Final Approver by / Date:</strong>
-              {timesheet.timesheet_signatures?.find((s: any) => s.signer_role === 'final_approver') ? (
-                <span style={{ marginLeft: '10px', color: '#000' }}>
-                  {(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').signer_name) || timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').user_profiles?.name}{' '}
-                  {formatDateInEastern(timesheet.timesheet_signatures.find((s: any) => s.signer_role === 'final_approver').signed_at)}
-                </span>
-              ) : (
-                <span style={{ marginLeft: '10px', borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px' }}></span>
-              )}
-            </div>
-          ) : null}
-        </div>
-
-        {/* Unbillable Time Section */}
-        <div className="unbillable-section" style={{ marginTop: '15px', color: '#000' }}>
-          <h3 style={{ fontSize: '12pt', fontWeight: 'bold', marginBottom: '10px', color: '#000' }}>UNBILLABLE TIME</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as const }}>
-            <colgroup>
-              <col style={{ width: '5.5rem' }} />
-              <col />
-              {weekDates.days.map((_, idx) => (
-                <col key={idx} style={{ width: '3rem' }} />
-              ))}
-              <col style={{ width: '4.5rem' }} />
-            </colgroup>
-            <thead>
-              <tr style={{ backgroundColor: '#f0f0f0' }}>
-                <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left', whiteSpace: 'nowrap' }}>Description</th>
-                <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Notes</th>
-                {weekDates.days.map((day, idx) => (
-                  <th key={idx} className="day-header" style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>
-                    <div>{format(day, 'EEE')}</div>
-                    <div className="day-date" style={{ fontSize: '8pt', fontWeight: 'normal' }}>
-                      {formatDateShort(weekDates.days[idx])}
-                    </div>
-                  </th>
-                ))}
-                <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', whiteSpace: 'nowrap' }}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {unbillable.map((entry) => (
-                <tr key={entry.id || entry.description}>
-                  <td style={{ border: '1px solid #000', padding: '5px', fontWeight: 'bold', color: '#000' }}>
-                    {entry.description}
-                  </td>
-                  <td style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>
-                    {(entry as { notes?: string }).notes || '—'}
-                  </td>
-                  {days.map((day) => (
-                    <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                      {formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}
-                    </td>
-                  ))}
-                  <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', fontWeight: 'bold', color: '#000' }}>
-                    {formatHoursAmount(calculateTotal(entry))}
-                  </td>
-                </tr>
-              ))}
-              
-              {/* Sub Totals */}
-              <tr className="subtotal-row" style={{ backgroundColor: '#FFFF99', fontWeight: 'bold', color: '#000' }}>
-                <td colSpan={2} style={{ border: '1px solid #000', padding: '5px', color: '#000' }}>Sub Totals</td>
-                {days.map((day) => (
-                  <td key={day} style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                    {formatHoursAmount(getUnbillableSubtotal(day))}
-                  </td>
-                ))}
-                <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'right', color: '#000' }}>
-                  {formatHoursAmount(getUnbillableGrandTotal())}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Notes Section */}
-        {timesheet.notes && (
-          <div style={{ marginTop: '15px', color: '#000' }}>
-            <strong style={{ color: '#000' }}>Notes:</strong>
-            <div style={{ border: '1px solid #ccc', padding: '8px', marginTop: '4px', whiteSpace: 'pre-wrap', fontSize: '10pt', color: '#000' }}>
-              {timesheet.notes}
-            </div>
-          </div>
-        )}
-
-        {/* Grand Total */}
-        <div className="grand-total-row" style={{ backgroundColor: '#90EE90', fontWeight: 'bold', padding: '10px', marginTop: '15px', textAlign: 'right', fontSize: '12pt', color: '#000' }}>
-          <span style={{ marginRight: '20px', color: '#000' }}>GRAND TOTAL</span>
-          <span style={{ color: '#000' }}>{formatHoursAmount(getGrandTotal())}</span>
-        </div>
-          </div>
-        </div>
+        <iframe
+          srcDoc={previewDoc}
+          title="Timesheet preview"
+          className={`w-full bg-white border border-gray-200 dark:border-gray-700 rounded-lg ${isPortrait ? 'md:block max-md:invisible max-md:absolute max-md:inset-0 max-md:opacity-0' : ''}`}
+          style={{ height: '780px' }}
+        />
+        {/* Hidden legacy JSX preview removed — preview now uses the iframe
+            above so it's byte-identical to the saved PDF. If you need to
+            restore a JSX-based preview, see git history for this file. */}
       </div>
     </div>
   )
