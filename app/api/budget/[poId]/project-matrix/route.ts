@@ -136,11 +136,14 @@ async function loadIndirectLinesFromBidSheetFallback(db: any, poId: string) {
     }
     const amt = indirectLineDollarTotal(Number(r.hours) || 0, Number(r.rate) || 0, r.category, r.notes)
     if (amt <= EPS) continue
+    // Bid sheet indirect rows are *projections* — money the project planned
+    // to spend on this category. Until a matching po_expense gets recorded
+    // during the project, nothing has actually been expended, so actual is 0.
     out.push({
       id: `bid-sheet-indirect:${r.id}`,
       label: bidIndirectRowLabel(r.category, r.notes),
       budgetCost: amt,
-      actualCost: amt,
+      actualCost: 0,
     })
   }
   return out
@@ -333,18 +336,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
 
   const { data: expenseRows } = await db.from('po_expenses').select('id, amount, custom_type_name').eq('po_id', poId)
 
+  // po_expenses entries are *actual* incurred costs the user logged during
+  // the project (receipts, invoiced expenses, etc.) — they're not budgeted
+  // ahead of time per line. So we surface them in the matrix with
+  // actualCost = amount and budgetCost = 0; the project's real budget is
+  // the PO total + COs + LIs which the budget detail page already shows.
   let indirectLines = (expenseRows || []).map((e: Record<string, unknown>) => {
     const amt = Number(e.amount) || 0
     const label = String(e.custom_type_name || 'Expense').trim() || 'Expense'
     return {
       id: e.id as string,
       label,
-      budgetCost: amt,
+      budgetCost: 0,
       actualCost: amt,
     }
   })
-  const poIndirectSum = indirectLines.reduce((s, x) => s + x.budgetCost, 0)
-  if (poIndirectSum <= EPS) {
+  // Fallback: when no real po_expenses exist yet, synthesize "indirect"
+  // lines from the bid sheet's projected indirect costs so the matrix can
+  // still show what the proposal planned to spend on indirect categories.
+  // Those are *projections only* — the fallback function returns them with
+  // actualCost = 0 to mirror the same semantics as the po_expenses path.
+  const poActualSum = indirectLines.reduce((s, x) => s + x.actualCost, 0)
+  if (poActualSum <= EPS) {
     indirectLines = await loadIndirectLinesFromBidSheetFallback(db, poId)
   }
   const indirectBudgetTotal = indirectLines.reduce((s, x) => s + x.budgetCost, 0)
