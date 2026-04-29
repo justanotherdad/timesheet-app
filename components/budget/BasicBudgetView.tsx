@@ -227,7 +227,16 @@ export default function BasicBudgetView({
       }
     } catch { /* ignore */ }
     setExpensesOverride(null)
-  }, [po.id])
+    // Budget Balance is computed server-side from PO total + COs + LIs minus
+    // labor cost and additional expenses. Whenever the expenses list changes
+    // (add / edit / delete), the balance card at the top of the page goes
+    // stale until we re-fetch — without this, deleting an expense left the
+    // Budget Balance unchanged until the user manually refreshed the page.
+    if (user) {
+      await loadBalance()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [po.id, fetchOpts, user, loadBalance])
 
   const refetch = useCallback(async () => {
     const t = `t=${Date.now()}`
