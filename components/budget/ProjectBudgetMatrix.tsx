@@ -85,6 +85,18 @@ type IndirectLineRow = {
   label: string
   budgetCost: number
   actualCost: number
+  /** Distinguishes real po_expenses from bid-sheet projections used as a display fallback. */
+  source?: 'po_expense' | 'bidsheet_fallback'
+  /** Bid sheet row ID — present on fallback rows so we can create a real po_expense from them. */
+  bidSheetRowId?: string
+}
+
+type MissingActivity = {
+  bidSheetRowId: string
+  category: string
+  notes: string | null
+  activityName: string
+  hours: number
 }
 
 type MatrixPayload = {
@@ -95,6 +107,10 @@ type MatrixPayload = {
   }
   rows: MatrixRow[]
   indirectLines?: IndirectLineRow[]
+  /** Activity-type indirect rows (PM, DocCoord, etc.) that should be in the regular matrix
+   *  via project_details but are missing — usually because the PO was converted before
+   *  the activity-type logic was added. */
+  missingActivities?: MissingActivity[]
   totals: {
     budgetedHours: number
     actualHoursInMatrix: number
@@ -177,6 +193,10 @@ export default function ProjectBudgetMatrix({
   const [editingIndirect, setEditingIndirect] = useState<IndirectLineRow | null>(null)
   const [editIndirectLabel, setEditIndirectLabel] = useState('')
   const [editIndirectAmount, setEditIndirectAmount] = useState('')
+
+  // State for the "missing activities" repair flow
+  const [syncingActivities, setSyncingActivities] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   const bumpRefresh = () => onMatrixRefresh?.()
 
@@ -298,6 +318,7 @@ export default function ProjectBudgetMatrix({
   }, [filteredRows, sortColumn, sortDir])
 
   const indirectLines = data?.indirectLines ?? []
+  const missingActivities = data?.missingActivities ?? []
   const indirectBudgetTotal = data?.totals.indirectBudgetCost ?? indirectLines.reduce((s, r) => s + r.budgetCost, 0)
   const indirectActualTotal = data?.totals.indirectActualCost ?? indirectLines.reduce((s, r) => s + r.actualCost, 0)
 
@@ -401,15 +422,14 @@ export default function ProjectBudgetMatrix({
 
   /**
    * Open the edit modal for an indirect / PO-expense line. We only allow
-   * editing rows backed by a real po_expenses record — the bid_sheet
-   * fallback rows aren't writable from this view (their ids are prefixed
-   * with `bid-sheet-indirect:`).
+   * editing rows backed by a real po_expenses record.
    */
   const startEditIndirect = (ir: IndirectLineRow) => {
-    if (ir.id.startsWith('bid-sheet-indirect:')) return
+    if (ir.source === 'bidsheet_fallback') return
     setEditingIndirect(ir)
     setEditIndirectLabel(ir.label || '')
-    setEditIndirectAmount(String(ir.budgetCost ?? 0))
+    // Real po_expenses store the amount as actualCost; fallback rows use budgetCost.
+    setEditIndirectAmount(String(ir.source === 'po_expense' ? (ir.actualCost ?? 0) : (ir.budgetCost ?? 0)))
   }
 
   const handleSaveIndirect = async () => {
@@ -448,12 +468,9 @@ export default function ProjectBudgetMatrix({
   }
 
   /**
-   * Delete an indirect / PO-expense line straight from the matrix view. The
-   * indirect lines render from `po_expenses` (or, when none exist, from the
-   * bid sheet's `bid_sheet_indirect_labor` fallback — those rows have ids
-   * prefixed with `bid-sheet-indirect:` and aren't deletable here). After a
-   * successful delete we call bumpRefresh so the matrix re-fetches and the
-   * Indirect subtotal / Grand total rows update without a page reload.
+   * Delete an indirect / PO-expense line straight from the matrix view.
+   * Fallback bid-sheet rows (source==='bidsheet_fallback') are not deletable — the
+   * user should instead record a real expense via "Record Expense" or sync activities.
    */
   const handleDeleteIndirect = async (id: string, label: string) => {
     if (id.startsWith('bid-sheet-indirect:')) return
@@ -474,6 +491,61 @@ export default function ProjectBudgetMatrix({
       setMutateError(e instanceof Error ? e.message : 'Delete failed')
     } finally {
       setMutating(false)
+    }
+  }
+
+  /**
+   * Convert a bid-sheet fallback expense row into a real po_expense so the user
+   * gets Edit / Delete buttons. Prefills label and amount from the projection.
+   */
+  const handleRecordExpense = async (ir: IndirectLineRow) => {
+    if (!confirm(`Record "${ir.label}" as a tracked expense on this PO?\n\nThis will create a real expense entry for $${ir.budgetCost.toLocaleString(undefined, { minimumFractionDigits: 2 })} that you can then edit or delete.`)) return
+    setMutating(true)
+    setMutateError(null)
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      const res = await fetch(`/api/budget/${poId}/expenses`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          custom_type_name: ir.label,
+          amount: ir.budgetCost,
+          expense_date: today,
+        }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Failed to record expense')
+      bumpRefresh()
+    } catch (e) {
+      setMutateError(e instanceof Error ? e.message : 'Failed to record expense')
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  /**
+   * Call the repair endpoint to add any activity-type indirect rows (PM, DocCoord, etc.)
+   * that are missing from project_details (usually because the PO was converted before
+   * the activity-type logic was added).
+   */
+  const handleSyncActivities = async () => {
+    setSyncingActivities(true)
+    setSyncError(null)
+    try {
+      const res = await fetch(`/api/budget/${poId}/sync-indirect-activities`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Sync failed')
+      bumpRefresh()
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : 'Sync failed')
+    } finally {
+      setSyncingActivities(false)
     }
   }
 
@@ -749,6 +821,30 @@ export default function ProjectBudgetMatrix({
       {mutateError && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
           {mutateError}
+        </div>
+      )}
+
+      {canEditMatrix && missingActivities.length > 0 && (
+        <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-200 text-sm flex items-start justify-between gap-4">
+          <div>
+            <p className="font-medium">Loggable activities not yet in the matrix</p>
+            <p className="mt-0.5 text-amber-700 dark:text-amber-300">
+              {missingActivities.map((a) => a.activityName).join(', ')} —{' '}
+              {missingActivities.length === 1 ? 'this activity was' : 'these activities were'} set as loggable in the bid sheet
+              but {missingActivities.length === 1 ? 'is' : 'are'} missing from the project matrix (the PO may have been converted before
+              activity-type tracking was available). Click <strong>Add to Matrix</strong> to add{' '}
+              {missingActivities.length === 1 ? 'it' : 'them'} with their bid-sheet budgeted hours.
+            </p>
+            {syncError && <p className="mt-1 text-red-600 dark:text-red-400">{syncError}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={handleSyncActivities}
+            disabled={syncingActivities}
+            className="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+          >
+            {syncingActivities ? 'Adding…' : 'Add to Matrix'}
+          </button>
         </div>
       )}
 
@@ -1158,18 +1254,22 @@ export default function ProjectBudgetMatrix({
                       ? 'text-red-600 dark:text-red-400'
                       : 'text-emerald-700 dark:text-emerald-400'
                     : ''
-                // Fallback rows synthesized from bid_sheet_indirect_labor
-                // when the PO has no real po_expenses; these aren't deletable
-                // because there's nothing in po_expenses to remove.
-                const isFallbackRow = ir.id.startsWith('bid-sheet-indirect:')
+                // Fallback rows are bid-sheet projections (no real po_expense yet).
+                // Real po_expense rows (source === 'po_expense') get Edit / Delete.
+                const isFallbackRow = ir.source === 'bidsheet_fallback'
                 return (
                   <tr key={`indirect-${ir.id}`} className="border-b border-gray-100 dark:border-gray-700 bg-amber-50/40 dark:bg-amber-950/15">
                     <td className="py-2 pr-4 text-gray-800 dark:text-gray-200 align-top">Indirect</td>
                     <td className="py-2 pr-4 text-gray-800 dark:text-gray-200 align-top" title={ir.label}>
                       {ir.label}
+                      {isFallbackRow && (
+                        <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">(bid-sheet projection)</span>
+                      )}
                     </td>
                     <td className="py-2 pr-4 text-gray-500 dark:text-gray-500 align-top">—</td>
-                    <td className="py-2 pr-4 text-gray-500 dark:text-gray-500 align-top max-w-[220px] text-xs">PO expense</td>
+                    <td className="py-2 pr-4 text-gray-500 dark:text-gray-500 align-top max-w-[220px] text-xs">
+                      {isFallbackRow ? 'Projected (bid sheet)' : 'PO expense'}
+                    </td>
                     <td className="text-right py-2 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
                     <td className="text-right py-2 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
                     <td className="text-right py-2 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
@@ -1180,12 +1280,15 @@ export default function ProjectBudgetMatrix({
                     {canEditMatrix && (
                       <td className="print:hidden py-2 pl-2 text-xs whitespace-nowrap">
                         {isFallbackRow ? (
-                          <span
-                            className="text-gray-500 dark:text-gray-500"
-                            title="This line is computed from the bid sheet because no PO expense exists yet — there's nothing here to edit."
+                          <button
+                            type="button"
+                            onClick={() => handleRecordExpense(ir)}
+                            disabled={mutating}
+                            title="Create a tracked expense entry from this bid-sheet projection so you can edit or delete it"
+                            className="text-amber-600 dark:text-amber-400 hover:underline disabled:opacity-50"
                           >
-                            —
-                          </span>
+                            Record Expense
+                          </button>
                         ) : (
                           <span className="inline-flex items-center gap-3">
                             <button

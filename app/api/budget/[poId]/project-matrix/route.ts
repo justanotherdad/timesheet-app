@@ -4,7 +4,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { canAccessPoBudget } from '@/lib/access'
 import { billRateIsActiveOnDate, pickEffectiveRateForWeek } from '@/lib/po-bill-rate-utils'
-import { decodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
+import {
+  decodeIndirectNotes,
+  indirectLineDollarTotal,
+  effectiveIndirectTreatAs,
+  indirectActivityName,
+} from '@/lib/bid-sheet-indirect'
 
 export const dynamic = 'force-dynamic'
 
@@ -115,17 +120,38 @@ function bidIndirectRowLabel(category: string, notes: string | null | undefined)
   return PRESET_INDIRECT_LABEL[category] || `Indirect — ${category}`
 }
 
+export type IndirectLine = {
+  id: string
+  label: string
+  budgetCost: number
+  actualCost: number
+  /** 'bidsheet_fallback' when synthesized from bid_sheet_indirect_labor (no real po_expense yet). */
+  source?: 'po_expense' | 'bidsheet_fallback'
+  /** The bid_sheet_indirect_labor row ID — present on fallback rows for repair operations. */
+  bidSheetRowId?: string
+}
+
+export type MissingActivity = {
+  bidSheetRowId: string
+  category: string
+  notes: string | null
+  activityName: string
+  hours: number
+}
+
 /**
  * If po_expenses is empty or all zeros (RLS, or conversion gap), derive the same indirect $ as the bid sheet
  * from bid_sheet_indirect_labor for the sheet that converted to this PO.
+ * Only returns *expense-type* rows — activity-type rows (PM, DocCoord, ProjControls) belong
+ * in the regular matrix via project_details and are excluded here.
  */
-async function loadIndirectLinesFromBidSheetFallback(db: any, poId: string) {
+async function loadIndirectLinesFromBidSheetFallback(db: any, poId: string): Promise<IndirectLine[]> {
   const { data: sheet } = await db.from('bid_sheets').select('id').eq('converted_po_id', poId).maybeSingle()
   const sid = (sheet as { id?: string } | null)?.id
-  if (!sid) return [] as Array<{ id: string; label: string; budgetCost: number; actualCost: number }>
+  if (!sid) return []
 
   const { data: indirectRows } = await db.from('bid_sheet_indirect_labor').select('*').eq('bid_sheet_id', sid)
-  const out: Array<{ id: string; label: string; budgetCost: number; actualCost: number }> = []
+  const out: IndirectLine[] = []
   for (const row of indirectRows || []) {
     const r = row as {
       id: string
@@ -134,16 +160,57 @@ async function loadIndirectLinesFromBidSheetFallback(db: any, poId: string) {
       hours?: number | null
       rate?: number | null
     }
+    // Activity-type rows (PM, DocCoord, ProjControls) should live in project_details
+    // and show up in the regular matrix — skip them here.
+    if (effectiveIndirectTreatAs(r.category, r.notes) === 'activity') continue
+
     const amt = indirectLineDollarTotal(Number(r.hours) || 0, Number(r.rate) || 0, r.category, r.notes)
     if (amt <= EPS) continue
-    // Bid sheet indirect rows are *projections* — money the project planned
-    // to spend on this category. Until a matching po_expense gets recorded
-    // during the project, nothing has actually been expended, so actual is 0.
+    // Bid sheet indirect rows are *projections* — nothing has been expended yet.
     out.push({
       id: `bid-sheet-indirect:${r.id}`,
       label: bidIndirectRowLabel(r.category, r.notes),
       budgetCost: amt,
       actualCost: 0,
+      source: 'bidsheet_fallback',
+      bidSheetRowId: r.id,
+    })
+  }
+  return out
+}
+
+/**
+ * Find activity-type bid sheet indirect rows (PM, DocCoord, etc.) that should have been
+ * converted to project_details rows but are missing — e.g. because the bid sheet was
+ * converted before the activity-type logic was added. Returns rows the caller can use to
+ * offer a one-click repair (POST /api/budget/[poId]/sync-indirect-activities).
+ */
+async function detectMissingIndirectActivities(
+  db: any,
+  poId: string,
+  existingActivityNames: Set<string>
+): Promise<MissingActivity[]> {
+  const { data: sheet } = await db.from('bid_sheets').select('id').eq('converted_po_id', poId).maybeSingle()
+  const sid = (sheet as { id?: string } | null)?.id
+  if (!sid) return []
+
+  const { data: indirectRows } = await db
+    .from('bid_sheet_indirect_labor')
+    .select('id, category, notes, hours, rate')
+    .eq('bid_sheet_id', sid)
+
+  const out: MissingActivity[] = []
+  for (const row of indirectRows || []) {
+    const r = row as { id: string; category: string; notes?: string | null; hours?: number | null; rate?: number | null }
+    if (effectiveIndirectTreatAs(r.category, r.notes) !== 'activity') continue
+    const actName = indirectActivityName(r.category, r.notes)
+    if (existingActivityNames.has(actName.toLowerCase())) continue
+    out.push({
+      bidSheetRowId: r.id,
+      category: r.category,
+      notes: r.notes ?? null,
+      activityName: actName,
+      hours: Number(r.hours) || 0,
     })
   }
   return out
@@ -337,11 +404,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
   const { data: expenseRows } = await db.from('po_expenses').select('id, amount, custom_type_name').eq('po_id', poId)
 
   // po_expenses entries are *actual* incurred costs the user logged during
-  // the project (receipts, invoiced expenses, etc.) — they're not budgeted
-  // ahead of time per line. So we surface them in the matrix with
-  // actualCost = amount and budgetCost = 0; the project's real budget is
-  // the PO total + COs + LIs which the budget detail page already shows.
-  let indirectLines = (expenseRows || []).map((e: Record<string, unknown>) => {
+  // the project. Surface them with actualCost = amount and budgetCost = 0.
+  let indirectLines: IndirectLine[] = (expenseRows || []).map((e: Record<string, unknown>) => {
     const amt = Number(e.amount) || 0
     const label = String(e.custom_type_name || 'Expense').trim() || 'Expense'
     return {
@@ -349,19 +413,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
       label,
       budgetCost: 0,
       actualCost: amt,
+      source: 'po_expense' as const,
     }
   })
-  // Fallback: when no real po_expenses exist yet, synthesize "indirect"
-  // lines from the bid sheet's projected indirect costs so the matrix can
-  // still show what the proposal planned to spend on indirect categories.
-  // Those are *projections only* — the fallback function returns them with
-  // actualCost = 0 to mirror the same semantics as the po_expenses path.
+  // Fallback: when no real po_expenses exist yet, synthesize expense-type indirect
+  // lines from the bid sheet's projected indirect costs (projections only, actual = 0).
+  // Activity-type rows (PM, DocCoord, etc.) are excluded from the fallback — they
+  // belong in project_details and appear in the regular matrix.
   const poActualSum = indirectLines.reduce((s, x) => s + x.actualCost, 0)
   if (poActualSum <= EPS) {
     indirectLines = await loadIndirectLinesFromBidSheetFallback(db, poId)
   }
   const indirectBudgetTotal = indirectLines.reduce((s, x) => s + x.budgetCost, 0)
   const indirectActualTotal = indirectLines.reduce((s, x) => s + x.actualCost, 0)
+
+  // Detect activity-type indirect rows from the bid sheet that are missing
+  // from project_details (can happen for budgets converted before this logic existed).
+  const existingActivityNames = new Set(
+    (detailRows || [])
+      .map((d) => ((d as { activities?: { name?: string } }).activities?.name ?? '').toLowerCase())
+      .filter(Boolean)
+  )
+  const missingActivities = await detectMissingIndirectActivities(db, poId, existingActivityNames)
 
   const grandBudgetCost = totalBudgetCost + indirectBudgetTotal
   const grandActualCost = totalActualCost + indirectActualTotal
@@ -384,6 +457,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
       },
       rows,
       indirectLines,
+      missingActivities,
       totals: {
         budgetedHours: totalBudgeted,
         actualHoursInMatrix: totalActualMatrix,
