@@ -99,6 +99,33 @@ async function loadBidSheetLineCostMap(db: any, poId: string): Promise<Map<strin
     cur.lineCost += line
     map.set(key, cur)
   }
+
+  // Also include activity-type indirect rows (PM / Doc Coord / Project Controls and
+  // custom rows marked treatAs='activity') so their Est. budget $ uses bid-sheet
+  // indirect dollars instead of falling back to blended labor rate.
+  const { data: indirectRows } = await db
+    .from('bid_sheet_indirect_labor')
+    .select('category, notes, hours, rate')
+    .eq('bid_sheet_id', sheetRow.id)
+
+  for (const row of (indirectRows || []) as Array<{
+    category: string
+    notes?: string | null
+    hours?: number | null
+    rate?: number | null
+  }>) {
+    if (effectiveIndirectTreatAs(row.category, row.notes) !== 'activity') continue
+    const activityName = indirectActivityName(row.category, row.notes)
+    const hours = Number(row.hours) || 0
+    const lineCost = indirectLineDollarTotal(hours, Number(row.rate) || 0, row.category, row.notes)
+    if (hours <= EPS || lineCost <= EPS) continue
+    const key = matrixMatchKey('Indirect', null, 'Indirect', activityName)
+    const cur = map.get(key) ?? { hours: 0, lineCost: 0 }
+    cur.hours += hours
+    cur.lineCost += lineCost
+    map.set(key, cur)
+  }
+
   return map
 }
 
