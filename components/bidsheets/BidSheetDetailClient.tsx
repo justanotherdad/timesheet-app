@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
-import { Upload, Plus, Trash2, X, FileSpreadsheet, Search, Info, Download, Layers, Eye, Users } from 'lucide-react'
+import { Upload, Plus, Trash2, X, FileSpreadsheet, Search, Info, Download, Layers, Eye, Users, Pencil, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import { decodeIndirectNotes, effectiveIndirectTreatAs, encodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
 
 interface Item {
@@ -137,6 +137,18 @@ export default function BidSheetDetailClient({
   const [laborPlaceholderLast, setLaborPlaceholderLast] = useState('')
   const [laborUsePlaceholder, setLaborUsePlaceholder] = useState(false)
   const [laborRate, setLaborRate] = useState('')
+  // Labor & Rates table sorting. Default: name ascending.
+  type LaborSortKey = 'name' | 'rate' | 'hours' | 'cost'
+  type LaborSortDir = 'asc' | 'desc'
+  const [laborSortKey, setLaborSortKey] = useState<LaborSortKey>('name')
+  const [laborSortDir, setLaborSortDir] = useState<LaborSortDir>('asc')
+  // Inline edit for an existing labor row. Mirrors the Add-labor inputs.
+  const [editingLabor, setEditingLabor] = useState<Labor | null>(null)
+  const [editLaborUsePlaceholder, setEditLaborUsePlaceholder] = useState(false)
+  const [editLaborUserId, setEditLaborUserId] = useState('')
+  const [editLaborPlaceholderFirst, setEditLaborPlaceholderFirst] = useState('')
+  const [editLaborPlaceholderLast, setEditLaborPlaceholderLast] = useState('')
+  const [editLaborRate, setEditLaborRate] = useState('')
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -148,6 +160,10 @@ export default function BidSheetDetailClient({
   // Filter the matrix to rows where at least one cell is assigned to this
   // labor row. Empty string = "all resources". Stored as the labor.id.
   const [laborFilter, setLaborFilter] = useState('')
+  // Toggle: hide rows whose budgeted hours sum to 0 across all deliverables.
+  const [hideZeroRows, setHideZeroRows] = useState(false)
+  // Toggle: hide rows that have hours but no resource assigned on any cell with hours.
+  const [hideUnassignedRows, setHideUnassignedRows] = useState(false)
   const [compactMode, setCompactMode] = useState(false)
   const [viewRow, setViewRow] = useState<{ systemId: string; activityId: string; systemName: string; activityName: string } | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -432,29 +448,6 @@ export default function BidSheetDetailClient({
     [systems, activities]
   )
 
-  const filteredRows = useMemo(() => {
-    const q = systemSearch.trim().toLowerCase()
-    const hasSearch = q.length > 0
-    const hasLaborFilter = !!laborFilter
-    if (!hasSearch && !hasLaborFilter) return systemActivityRows
-    return systemActivityRows.filter((row) => {
-      if (hasSearch) {
-        const nameMatch = (row.systemName || '').toLowerCase().includes(q)
-        const codeMatch = (row.systemCode || '').toLowerCase().includes(q)
-        if (!nameMatch && !codeMatch) return false
-      }
-      if (hasLaborFilter) {
-        // Keep this (system, activity) row only if at least one deliverable
-        // cell on the row is assigned to the selected labor entry.
-        const hasAssigned = deliverables.some(
-          (d) => getItemLaborId(row.systemId, d.id, row.activityId) === laborFilter
-        )
-        if (!hasAssigned) return false
-      }
-      return true
-    })
-  }, [systemActivityRows, systemSearch, laborFilter, deliverables, getItemLaborId])
-
   const getEffectiveHours = useCallback(
     (systemId: string, deliverableId: string, activityId: string) => {
       const k = cellKey(systemId, deliverableId, activityId)
@@ -469,6 +462,59 @@ export default function BidSheetDetailClient({
     },
     [hourDrafts, getItemHours]
   )
+
+  const filteredRows = useMemo(() => {
+    const q = systemSearch.trim().toLowerCase()
+    const hasSearch = q.length > 0
+    const hasLaborFilter = !!laborFilter
+    if (!hasSearch && !hasLaborFilter && !hideZeroRows && !hideUnassignedRows) {
+      return systemActivityRows
+    }
+    return systemActivityRows.filter((row) => {
+      if (hasSearch) {
+        const nameMatch = (row.systemName || '').toLowerCase().includes(q)
+        const codeMatch = (row.systemCode || '').toLowerCase().includes(q)
+        if (!nameMatch && !codeMatch) return false
+      }
+      if (hasLaborFilter) {
+        // Keep this (system, activity) row only if at least one deliverable
+        // cell on the row is assigned to the selected labor entry.
+        const hasAssigned = deliverables.some(
+          (d) => getItemLaborId(row.systemId, d.id, row.activityId) === laborFilter
+        )
+        if (!hasAssigned) return false
+      }
+      if (hideZeroRows || hideUnassignedRows) {
+        // Walk the cells once so both toggles share the same scan and stay
+        // in sync with what the matrix actually shows (drafts included).
+        let totalHrs = 0
+        let hasUnassignedHours = false
+        for (const d of deliverables) {
+          const hrs = getEffectiveHours(row.systemId, d.id, row.activityId)
+          if (hrs > 0) {
+            totalHrs += hrs
+            if (!getItemLaborId(row.systemId, d.id, row.activityId)) {
+              hasUnassignedHours = true
+            }
+          }
+        }
+        if (hideZeroRows && totalHrs <= 0) return false
+        // Only relevant when the row actually has hours (we don't hide a
+        // genuinely-empty row just because its 0 hrs aren't assigned).
+        if (hideUnassignedRows && totalHrs > 0 && hasUnassignedHours) return false
+      }
+      return true
+    })
+  }, [
+    systemActivityRows,
+    systemSearch,
+    laborFilter,
+    hideZeroRows,
+    hideUnassignedRows,
+    deliverables,
+    getItemLaborId,
+    getEffectiveHours,
+  ])
 
   const matrixAggregates = useMemo(() => {
     const columnCosts: Record<string, number> = {}
@@ -527,6 +573,65 @@ export default function BidSheetDetailClient({
     }
     return map
   }, [items, labor, getEffectiveHours])
+
+  /** Display name used by the labor table and exports. Falls back to a stable
+   *  '-' so unnamed rows still sort consistently. */
+  const laborDisplayName = useCallback(
+    (l: Labor) => (l.user_profiles?.name || l.placeholder_name || '-').trim(),
+    []
+  )
+
+  /** Sorted copy of `labor` driven by the table's column-sort state. Defaults
+   *  to alphabetical-by-name (ascending) on first render. Numeric columns
+   *  still tie-break alphabetically so two zero-cost rows stay stable. */
+  const sortedLabor = useMemo(() => {
+    const arr = [...labor]
+    const dir = laborSortDir === 'asc' ? 1 : -1
+    arr.sort((a, b) => {
+      const an = laborDisplayName(a).toLowerCase()
+      const bn = laborDisplayName(b).toLowerCase()
+      let cmp = 0
+      switch (laborSortKey) {
+        case 'name':
+          cmp = an.localeCompare(bn)
+          break
+        case 'rate':
+          cmp = (Number(a.bid_rate) || 0) - (Number(b.bid_rate) || 0)
+          if (cmp === 0) cmp = an.localeCompare(bn)
+          break
+        case 'hours': {
+          const ah = laborHoursAndCost.get(a.id)?.hours ?? 0
+          const bh = laborHoursAndCost.get(b.id)?.hours ?? 0
+          cmp = ah - bh
+          if (cmp === 0) cmp = an.localeCompare(bn)
+          break
+        }
+        case 'cost': {
+          const ac = laborHoursAndCost.get(a.id)?.cost ?? 0
+          const bc = laborHoursAndCost.get(b.id)?.cost ?? 0
+          cmp = ac - bc
+          if (cmp === 0) cmp = an.localeCompare(bn)
+          break
+        }
+      }
+      return cmp * dir
+    })
+    return arr
+  }, [labor, laborSortKey, laborSortDir, laborDisplayName, laborHoursAndCost])
+
+  /** Toggle sort direction when re-clicking the active column; otherwise
+   *  switch to that column with a sensible default direction (text columns
+   *  start asc, numeric columns start desc so the largest value rises to top). */
+  const onLaborSort = useCallback((key: LaborSortKey) => {
+    setLaborSortKey((prev) => {
+      if (prev === key) {
+        setLaborSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+        return prev
+      }
+      setLaborSortDir(key === 'name' ? 'asc' : 'desc')
+      return key
+    })
+  }, [])
   const totalLaborCost = useMemo(() => {
     let s = 0
     for (const sys of systems) {
@@ -651,6 +756,83 @@ export default function BidSheetDetailClient({
     if (res.ok) {
       setLabor((prev) => prev.filter((l) => l.id !== laborId))
       setItems((prev) => prev.map((i) => (i.labor_id === laborId ? { ...i, labor_id: null } : i)))
+    }
+  }
+
+  /** Open the edit modal for a labor row, prefilling every field from the
+   *  current row so the user only has to change what they want. Placeholder
+   *  rows (no user_id) start in placeholder mode; user-linked rows start in
+   *  existing-user mode. */
+  const handleStartEditLabor = (l: Labor) => {
+    setEditingLabor(l)
+    const hasUser = !!l.user_id
+    setEditLaborUsePlaceholder(!hasUser)
+    setEditLaborUserId(l.user_id || '')
+    const placeholder = (l.placeholder_name || '').trim()
+    if (placeholder) {
+      const idx = placeholder.indexOf(' ')
+      if (idx > 0) {
+        setEditLaborPlaceholderFirst(placeholder.slice(0, idx))
+        setEditLaborPlaceholderLast(placeholder.slice(idx + 1))
+      } else {
+        setEditLaborPlaceholderFirst(placeholder)
+        setEditLaborPlaceholderLast('')
+      }
+    } else {
+      setEditLaborPlaceholderFirst('')
+      setEditLaborPlaceholderLast('')
+    }
+    setEditLaborRate(String(l.bid_rate ?? ''))
+    setError(null)
+  }
+
+  const handleCancelEditLabor = () => {
+    setEditingLabor(null)
+    setEditLaborUsePlaceholder(false)
+    setEditLaborUserId('')
+    setEditLaborPlaceholderFirst('')
+    setEditLaborPlaceholderLast('')
+    setEditLaborRate('')
+  }
+
+  const handleSaveEditLabor = async () => {
+    if (!editingLabor) return
+    if (!editLaborRate) {
+      setError('Bid rate is required')
+      return
+    }
+    const placeholderName = editLaborUsePlaceholder
+      ? [editLaborPlaceholderFirst.trim(), editLaborPlaceholderLast.trim()].filter(Boolean).join(' ')
+      : ''
+    if (editLaborUsePlaceholder && !placeholderName) {
+      setError('Provide a placeholder name')
+      return
+    }
+    if (!editLaborUsePlaceholder && !editLaborUserId) {
+      setError('Select a user')
+      return
+    }
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/bid-sheets/${bidSheetId}/labor`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          labor_id: editingLabor.id,
+          user_id: editLaborUsePlaceholder ? null : editLaborUserId || null,
+          placeholder_name: editLaborUsePlaceholder ? placeholderName : null,
+          bid_rate: parseFloat(editLaborRate),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to save labor changes')
+      setLabor((prev) => prev.map((l) => (l.id === data.id ? data : l)))
+      handleCancelEditLabor()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save labor changes')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -1703,6 +1885,32 @@ export default function BidSheetDetailClient({
               </button>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => setHideZeroRows((v) => !v)}
+            aria-pressed={hideZeroRows}
+            title="Hide rows whose total budgeted hours = 0"
+            className={`h-9 px-3 text-xs font-medium rounded-lg border transition-colors ${
+              hideZeroRows
+                ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            {hideZeroRows ? 'Show empty rows' : 'Hide empty rows'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setHideUnassignedRows((v) => !v)}
+            aria-pressed={hideUnassignedRows}
+            title="Hide rows that have hours but no resource assigned on at least one cell"
+            className={`h-9 px-3 text-xs font-medium rounded-lg border transition-colors ${
+              hideUnassignedRows
+                ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            {hideUnassignedRows ? 'Show unassigned' : 'Hide unassigned'}
+          </button>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -1712,7 +1920,7 @@ export default function BidSheetDetailClient({
             />
             <span className="text-sm">Compact Mode</span>
           </label>
-          {(systemSearch || laborFilter) && (
+          {(systemSearch || laborFilter || hideZeroRows || hideUnassignedRows) && (
             <span className="text-xs text-gray-500 dark:text-gray-400">
               Showing {filteredRows.length} of {systemActivityRows.length} rows
             </span>
@@ -1993,27 +2201,64 @@ export default function BidSheetDetailClient({
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-700">
-              <th className="text-left py-2 text-sm font-medium">Person</th>
-              <th className="text-left py-2 text-sm font-medium">Rate ($/hr)</th>
-              <th className="text-left py-2 text-sm font-medium">Total Hours</th>
-              <th className="text-left py-2 text-sm font-medium">Total Cost</th>
-              {canEdit && <th className="w-10"></th>}
+              {(['name', 'rate', 'hours', 'cost'] as const).map((key) => {
+                const label =
+                  key === 'name' ? 'Person' :
+                  key === 'rate' ? 'Rate ($/hr)' :
+                  key === 'hours' ? 'Total Hours' :
+                  'Total Cost'
+                const active = laborSortKey === key
+                const Icon = !active ? ArrowUpDown : laborSortDir === 'asc' ? ArrowUp : ArrowDown
+                return (
+                  <th key={key} className="text-left py-2 text-sm font-medium">
+                    <button
+                      type="button"
+                      onClick={() => onLaborSort(key)}
+                      className={`inline-flex items-center gap-1 hover:underline focus:outline-none ${
+                        active ? 'text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
+                      }`}
+                      title={`Sort by ${label}`}
+                    >
+                      <span>{label}</span>
+                      <Icon className={`h-3.5 w-3.5 ${active ? 'opacity-100' : 'opacity-50'}`} />
+                    </button>
+                  </th>
+                )
+              })}
+              {canEdit && <th className="w-20"></th>}
             </tr>
           </thead>
           <tbody>
-            {labor.map((l) => {
+            {sortedLabor.map((l) => {
               const { hours, cost } = laborHoursAndCost.get(l.id) || { hours: 0, cost: 0 }
               return (
               <tr key={l.id} className="border-b border-gray-200 dark:border-gray-700">
-                <td className="py-2">{l.user_profiles?.name || l.placeholder_name || '-'}</td>
+                <td className="py-2">{laborDisplayName(l)}</td>
                 <td className="py-2">${Number(l.bid_rate).toFixed(2)}</td>
                 <td className="py-2 tabular-nums">{hours.toFixed(2)}</td>
                 <td className="py-2 tabular-nums">${cost.toFixed(2)}</td>
                 {canEdit && (
                   <td>
-                    <button type="button" onClick={() => handleDeleteLabor(l.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditLabor(l)}
+                        className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                        title="Edit this resource"
+                        aria-label={`Edit ${laborDisplayName(l)}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteLabor(l.id)}
+                        className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                        title="Delete this resource"
+                        aria-label={`Delete ${laborDisplayName(l)}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 )}
               </tr>
@@ -2654,6 +2899,109 @@ export default function BidSheetDetailClient({
                 type="button"
                 onClick={handleSaveActivityEdit}
                 disabled={loading || !editActName.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Labor Modal */}
+      {editingLabor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={handleCancelEditLabor}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Edit resource</h3>
+              <button type="button" onClick={handleCancelEditLabor} className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="flex flex-wrap gap-3">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={!editLaborUsePlaceholder}
+                    onChange={() => setEditLaborUsePlaceholder(false)}
+                  />
+                  <span className="text-sm">Existing user</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={editLaborUsePlaceholder}
+                    onChange={() => setEditLaborUsePlaceholder(true)}
+                  />
+                  <span className="text-sm">Placeholder</span>
+                </label>
+              </div>
+              {!editLaborUsePlaceholder ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">User</label>
+                  <select
+                    value={editLaborUserId}
+                    onChange={(e) => setEditLaborUserId(e.target.value)}
+                    className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                  >
+                    <option value="">-- Select --</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First name</label>
+                    <input
+                      type="text"
+                      value={editLaborPlaceholderFirst}
+                      onChange={(e) => setEditLaborPlaceholderFirst(e.target.value)}
+                      className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last name</label>
+                    <input
+                      type="text"
+                      value={editLaborPlaceholderLast}
+                      onChange={(e) => setEditLaborPlaceholderLast(e.target.value)}
+                      className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bid rate ($/hr)</label>
+                <input
+                  type="number"
+                  value={editLaborRate}
+                  onChange={(e) => setEditLaborRate(e.target.value)}
+                  min={0}
+                  step={0.01}
+                  className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+              {error && (
+                <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+              <button type="button" onClick={handleCancelEditLabor} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditLabor}
+                disabled={
+                  loading ||
+                  !editLaborRate ||
+                  (editLaborUsePlaceholder
+                    ? !editLaborPlaceholderFirst.trim() && !editLaborPlaceholderLast.trim()
+                    : !editLaborUserId)
+                }
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
               >
                 Save
