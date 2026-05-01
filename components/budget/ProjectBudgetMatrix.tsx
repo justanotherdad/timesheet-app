@@ -198,6 +198,15 @@ export default function ProjectBudgetMatrix({
   const [syncingActivities, setSyncingActivities] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
 
+  // State for the "fix unmatched timesheet entries" repair flow
+  const [syncingEntries, setSyncingEntries] = useState(false)
+  const [syncEntriesError, setSyncEntriesError] = useState<string | null>(null)
+  const [syncEntriesResult, setSyncEntriesResult] = useState<{
+    fixedCount: number
+    ambiguousCount: number
+    noCandidateCount: number
+  } | null>(null)
+
   const bumpRefresh = () => onMatrixRefresh?.()
 
   useEffect(() => {
@@ -549,6 +558,45 @@ export default function ProjectBudgetMatrix({
     }
   }
 
+  /**
+   * One-click repair for timesheet entries on this PO that don't match a
+   * matrix row. The repair endpoint fuzzy-matches each unmatched entry's
+   * (system, deliverable, activity) against project_details rows and updates
+   * the entry's IDs when exactly one project_details candidate is found.
+   * Common cause: site has duplicate deliverables ("SLIA" vs "System Level
+   * Impact Assessment (SLIA)") and the timesheet picked the orphan one.
+   */
+  const handleSyncTimesheetEntries = async () => {
+    setSyncingEntries(true)
+    setSyncEntriesError(null)
+    setSyncEntriesResult(null)
+    try {
+      const res = await fetch(`/api/budget/${poId}/sync-timesheet-entries`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Sync failed')
+      const result = body as {
+        fixedCount: number
+        ambiguousCount: number
+        noCandidateCount: number
+      }
+      setSyncEntriesResult({
+        fixedCount: Number(result.fixedCount) || 0,
+        ambiguousCount: Number(result.ambiguousCount) || 0,
+        noCandidateCount: Number(result.noCandidateCount) || 0,
+      })
+      bumpRefresh()
+    } catch (e) {
+      setSyncEntriesError(e instanceof Error ? e.message : 'Sync failed')
+    } finally {
+      setSyncingEntries(false)
+    }
+  }
+
   const handleAddRow = async () => {
     setMutating(true)
     setMutateError(null)
@@ -845,6 +893,46 @@ export default function ProjectBudgetMatrix({
           >
             {syncingActivities ? 'Adding…' : 'Add to Matrix'}
           </button>
+        </div>
+      )}
+
+      {data && data.totals.unmatchedActualHours > 0 && (
+        <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-200 text-sm flex items-start justify-between gap-4">
+          <div>
+            <p className="font-medium">
+              {formatHours(data.totals.unmatchedActualHours)} timesheet hours don&apos;t match a matrix row
+            </p>
+            <p className="mt-0.5 text-amber-700 dark:text-amber-300">
+              These hours were logged against a system / deliverable / activity combination that doesn&apos;t exist as a project matrix cell —
+              usually because the timesheet picked a duplicate deliverable or activity (e.g. <em>SLIA</em> vs <em>System Level Impact Assessment (SLIA)</em>).
+              {canEditMatrix
+                ? <> Click <strong>Fix Entries</strong> to auto-remap each entry to the matching matrix cell when there&apos;s a single safe candidate.</>
+                : ' Ask an admin to repair these entries from the budget detail page.'}
+            </p>
+            {syncEntriesError && <p className="mt-1 text-red-600 dark:text-red-400">{syncEntriesError}</p>}
+            {syncEntriesResult && (
+              <p className="mt-1 text-amber-900 dark:text-amber-100">
+                Repaired {syncEntriesResult.fixedCount} entr{syncEntriesResult.fixedCount === 1 ? 'y' : 'ies'}
+                {syncEntriesResult.ambiguousCount > 0 && (
+                  <> · {syncEntriesResult.ambiguousCount} ambiguous (multiple matches — left alone)</>
+                )}
+                {syncEntriesResult.noCandidateCount > 0 && (
+                  <> · {syncEntriesResult.noCandidateCount} with no matching matrix cell (need to be edited or re-logged)</>
+                )}
+                .
+              </p>
+            )}
+          </div>
+          {canEditMatrix && (
+            <button
+              type="button"
+              onClick={handleSyncTimesheetEntries}
+              disabled={syncingEntries}
+              className="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {syncingEntries ? 'Fixing…' : 'Fix Entries'}
+            </button>
+          )}
         </div>
       )}
 

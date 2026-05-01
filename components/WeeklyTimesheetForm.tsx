@@ -19,6 +19,18 @@ interface WeeklyTimesheetFormProps {
   deliverablePOIds?: Record<string, string[]>
   deliverableDepartmentIds?: Record<string, string[]>
   activityPOIds?: Record<string, string[]>
+  /**
+   * For each project-budget PO, the (system, deliverable, activity) triplets
+   * that exist in project_details (i.e. the cells the project matrix actually
+   * tracks). When the user selects a PO that has an entry here, the dropdowns
+   * are constrained to those combos so timesheet hours always land on a real
+   * matrix cell. POs absent from the map (Basic Budgets) keep the looser
+   * dept/PO filtering.
+   */
+  projectBudgetCombosByPo?: Record<
+    string,
+    Array<{ systemId: string; deliverableId: string; activityId: string }>
+  >
   defaultWeekEnding: string
   userId: string
   timesheetId?: string
@@ -128,6 +140,7 @@ export default function WeeklyTimesheetForm({
   deliverablePOIds = {},
   deliverableDepartmentIds = {},
   activityPOIds = {},
+  projectBudgetCombosByPo = {},
   defaultWeekEnding,
   userId,
   timesheetId,
@@ -442,6 +455,14 @@ export default function WeeklyTimesheetForm({
     code: s.code,
   }))
 
+  // When the selected PO is a project budget, restrict dropdowns to combos
+  // that exist as project_details rows. Honors the *current* row's other
+  // selections (system / deliverable / activity) so each dropdown narrows
+  // as the user picks values, just like the bid-sheet matrix would.
+  const projectCombosForPo: Array<{ systemId: string; deliverableId: string; activityId: string }> =
+    editingEntry?.po_id ? projectBudgetCombosByPo[editingEntry.po_id] || [] : []
+  const usingProjectCombos = projectCombosForPo.length > 0
+
   // Filter deliverables by client (site) and PO; deduplicate by id
   // When deliverable has no PO assignments: only show if its department matches the selected PO's department
   const filteredDeliverables = (() => {
@@ -450,19 +471,31 @@ export default function WeeklyTimesheetForm({
       list = list.filter(d => d.site_id === editingEntry.client_project_id)
     }
     if (editingEntry?.po_id) {
-      const selectedPO = purchaseOrders.find(p => p.id === editingEntry.po_id)
-      const poDepartmentId = selectedPO?.department_id
-      list = list.filter(d => {
-        const poIds = deliverablePOIds[d.id] || []
-        if (poIds.length > 0) {
-          return poIds.includes(editingEntry.po_id!)
+      if (usingProjectCombos) {
+        // Strict project-budget mode: only deliverables that appear with the
+        // chosen system (and chosen activity, if any) on a real matrix cell.
+        const allowedIds = new Set<string>()
+        for (const combo of projectCombosForPo) {
+          if (editingEntry.system_id && combo.systemId !== editingEntry.system_id) continue
+          if (editingEntry.activity_id && combo.activityId !== editingEntry.activity_id) continue
+          allowedIds.add(combo.deliverableId)
         }
-        // No PO assignments
-        const delDeptIds = deliverableDepartmentIds[d.id] || []
-        if (delDeptIds.length === 0) return true // N/A department: show for any PO
-        if (!poDepartmentId) return false
-        return delDeptIds.includes(poDepartmentId)
-      })
+        list = list.filter(d => allowedIds.has(d.id))
+      } else {
+        const selectedPO = purchaseOrders.find(p => p.id === editingEntry.po_id)
+        const poDepartmentId = selectedPO?.department_id
+        list = list.filter(d => {
+          const poIds = deliverablePOIds[d.id] || []
+          if (poIds.length > 0) {
+            return poIds.includes(editingEntry.po_id!)
+          }
+          // No PO assignments
+          const delDeptIds = deliverableDepartmentIds[d.id] || []
+          if (delDeptIds.length === 0) return true // N/A department: show for any PO
+          if (!poDepartmentId) return false
+          return delDeptIds.includes(poDepartmentId)
+        })
+      }
     }
     return Array.from(new Map(list.map(d => [d.id, d])).values())
   })()
@@ -480,10 +513,21 @@ export default function WeeklyTimesheetForm({
       list = list.filter(a => a.site_id === editingEntry.client_project_id)
     }
     if (editingEntry?.po_id) {
-      list = list.filter(a => {
-        const poIds = activityPOIds[a.id] || []
-        return poIds.length === 0 || poIds.includes(editingEntry.po_id!)
-      })
+      if (usingProjectCombos) {
+        // Strict project-budget mode (mirrors filteredDeliverables above).
+        const allowedIds = new Set<string>()
+        for (const combo of projectCombosForPo) {
+          if (editingEntry.system_id && combo.systemId !== editingEntry.system_id) continue
+          if (editingEntry.deliverable_id && combo.deliverableId !== editingEntry.deliverable_id) continue
+          allowedIds.add(combo.activityId)
+        }
+        list = list.filter(a => allowedIds.has(a.id))
+      } else {
+        list = list.filter(a => {
+          const poIds = activityPOIds[a.id] || []
+          return poIds.length === 0 || poIds.includes(editingEntry.po_id!)
+        })
+      }
     }
     return Array.from(new Map(list.map(a => [a.id, a])).values())
   })()

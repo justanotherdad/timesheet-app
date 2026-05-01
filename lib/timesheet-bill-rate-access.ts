@@ -133,6 +133,8 @@ export async function getBillRatePoSummaryByUserIds(
   return result
 }
 
+export type ProjectDetailCombo = { systemId: string; deliverableId: string; activityId: string }
+
 export type TimesheetDropdownPayload = {
   sites: any[]
   purchaseOrders: any[]
@@ -142,6 +144,14 @@ export type TimesheetDropdownPayload = {
   deliverablePOIds: Record<string, string[]>
   deliverableDepartmentIds: Record<string, string[]>
   activityPOIds: Record<string, string[]>
+  /**
+   * Map of project-budget PO id -> list of valid (system, deliverable, activity)
+   * triplets pulled from project_details. The timesheet form uses this to
+   * restrict its dropdown options when the selected PO is a Project Budget,
+   * preventing entries from referencing combos that don't exist as matrix cells.
+   * Basic Budget POs are absent from this map and keep the looser dept/PO filter.
+   */
+  projectBudgetCombosByPo: Record<string, ProjectDetailCombo[]>
 }
 
 /**
@@ -192,6 +202,7 @@ export async function loadTimesheetDropdownData(params: {
         deliverablePOIds: {},
         deliverableDepartmentIds: {},
         activityPOIds: {},
+        projectBudgetCombosByPo: {},
       }
     }
 
@@ -217,6 +228,7 @@ export async function loadTimesheetDropdownData(params: {
         deliverablePOIds: {},
         deliverableDepartmentIds: {},
         activityPOIds: {},
+        projectBudgetCombosByPo: {},
       }
     }
 
@@ -336,6 +348,36 @@ export async function loadTimesheetDropdownData(params: {
     })
   }
 
+  // Build the strict (system, deliverable, activity) allowlist for project-
+  // budget POs. We pull project_details for any PO with budget_type='project'
+  // visible to this user; the timesheet form uses this to keep dropdowns in
+  // sync with the actual matrix cells so users can't pick combos that won't
+  // appear on the project matrix.
+  const projectBudgetCombosByPo: Record<string, ProjectDetailCombo[]> = {}
+  const projectBudgetPoIds = (purchaseOrders as Array<{ id: string; budget_type?: string }>)
+    .filter((p) => p.budget_type === 'project')
+    .map((p) => p.id)
+  if (projectBudgetPoIds.length > 0) {
+    const { data: detailRows } = await admin
+      .from('project_details')
+      .select('po_id, system_id, deliverable_id, activity_id')
+      .in('po_id', projectBudgetPoIds)
+    for (const row of (detailRows || []) as Array<{
+      po_id: string
+      system_id: string | null
+      deliverable_id: string | null
+      activity_id: string | null
+    }>) {
+      if (!row.system_id || !row.deliverable_id || !row.activity_id) continue
+      const list = projectBudgetCombosByPo[row.po_id] || (projectBudgetCombosByPo[row.po_id] = [])
+      list.push({
+        systemId: row.system_id,
+        deliverableId: row.deliverable_id,
+        activityId: row.activity_id,
+      })
+    }
+  }
+
   return {
     sites,
     purchaseOrders,
@@ -345,5 +387,6 @@ export async function loadTimesheetDropdownData(params: {
     deliverablePOIds,
     deliverableDepartmentIds,
     activityPOIds,
+    projectBudgetCombosByPo,
   }
 }

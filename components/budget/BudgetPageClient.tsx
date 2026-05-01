@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, ChevronDown } from 'lucide-react'
 import BasicBudgetView from './BasicBudgetView'
@@ -65,10 +65,23 @@ function BudgetPageClientInner({
   const [selectedPoId, setSelectedPoId] = useState<string | null>(initialPoId)
   const [expandedPoId, setExpandedPoId] = useState<string | null>(null)
 
-  const allSitePOsForNav = selectedSiteId ? purchaseOrders.filter((p) => p.site_id === selectedSiteId) : []
+  // Sort POs by po_number using locale-aware compare so the rendered list is
+  // alphabetical across mixed prefixes (e.g. "E…" and "SNFITQ…"). The server's
+  // ORDER BY can return inconsistent ordering depending on collation, so we
+  // pin the order client-side once instead of relying on the DB.
+  const sortedPurchaseOrders = useMemo(() => {
+    return [...purchaseOrders].sort((a, b) =>
+      (a.po_number || '').localeCompare(b.po_number || '', undefined, {
+        sensitivity: 'base',
+        numeric: true,
+      })
+    )
+  }, [purchaseOrders])
+
+  const allSitePOsForNav = selectedSiteId ? sortedPurchaseOrders.filter((p) => p.site_id === selectedSiteId) : []
   const sitePOs = allSitePOsForNav
   const sitePOsForSelector = selectedSiteId
-    ? purchaseOrders.filter((p) => {
+    ? sortedPurchaseOrders.filter((p) => {
         if (p.site_id !== selectedSiteId) return false
         // When showArchivedPOs is true, show ONLY archived (active === false)
         // When false, show only active (active !== false)

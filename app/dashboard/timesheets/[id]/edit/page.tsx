@@ -79,6 +79,7 @@ export default async function EditTimesheetPage({
     deliverablePOIds,
     deliverableDepartmentIds,
     activityPOIds,
+    projectBudgetCombosByPo,
   } = await loadTimesheetDropdownData({
     supabase,
     admin: adminSupabase,
@@ -227,6 +228,7 @@ export default async function EditTimesheetPage({
               deliverablePOIds={deliverablePOIds}
               deliverableDepartmentIds={deliverableDepartmentIds}
               activityPOIds={activityPOIds}
+              projectBudgetCombosByPo={projectBudgetCombosByPo}
               defaultWeekEnding={formatDateForInput(new Date(timesheet.week_ending))}
               userId={user.id}
               timesheetId={timesheet.id}
