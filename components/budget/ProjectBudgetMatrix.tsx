@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, Download, Pencil, Plus, Printer, Trash2, X } from 'lucide-react'
 import { formatHours } from '@/lib/utils'
 
@@ -206,6 +206,47 @@ export default function ProjectBudgetMatrix({
     ambiguousCount: number
     noCandidateCount: number
   } | null>(null)
+
+  // State for the "Reassign manually" modal — used when the auto fuzzy match
+  // can't pick a candidate for some unmatched entries (status = no_candidate
+  // or ambiguous). The budget owner picks the correct (system, deliverable,
+  // activity) cell for each entry; the modal POSTs them to
+  // /api/budget/[poId]/sync-timesheet-entries with an `assignments` payload,
+  // which validates each combo against project_details and updates the FKs.
+  type UnmatchedEntry = {
+    entryId: string
+    timesheetId: string | null
+    userId: string | null
+    userName: string
+    weekEnding: string | null
+    hours: number
+    systemId: string | null
+    deliverableId: string | null
+    activityId: string | null
+    systemName: string | null
+    systemCode: string | null
+    deliverableName: string | null
+    activityName: string | null
+  }
+  type ValidCombo = {
+    systemId: string
+    deliverableId: string
+    activityId: string
+    systemName: string
+    systemCode: string | null
+    deliverableName: string
+    activityName: string
+  }
+  const [reassignOpen, setReassignOpen] = useState(false)
+  const [reassignLoading, setReassignLoading] = useState(false)
+  const [reassignError, setReassignError] = useState<string | null>(null)
+  const [reassignSaving, setReassignSaving] = useState(false)
+  const [unmatchedEntries, setUnmatchedEntries] = useState<UnmatchedEntry[]>([])
+  const [validCombos, setValidCombos] = useState<ValidCombo[]>([])
+  // Per-entry user picks (entryId -> {systemId, deliverableId, activityId})
+  const [reassignPicks, setReassignPicks] = useState<
+    Record<string, { systemId: string; deliverableId: string; activityId: string }>
+  >({})
 
   const bumpRefresh = () => onMatrixRefresh?.()
 
@@ -597,6 +638,188 @@ export default function ProjectBudgetMatrix({
     }
   }
 
+  /**
+   * Open the "Reassign manually" modal. Fetches the list of unmatched entries
+   * on this PO (entries whose triplet doesn't exist in project_details) plus
+   * the catalog of valid combos so the dropdowns are restricted to real
+   * matrix cells.
+   */
+  const handleOpenReassign = async () => {
+    setReassignOpen(true)
+    setReassignLoading(true)
+    setReassignError(null)
+    setUnmatchedEntries([])
+    setValidCombos([])
+    setReassignPicks({})
+    try {
+      const res = await fetch(`/api/budget/${poId}/unmatched-entries`, {
+        credentials: 'include',
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Failed to load')
+      const payload = body as { unmatched: UnmatchedEntry[]; validCombos: ValidCombo[] }
+      setUnmatchedEntries(payload.unmatched || [])
+      setValidCombos(payload.validCombos || [])
+      // Pre-seed picks with empty selections for each entry so we can render
+      // the dropdowns in a controlled way.
+      const seed: Record<string, { systemId: string; deliverableId: string; activityId: string }> = {}
+      for (const e of payload.unmatched || []) {
+        seed[e.entryId] = { systemId: '', deliverableId: '', activityId: '' }
+      }
+      setReassignPicks(seed)
+    } catch (e) {
+      setReassignError(e instanceof Error ? e.message : 'Failed to load')
+    } finally {
+      setReassignLoading(false)
+    }
+  }
+
+  const handleCloseReassign = () => {
+    if (reassignSaving) return
+    setReassignOpen(false)
+    setReassignError(null)
+  }
+
+  /**
+   * Build cascading dropdown options from validCombos for a given entry's
+   * current picks. The system list shows all distinct systems on this PO.
+   * Once a system is chosen, the deliverable list narrows to deliverables
+   * paired with that system. Once both are chosen, the activity list narrows
+   * to activities paired with that (system, deliverable).
+   */
+  const reassignSystemOptions = useMemo(() => {
+    const seen = new Map<string, { systemId: string; label: string }>()
+    for (const c of validCombos) {
+      if (seen.has(c.systemId)) continue
+      const label = c.systemCode ? `${c.systemName} (${c.systemCode})` : c.systemName
+      seen.set(c.systemId, { systemId: c.systemId, label })
+    }
+    return Array.from(seen.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+    )
+  }, [validCombos])
+
+  const getDeliverableOptions = useCallback(
+    (systemId: string) => {
+      if (!systemId) return [] as Array<{ deliverableId: string; label: string }>
+      const seen = new Map<string, { deliverableId: string; label: string }>()
+      for (const c of validCombos) {
+        if (c.systemId !== systemId) continue
+        if (seen.has(c.deliverableId)) continue
+        seen.set(c.deliverableId, { deliverableId: c.deliverableId, label: c.deliverableName })
+      }
+      return Array.from(seen.values()).sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+      )
+    },
+    [validCombos]
+  )
+
+  const getActivityOptions = useCallback(
+    (systemId: string, deliverableId: string) => {
+      if (!systemId || !deliverableId) return [] as Array<{ activityId: string; label: string }>
+      const seen = new Map<string, { activityId: string; label: string }>()
+      for (const c of validCombos) {
+        if (c.systemId !== systemId) continue
+        if (c.deliverableId !== deliverableId) continue
+        if (seen.has(c.activityId)) continue
+        seen.set(c.activityId, { activityId: c.activityId, label: c.activityName })
+      }
+      return Array.from(seen.values()).sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+      )
+    },
+    [validCombos]
+  )
+
+  const setReassignPick = (
+    entryId: string,
+    field: 'systemId' | 'deliverableId' | 'activityId',
+    value: string
+  ) => {
+    setReassignPicks((prev) => {
+      const cur = prev[entryId] || { systemId: '', deliverableId: '', activityId: '' }
+      const next = { ...cur, [field]: value }
+      // Clear downstream selections when an upstream pick changes so the
+      // user can't end up with an inconsistent (system, deliverable, activity)
+      // triplet via a stale dropdown value.
+      if (field === 'systemId') {
+        next.deliverableId = ''
+        next.activityId = ''
+      } else if (field === 'deliverableId') {
+        next.activityId = ''
+      }
+      return { ...prev, [entryId]: next }
+    })
+  }
+
+  /**
+   * POST the chosen assignments to /api/budget/[poId]/sync-timesheet-entries.
+   * Only entries where all three fields are filled are submitted; the rest
+   * are left for the user to come back to.
+   */
+  const handleSaveReassign = async () => {
+    const assignments = Object.entries(reassignPicks)
+      .filter(([, p]) => p.systemId && p.deliverableId && p.activityId)
+      .map(([entryId, p]) => ({
+        entryId,
+        systemId: p.systemId,
+        deliverableId: p.deliverableId,
+        activityId: p.activityId,
+      }))
+    if (assignments.length === 0) {
+      setReassignError('Pick a system, deliverable, and activity for at least one entry first.')
+      return
+    }
+    setReassignSaving(true)
+    setReassignError(null)
+    try {
+      const res = await fetch(`/api/budget/${poId}/sync-timesheet-entries`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignments }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Save failed')
+      const result = body as {
+        updatedCount: number
+        invalidComboCount: number
+        notOnPoCount: number
+        errorCount: number
+      }
+      // Refresh the unmatched list — saved entries should drop off; any with
+      // errors stay so the user can fix them.
+      const refreshed = await fetch(`/api/budget/${poId}/unmatched-entries`, {
+        credentials: 'include',
+      })
+      const refreshedBody = await refreshed.json().catch(() => ({}))
+      const payload = refreshedBody as { unmatched?: UnmatchedEntry[] }
+      const remaining = payload.unmatched || []
+      setUnmatchedEntries(remaining)
+      // Trim picks to only entries that are still unmatched
+      setReassignPicks((prev) => {
+        const next: typeof prev = {}
+        for (const e of remaining) next[e.entryId] = prev[e.entryId] || { systemId: '', deliverableId: '', activityId: '' }
+        return next
+      })
+      bumpRefresh()
+      if (
+        result.invalidComboCount + result.notOnPoCount + result.errorCount > 0
+      ) {
+        setReassignError(
+          `Saved ${result.updatedCount}. Some assignments were rejected — invalid combo: ${result.invalidComboCount}, not on PO: ${result.notOnPoCount}, errors: ${result.errorCount}.`
+        )
+      } else if (remaining.length === 0) {
+        setReassignOpen(false)
+      }
+    } catch (e) {
+      setReassignError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setReassignSaving(false)
+    }
+  }
+
   const handleAddRow = async () => {
     setMutating(true)
     setMutateError(null)
@@ -924,14 +1147,25 @@ export default function ProjectBudgetMatrix({
             )}
           </div>
           {canEditMatrix && (
-            <button
-              type="button"
-              onClick={handleSyncTimesheetEntries}
-              disabled={syncingEntries}
-              className="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
-            >
-              {syncingEntries ? 'Fixing…' : 'Fix Entries'}
-            </button>
+            <div className="shrink-0 flex flex-col gap-2 items-stretch">
+              <button
+                type="button"
+                onClick={handleSyncTimesheetEntries}
+                disabled={syncingEntries || reassignSaving}
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {syncingEntries ? 'Fixing…' : 'Fix Entries'}
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenReassign}
+                disabled={syncingEntries || reassignSaving}
+                title="Pick the right matrix cell for each unmatched entry"
+                className="px-3 py-1.5 rounded-md text-xs font-medium border border-amber-600 text-amber-700 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40 disabled:opacity-50"
+              >
+                Reassign manually
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -1617,6 +1851,171 @@ export default function ProjectBudgetMatrix({
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
           All approved timesheets · total hours on PO: {formatHours(data!.totals.actualHoursAllEntries)}
         </p>
+      )}
+
+      {/* Reassign manually modal — used when the auto fuzzy match can't pick
+          a target (no_candidate / ambiguous). The budget owner picks a real
+          matrix cell for each unmatched entry from cascading dropdowns
+          restricted to project_details combos for this PO. Saving updates
+          the entry FKs in the DB so the matrix view AND the CSV export
+          immediately reflect the corrected combo. */}
+      {reassignOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={handleCloseReassign}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Reassign timesheet entries</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Pick the matrix cell each entry should land on. Dropdowns are restricted to
+                  (system, deliverable, activity) combos that exist on this PO. Saving updates
+                  the entry directly — the matrix and CSV export will reflect the new cell.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseReassign}
+                disabled={reassignSaving}
+                className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-50"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto px-4 py-3">
+              {reassignLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full" />
+                </div>
+              ) : unmatchedEntries.length === 0 ? (
+                <div className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No unmatched timesheet entries on this PO.
+                </div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300">
+                      <th className="text-left py-2 pr-2 font-medium">Employee</th>
+                      <th className="text-left py-2 pr-2 font-medium">Week</th>
+                      <th className="text-right py-2 pr-2 font-medium">Hrs</th>
+                      <th className="text-left py-2 pr-2 font-medium">Currently logged as</th>
+                      <th className="text-left py-2 pr-2 font-medium">New System</th>
+                      <th className="text-left py-2 pr-2 font-medium">New Deliverable</th>
+                      <th className="text-left py-2 pr-2 font-medium">New Activity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unmatchedEntries.map((e) => {
+                      const pick = reassignPicks[e.entryId] || { systemId: '', deliverableId: '', activityId: '' }
+                      const delOptions = getDeliverableOptions(pick.systemId)
+                      const actOptions = getActivityOptions(pick.systemId, pick.deliverableId)
+                      const currentLabel =
+                        [e.systemName, e.deliverableName, e.activityName]
+                          .filter(Boolean)
+                          .join(' / ') || '(blank)'
+                      return (
+                        <tr key={e.entryId} className="border-b border-gray-100 dark:border-gray-700/50 align-top">
+                          <td className="py-2 pr-2 text-gray-900 dark:text-gray-100">{e.userName || '—'}</td>
+                          <td className="py-2 pr-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                            {e.weekEnding ? e.weekEnding.slice(0, 10) : '—'}
+                          </td>
+                          <td className="py-2 pr-2 text-right text-gray-900 dark:text-gray-100">
+                            {e.hours.toFixed(2)}
+                          </td>
+                          <td className="py-2 pr-2 text-gray-600 dark:text-gray-400 max-w-[16rem]">
+                            <span title={currentLabel} className="line-clamp-2">{currentLabel}</span>
+                          </td>
+                          <td className="py-2 pr-2">
+                            <select
+                              value={pick.systemId}
+                              onChange={(ev) => setReassignPick(e.entryId, 'systemId', ev.target.value)}
+                              disabled={reassignSaving}
+                              className="w-full h-8 px-1 border rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs"
+                            >
+                              <option value="">Select…</option>
+                              {reassignSystemOptions.map((o) => (
+                                <option key={o.systemId} value={o.systemId}>{o.label}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-2 pr-2">
+                            <select
+                              value={pick.deliverableId}
+                              onChange={(ev) => setReassignPick(e.entryId, 'deliverableId', ev.target.value)}
+                              disabled={reassignSaving || !pick.systemId}
+                              className="w-full h-8 px-1 border rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs disabled:opacity-50"
+                            >
+                              <option value="">Select…</option>
+                              {delOptions.map((o) => (
+                                <option key={o.deliverableId} value={o.deliverableId}>{o.label}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-2 pr-2">
+                            <select
+                              value={pick.activityId}
+                              onChange={(ev) => setReassignPick(e.entryId, 'activityId', ev.target.value)}
+                              disabled={reassignSaving || !pick.deliverableId}
+                              className="w-full h-8 px-1 border rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs disabled:opacity-50"
+                            >
+                              <option value="">Select…</option>
+                              {actOptions.map((o) => (
+                                <option key={o.activityId} value={o.activityId}>{o.label}</option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+              {reassignError && (
+                <p className="mt-3 text-xs text-red-600 dark:text-red-400">{reassignError}</p>
+              )}
+            </div>
+
+            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Picked:{' '}
+                {Object.values(reassignPicks).filter(
+                  (p) => p.systemId && p.deliverableId && p.activityId
+                ).length}{' '}
+                of {unmatchedEntries.length}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseReassign}
+                  disabled={reassignSaving}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm disabled:opacity-50"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveReassign}
+                  disabled={
+                    reassignSaving ||
+                    reassignLoading ||
+                    Object.values(reassignPicks).filter(
+                      (p) => p.systemId && p.deliverableId && p.activityId
+                    ).length === 0
+                  }
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                >
+                  {reassignSaving ? 'Saving…' : 'Save assignments'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

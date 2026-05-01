@@ -230,6 +230,13 @@ async function detectMissingIndirectActivities(
   for (const row of indirectRows || []) {
     const r = row as { id: string; category: string; notes?: string | null; hours?: number | null; rate?: number | null }
     if (effectiveIndirectTreatAs(r.category, r.notes) !== 'activity') continue
+    // Skip activity-type rows the bid sheet left blank (0 hours). Those are
+    // categories the proposal didn't actually budget for — surfacing them as
+    // "missing" would prompt the user to add empty rows that aren't part of
+    // this project's scope. Users can still add them manually from the matrix
+    // later if scope changes.
+    const hours = Number(r.hours) || 0
+    if (hours <= 0) continue
     const actName = indirectActivityName(r.category, r.notes)
     if (existingActivityNames.has(actName.toLowerCase())) continue
     out.push({
@@ -237,7 +244,7 @@ async function detectMissingIndirectActivities(
       category: r.category,
       notes: r.notes ?? null,
       activityName: actName,
-      hours: Number(r.hours) || 0,
+      hours,
     })
   }
   return out

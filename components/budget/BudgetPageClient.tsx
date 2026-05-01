@@ -65,13 +65,20 @@ function BudgetPageClientInner({
   const [selectedPoId, setSelectedPoId] = useState<string | null>(initialPoId)
   const [expandedPoId, setExpandedPoId] = useState<string | null>(null)
 
-  // Sort POs by po_number using locale-aware compare so the rendered list is
-  // alphabetical across mixed prefixes (e.g. "E…" and "SNFITQ…"). The server's
-  // ORDER BY can return inconsistent ordering depending on collation, so we
-  // pin the order client-side once instead of relying on the DB.
+  // Sort POs by po_number using a trimmed, case-insensitive comparator. We
+  // strip leading whitespace and invisible chars (zero-width space etc.)
+  // before comparing — the server's ORDER BY can otherwise put a record with
+  // a stray leading space before everything else even though the rendered
+  // string looks identical. The numeric option keeps "SNFITQ00001363" sorting
+  // before "SNFITQ00002240" inside a shared prefix.
   const sortedPurchaseOrders = useMemo(() => {
+    const sortKey = (s: string | null | undefined) =>
+      String(s ?? '')
+        .replace(/^[\s\u200B-\u200D\uFEFF]+/, '')
+        .trim()
+        .toUpperCase()
     return [...purchaseOrders].sort((a, b) =>
-      (a.po_number || '').localeCompare(b.po_number || '', undefined, {
+      sortKey(a.po_number).localeCompare(sortKey(b.po_number), undefined, {
         sensitivity: 'base',
         numeric: true,
       })

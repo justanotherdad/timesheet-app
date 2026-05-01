@@ -60,19 +60,33 @@ function namesLikelyMatch(a: string | null | undefined, b: string | null | undef
   return false
 }
 
+type ManualAssignment = {
+  entryId: string
+  systemId: string
+  deliverableId: string
+  activityId: string
+}
+
 /**
  * POST /api/budget/[poId]/sync-timesheet-entries
  *
- * Repairs timesheet entries on this PO whose (system, deliverable, activity)
- * triplet doesn't match any project_details row for the PO. Common cause:
- * the user's site has duplicate deliverables/activities (e.g. "SLIA" and
- * "System Level Impact Assessment (SLIA)") and the timesheet picked one
- * while the bid sheet conversion used the other. This route fuzzy-matches
- * each entry against project_details rows and updates the entry's IDs when
- * exactly one candidate is found.
+ * Two modes, selected by request body:
  *
- * Body (optional): { dryRun?: boolean } — when true, returns what would
- * change without modifying anything.
+ *   1. Auto fuzzy-match (no body or { dryRun?: boolean }):
+ *      Repairs timesheet entries on this PO whose (system, deliverable,
+ *      activity) triplet doesn't match any project_details row. Fuzzy-matches
+ *      each entry against project_details rows and updates IDs when exactly
+ *      one candidate is found. dryRun=true previews without writing.
+ *
+ *   2. Manual assignments ({ assignments: [{ entryId, systemId, deliverableId, activityId }] }):
+ *      Used when the auto-fix can't pick a candidate. The budget owner picks
+ *      a valid project_details cell for each unmatched entry and submits the
+ *      list. Each assignment is validated:
+ *        - the entry must belong to this PO
+ *        - the (systemId, deliverableId, activityId) triplet must exist as a
+ *          project_details row for this PO
+ *      Valid assignments update the entry's FK columns; the matrix and the
+ *      CSV export will then place those hours in the chosen cell.
  */
 export async function POST(
   req: Request,
@@ -93,6 +107,7 @@ export async function POST(
 
   const body = await req.json().catch(() => ({}))
   const dryRun = body?.dryRun === true
+  const rawAssignments: unknown = body?.assignments
 
   // Pull project_details for this PO so we know which combos are valid
   const { data: detailRows, error: detErr } = await admin
@@ -119,6 +134,95 @@ export async function POST(
       .map((d) => `${d.system_id}|${d.deliverable_id}|${d.activity_id}`)
   )
 
+  // ----- Manual assignment mode -----
+  if (Array.isArray(rawAssignments)) {
+    const assignments: ManualAssignment[] = []
+    for (const a of rawAssignments) {
+      if (
+        a &&
+        typeof a === 'object' &&
+        typeof (a as Record<string, unknown>).entryId === 'string' &&
+        typeof (a as Record<string, unknown>).systemId === 'string' &&
+        typeof (a as Record<string, unknown>).deliverableId === 'string' &&
+        typeof (a as Record<string, unknown>).activityId === 'string'
+      ) {
+        assignments.push(a as ManualAssignment)
+      }
+    }
+    if (assignments.length === 0) {
+      return NextResponse.json({ error: 'No valid assignments provided' }, { status: 400 })
+    }
+
+    // Confirm each entry actually belongs to this PO before we touch it.
+    const entryIds = [...new Set(assignments.map((a) => a.entryId))]
+    const { data: entryOwnership, error: ownErr } = await admin
+      .from('timesheet_entries')
+      .select('id, po_id')
+      .in('id', entryIds)
+    if (ownErr) return NextResponse.json({ error: ownErr.message }, { status: 500 })
+    const entryPoMap = new Map<string, string>()
+    for (const row of (entryOwnership || []) as Array<{ id: string; po_id: string }>) {
+      entryPoMap.set(row.id, row.po_id)
+    }
+
+    type AssignResult = {
+      entryId: string
+      status: 'updated' | 'invalid_combo' | 'not_on_po' | 'error'
+      message?: string
+    }
+    const results: AssignResult[] = []
+    let updatedCount = 0
+
+    for (const a of assignments) {
+      if (entryPoMap.get(a.entryId) !== poId) {
+        results.push({
+          entryId: a.entryId,
+          status: 'not_on_po',
+          message: 'Entry is not on this PO',
+        })
+        continue
+      }
+      const triplet = `${a.systemId}|${a.deliverableId}|${a.activityId}`
+      if (!validKeys.has(triplet)) {
+        results.push({
+          entryId: a.entryId,
+          status: 'invalid_combo',
+          message: 'Selected (system, deliverable, activity) is not a matrix cell on this PO',
+        })
+        continue
+      }
+
+      if (!dryRun) {
+        const { error: upErr } = await admin
+          .from('timesheet_entries')
+          .update({
+            system_id: a.systemId,
+            deliverable_id: a.deliverableId,
+            activity_id: a.activityId,
+          })
+          .eq('id', a.entryId)
+        if (upErr) {
+          results.push({ entryId: a.entryId, status: 'error', message: upErr.message })
+          continue
+        }
+      }
+      updatedCount++
+      results.push({ entryId: a.entryId, status: 'updated' })
+    }
+
+    return NextResponse.json({
+      mode: 'manual',
+      dryRun,
+      requested: assignments.length,
+      updatedCount,
+      invalidComboCount: results.filter((r) => r.status === 'invalid_combo').length,
+      notOnPoCount: results.filter((r) => r.status === 'not_on_po').length,
+      errorCount: results.filter((r) => r.status === 'error').length,
+      results,
+    })
+  }
+
+  // ----- Auto fuzzy-match mode -----
   // Pull the entries on this PO joined to system/deliverable/activity for fuzzy match input
   const { data: entryRows, error: entErr } = await admin
     .from('timesheet_entries')
@@ -216,6 +320,7 @@ export async function POST(
   }
 
   return NextResponse.json({
+    mode: 'auto',
     dryRun,
     totalEntries: entries.length,
     fixedCount,
