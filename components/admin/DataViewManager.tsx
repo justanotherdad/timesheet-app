@@ -132,7 +132,21 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
     let list = purchaseOrders
     if (selectedSite) list = list.filter(po => po.site_id === selectedSite)
     if (selectedDepartment) list = list.filter(po => po.department_id === selectedDepartment)
-    return list
+    // Sort alphabetically by po_number using a trimmed, case-insensitive,
+    // numeric-aware comparator. Strips leading whitespace + invisible chars
+    // (zero-width space etc.) so a record with a stray leading char doesn't
+    // float to the top of the dropdown ahead of all the other POs.
+    const sortKey = (s: string | null | undefined) =>
+      String(s ?? '')
+        .replace(/^[\s\u200B-\u200D\uFEFF]+/, '')
+        .trim()
+        .toUpperCase()
+    return [...list].sort((a, b) =>
+      sortKey(a.po_number).localeCompare(sortKey(b.po_number), undefined, {
+        sensitivity: 'base',
+        numeric: true,
+      })
+    )
   }, [purchaseOrders, selectedSite, selectedDepartment])
 
   const filteredUsers = useMemo(() => {
@@ -397,15 +411,14 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
             <select
               value={selectedPO}
               onChange={(e) => {
-                const newPO = e.target.value
-                setSelectedPO(newPO)
-                if (newPO) {
-                  const po = purchaseOrders.find(p => p.id === newPO)
-                  if (po) {
-                    if (po.site_id && po.site_id !== selectedSite) setSelectedSite(po.site_id)
-                    if (po.department_id && po.department_id !== selectedDepartment) setSelectedDepartment(po.department_id)
-                  }
-                }
+                // Only update the PO filter. Auto-applying Site / Department
+                // here used to silently exclude entries when the PO's
+                // department_id didn't match the joined entry's department_id
+                // (e.g. converted bid sheet POs). The cascading-options memos
+                // (filteredSites / filteredDepartments) still narrow what's
+                // visible in those dropdowns when a PO is picked, but the
+                // user controls whether to actually apply them as filters.
+                setSelectedPO(e.target.value)
               }}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             >
