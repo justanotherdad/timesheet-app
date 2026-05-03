@@ -1,8 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowDown, ArrowUp, ArrowUpDown, Download, Pencil, Plus, Printer, Trash2, X } from 'lucide-react'
 import { formatHours } from '@/lib/utils'
+import ProjectBySystemView from './ProjectBySystemView'
+import ProjectByIndividualView from './ProjectByIndividualView'
+
+type ProjectBudgetTab = 'matrix' | 'by-system' | 'by-individual'
 
 /** Variance always shows numeric (0.00 when balanced); formatHours treats 0 as em dash. */
 function fmtVariance(n: number): string {
@@ -161,6 +166,26 @@ export default function ProjectBudgetMatrix({
   canEditMatrix = false,
   onMatrixRefresh,
 }: ProjectBudgetMatrixProps) {
+  // Active tab is mirrored to ?tab=… so the selection survives a refresh and
+  // can be linked / bookmarked. The matrix is the default for backward
+  // compatibility (no tab param == matrix).
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const activeTab: ProjectBudgetTab =
+    tabParam === 'by-system' || tabParam === 'by-individual' ? tabParam : 'matrix'
+  const setActiveTab = useCallback(
+    (tab: ProjectBudgetTab) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (tab === 'matrix') params.delete('tab')
+      else params.set('tab', tab)
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    },
+    [pathname, router, searchParams]
+  )
+
   const [data, setData] = useState<MatrixPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -1022,6 +1047,57 @@ export default function ProjectBudgetMatrix({
 
   return (
     <div className="report-print-container bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      {/* Inline tabs — matrix / by-system / by-individual. Hidden in print so
+          exports don't carry the navigation. The active tab is mirrored to a
+          ?tab= query param so refreshes / direct links land on the right
+          view. Project budget only — basic budgets short-circuit before this
+          component renders. */}
+      <div className="mb-4 print:hidden -mt-2 -mx-2 px-2 border-b border-gray-200 dark:border-gray-700 flex flex-wrap gap-1 overflow-x-auto">
+        {(
+          [
+            { key: 'matrix', label: 'Project matrix' },
+            { key: 'by-system', label: 'By system' },
+            { key: 'by-individual', label: 'By individual' },
+          ] as Array<{ key: ProjectBudgetTab; label: string }>
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setActiveTab(t.key)}
+            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === t.key
+                ? 'border-blue-600 text-blue-700 dark:text-blue-300'
+                : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+            aria-current={activeTab === t.key ? 'page' : undefined}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'by-system' && (
+        <ProjectBySystemView
+          poId={poId}
+          refreshTick={refreshTick}
+          reportTitle={reportTitle}
+          fileBaseName={fileBaseName}
+          canEditMatrix={canEditMatrix}
+          onMatrixRefresh={onMatrixRefresh}
+        />
+      )}
+
+      {activeTab === 'by-individual' && (
+        <ProjectByIndividualView
+          poId={poId}
+          refreshTick={refreshTick}
+          reportTitle={reportTitle}
+          fileBaseName={fileBaseName}
+        />
+      )}
+
+      {activeTab === 'matrix' && (
+      <>
       <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
@@ -2016,6 +2092,8 @@ export default function ProjectBudgetMatrix({
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   )

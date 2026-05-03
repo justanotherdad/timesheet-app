@@ -61,10 +61,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ poId: 
   }
 
   const body = await req.json().catch(() => ({}))
-  const { id, budgeted_hours, description } = body as {
+  const { id, budgeted_hours, description, status_pct } = body as {
     id?: string
     budgeted_hours?: number
     description?: string | null
+    /**
+     * Manual completion override for this cell, as either a fraction (0..1)
+     * or a percent (0..100). Pass null explicitly to clear the override and
+     * fall back to the auto status. Omitted = leave as-is.
+     */
+    status_pct?: number | null
   }
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
 
@@ -79,6 +85,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ poId: 
   if (budgeted_hours !== undefined) updates.budgeted_hours = Number(budgeted_hours) || 0
   if (description !== undefined) {
     updates.description = description === null ? null : String(description).trim() || null
+  }
+  if (status_pct !== undefined) {
+    if (status_pct === null) {
+      updates.status_pct = null
+    } else {
+      const raw = Number(status_pct)
+      if (!Number.isFinite(raw)) {
+        return NextResponse.json({ error: 'status_pct must be a number or null' }, { status: 400 })
+      }
+      // Accept either a percent (0..100) or a fraction (0..1). Anything > 1
+      // is treated as a percent. Clamp to [0, 1] to match the DB constraint.
+      const fraction = raw > 1 ? raw / 100 : raw
+      if (fraction < 0 || fraction > 1) {
+        return NextResponse.json(
+          { error: 'status_pct must be between 0 and 100% (or 0..1 as a fraction)' },
+          { status: 400 }
+        )
+      }
+      updates.status_pct = fraction
+    }
   }
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })

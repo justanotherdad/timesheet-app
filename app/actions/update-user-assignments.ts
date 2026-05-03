@@ -15,6 +15,11 @@ export async function updateUserProfile(
     manager_id?: string | null
     final_approver_id?: string | null
     active?: boolean
+    /**
+     * Free-text job title shown on the project budget "By individual" tab.
+     * Pass an empty string or null to clear it.
+     */
+    title?: string | null
   }
 ) {
   try {
@@ -59,7 +64,7 @@ export async function updateUserProfile(
       }
     }
 
-    const { email, employee_type, ...profileUpdates } = updates
+    const { email, employee_type, title, ...profileUpdates } = updates
 
     if (email !== undefined) {
       const { error: authError } = await adminClient.auth.admin.updateUserById(userId, { email })
@@ -70,6 +75,10 @@ export async function updateUserProfile(
       ...profileUpdates,
       ...(email !== undefined && { email }),
       ...(employee_type !== undefined && { employee_type: employee_type ?? 'internal' }),
+      ...(title !== undefined && {
+        // Persist title verbatim; the UI normalizes empty strings to null.
+        title: title === null ? null : (typeof title === 'string' ? title.trim() || null : null),
+      }),
     }
     if (updates.active !== undefined) updatePayload.active = updates.active
 

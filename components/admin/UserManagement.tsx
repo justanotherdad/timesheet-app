@@ -240,6 +240,14 @@ export default function UserManagement({
       const managerId = (formData.get('manager_id') as string) || null
       const finalApproverId = (formData.get('final_approver_id') as string) || null
       const employeeType = (formData.get('employee_type') as 'internal' | 'external') || 'internal'
+      // Title is optional and only present when the full edit form (not the
+      // assignments-only mode) is shown; coerce missing inputs to undefined
+      // so the server action skips the column.
+      const titleRaw = formData.get('title')
+      const title =
+        typeof titleRaw === 'string'
+          ? (titleRaw.trim() === '' ? null : titleRaw.trim())
+          : undefined
 
       const profileResult = await updateUserProfile(editingUser.id, {
         name,
@@ -249,6 +257,7 @@ export default function UserManagement({
         supervisor_id: supervisorId || null,
         manager_id: managerId || null,
         final_approver_id: finalApproverId || null,
+        ...(title !== undefined && { title }),
       })
       if (profileResult.error) throw new Error(profileResult.error)
 
@@ -264,6 +273,7 @@ export default function UserManagement({
                 supervisor_id: supervisorId || undefined,
                 manager_id: managerId || undefined,
                 final_approver_id: finalApproverId || undefined,
+                ...(title !== undefined && { title }),
               }
             : u
         )
@@ -864,6 +874,22 @@ export default function UserManagement({
                       required
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Title <span className="font-normal text-gray-500 dark:text-gray-400">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="title"
+                      defaultValue={(editingUser as { title?: string | null }).title ?? ''}
+                      maxLength={120}
+                      placeholder="e.g. Senior Project Manager"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      Shown on the project budget &quot;By individual&quot; report. Leave blank to omit.
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
