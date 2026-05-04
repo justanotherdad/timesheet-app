@@ -253,9 +253,13 @@ export async function GET(
     })
   }
 
-  // Compute rollups (system & deliverable) and totals
+  // Compute rollups (system & deliverable) and totals. The synthetic
+  // "Indirect" system stays as a SystemNode (so the UI can drill into its
+  // deliverables → activities and reuse the same details modal as real
+  // systems) but is returned separately so it doesn't get rendered as just
+  // another card in the system grid.
   const realSystems: SystemNode[] = []
-  const indirectCells: EvmCellResult[] = []
+  let indirectSystem: SystemNode | null = null
   const allCells: EvmCellResult[] = []
 
   for (const sysNode of systemMap.values()) {
@@ -276,8 +280,7 @@ export async function GET(
     const isIndirectSystem =
       sysNode.systemName.toLowerCase() === INDIRECT_SYSTEM_NAME.toLowerCase()
     if (isIndirectSystem) {
-      // Don't show as a card; roll up into indirectTotal instead.
-      indirectCells.push(...sysCells)
+      indirectSystem = sysNode
     } else {
       realSystems.push(sysNode)
     }
@@ -288,16 +291,16 @@ export async function GET(
     a.systemName.localeCompare(b.systemName, undefined, { sensitivity: 'base', numeric: true })
   )
 
-  const indirectTotal = rollupEvm(indirectCells)
+  // Backward-compatible total used by the summary numbers. Equivalent to
+  // indirectSystem?.rollup when present.
+  const indirectTotal = indirectSystem?.rollup ?? emptyRollup()
   const projectTotal = rollupEvm(allCells)
-  // Suppress unused-var linter when there are no indirect cells.
-  void indirectCells
-  void allCells
 
   return NextResponse.json(
     {
       blendedRate,
       systems: realSystems,
+      indirectSystem,
       indirectTotal,
       projectTotal,
     },

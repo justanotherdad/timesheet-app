@@ -67,6 +67,10 @@ type SystemNode = {
 type BySystemPayload = {
   blendedRate: number
   systems: SystemNode[]
+  /** Full deliverable → activity tree for the synthetic "Indirect" system,
+   *  or null when the PO has no indirect activity-type rows. Used to drive
+   *  the expandable Indirect card. */
+  indirectSystem: SystemNode | null
   indirectTotal: EvmCellResult
   projectTotal: EvmCellResult
 }
@@ -143,10 +147,13 @@ export default function ProjectBySystemView({
     load()
   }, [load, refreshTick])
 
-  const openSystem = useMemo(
-    () => (openSystemId ? data?.systems.find((s) => s.systemId === openSystemId) ?? null : null),
-    [openSystemId, data]
-  )
+  const openSystem = useMemo(() => {
+    if (!openSystemId || !data) return null
+    if (data.indirectSystem && data.indirectSystem.systemId === openSystemId) {
+      return data.indirectSystem
+    }
+    return data.systems.find((s) => s.systemId === openSystemId) ?? null
+  }, [openSystemId, data])
 
   /**
    * Save a Status % override to the API. Accepts a percent (0..100) string;
@@ -271,10 +278,24 @@ export default function ProjectBySystemView({
         q((sys.rollup.statusPct * 100).toFixed(1)),
       ].join(','))
     }
-    if (data.indirectTotal.budgetCost > 0 || data.indirectTotal.actualCost > 0) {
-      const t = data.indirectTotal
+    // Indirect system: include the full activity breakdown so the CSV
+    // matches what users see when they open the Indirect details modal.
+    if (data.indirectSystem) {
+      for (const del of data.indirectSystem.deliverables) {
+        for (const act of del.activities) {
+          const e = act.evm
+          lines.push([
+            q('Indirect'), q(''), q(del.deliverableName), q(act.activityName),
+            q(e.budgetHours.toFixed(2)), q(e.actualHours.toFixed(2)), q(e.etcHours.toFixed(2)),
+            q(e.budgetCost.toFixed(2)), q(e.actualCost.toFixed(2)), q(e.etcCost.toFixed(2)),
+            q(e.ev.toFixed(2)), q(e.cpi == null ? '' : e.cpi.toFixed(4)),
+            q((e.statusPct * 100).toFixed(1)),
+          ].join(','))
+        }
+      }
+      const t = data.indirectSystem.rollup
       lines.push([
-        q('Indirect (project-wide)'), q(''), q(''), q(''),
+        q('Indirect (system total)'), q(''), q(''), q(''),
         q(t.budgetHours.toFixed(2)), q(t.actualHours.toFixed(2)), q(t.etcHours.toFixed(2)),
         q(t.budgetCost.toFixed(2)), q(t.actualCost.toFixed(2)), q(t.etcCost.toFixed(2)),
         q(t.ev.toFixed(2)), q(t.cpi == null ? '' : t.cpi.toFixed(4)),
@@ -399,15 +420,10 @@ export default function ProjectBySystemView({
       {data && (
         <div className="mt-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-            {data.indirectTotal.budgetCost > 0 || data.indirectTotal.actualCost > 0 ? (
-              <SummaryBlock
-                label="Indirect (rolled into project total)"
-                budget={data.indirectTotal.budgetCost}
-                actual={data.indirectTotal.actualCost}
-                etc={data.indirectTotal.etcCost}
-                ev={data.indirectTotal.ev}
-                statusPct={data.indirectTotal.statusPct}
-                cpi={data.indirectTotal.cpi}
+            {data.indirectSystem && data.indirectSystem.deliverables.length > 0 ? (
+              <IndirectCard
+                indirect={data.indirectSystem}
+                onOpenDetails={() => setOpenSystemId(data.indirectSystem!.systemId)}
               />
             ) : (
               <div />
@@ -505,6 +521,78 @@ function SystemCard({ sys, onOpenDetails }: { sys: SystemNode; onOpenDetails: ()
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Card representing the synthetic "Indirect" system on the by-system tab.
+ * Visually distinct from real system cards (amber accent, "Indirect" label
+ * instead of a system code) but uses the exact same details modal so users
+ * can drill into PM / Doc Coord / Project Controls / etc. and click through
+ * to per-week, per-employee timesheet links.
+ */
+function IndirectCard({
+  indirect,
+  onOpenDetails,
+}: {
+  indirect: SystemNode
+  onOpenDetails: () => void
+}) {
+  // Flatten activity names for the preview line so users can see at a glance
+  // *what* is rolled up (PM, Doc Coord, Project Controls, custom rows, …).
+  const activityNames = indirect.deliverables.flatMap((d) =>
+    d.activities.map((a) => a.activityName)
+  )
+  const previewNames = activityNames.slice(0, 4).join(' · ')
+  const overflowCount = Math.max(0, activityNames.length - 4)
+  return (
+    <button
+      type="button"
+      onClick={onOpenDetails}
+      className="text-left p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400"
+      title="Show indirect activities (Project Management, Document Coordinator, Project Controls, …)"
+    >
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <div className="text-xs font-medium text-amber-800 dark:text-amber-200">
+          Indirect (rolled into project total)
+        </div>
+        <span className="shrink-0 text-[11px] px-2 py-0.5 rounded-full bg-amber-200/70 dark:bg-amber-800/60 text-amber-900 dark:text-amber-100">
+          {activityNames.length} activit{activityNames.length === 1 ? 'y' : 'ies'} — Details
+        </span>
+      </div>
+      {previewNames && (
+        <div className="text-[11px] text-amber-700 dark:text-amber-200/80 mb-2 line-clamp-1" title={activityNames.join(', ')}>
+          {previewNames}
+          {overflowCount > 0 && <> +{overflowCount} more</>}
+        </div>
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1 text-xs">
+        <div>
+          <div className="text-amber-700/80 dark:text-amber-200/70">Budget</div>
+          <div className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{fmtMoney(indirect.rollup.budgetCost)}</div>
+        </div>
+        <div>
+          <div className="text-amber-700/80 dark:text-amber-200/70">Actual</div>
+          <div className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{fmtMoney(indirect.rollup.actualCost)}</div>
+        </div>
+        <div>
+          <div className="text-amber-700/80 dark:text-amber-200/70">ETC</div>
+          <div className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{fmtMoney(indirect.rollup.etcCost)}</div>
+        </div>
+        <div>
+          <div className="text-amber-700/80 dark:text-amber-200/70">EV</div>
+          <div className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{fmtMoney(indirect.rollup.ev)}</div>
+        </div>
+        <div>
+          <div className="text-amber-700/80 dark:text-amber-200/70">Status</div>
+          <div className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{fmtPct(indirect.rollup.statusPct)}</div>
+        </div>
+        <div>
+          <div className="text-amber-700/80 dark:text-amber-200/70">CPI</div>
+          <div className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{fmtCpi(indirect.rollup.cpi)}</div>
+        </div>
+      </div>
+    </button>
   )
 }
 
