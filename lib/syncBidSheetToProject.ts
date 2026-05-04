@@ -12,29 +12,83 @@ export type BidSheetItemRow = {
   bid_sheet_activities: { name: string } | null
 }
 
-async function findOrCreateSystem(admin: SupabaseClient, siteId: string, name: string, code: string | null): Promise<string> {
-  let q = admin.from('systems').select('id').eq('site_id', siteId).eq('name', name)
+// All sync helpers below are scoped by `project_po_id = poId`. A bid-sheet
+// conversion (and any subsequent edits to that bid sheet) only ever
+// looks up or creates rows that belong to its own project PO, so a
+// project never reuses a global "Travel" activity or pollutes the global
+// Manage Timesheet Options listing. Globals (project_po_id IS NULL) are
+// untouched by these helpers.
+
+async function findOrCreateSystem(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  name: string,
+  code: string | null
+): Promise<string> {
+  let q = admin
+    .from('systems')
+    .select('id')
+    .eq('site_id', siteId)
+    .eq('project_po_id', poId)
+    .eq('name', name)
   if (code) q = q.eq('code', code)
   else q = q.is('code', null)
   const { data: existing } = await q.limit(1).maybeSingle()
   if (existing?.id) return existing.id
-  const { data: ins, error } = await admin.from('systems').insert({ site_id: siteId, name, code }).select('id').single()
+  const { data: ins, error } = await admin
+    .from('systems')
+    .insert({ site_id: siteId, name, code, project_po_id: poId })
+    .select('id')
+    .single()
   if (error || !ins?.id) throw new Error(error?.message || 'Failed to create system')
   return ins.id
 }
 
-async function findOrCreateDeliverable(admin: SupabaseClient, siteId: string, name: string): Promise<string> {
-  const { data: existing } = await admin.from('deliverables').select('id').eq('site_id', siteId).eq('name', name).limit(1).maybeSingle()
+async function findOrCreateDeliverable(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  name: string
+): Promise<string> {
+  const { data: existing } = await admin
+    .from('deliverables')
+    .select('id')
+    .eq('site_id', siteId)
+    .eq('project_po_id', poId)
+    .eq('name', name)
+    .limit(1)
+    .maybeSingle()
   if (existing?.id) return existing.id
-  const { data: ins, error } = await admin.from('deliverables').insert({ site_id: siteId, name }).select('id').single()
+  const { data: ins, error } = await admin
+    .from('deliverables')
+    .insert({ site_id: siteId, name, project_po_id: poId })
+    .select('id')
+    .single()
   if (error || !ins?.id) throw new Error(error?.message || 'Failed to create deliverable')
   return ins.id
 }
 
-async function findOrCreateActivity(admin: SupabaseClient, siteId: string, name: string): Promise<string> {
-  const { data: existing } = await admin.from('activities').select('id').eq('site_id', siteId).eq('name', name).limit(1).maybeSingle()
+async function findOrCreateActivity(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  name: string
+): Promise<string> {
+  const { data: existing } = await admin
+    .from('activities')
+    .select('id')
+    .eq('site_id', siteId)
+    .eq('project_po_id', poId)
+    .eq('name', name)
+    .limit(1)
+    .maybeSingle()
   if (existing?.id) return existing.id
-  const { data: ins, error } = await admin.from('activities').insert({ site_id: siteId, name }).select('id').single()
+  const { data: ins, error } = await admin
+    .from('activities')
+    .insert({ site_id: siteId, name, project_po_id: poId })
+    .select('id')
+    .single()
   if (error || !ins?.id) throw new Error(error?.message || 'Failed to create activity')
   return ins.id
 }
@@ -66,9 +120,9 @@ export async function syncBidSheetItemToProject(
   const act = item.bid_sheet_activities
   if (!sys?.name || !del?.name || !act?.name) return
 
-  const systemId = await findOrCreateSystem(admin, siteId, sys.name, sys.code || null)
-  const deliverableId = await findOrCreateDeliverable(admin, siteId, del.name)
-  const activityId = await findOrCreateActivity(admin, siteId, act.name)
+  const systemId = await findOrCreateSystem(admin, siteId, poId, sys.name, sys.code || null)
+  const deliverableId = await findOrCreateDeliverable(admin, siteId, poId, del.name)
+  const activityId = await findOrCreateActivity(admin, siteId, poId, act.name)
 
   await ensurePoLink(admin, 'system_purchase_orders', 'system_id', systemId, poId)
   await ensurePoLink(admin, 'deliverable_purchase_orders', 'deliverable_id', deliverableId, poId)
@@ -122,9 +176,9 @@ export async function upsertProjectDetailByNames(
   const an = input.activityName.trim()
   if (!sn || !dn || !an) throw new Error('System, deliverable, and activity names are required')
 
-  const systemId = await findOrCreateSystem(admin, siteId, sn, input.systemCode)
-  const deliverableId = await findOrCreateDeliverable(admin, siteId, dn)
-  const activityId = await findOrCreateActivity(admin, siteId, an)
+  const systemId = await findOrCreateSystem(admin, siteId, poId, sn, input.systemCode)
+  const deliverableId = await findOrCreateDeliverable(admin, siteId, poId, dn)
+  const activityId = await findOrCreateActivity(admin, siteId, poId, an)
 
   await ensurePoLink(admin, 'system_purchase_orders', 'system_id', systemId, poId)
   await ensurePoLink(admin, 'deliverable_purchase_orders', 'deliverable_id', deliverableId, poId)
@@ -169,21 +223,56 @@ export async function upsertProjectDetailByNames(
   return { id: ins.id }
 }
 
-async function findSystemId(admin: SupabaseClient, siteId: string, name: string, code: string | null): Promise<string | null> {
-  let q = admin.from('systems').select('id').eq('site_id', siteId).eq('name', name)
+async function findSystemId(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  name: string,
+  code: string | null
+): Promise<string | null> {
+  let q = admin
+    .from('systems')
+    .select('id')
+    .eq('site_id', siteId)
+    .eq('project_po_id', poId)
+    .eq('name', name)
   if (code) q = q.eq('code', code)
   else q = q.is('code', null)
   const { data } = await q.limit(1).maybeSingle()
   return data?.id ?? null
 }
 
-async function findDeliverableId(admin: SupabaseClient, siteId: string, name: string): Promise<string | null> {
-  const { data } = await admin.from('deliverables').select('id').eq('site_id', siteId).eq('name', name).limit(1).maybeSingle()
+async function findDeliverableId(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  name: string
+): Promise<string | null> {
+  const { data } = await admin
+    .from('deliverables')
+    .select('id')
+    .eq('site_id', siteId)
+    .eq('project_po_id', poId)
+    .eq('name', name)
+    .limit(1)
+    .maybeSingle()
   return data?.id ?? null
 }
 
-async function findActivityId(admin: SupabaseClient, siteId: string, name: string): Promise<string | null> {
-  const { data } = await admin.from('activities').select('id').eq('site_id', siteId).eq('name', name).limit(1).maybeSingle()
+async function findActivityId(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  name: string
+): Promise<string | null> {
+  const { data } = await admin
+    .from('activities')
+    .select('id')
+    .eq('site_id', siteId)
+    .eq('project_po_id', poId)
+    .eq('name', name)
+    .limit(1)
+    .maybeSingle()
   return data?.id ?? null
 }
 
@@ -199,9 +288,9 @@ export async function deleteBidSheetItemFromProject(
   const act = item.bid_sheet_activities
   if (!sys?.name || !del?.name || !act?.name) return
 
-  const systemId = await findSystemId(admin, siteId, sys.name, sys.code || null)
-  const deliverableId = await findDeliverableId(admin, siteId, del.name)
-  const activityId = await findActivityId(admin, siteId, act.name)
+  const systemId = await findSystemId(admin, siteId, poId, sys.name, sys.code || null)
+  const deliverableId = await findDeliverableId(admin, siteId, poId, del.name)
+  const activityId = await findActivityId(admin, siteId, poId, act.name)
   if (!systemId || !deliverableId || !activityId) return
 
   await admin
@@ -232,32 +321,20 @@ export async function renameSystemForProject(
 ): Promise<void> {
   if (oldName === newName && (oldCode || null) === (newCode || null)) return
 
-  const oldSystemId = await findSystemId(admin, siteId, oldName, oldCode)
+  const oldSystemId = await findSystemId(admin, siteId, poId, oldName, oldCode)
   if (!oldSystemId) return
 
-  const newSystemId = await findOrCreateSystem(admin, siteId, newName, newCode)
-  if (newSystemId === oldSystemId) return
+  // Project-scoped rows are owned by this PO, so we can rename in place
+  // instead of re-pointing project_details to a different row. This keeps
+  // the row count tidy and avoids leaving stale "old name" rows behind.
+  const updatePayload: Record<string, string | null> = { name: newName, code: newCode }
+  const { error: renameErr } = await admin
+    .from('systems')
+    .update(updatePayload)
+    .eq('id', oldSystemId)
+  if (renameErr) throw new Error(renameErr.message)
 
-  await admin
-    .from('project_details')
-    .update({ system_id: newSystemId })
-    .eq('po_id', poId)
-    .eq('system_id', oldSystemId)
-
-  await ensurePoLink(admin, 'system_purchase_orders', 'system_id', newSystemId, poId)
-
-  const { count: remaining } = await admin
-    .from('project_details')
-    .select('id', { count: 'exact', head: true })
-    .eq('po_id', poId)
-    .eq('system_id', oldSystemId)
-  if (!remaining || remaining === 0) {
-    await admin
-      .from('system_purchase_orders')
-      .delete()
-      .eq('purchase_order_id', poId)
-      .eq('system_id', oldSystemId)
-  }
+  await ensurePoLink(admin, 'system_purchase_orders', 'system_id', oldSystemId, poId)
 }
 
 /** Same as renameSystemForProject but for deliverables (no code column). */
@@ -270,32 +347,16 @@ export async function renameDeliverableForProject(
 ): Promise<void> {
   if (oldName === newName) return
 
-  const oldId = await findDeliverableId(admin, siteId, oldName)
+  const oldId = await findDeliverableId(admin, siteId, poId, oldName)
   if (!oldId) return
 
-  const newId = await findOrCreateDeliverable(admin, siteId, newName)
-  if (newId === oldId) return
+  const { error: renameErr } = await admin
+    .from('deliverables')
+    .update({ name: newName })
+    .eq('id', oldId)
+  if (renameErr) throw new Error(renameErr.message)
 
-  await admin
-    .from('project_details')
-    .update({ deliverable_id: newId })
-    .eq('po_id', poId)
-    .eq('deliverable_id', oldId)
-
-  await ensurePoLink(admin, 'deliverable_purchase_orders', 'deliverable_id', newId, poId)
-
-  const { count: remaining } = await admin
-    .from('project_details')
-    .select('id', { count: 'exact', head: true })
-    .eq('po_id', poId)
-    .eq('deliverable_id', oldId)
-  if (!remaining || remaining === 0) {
-    await admin
-      .from('deliverable_purchase_orders')
-      .delete()
-      .eq('purchase_order_id', poId)
-      .eq('deliverable_id', oldId)
-  }
+  await ensurePoLink(admin, 'deliverable_purchase_orders', 'deliverable_id', oldId, poId)
 }
 
 /** Same as renameSystemForProject but for activities. */
@@ -308,32 +369,16 @@ export async function renameActivityForProject(
 ): Promise<void> {
   if (oldName === newName) return
 
-  const oldId = await findActivityId(admin, siteId, oldName)
+  const oldId = await findActivityId(admin, siteId, poId, oldName)
   if (!oldId) return
 
-  const newId = await findOrCreateActivity(admin, siteId, newName)
-  if (newId === oldId) return
+  const { error: renameErr } = await admin
+    .from('activities')
+    .update({ name: newName })
+    .eq('id', oldId)
+  if (renameErr) throw new Error(renameErr.message)
 
-  await admin
-    .from('project_details')
-    .update({ activity_id: newId })
-    .eq('po_id', poId)
-    .eq('activity_id', oldId)
-
-  await ensurePoLink(admin, 'activity_purchase_orders', 'activity_id', newId, poId)
-
-  const { count: remaining } = await admin
-    .from('project_details')
-    .select('id', { count: 'exact', head: true })
-    .eq('po_id', poId)
-    .eq('activity_id', oldId)
-  if (!remaining || remaining === 0) {
-    await admin
-      .from('activity_purchase_orders')
-      .delete()
-      .eq('purchase_order_id', poId)
-      .eq('activity_id', oldId)
-  }
+  await ensurePoLink(admin, 'activity_purchase_orders', 'activity_id', oldId, poId)
 }
 
 /**
@@ -420,9 +465,9 @@ export async function upsertIndirectActivityForProject(
 ): Promise<void> {
   const activityName = indirectActivityName(category, notes)
 
-  const systemId = await findOrCreateSystem(admin, siteId, INDIRECT_SYSTEM_NAME, null)
-  const deliverableId = await findOrCreateDeliverable(admin, siteId, INDIRECT_DELIVERABLE_NAME)
-  const activityId = await findOrCreateActivity(admin, siteId, activityName)
+  const systemId = await findOrCreateSystem(admin, siteId, poId, INDIRECT_SYSTEM_NAME, null)
+  const deliverableId = await findOrCreateDeliverable(admin, siteId, poId, INDIRECT_DELIVERABLE_NAME)
+  const activityId = await findOrCreateActivity(admin, siteId, poId, activityName)
 
   await ensurePoLink(admin, 'system_purchase_orders', 'system_id', systemId, poId)
   await ensurePoLink(admin, 'deliverable_purchase_orders', 'deliverable_id', deliverableId, poId)
@@ -472,9 +517,9 @@ export async function deleteIndirectActivityForProject(
 ): Promise<void> {
   const activityName = indirectActivityName(category, notes)
 
-  const systemId = await findSystemId(admin, siteId, INDIRECT_SYSTEM_NAME, null)
-  const deliverableId = await findDeliverableId(admin, siteId, INDIRECT_DELIVERABLE_NAME)
-  const activityId = await findActivityId(admin, siteId, activityName)
+  const systemId = await findSystemId(admin, siteId, poId, INDIRECT_SYSTEM_NAME, null)
+  const deliverableId = await findDeliverableId(admin, siteId, poId, INDIRECT_DELIVERABLE_NAME)
+  const activityId = await findActivityId(admin, siteId, poId, activityName)
   if (!systemId || !deliverableId || !activityId) return
 
   await admin

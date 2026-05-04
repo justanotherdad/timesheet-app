@@ -224,12 +224,20 @@ export default function HierarchicalItemManager({
     setLoading(true)
     setError(null)
     try {
+      // Manage Timesheet Options only shows globally-scoped rows
+      // (project_po_id IS NULL). Project-budget POs create their own
+      // private systems / deliverables / activities scoped to that PO so
+      // they never leak into this admin screen — see convert/route.ts and
+      // syncBidSheetToProject.ts. Same filter applies to all three tables
+      // (systems, deliverables, activities) since they all carry the
+      // optional project_po_id column.
       const { data, error: fetchError } = await supabase
         .from(tableName)
         .select('*')
         .eq('site_id', siteId)
+        .is('project_po_id', null)
         .order('name')
-      
+
       if (fetchError) throw fetchError
       setItems(data || [])
     } catch (err: any) {

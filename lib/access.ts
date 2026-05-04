@@ -79,7 +79,12 @@ export async function canAccessPoBudget(
 
 /**
  * Get bid sheet IDs the user can access.
- * Admin/Super Admin: all. Manager/Supervisor: bid_sheet_access OR site assignment.
+ * Admin/Super Admin: all (returns null). Everyone else (Manager / Supervisor /
+ * Employee): explicit `bid_sheet_access` grants always count, plus, for non-
+ * employees, any bid sheets at sites they're assigned to via `user_sites`.
+ *
+ * Returning `null` means "no filter — all sheets are accessible". An empty
+ * array means "user has zero access; show nothing".
  */
 export async function getAccessibleBidSheetIds(
   supabase: SupabaseClient,
@@ -87,13 +92,18 @@ export async function getAccessibleBidSheetIds(
   role: UserRole
 ): Promise<string[] | null> {
   if (role === 'admin' || role === 'super_admin') return null
-  if (role === 'employee') return []
 
   const { data: accessRows } = await supabase
     .from('bid_sheet_access')
     .select('bid_sheet_id')
     .eq('user_id', userId)
   const accessIds = (accessRows || []).map((r: { bid_sheet_id: string }) => r.bid_sheet_id)
+
+  // Employees only ever see what they've been explicitly granted — no
+  // site-wide auto-share. Manager/Supervisor get site-assigned sheets too.
+  if (role === 'employee') {
+    return accessIds.length > 0 ? accessIds : []
+  }
 
   const accessibleSiteIds = await getAccessibleSiteIds(supabase, userId, role)
   if (accessibleSiteIds && accessibleSiteIds.length > 0) {

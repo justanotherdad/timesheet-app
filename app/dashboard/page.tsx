@@ -23,6 +23,32 @@ export default async function DashboardPage() {
 
   const supabase = await createClient()
 
+  // Surface Budget Detail / Bid Sheets tiles to non-managerial users when
+  // they've been explicitly granted access via po_budget_access or
+  // bid_sheet_access. We do a tiny "any row?" check (limit 1, head-only)
+  // so this stays cheap on the dashboard.
+  const isManagerOrAbove = ['manager', 'admin', 'super_admin'].includes(user.profile.role)
+  const isSupervisorOrAbove = ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)
+
+  let hasAnyBudgetAccess = false
+  let hasAnyBidSheetAccess = false
+  if (!isManagerOrAbove) {
+    const { count: budgetAccessCount } = await supabase
+      .from('po_budget_access')
+      .select('purchase_order_id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    hasAnyBudgetAccess = (budgetAccessCount ?? 0) > 0
+  }
+  if (!isSupervisorOrAbove) {
+    const { count: bidSheetAccessCount } = await supabase
+      .from('bid_sheet_access')
+      .select('bid_sheet_id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    hasAnyBidSheetAccess = (bidSheetAccessCount ?? 0) > 0
+  }
+  const showBudgetDetailTile = isManagerOrAbove || hasAnyBudgetAccess
+  const showBidSheetsTile = isSupervisorOrAbove || hasAnyBidSheetAccess
+
   // Get user's 5 most recent timesheets (all statuses including draft), newest first
   const recentTimesheetsResult = await withQueryTimeout(() =>
     supabase
@@ -286,7 +312,7 @@ export default async function DashboardPage() {
             </Link>
           )}
 
-          {['manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+          {showBudgetDetailTile && (
             <Link
               href="/dashboard/budget"
               className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
@@ -303,7 +329,7 @@ export default async function DashboardPage() {
             </Link>
           )}
 
-          {['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
+          {showBidSheetsTile && (
             <Link
               href="/dashboard/bid-sheets"
               className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"

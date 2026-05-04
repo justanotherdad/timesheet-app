@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { requireRole } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth'
 import Header from '@/components/Header'
 import BidSheetDetailClient from '@/components/bidsheets/BidSheetDetailClient'
 import { createClient } from '@/lib/supabase/server'
@@ -20,7 +20,11 @@ async function canAccess(supabase: Awaited<ReturnType<typeof createClient>>, use
 
 export default async function BidSheetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
+  // The detail page already has its own per-sheet access check below
+  // (canAccess), so we let any authenticated user reach this point and
+  // rely on canAccess to redirect non-grantees. This lets employees with
+  // an explicit bid_sheet_access grant view the sheet they were given.
+  const user = await requireAuth()
   const supabase = await createClient()
 
   const allowed = await canAccess(supabase, user.id, user.profile.role, id)

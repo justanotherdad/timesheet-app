@@ -1,17 +1,32 @@
-import { requireRole } from '@/lib/auth'
+import { redirect } from 'next/navigation'
+import { requireAuth } from '@/lib/auth'
 import Header from '@/components/Header'
 import BidSheetsClient from '@/components/bidsheets/BidSheetsClient'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { withQueryTimeout } from '@/lib/timeout'
 import { getAccessibleBidSheetIds } from '@/lib/access'
+import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
 export default async function BidSheetsPage() {
-  const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
+  // Supervisors/managers/admins always get in. Employees land here only
+  // when they have at least one explicit bid_sheet_access grant — same
+  // check that surfaces the dashboard tile for them.
+  const user = await requireAuth()
+  const role = user.profile.role as UserRole
   const supabase = await createClient()
-  const role = user.profile.role as 'supervisor' | 'manager' | 'admin' | 'super_admin'
+
+  const isPrivilegedRole = ['supervisor', 'manager', 'admin', 'super_admin'].includes(role)
+  if (!isPrivilegedRole) {
+    const { count } = await supabase
+      .from('bid_sheet_access')
+      .select('bid_sheet_id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    if (!count || count === 0) redirect('/dashboard')
+  }
+
   const db = role === 'admin' || role === 'super_admin' ? createAdminClient() : supabase
 
   const [sheetsResult, sitesResult] = await Promise.all([

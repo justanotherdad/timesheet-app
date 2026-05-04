@@ -110,28 +110,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if ((items || []).length > 0) {
     const siteId = sheet.site_id
 
-    const findOrCreateSystem = async (name: string, code: string | null): Promise<string> => {
-      let q = adminSupabase.from('systems').select('id').eq('site_id', siteId).eq('name', name)
-      if (code) q = q.eq('code', code)
-      else q = q.is('code', null)
-      const { data: existing } = await q.limit(1).maybeSingle()
-      if (existing?.id) return existing.id
-      const { data: ins, error } = await adminSupabase.from('systems').insert({ site_id: siteId, name, code }).select('id').single()
-      if (error || !ins?.id) throw new Error('Failed to create system')
+    // Project-scoped inserts: every system/deliverable/activity created
+    // here is owned by this newly-minted project PO via project_po_id, so
+    // it never leaks into the global Manage Timesheet Options screen and
+    // never collides with same-named globals or other projects' rows. We
+    // dedupe by (name, code/name) within the bid sheet so we only insert
+    // once per unique value.
+    const createScopedSystem = async (name: string, code: string | null): Promise<string> => {
+      const { data: ins, error } = await adminSupabase
+        .from('systems')
+        .insert({ site_id: siteId, name, code, project_po_id: po.id })
+        .select('id')
+        .single()
+      if (error || !ins?.id) throw new Error(error?.message || 'Failed to create system')
       return ins.id
     }
-    const findOrCreateDeliverable = async (name: string): Promise<string> => {
-      const { data: existing } = await adminSupabase.from('deliverables').select('id').eq('site_id', siteId).eq('name', name).limit(1).maybeSingle()
-      if (existing?.id) return existing.id
-      const { data: ins, error } = await adminSupabase.from('deliverables').insert({ site_id: siteId, name }).select('id').single()
-      if (error || !ins?.id) throw new Error('Failed to create deliverable')
+    const createScopedDeliverable = async (name: string): Promise<string> => {
+      const { data: ins, error } = await adminSupabase
+        .from('deliverables')
+        .insert({ site_id: siteId, name, project_po_id: po.id })
+        .select('id')
+        .single()
+      if (error || !ins?.id) throw new Error(error?.message || 'Failed to create deliverable')
       return ins.id
     }
-    const findOrCreateActivity = async (name: string): Promise<string> => {
-      const { data: existing } = await adminSupabase.from('activities').select('id').eq('site_id', siteId).eq('name', name).limit(1).maybeSingle()
-      if (existing?.id) return existing.id
-      const { data: ins, error } = await adminSupabase.from('activities').insert({ site_id: siteId, name }).select('id').single()
-      if (error || !ins?.id) throw new Error('Failed to create activity')
+    const createScopedActivity = async (name: string): Promise<string> => {
+      const { data: ins, error } = await adminSupabase
+        .from('activities')
+        .insert({ site_id: siteId, name, project_po_id: po.id })
+        .select('id')
+        .single()
+      if (error || !ins?.id) throw new Error(error?.message || 'Failed to create activity')
       return ins.id
     }
 
@@ -150,13 +159,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const actKey = act.name
 
       if (!sysMap.has(sysKey)) {
-        sysMap.set(sysKey, await findOrCreateSystem(sys.name, sys.code || null))
+        sysMap.set(sysKey, await createScopedSystem(sys.name, sys.code || null))
       }
       if (!delMap.has(delKey)) {
-        delMap.set(delKey, await findOrCreateDeliverable(del.name))
+        delMap.set(delKey, await createScopedDeliverable(del.name))
       }
       if (!actMap.has(actKey)) {
-        actMap.set(actKey, await findOrCreateActivity(act.name))
+        actMap.set(actKey, await createScopedActivity(act.name))
       }
     }
 
