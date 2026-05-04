@@ -403,9 +403,9 @@ export default function ProjectBySystemView({
         </div>
       )}
 
-      {/* Card grid */}
+      {/* Card grid: 1 col on phones, 2 on tablet, 3 on desktop. */}
       {data && data.systems.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {data.systems.map((sys) => (
             <SystemCard
               key={sys.systemId}

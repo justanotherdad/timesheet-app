@@ -313,7 +313,15 @@ export async function PATCH(
       if (prior_period_notes !== undefined) updateData.prior_period_notes = prior_period_notes || null
       if (weekly_burn !== undefined) updateData.weekly_burn = weekly_burn === '' || weekly_burn == null ? null : parseFloat(String(weekly_burn))
       if (target_end_date !== undefined) updateData.target_end_date = target_end_date || null
-      if (active !== undefined) updateData.active = !!active
+      if (active !== undefined) {
+        const nextActive = !!active
+        updateData.active = nextActive
+        // Stamp archived_at when the row transitions to inactive; clear
+        // it on reactivate so the column always reflects the most-recent
+        // archive event. We only touch archived_at when active is actually
+        // in the patch payload — other field updates leave it alone.
+        updateData.archived_at = nextActive ? null : new Date().toISOString()
+      }
 
       const { error: updateError } = await adminSupabase
         .from('purchase_orders')

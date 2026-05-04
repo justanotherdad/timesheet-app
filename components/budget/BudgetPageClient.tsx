@@ -6,6 +6,16 @@ import { ArrowLeft, ChevronDown } from 'lucide-react'
 import BasicBudgetView from './BasicBudgetView'
 import ProjectBudgetMatrix from './ProjectBudgetMatrix'
 import BudgetPoSummaryPanel from './BudgetPoSummaryPanel'
+import { formatDateShort } from '@/lib/utils'
+
+/** Render a PO archive timestamp as "M/d/yy"; empty string if unparseable. */
+function formatArchivedDate(value: string): string {
+  try {
+    return formatDateShort(value)
+  } catch {
+    return ''
+  }
+}
 
 interface Site {
   id: string
@@ -30,9 +40,13 @@ interface PurchaseOrder {
   project_name?: string
   budget_type?: string
   active?: boolean
+  archived_at?: string | null
+  client_contact_name?: string | null
   sites?: Site
   departments?: { id: string; name: string }
 }
+
+type PoSortMode = 'po_number' | 'archived_oldest' | 'archived_newest'
 
 interface BudgetPageClientProps {
   sites: Site[]
@@ -55,6 +69,8 @@ function BudgetPageClientInner({
 
   const [budgetRefreshKey, setBudgetRefreshKey] = useState(0)
   const [showArchivedPOs, setShowArchivedPOs] = useState(false)
+  const [poSearch, setPoSearch] = useState('')
+  const [poSortMode, setPoSortMode] = useState<PoSortMode>('po_number')
   const [selectedSiteId, setSelectedSiteId] = useState<string>(() => {
     if (initialPoId) {
       const po = purchaseOrders.find((p) => p.id === initialPoId)
@@ -87,14 +103,60 @@ function BudgetPageClientInner({
 
   const allSitePOsForNav = selectedSiteId ? sortedPurchaseOrders.filter((p) => p.site_id === selectedSiteId) : []
   const sitePOs = allSitePOsForNav
-  const sitePOsForSelector = selectedSiteId
-    ? sortedPurchaseOrders.filter((p) => {
-        if (p.site_id !== selectedSiteId) return false
-        // When showArchivedPOs is true, show ONLY archived (active === false)
-        // When false, show only active (active !== false)
-        return showArchivedPOs ? p.active === false : p.active !== false
-      })
-    : []
+
+  // Apply active/archived filter, then the user's search query (matches
+  // PO number, project name / description, proposal number, or client
+  // contact name — all case-insensitive substring), then the chosen sort
+  // mode. Sorting only by archived date in the archived view; for active
+  // POs the only meaningful sort is PO number, so we fall back to the
+  // pre-sorted list there.
+  const sitePOsForSelector = useMemo(() => {
+    if (!selectedSiteId) return []
+    const base = sortedPurchaseOrders.filter((p) => {
+      if (p.site_id !== selectedSiteId) return false
+      // showArchivedPOs true → only archived (active === false); false → only active.
+      return showArchivedPOs ? p.active === false : p.active !== false
+    })
+
+    const q = poSearch.trim().toLowerCase()
+    const matchesQuery = (po: PurchaseOrder) => {
+      if (!q) return true
+      const haystack = [
+        po.po_number,
+        po.description,
+        po.project_name,
+        po.proposal_number,
+        po.client_contact_name,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(q)
+    }
+    const filtered = base.filter(matchesQuery)
+
+    if (!showArchivedPOs || poSortMode === 'po_number') {
+      return filtered // already PO-number sorted via sortedPurchaseOrders
+    }
+
+    // Sort by archived_at; missing dates sink to the bottom regardless of
+    // direction, then fall back to PO number for stable ordering.
+    const archivedTime = (po: PurchaseOrder) => {
+      if (!po.archived_at) return null
+      const t = Date.parse(po.archived_at)
+      return Number.isFinite(t) ? t : null
+    }
+    return [...filtered].sort((a, b) => {
+      const ta = archivedTime(a)
+      const tb = archivedTime(b)
+      if (ta == null && tb == null) {
+        return (a.po_number || '').localeCompare(b.po_number || '', undefined, { numeric: true })
+      }
+      if (ta == null) return 1
+      if (tb == null) return -1
+      return poSortMode === 'archived_oldest' ? ta - tb : tb - ta
+    })
+  }, [selectedSiteId, sortedPurchaseOrders, showArchivedPOs, poSearch, poSortMode])
 
   const selectedPO = selectedPoId
     ? purchaseOrders.find((p) => p.id === selectedPoId)
@@ -122,6 +184,15 @@ function BudgetPageClientInner({
       router.replace(selectedPoId ? `/dashboard/budget?poId=${selectedPoId}` : '/dashboard/budget', { scroll: false })
     }
   }, [matrixMode, selectedPO, selectedPoId, router])
+
+  // Archived-date sorts only make sense in archived view. Snap back to PO
+  // number when the user toggles archived off so the dropdown never shows
+  // a disabled option as the active selection.
+  useEffect(() => {
+    if (!showArchivedPOs && poSortMode !== 'po_number') {
+      setPoSortMode('po_number')
+    }
+  }, [showArchivedPOs, poSortMode])
 
   if (selectedPO) {
     const currentIndex = sitePOs.findIndex((p) => p.id === selectedPoId)
@@ -231,10 +302,39 @@ function BudgetPageClientInner({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Purchase Order
             </label>
+            <div className="flex flex-col sm:flex-row gap-2 mb-3">
+              <input
+                type="search"
+                value={poSearch}
+                onChange={(e) => setPoSearch(e.target.value)}
+                placeholder="Search PO #, project, proposal #, or contact"
+                className="flex-1 min-h-[2.5rem] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+              />
+              <select
+                value={poSortMode}
+                onChange={(e) => setPoSortMode(e.target.value as PoSortMode)}
+                className="sm:w-64 min-h-[2.5rem] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                aria-label="Sort purchase orders"
+              >
+                <option value="po_number">Sort: PO number</option>
+                <option value="archived_newest" disabled={!showArchivedPOs}>
+                  Sort: Archived date (newest first)
+                </option>
+                <option value="archived_oldest" disabled={!showArchivedPOs}>
+                  Sort: Archived date (oldest first)
+                </option>
+              </select>
+            </div>
             <div className="space-y-2">
               {sitePOsForSelector.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {showArchivedPOs ? 'No archived purchase orders for this client.' : hasArchived ? 'No active purchase orders. Check "Show archived POs" to view archived ones.' : 'No purchase orders for this client.'}
+                  {poSearch.trim()
+                    ? 'No purchase orders match your search.'
+                    : showArchivedPOs
+                      ? 'No archived purchase orders for this client.'
+                      : hasArchived
+                        ? 'No active purchase orders. Check "Show archived POs" to view archived ones.'
+                        : 'No purchase orders for this client.'}
                 </p>
               ) : (
                 sitePOsForSelector.map((po) => {
@@ -254,7 +354,10 @@ function BudgetPageClientInner({
                           {po.po_number}
                           {(po.description || po.departments?.name) ? ` — ${po.description || po.departments?.name}` : ''}
                           {po.active === false && (
-                            <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">(Archived)</span>
+                            <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
+                              (Archived
+                              {po.archived_at ? ` ${formatArchivedDate(po.archived_at)}` : ''})
+                            </span>
                           )}
                         </span>
                         <span className="flex items-center gap-2 shrink-0">
