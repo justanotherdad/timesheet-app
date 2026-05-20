@@ -18,6 +18,14 @@ interface UserManagementProps {
   billRateTimesheetSummaryByUserId: Record<string, BillRatePoSummaryRow[]>
   currentUserRole: UserRole
   currentUserId?: string
+  /**
+   * PO IDs the currently-signed-in viewer can access. `null` means full
+   * access (admin / super_admin). When provided, only POs in this set are
+   * rendered as links in the "Timesheet POs" list on the Edit User dialog;
+   * the rest appear as plain text so the UI doesn't misleadingly invite
+   * the viewer to click into a PO they'd hit 403 on.
+   */
+  accessiblePoIds?: string[] | null
 }
 
 function formatBillRateSummaryLine(rows: BillRatePoSummaryRow[]): string {
@@ -31,7 +39,16 @@ export default function UserManagement({
   billRateTimesheetSummaryByUserId,
   currentUserRole,
   currentUserId,
+  accessiblePoIds,
 }: UserManagementProps) {
+  // null = viewer has full access (admin/super_admin); a Set lets us O(1)
+  // check whether a given PO should be rendered as a clickable link.
+  const accessiblePoIdSet =
+    accessiblePoIds === null || accessiblePoIds === undefined
+      ? null
+      : new Set(accessiblePoIds)
+  const canAccessPo = (poId: string) =>
+    accessiblePoIdSet === null ? true : accessiblePoIdSet.has(poId)
   const [users, setUsers] = useState(initialUsers)
   const nameLookup = lookupUsers ?? users
 
@@ -831,11 +848,25 @@ export default function UserManagement({
                 <div>
                   <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-1">Timesheet POs (from bill rates):</span>
                   <ul className="text-sm text-gray-900 dark:text-gray-100 list-disc list-inside space-y-1">
-                    {(billRateTimesheetSummaryByUserId[editingUser.id] || []).map((r) => (
-                      <li key={r.po_id}>
-                        {r.site_name} — {r.po_number}: {r.project_description}
-                      </li>
-                    ))}
+                    {(billRateTimesheetSummaryByUserId[editingUser.id] || []).map((r) => {
+                      const label = `${r.site_name} — ${r.po_number}: ${r.project_description}`
+                      return (
+                        <li key={r.po_id}>
+                          {canAccessPo(r.po_id) ? (
+                            <a
+                              href={`/dashboard/budget?poId=${encodeURIComponent(r.po_id)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 dark:text-blue-400 hover:underline"
+                            >
+                              {label}
+                            </a>
+                          ) : (
+                            <span>{label}</span>
+                          )}
+                        </li>
+                      )
+                    })}
                   </ul>
                   {(billRateTimesheetSummaryByUserId[editingUser.id] || []).length === 0 && (
                     <span className="text-sm text-gray-500 dark:text-gray-400">No bill rates yet. Add this user on a PO budget.</span>
@@ -909,11 +940,25 @@ export default function UserManagement({
               <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50 dark:bg-gray-700/40">
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Timesheet POs (from bill rates)</p>
                 <ul className="text-sm text-gray-900 dark:text-gray-100 list-disc list-inside space-y-1 max-h-48 overflow-y-auto">
-                  {(billRateTimesheetSummaryByUserId[editingUser.id] || []).map((r) => (
-                    <li key={r.po_id}>
-                      {r.site_name} — {r.po_number}: {r.project_description}
-                    </li>
-                  ))}
+                  {(billRateTimesheetSummaryByUserId[editingUser.id] || []).map((r) => {
+                    const label = `${r.site_name} — ${r.po_number}: ${r.project_description}`
+                    return (
+                      <li key={r.po_id}>
+                        {canAccessPo(r.po_id) ? (
+                          <a
+                            href={`/dashboard/budget?poId=${encodeURIComponent(r.po_id)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            {label}
+                          </a>
+                        ) : (
+                          <span>{label}</span>
+                        )}
+                      </li>
+                    )
+                  })}
                 </ul>
                 {(billRateTimesheetSummaryByUserId[editingUser.id] || []).length === 0 && (
                   <p className="text-sm text-gray-500 dark:text-gray-400">No bill rates yet. Add this user on a PO budget.</p>

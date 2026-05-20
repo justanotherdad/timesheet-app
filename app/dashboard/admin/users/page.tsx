@@ -40,17 +40,34 @@ export default async function UsersAdminPage() {
   const billRateTimesheetSummaryByUserId =
     userIds.length > 0 ? await getBillRatePoSummaryByUserIds(adminSupabase, userIds) : {}
 
+  // Compute which POs the *viewer* (not the user being edited) can access.
+  // Admin / super_admin = full access (null). Everyone else gets the
+  // explicit set of po_budget_access grants — POs the viewer can't reach are
+  // rendered as plain text in the Edit User dialog instead of as links, so
+  // we don't invite a click that would hit a 403.
+  let accessiblePoIds: string[] | null = null
+  if (role !== 'admin' && role !== 'super_admin') {
+    const { data: accessRows } = await adminSupabase
+      .from('po_budget_access')
+      .select('purchase_order_id')
+      .eq('user_id', user.id)
+    accessiblePoIds = (accessRows || []).map(
+      (r: { purchase_order_id: string }) => r.purchase_order_id
+    )
+  }
+
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
       <Header title="Manage Users" showBack backUrl="/dashboard" user={user} />
       <div className="flex-1 min-h-0 w-full px-4 py-4 md:px-6 lg:px-8 flex flex-col overflow-hidden">
         <div className="w-full max-w-[1920px] mx-auto flex-1 flex flex-col min-h-0 overflow-hidden">
-          <UserManagement 
-            users={users} 
+          <UserManagement
+            users={users}
             lookupUsers={allUsers}
             billRateTimesheetSummaryByUserId={billRateTimesheetSummaryByUserId}
             currentUserRole={user.profile.role}
             currentUserId={user.id}
+            accessiblePoIds={accessiblePoIds}
           />
         </div>
       </div>

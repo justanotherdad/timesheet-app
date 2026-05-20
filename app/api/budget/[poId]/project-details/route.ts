@@ -61,7 +61,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ poId: 
   }
 
   const body = await req.json().catch(() => ({}))
-  const { id, budgeted_hours, description, status_pct } = body as {
+  const { id, budgeted_hours, description, status_pct, system_id, deliverable_id, activity_id } = body as {
     id?: string
     budgeted_hours?: number
     description?: string | null
@@ -71,6 +71,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ poId: 
      * fall back to the auto status. Omitted = leave as-is.
      */
     status_pct?: number | null
+    /**
+     * Re-point the row at a different (system, deliverable, activity)
+     * combination. All three must be sent together when changing the
+     * combo; sending only some is rejected to avoid a partial / invalid
+     * triplet. Existing timesheet entries on the old combo are NOT
+     * automatically re-routed — they remain on their original FKs and may
+     * surface as unmatched until reassigned via the Reassign dialog.
+     */
+    system_id?: string
+    deliverable_id?: string
+    activity_id?: string
   }
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
 
@@ -106,6 +117,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ poId: 
       updates.status_pct = fraction
     }
   }
+  // Combo re-pointing: require all three IDs together so we never write a
+  // partial / inconsistent triplet to project_details.
+  const anyComboField = system_id !== undefined || deliverable_id !== undefined || activity_id !== undefined
+  if (anyComboField) {
+    if (!system_id || !deliverable_id || !activity_id) {
+      return NextResponse.json(
+        { error: 'system_id, deliverable_id, and activity_id must be sent together when changing the combo' },
+        { status: 400 }
+      )
+    }
+    updates.system_id = system_id
+    updates.deliverable_id = deliverable_id
+    updates.activity_id = activity_id
+  }
+
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
   }

@@ -212,6 +212,16 @@ export default function ProjectBudgetMatrix({
   const [editingRow, setEditingRow] = useState<MatrixRow | null>(null)
   const [editBudget, setEditBudget] = useState('')
   const [editDesc, setEditDesc] = useState('')
+  // Cascading picks for the Edit matrix row dialog. Same dedup model as the
+  // Reassign dialog: the user picks a system display label, then a
+  // deliverable (broadened across all underlying systems with that label),
+  // then an activity. On save we resolve the concrete system_id from the
+  // picked deliverable. Empty = leave the row's existing combo as-is.
+  const [editSystemLabel, setEditSystemLabel] = useState('')
+  const [editDeliverableId, setEditDeliverableId] = useState('')
+  const [editActivityId, setEditActivityId] = useState('')
+  const [editCombosLoading, setEditCombosLoading] = useState(false)
+  const [editCombosError, setEditCombosError] = useState<string | null>(null)
   // Editing state for indirect / PO-expense lines (the rows below the labor
   // matrix). Mirrors editingRow but for po_expenses, so an admin can fix the
   // label / amount / notes without leaving the matrix view.
@@ -268,9 +278,12 @@ export default function ProjectBudgetMatrix({
   const [reassignSaving, setReassignSaving] = useState(false)
   const [unmatchedEntries, setUnmatchedEntries] = useState<UnmatchedEntry[]>([])
   const [validCombos, setValidCombos] = useState<ValidCombo[]>([])
-  // Per-entry user picks (entryId -> {systemId, deliverableId, activityId})
+  // Per-entry user picks. `systemLabel` is the deduped display label for the
+  // system (multiple underlying system rows that share a name collapse into one
+  // pickable entry). The actual concrete `system_id` is resolved on save from
+  // the picked deliverable's parent.
   const [reassignPicks, setReassignPicks] = useState<
-    Record<string, { systemId: string; deliverableId: string; activityId: string }>
+    Record<string, { systemLabel: string; deliverableId: string; activityId: string }>
   >({})
 
   const bumpRefresh = () => onMatrixRefresh?.()
@@ -443,27 +456,98 @@ export default function ProjectBudgetMatrix({
     }
   }
 
-  const openEdit = (r: MatrixRow) => {
+  const openEdit = async (r: MatrixRow) => {
     setMutateError(null)
     setEditingRow(r)
     setEditBudget(String(r.budgetedHours))
     setEditDesc((r.description ?? '') || '')
+    // Reset cascading picks; we hydrate them once validCombos has loaded so
+    // the dropdowns can display the row's current combo as the initial value.
+    setEditSystemLabel('')
+    setEditDeliverableId('')
+    setEditActivityId('')
+    setEditCombosError(null)
+    // Fetch valid combos for this PO if we don't already have them (the
+    // Reassign dialog may have already populated them). This is what the
+    // cascading dropdowns use as their option source.
+    if (validCombos.length === 0) {
+      setEditCombosLoading(true)
+      try {
+        const res = await fetch(`/api/budget/${poId}/unmatched-entries`, {
+          credentials: 'include',
+        })
+        const body = await res.json().catch(() => ({}))
+        if (res.ok) {
+          const payload = body as { unmatched: UnmatchedEntry[]; validCombos: ValidCombo[] }
+          setValidCombos(payload.validCombos || [])
+        } else {
+          setEditCombosError((body as { error?: string }).error || 'Failed to load combos')
+        }
+      } catch (e) {
+        setEditCombosError(e instanceof Error ? e.message : 'Failed to load combos')
+      } finally {
+        setEditCombosLoading(false)
+      }
+    }
   }
+
+  // Once validCombos is available, pre-fill the Edit matrix row dropdowns to
+  // match the row currently being edited. We only seed empty fields so the
+  // user's in-flight picks aren't overwritten if they edit, blur, and re-open.
+  useEffect(() => {
+    if (!editingRow) return
+    if (validCombos.length === 0) return
+    if (editSystemLabel || editDeliverableId || editActivityId) return
+    // Find a combo on this PO that matches the editing row's labels. The
+    // matrix row carries system/deliverable/activity *names*, not IDs, so we
+    // match by name where possible. systemLabel may contain a code suffix
+    // like "Indirect (079-IND-001)"; the underlying systems table stores
+    // just the name, so we strip a trailing "(...)" before comparing.
+    const stripCode = (s: string) => s.replace(/\s*\([^)]*\)\s*$/, '').trim()
+    const rowSysName = stripCode(editingRow.systemLabel)
+    const match = validCombos.find(
+      (c) =>
+        c.systemName.trim().toLowerCase() === rowSysName.toLowerCase() &&
+        c.deliverableName === editingRow.deliverableName &&
+        c.activityName === editingRow.activityName
+    )
+    if (match) {
+      setEditSystemLabel(match.systemName.trim())
+      setEditDeliverableId(match.deliverableId)
+      setEditActivityId(match.activityId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingRow, validCombos])
 
   const handleSaveEdit = async () => {
     if (!editingRow) return
     setMutating(true)
     setMutateError(null)
     try {
+      const payload: Record<string, unknown> = {
+        id: editingRow.id,
+        budgeted_hours: Number(editBudget) || 0,
+        description: editDesc.trim() || null,
+      }
+      // If the user picked a new (system, deliverable, activity) combo, send
+      // the concrete IDs. The system_id is resolved from the picked
+      // deliverable (the same dedup model used in the Reassign dialog).
+      if (editSystemLabel && editDeliverableId && editActivityId) {
+        const resolvedSystemId = resolveSystemIdForPick(editDeliverableId, editActivityId)
+        if (!resolvedSystemId) {
+          setMutateError('Could not resolve the picked combo on this PO. Refresh and try again.')
+          setMutating(false)
+          return
+        }
+        payload.system_id = resolvedSystemId
+        payload.deliverable_id = editDeliverableId
+        payload.activity_id = editActivityId
+      }
       const res = await fetch(`/api/budget/${poId}/project-details`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editingRow.id,
-          budgeted_hours: Number(editBudget) || 0,
-          description: editDesc.trim() || null,
-        }),
+        body: JSON.stringify(payload),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error((body as { error?: string }).error || 'Save failed')
@@ -687,9 +771,9 @@ export default function ProjectBudgetMatrix({
       setValidCombos(payload.validCombos || [])
       // Pre-seed picks with empty selections for each entry so we can render
       // the dropdowns in a controlled way.
-      const seed: Record<string, { systemId: string; deliverableId: string; activityId: string }> = {}
+      const seed: Record<string, { systemLabel: string; deliverableId: string; activityId: string }> = {}
       for (const e of payload.unmatched || []) {
-        seed[e.entryId] = { systemId: '', deliverableId: '', activityId: '' }
+        seed[e.entryId] = { systemLabel: '', deliverableId: '', activityId: '' }
       }
       setReassignPicks(seed)
     } catch (e) {
@@ -707,45 +791,71 @@ export default function ProjectBudgetMatrix({
 
   /**
    * Build cascading dropdown options from validCombos for a given entry's
-   * current picks. The system list shows all distinct systems on this PO.
-   * Once a system is chosen, the deliverable list narrows to deliverables
-   * paired with that system. Once both are chosen, the activity list narrows
-   * to activities paired with that (system, deliverable).
+   * current picks.
+   *
+   * - The System list collapses systems that share a display label (e.g. three
+   *   distinct system rows all named "Indirect" appear once). The picked value
+   *   is the display label, not a concrete system_id.
+   * - The Deliverable list shows every deliverable belonging to ANY underlying
+   *   system that matches the picked label. Each option carries a subtext
+   *   showing the parent system's code (or system name when no code exists)
+   *   so visually-identical deliverable names can still be told apart.
+   * - The Activity list narrows to activities valid for the picked
+   *   deliverable. (Because a deliverable_id is tied to exactly one system_id
+   *   in validCombos, the picked deliverable also uniquely determines the
+   *   concrete system_id used on save.)
    */
+  const systemLabelFor = useCallback((c: ValidCombo) => {
+    // Display label used to group duplicate-named systems. We use the bare
+    // name (case-insensitive grouping) so e.g. three "Indirect" rows collapse;
+    // the code is intentionally NOT part of the grouping key.
+    return c.systemName.trim()
+  }, [])
+
   const reassignSystemOptions = useMemo(() => {
-    const seen = new Map<string, { systemId: string; label: string }>()
+    const seen = new Map<string, { systemLabel: string; label: string }>()
     for (const c of validCombos) {
-      if (seen.has(c.systemId)) continue
-      const label = c.systemCode ? `${c.systemName} (${c.systemCode})` : c.systemName
-      seen.set(c.systemId, { systemId: c.systemId, label })
+      const key = systemLabelFor(c).toLowerCase()
+      if (seen.has(key)) continue
+      seen.set(key, { systemLabel: systemLabelFor(c), label: systemLabelFor(c) })
     }
     return Array.from(seen.values()).sort((a, b) =>
       a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
     )
-  }, [validCombos])
+  }, [validCombos, systemLabelFor])
 
   const getDeliverableOptions = useCallback(
-    (systemId: string) => {
-      if (!systemId) return [] as Array<{ deliverableId: string; label: string }>
-      const seen = new Map<string, { deliverableId: string; label: string }>()
+    (systemLabel: string) => {
+      if (!systemLabel) {
+        return [] as Array<{ deliverableId: string; label: string; subtext: string }>
+      }
+      const wanted = systemLabel.trim().toLowerCase()
+      const seen = new Map<string, { deliverableId: string; label: string; subtext: string }>()
       for (const c of validCombos) {
-        if (c.systemId !== systemId) continue
+        if (systemLabelFor(c).toLowerCase() !== wanted) continue
         if (seen.has(c.deliverableId)) continue
-        seen.set(c.deliverableId, { deliverableId: c.deliverableId, label: c.deliverableName })
+        // Subtext disambiguates which underlying "Indirect" (or other
+        // duplicate-named system) a deliverable belongs to. Prefer the
+        // system code when available; fall back to the system name.
+        const subtext = c.systemCode || c.systemName
+        seen.set(c.deliverableId, {
+          deliverableId: c.deliverableId,
+          label: c.deliverableName,
+          subtext,
+        })
       }
       return Array.from(seen.values()).sort((a, b) =>
         a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
       )
     },
-    [validCombos]
+    [validCombos, systemLabelFor]
   )
 
   const getActivityOptions = useCallback(
-    (systemId: string, deliverableId: string) => {
-      if (!systemId || !deliverableId) return [] as Array<{ activityId: string; label: string }>
+    (deliverableId: string) => {
+      if (!deliverableId) return [] as Array<{ activityId: string; label: string }>
       const seen = new Map<string, { activityId: string; label: string }>()
       for (const c of validCombos) {
-        if (c.systemId !== systemId) continue
         if (c.deliverableId !== deliverableId) continue
         if (seen.has(c.activityId)) continue
         seen.set(c.activityId, { activityId: c.activityId, label: c.activityName })
@@ -757,18 +867,35 @@ export default function ProjectBudgetMatrix({
     [validCombos]
   )
 
+  /**
+   * Given a picked (deliverableId, activityId), return the concrete system_id
+   * that this combo belongs to. Used at save time to translate the user's
+   * deduped systemLabel pick back into the underlying row.
+   */
+  const resolveSystemIdForPick = useCallback(
+    (deliverableId: string, activityId: string): string | null => {
+      for (const c of validCombos) {
+        if (c.deliverableId === deliverableId && c.activityId === activityId) {
+          return c.systemId
+        }
+      }
+      return null
+    },
+    [validCombos]
+  )
+
   const setReassignPick = (
     entryId: string,
-    field: 'systemId' | 'deliverableId' | 'activityId',
+    field: 'systemLabel' | 'deliverableId' | 'activityId',
     value: string
   ) => {
     setReassignPicks((prev) => {
-      const cur = prev[entryId] || { systemId: '', deliverableId: '', activityId: '' }
+      const cur = prev[entryId] || { systemLabel: '', deliverableId: '', activityId: '' }
       const next = { ...cur, [field]: value }
       // Clear downstream selections when an upstream pick changes so the
       // user can't end up with an inconsistent (system, deliverable, activity)
       // triplet via a stale dropdown value.
-      if (field === 'systemId') {
+      if (field === 'systemLabel') {
         next.deliverableId = ''
         next.activityId = ''
       } else if (field === 'deliverableId') {
@@ -784,14 +911,26 @@ export default function ProjectBudgetMatrix({
    * are left for the user to come back to.
    */
   const handleSaveReassign = async () => {
-    const assignments = Object.entries(reassignPicks)
-      .filter(([, p]) => p.systemId && p.deliverableId && p.activityId)
-      .map(([entryId, p]) => ({
+    // The user picks a deduped systemLabel + deliverableId + activityId. The
+    // concrete system_id is resolved from the chosen deliverable's parent
+    // (deliverable IDs are unique to one system_id in validCombos).
+    const assignments: Array<{
+      entryId: string
+      systemId: string
+      deliverableId: string
+      activityId: string
+    }> = []
+    for (const [entryId, p] of Object.entries(reassignPicks)) {
+      if (!p.systemLabel || !p.deliverableId || !p.activityId) continue
+      const systemId = resolveSystemIdForPick(p.deliverableId, p.activityId)
+      if (!systemId) continue
+      assignments.push({
         entryId,
-        systemId: p.systemId,
+        systemId,
         deliverableId: p.deliverableId,
         activityId: p.activityId,
-      }))
+      })
+    }
     if (assignments.length === 0) {
       setReassignError('Pick a system, deliverable, and activity for at least one entry first.')
       return
@@ -825,7 +964,7 @@ export default function ProjectBudgetMatrix({
       // Trim picks to only entries that are still unmatched
       setReassignPicks((prev) => {
         const next: typeof prev = {}
-        for (const e of remaining) next[e.entryId] = prev[e.entryId] || { systemId: '', deliverableId: '', activityId: '' }
+        for (const e of remaining) next[e.entryId] = prev[e.entryId] || { systemLabel: '', deliverableId: '', activityId: '' }
         return next
       })
       bumpRefresh()
@@ -1858,20 +1997,68 @@ export default function ProjectBudgetMatrix({
             </div>
             <div className="p-4 space-y-3 text-sm">
               <p className="text-gray-600 dark:text-gray-400">
-                To rename system, deliverable, or activity, update them on the bid sheet (if linked) or in site setup. Here you can adjust budget hours and the row description.
+                Adjust the System / Deliverable / Activity this row points to (restricted to combos that already exist on this PO),
+                or update the budget hours and description. Existing approved timesheet entries on the prior combo are left as-is and may surface as
+                unmatched until reassigned.
               </p>
-              <div>
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">System</span>
-                <p className="text-gray-900 dark:text-gray-100">{editingRow.systemLabel}</p>
-              </div>
-              <div>
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Deliverable</span>
-                <p className="text-gray-900 dark:text-gray-100">{editingRow.deliverableName}</p>
-              </div>
-              <div>
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Activity</span>
-                <p className="text-gray-900 dark:text-gray-100">{editingRow.activityName}</p>
-              </div>
+              {editCombosLoading && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">Loading options…</p>
+              )}
+              {editCombosError && (
+                <p className="text-xs text-red-600 dark:text-red-400">{editCombosError}</p>
+              )}
+              <label className="block">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">System</span>
+                <select
+                  value={editSystemLabel}
+                  onChange={(ev) => {
+                    setEditSystemLabel(ev.target.value)
+                    // Clear downstream picks when the system changes.
+                    setEditDeliverableId('')
+                    setEditActivityId('')
+                  }}
+                  disabled={mutating || editCombosLoading}
+                  className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                >
+                  <option value="">Select…</option>
+                  {reassignSystemOptions.map((o) => (
+                    <option key={o.systemLabel} value={o.systemLabel}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Deliverable</span>
+                <select
+                  value={editDeliverableId}
+                  onChange={(ev) => {
+                    setEditDeliverableId(ev.target.value)
+                    setEditActivityId('')
+                  }}
+                  disabled={mutating || editCombosLoading || !editSystemLabel}
+                  className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm disabled:opacity-50"
+                >
+                  <option value="">Select…</option>
+                  {getDeliverableOptions(editSystemLabel).map((o) => (
+                    <option key={o.deliverableId} value={o.deliverableId}>
+                      {o.subtext ? `${o.label} (${o.subtext})` : o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Activity</span>
+                <select
+                  value={editActivityId}
+                  onChange={(ev) => setEditActivityId(ev.target.value)}
+                  disabled={mutating || editCombosLoading || !editDeliverableId}
+                  className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm disabled:opacity-50"
+                >
+                  <option value="">Select…</option>
+                  {getActivityOptions(editDeliverableId).map((o) => (
+                    <option key={o.activityId} value={o.activityId}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
               <label className="block">
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Budget (h)</span>
                 <input
@@ -1893,6 +2080,9 @@ export default function ProjectBudgetMatrix({
                   placeholder="Scope or notes for this line…"
                 />
               </label>
+              {mutateError && (
+                <p className="text-xs text-red-600 dark:text-red-400">{mutateError}</p>
+              )}
             </div>
             <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
               <button
@@ -1988,9 +2178,9 @@ export default function ProjectBudgetMatrix({
                   </thead>
                   <tbody>
                     {unmatchedEntries.map((e) => {
-                      const pick = reassignPicks[e.entryId] || { systemId: '', deliverableId: '', activityId: '' }
-                      const delOptions = getDeliverableOptions(pick.systemId)
-                      const actOptions = getActivityOptions(pick.systemId, pick.deliverableId)
+                      const pick = reassignPicks[e.entryId] || { systemLabel: '', deliverableId: '', activityId: '' }
+                      const delOptions = getDeliverableOptions(pick.systemLabel)
+                      const actOptions = getActivityOptions(pick.deliverableId)
                       const currentLabel =
                         [e.systemName, e.deliverableName, e.activityName]
                           .filter(Boolean)
@@ -2009,14 +2199,14 @@ export default function ProjectBudgetMatrix({
                           </td>
                           <td className="py-2 pr-2">
                             <select
-                              value={pick.systemId}
-                              onChange={(ev) => setReassignPick(e.entryId, 'systemId', ev.target.value)}
+                              value={pick.systemLabel}
+                              onChange={(ev) => setReassignPick(e.entryId, 'systemLabel', ev.target.value)}
                               disabled={reassignSaving}
                               className="w-full h-8 px-1 border rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs"
                             >
                               <option value="">Select…</option>
                               {reassignSystemOptions.map((o) => (
-                                <option key={o.systemId} value={o.systemId}>{o.label}</option>
+                                <option key={o.systemLabel} value={o.systemLabel}>{o.label}</option>
                               ))}
                             </select>
                           </td>
@@ -2024,12 +2214,14 @@ export default function ProjectBudgetMatrix({
                             <select
                               value={pick.deliverableId}
                               onChange={(ev) => setReassignPick(e.entryId, 'deliverableId', ev.target.value)}
-                              disabled={reassignSaving || !pick.systemId}
+                              disabled={reassignSaving || !pick.systemLabel}
                               className="w-full h-8 px-1 border rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs disabled:opacity-50"
                             >
                               <option value="">Select…</option>
                               {delOptions.map((o) => (
-                                <option key={o.deliverableId} value={o.deliverableId}>{o.label}</option>
+                                <option key={o.deliverableId} value={o.deliverableId}>
+                                  {o.subtext ? `${o.label} (${o.subtext})` : o.label}
+                                </option>
                               ))}
                             </select>
                           </td>
@@ -2061,7 +2253,7 @@ export default function ProjectBudgetMatrix({
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Picked:{' '}
                 {Object.values(reassignPicks).filter(
-                  (p) => p.systemId && p.deliverableId && p.activityId
+                  (p) => p.systemLabel && p.deliverableId && p.activityId
                 ).length}{' '}
                 of {unmatchedEntries.length}
               </p>
@@ -2081,7 +2273,7 @@ export default function ProjectBudgetMatrix({
                     reassignSaving ||
                     reassignLoading ||
                     Object.values(reassignPicks).filter(
-                      (p) => p.systemId && p.deliverableId && p.activityId
+                      (p) => p.systemLabel && p.deliverableId && p.activityId
                     ).length === 0
                   }
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"

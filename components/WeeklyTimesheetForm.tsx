@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import SearchableSelect from './SearchableSelect'
@@ -538,47 +538,14 @@ export default function WeeklyTimesheetForm({
     code: a.code,
   }))
 
-  // Auto-select Deliverable / Activity when there's only one valid option and
-  // the user hasn't already chosen one. This makes "Indirect" rows (created
-  // when a bid sheet's PM/DocCoord/ProjControls indirect line converts to a
-  // loggable activity) feel like one click instead of three: pick the PO,
-  // and the System/Deliverable/Activity collapse to their only choices. It's
-  // also a general nicety — any PO that maps to a single S/D/A combination
-  // pre-fills it. We only fill empty fields so the user's manual picks win.
-  useEffect(() => {
-    if (!editingEntry) return
-    const patch: Partial<BillableEntry> = {}
-
-    if (
-      !editingEntry.deliverable_id &&
-      filteredDeliverables.length === 1 &&
-      filteredDeliverables[0]?.id
-    ) {
-      patch.deliverable_id = filteredDeliverables[0].id
-    }
-    if (
-      !editingEntry.activity_id &&
-      filteredActivities.length === 1 &&
-      filteredActivities[0]?.id
-    ) {
-      patch.activity_id = filteredActivities[0].id
-    }
-    if (Object.keys(patch).length > 0) {
-      setEditingEntry({ ...editingEntry, ...patch })
-    }
-    // We intentionally watch the *inputs* that determine which dropdown values
-    // are valid (PO, site) plus current ID state so we re-run after the user
-    // narrows the form, without looping when the patch we just applied flows
-    // back through editingEntry.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    editingEntry?.po_id,
-    editingEntry?.client_project_id,
-    editingEntry?.deliverable_id,
-    editingEntry?.activity_id,
-    filteredDeliverables.length,
-    filteredActivities.length,
-  ])
+  // Note: a previous version of this component auto-filled the Deliverable
+  // and Activity dropdowns whenever there was only one valid option. That
+  // made the X "clear" button on those fields effectively a no-op — the
+  // user would click X, the field would clear for a render, then the
+  // effect would immediately re-fill it from the single available option,
+  // so the field appeared "locked". The auto-fill has been removed: the
+  // user always picks Deliverable and Activity explicitly. The single-
+  // option case is still one extra click but the field can now be cleared.
 
   return (
     <>
@@ -1168,12 +1135,31 @@ export default function WeeklyTimesheetForm({
                         max="24"
                         value={editingEntry[`${day}_hours`] || ''}
                         onChange={(e) => {
+                          // Treat an empty input as "cleared" rather than
+                          // falling back to the previous value. This is what
+                          // makes backspace work: deleting the last digit
+                          // leaves the field empty (valueAsNumber → NaN);
+                          // previously the handler kept the prior value, so
+                          // the user could never clear a populated cell
+                          // without first highlighting it.
+                          const raw = e.target.value
+                          if (raw === '') {
+                            setEditingEntry({
+                              ...editingEntry,
+                              [`${day}_hours`]: 0,
+                            })
+                            return
+                          }
                           const parsed = e.target.valueAsNumber
+                          if (isNaN(parsed)) {
+                            // Mid-typing states like "-" or "." — leave the
+                            // previous value alone; the browser preserves
+                            // the field text until the user enters a digit.
+                            return
+                          }
                           setEditingEntry({
                             ...editingEntry,
-                            [`${day}_hours`]: isNaN(parsed)
-                              ? editingEntry[`${day}_hours`]
-                              : normalizeTimesheetHours(parsed),
+                            [`${day}_hours`]: normalizeTimesheetHours(parsed),
                           })
                         }}
                         className="w-full h-9 min-h-9 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-base focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white box-border"
