@@ -814,16 +814,10 @@ export default function WeeklyTimesheetForm({
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Unbillable Time</h2>
           
           <div className="overflow-x-auto">
-            {/* Same colgroup as billable so Mon–Sun columns align vertically. */}
-            <table className="min-w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+            <table className="min-w-full w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
               <colgroup>
-                <col className="w-10" />
+                <col className="w-[5.5rem]" />
                 <col />
-                <col className="w-28" />
-                <col />
-                <col className="w-24" />
-                <col className="w-24" />
-                <col className="w-24" />
                 {weekDates.days.map((_, idx) => (
                   <col key={idx} className="w-[3.5rem]" />
                 ))}
@@ -831,17 +825,12 @@ export default function WeeklyTimesheetForm({
               </colgroup>
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                     Description
                   </th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 min-w-0">
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 min-w-0">
                     Notes
                   </th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></th>
                   {weekDates.days.map((day, idx) => (
                     <th key={idx} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                       <div>{format(day, 'EEE')}</div>
@@ -856,12 +845,10 @@ export default function WeeklyTimesheetForm({
               <tbody>
                 {unbillableEntries.map((entry, entryIdx) => (
                   <tr key={entryIdx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                       {entry.description}
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 min-w-0">
+                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 min-w-0">
                       <input
                         type="text"
                         value={entry.notes ?? ''}
@@ -870,9 +857,6 @@ export default function WeeklyTimesheetForm({
                         className="w-full min-w-0 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-900 bg-white dark:bg-gray-700 dark:text-gray-100"
                       />
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></td>
                     {days.map((day) => (
                       <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2">
                         <input
@@ -901,7 +885,7 @@ export default function WeeklyTimesheetForm({
                 
                 {/* Sub Totals Row */}
                 <tr className="bg-yellow-50 dark:bg-yellow-900/30 font-semibold">
-                  <td colSpan={7} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
+                  <td colSpan={2} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
                   {days.map((day) => (
                     <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-gray-900 dark:text-gray-100">
                       {formatHours(getUnbillableSubtotal(day))}
