@@ -91,7 +91,7 @@ export function getPreviousWeekEnding(date?: Date, weekStartsOn: number = 1): Da
   return subWeeks(current, 1)
 }
 
-/** Sunday week-ending dates for the timesheet selector (Mon–Sun weeks). Previous Sunday first, then older, then future. */
+/** Sunday week-ending dates for the timesheet selector (Mon–Sun weeks). Oldest first; scroll down for later weeks. Default selection is previous week ending (anchor). */
 export function getWeekEndingSundayOptions(
   weeksBack = 52,
   weeksForward = 8,
@@ -100,9 +100,10 @@ export function getWeekEndingSundayOptions(
   const ref = referenceDate ?? getNowInAppTz()
   const anchor = getPreviousWeekEnding(ref, 1)
   const options: string[] = []
-  for (let i = 0; i <= weeksBack; i++) {
+  for (let i = weeksBack; i >= 1; i--) {
     options.push(formatDateForInput(subWeeks(anchor, i)))
   }
+  options.push(formatDateForInput(anchor))
   for (let i = 1; i <= weeksForward; i++) {
     options.push(formatDateForInput(addWeeks(anchor, i)))
   }

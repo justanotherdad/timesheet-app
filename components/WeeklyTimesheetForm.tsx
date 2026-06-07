@@ -165,7 +165,7 @@ export default function WeeklyTimesheetForm({
   const weekEndingOptions = useMemo(() => {
     const opts = getWeekEndingSundayOptions()
     if (weekEnding && !opts.includes(weekEnding)) {
-      return [weekEnding, ...opts]
+      return [...opts, weekEnding].sort((a, b) => a.localeCompare(b))
     }
     return opts
   }, [weekEnding])
