@@ -3,6 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
+import {
+  buildExpenseAddedDescription,
+  fetchExpenseTypeNames,
+  logPoBudgetContainerAudit,
+} from '@/lib/po-budget-container-audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,5 +79,13 @@ export async function POST(
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const typeNames = await fetchExpenseTypeNames(supabase, [data.expense_type_id].filter(Boolean))
+  void logPoBudgetContainerAudit({
+    poId,
+    container: 'expenses',
+    actorId: user.id,
+    actorName: user.profile.name,
+    description: buildExpenseAddedDescription(data, typeNames),
+  })
   return NextResponse.json(data)
 }

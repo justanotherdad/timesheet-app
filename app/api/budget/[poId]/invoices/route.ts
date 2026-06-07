@@ -3,6 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
+import {
+  buildInvoiceAddedDescription,
+  logPoBudgetContainerAudit,
+} from '@/lib/po-budget-container-audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,5 +110,12 @@ export async function POST(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   await updatePoBalance(supabase, poId)
+  void logPoBudgetContainerAudit({
+    poId,
+    container: 'invoices',
+    actorId: user.id,
+    actorName: user.profile.name,
+    description: buildInvoiceAddedDescription(inv),
+  })
   return NextResponse.json(inv)
 }

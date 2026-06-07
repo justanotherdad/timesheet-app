@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
+import {
+  buildBillRateDeletedDescription,
+  buildBillRateRemovedFromPoDescription,
+  buildBillRateUpdatedDescription,
+  fetchUserName,
+  logPoBudgetContainerAudit,
+} from '@/lib/po-budget-container-audit'
 
 export async function PATCH(
   req: Request,
@@ -23,7 +30,7 @@ export async function PATCH(
 
   const { data: existing, error: existingErr } = await supabase
     .from('po_bill_rates')
-    .select('id, effective_from_date, effective_to_date')
+    .select('id, user_id, rate, effective_from_date, effective_to_date')
     .eq('id', rateId)
     .eq('po_id', poId)
     .maybeSingle()
@@ -73,6 +80,17 @@ export async function PATCH(
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const employeeName = await fetchUserName(supabase, existing.user_id)
+  const isRemoveFromPo = body.remove_from_po === true
+  void logPoBudgetContainerAudit({
+    poId,
+    container: 'bill_rates',
+    actorId: user.id,
+    actorName: user.profile.name,
+    description: isRemoveFromPo
+      ? buildBillRateRemovedFromPoDescription(employeeName, data.effective_to_date)
+      : buildBillRateUpdatedDescription(existing, data, employeeName),
+  })
   return NextResponse.json(data)
 }
 
@@ -92,7 +110,26 @@ export async function DELETE(
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 
+  const { data: existing, error: existingErr } = await supabase
+    .from('po_bill_rates')
+    .select('id, user_id, rate')
+    .eq('id', rateId)
+    .eq('po_id', poId)
+    .maybeSingle()
+
+  if (existingErr || !existing) {
+    return NextResponse.json({ error: 'Bill rate not found' }, { status: 404 })
+  }
+
   const { error } = await supabase.from('po_bill_rates').delete().eq('id', rateId).eq('po_id', poId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const employeeName = await fetchUserName(supabase, existing.user_id)
+  void logPoBudgetContainerAudit({
+    poId,
+    container: 'bill_rates',
+    actorId: user.id,
+    actorName: user.profile.name,
+    description: buildBillRateDeletedDescription(existing, employeeName),
+  })
   return NextResponse.json({ success: true })
 }

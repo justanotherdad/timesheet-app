@@ -19,6 +19,7 @@ import InvoiceFormModal from './InvoiceFormModal'
 import ExpenseFormModal from './ExpenseFormModal'
 import BillRateFormModal from './BillRateFormModal'
 import BillRateRemoveModal from './BillRateRemoveModal'
+import BudgetContainerAuditTrail, { type ContainerAuditRow } from './BudgetContainerAuditTrail'
 
 const ATTACHMENT_ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 
@@ -116,6 +117,11 @@ export default function BasicBudgetView({
   const [saving, setSaving] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
   const [expenseTypesFallback, setExpenseTypesFallback] = useState<Array<{ id: string; name: string }>>([])
+  const [containerAudit, setContainerAudit] = useState<{
+    invoices: ContainerAuditRow[]
+    expenses: ContainerAuditRow[]
+    bill_rates: ContainerAuditRow[]
+  }>({ invoices: [], expenses: [], bill_rates: [] })
   const [clientPOForm, setClientPOForm] = useState({
     po_number: '',
     department_id: '',
@@ -217,6 +223,22 @@ export default function BasicBudgetView({
     } catch { /* ignore */ }
   }, [po.id, user])
 
+  const loadContainerAudit = useCallback(async () => {
+    if (hasLimitedAccess) return
+    try {
+      const t = `t=${Date.now()}`
+      const res = await fetch(`/api/budget/${po.id}/container-audit?${t}`, fetchOpts)
+      if (res.ok) {
+        const json = await res.json()
+        setContainerAudit({
+          invoices: Array.isArray(json.invoices) ? json.invoices : [],
+          expenses: Array.isArray(json.expenses) ? json.expenses : [],
+          bill_rates: Array.isArray(json.bill_rates) ? json.bill_rates : [],
+        })
+      }
+    } catch { /* ignore */ }
+  }, [po.id, fetchOpts, hasLimitedAccess])
+
   const loadExpenses = useCallback(async () => {
     try {
       const t = `t=${Date.now()}`
@@ -235,8 +257,9 @@ export default function BasicBudgetView({
     if (user) {
       await loadBalance()
     }
+    await loadContainerAudit()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [po.id, fetchOpts, user, loadBalance])
+  }, [po.id, fetchOpts, user, loadBalance, loadContainerAudit])
 
   const refetch = useCallback(async () => {
     const t = `t=${Date.now()}`
@@ -268,7 +291,8 @@ export default function BasicBudgetView({
     loadBudgetAccess()
     if (user) loadBalance()
     await fetchAttachmentsList({ silent: true })
-  }, [po.id, loadBudgetAccess, loadBalance, user, fetchOpts, fetchAttachmentsList])
+    await loadContainerAudit()
+  }, [po.id, loadBudgetAccess, loadBalance, user, fetchOpts, fetchAttachmentsList, loadContainerAudit])
 
   useEffect(() => {
     setExpenseTypesFallback([])
@@ -324,6 +348,9 @@ export default function BasicBudgetView({
             personnelLineItems: balJson.personnelLineItems ?? [],
           })
         }
+        if (!hasLimitedAccess) {
+          await loadContainerAudit()
+        }
       } catch (e) {
         console.error(e)
       } finally {
@@ -331,7 +358,7 @@ export default function BasicBudgetView({
       }
     }
     load()
-  }, [po.id, selectedMonth, showAllMonths, user, fetchOpts])
+  }, [po.id, selectedMonth, showAllMonths, user, fetchOpts, hasLimitedAccess, loadContainerAudit])
 
   useEffect(() => {
     const p = data?.po ?? po
@@ -1454,6 +1481,7 @@ export default function BasicBudgetView({
             </tbody>
           </table>
         </div>
+        <BudgetContainerAuditTrail entries={containerAudit.invoices} />
       </div>
       )}
 
@@ -1895,6 +1923,7 @@ export default function BasicBudgetView({
             )}
           </tbody>
         </table>
+        <BudgetContainerAuditTrail entries={containerAudit.expenses} />
       </div>
       )}
 
@@ -1960,6 +1989,7 @@ export default function BasicBudgetView({
             )}
           </tbody>
         </table>
+        <BudgetContainerAuditTrail entries={containerAudit.bill_rates} />
       </div>
       )}
 

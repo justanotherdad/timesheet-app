@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
+import {
+  buildExpenseDeletedDescription,
+  buildExpenseUpdatedDescription,
+  fetchExpenseTypeNames,
+  logPoBudgetContainerAudit,
+} from '@/lib/po-budget-container-audit'
 
 export async function PATCH(
   req: Request,
@@ -17,6 +23,17 @@ export async function PATCH(
   const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
   if (!allowed) {
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
+
+  const { data: existing, error: existingErr } = await supabase
+    .from('po_expenses')
+    .select('*')
+    .eq('id', expenseId)
+    .eq('po_id', poId)
+    .maybeSingle()
+
+  if (existingErr || !existing) {
+    return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
   }
 
   const body = await req.json()
@@ -36,6 +53,14 @@ export async function PATCH(
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const typeNames = await fetchExpenseTypeNames(supabase, [existing.expense_type_id, data.expense_type_id].filter(Boolean))
+  void logPoBudgetContainerAudit({
+    poId,
+    container: 'expenses',
+    actorId: user.id,
+    actorName: user.profile.name,
+    description: buildExpenseUpdatedDescription(existing, data, typeNames),
+  })
   return NextResponse.json(data)
 }
 
@@ -55,7 +80,26 @@ export async function DELETE(
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 
+  const { data: existing, error: existingErr } = await supabase
+    .from('po_expenses')
+    .select('*')
+    .eq('id', expenseId)
+    .eq('po_id', poId)
+    .maybeSingle()
+
+  if (existingErr || !existing) {
+    return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
+  }
+
   const { error } = await supabase.from('po_expenses').delete().eq('id', expenseId).eq('po_id', poId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const typeNames = await fetchExpenseTypeNames(supabase, [existing.expense_type_id].filter(Boolean))
+  void logPoBudgetContainerAudit({
+    poId,
+    container: 'expenses',
+    actorId: user.id,
+    actorName: user.profile.name,
+    description: buildExpenseDeletedDescription(existing, typeNames),
+  })
   return NextResponse.json({ success: true })
 }

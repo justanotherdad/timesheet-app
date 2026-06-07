@@ -3,6 +3,12 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
+import {
+  buildBillRateAddedDescription,
+  buildBillRateUpdatedDescription,
+  fetchUserName,
+  logPoBudgetContainerAudit,
+} from '@/lib/po-budget-container-audit'
 
 function getDb(supabase: Awaited<ReturnType<typeof createClient>>) {
   try {
@@ -93,6 +99,14 @@ export async function POST(
   let result = await db.from('po_bill_rates').insert(payload).select('*').single()
 
   if (result.error && (result.error.code === '23505' || result.error.message?.includes('duplicate key'))) {
+    const { data: before } = await db
+      .from('po_bill_rates')
+      .select('*')
+      .eq('po_id', poId)
+      .eq('user_id', user_id)
+      .eq('effective_from_date', fromStr)
+      .maybeSingle()
+
     const updateRes = await db
       .from('po_bill_rates')
       .update({
@@ -104,10 +118,30 @@ export async function POST(
       .eq('effective_from_date', fromStr)
       .select('*')
       .single()
-    if (!updateRes.error) return NextResponse.json(updateRes.data)
+    if (!updateRes.error && updateRes.data) {
+      const employeeName = await fetchUserName(supabase, user_id)
+      void logPoBudgetContainerAudit({
+        poId,
+        container: 'bill_rates',
+        actorId: user.id,
+        actorName: user.profile.name,
+        description: before
+          ? buildBillRateUpdatedDescription(before, updateRes.data, employeeName)
+          : buildBillRateAddedDescription(updateRes.data, employeeName),
+      })
+      return NextResponse.json(updateRes.data)
+    }
   }
 
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 })
   if (!result.data) return NextResponse.json({ error: 'Failed to save bill rate' }, { status: 500 })
+  const employeeName = await fetchUserName(supabase, user_id)
+  void logPoBudgetContainerAudit({
+    poId,
+    container: 'bill_rates',
+    actorId: user.id,
+    actorName: user.profile.name,
+    description: buildBillRateAddedDescription(result.data, employeeName),
+  })
   return NextResponse.json(result.data)
 }

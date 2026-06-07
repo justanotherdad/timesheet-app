@@ -41,7 +41,7 @@ export default function BillRateRemoveModal({ poId, rate, onSave, onClose }: Bil
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ effective_to_date: effectiveToDate }),
+        body: JSON.stringify({ effective_to_date: effectiveToDate, remove_from_po: true }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
