@@ -69,6 +69,17 @@ select {
   min-height: 2.5rem;
 }
 
+/* Hide number input spinners — users type values manually */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* Hide header in print */
 @media print {
   header {

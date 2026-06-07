@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import SearchableSelect from './SearchableSelect'
 import SystemInput from './SystemInput'
 import DeleteTimesheetButton from './DeleteTimesheetButton'
-import { getWeekDates, formatDate, formatDateShort, formatDateForInput, formatHours, normalizeTimesheetHours } from '@/lib/utils'
+import { getWeekDates, formatDate, formatDateShort, formatDateForInput, formatHours, formatWeekEnding, getWeekEndingSundayOptions, normalizeTimesheetHours } from '@/lib/utils'
 import { format } from 'date-fns'
 import { Plus, Trash2, Edit2, X } from 'lucide-react'
 
@@ -160,6 +160,15 @@ export default function WeeklyTimesheetForm({
   const [editingEntry, setEditingEntry] = useState<BillableEntry | null>(null)
   const [showCopyModal, setShowCopyModal] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
+  const isNewTimesheet = !timesheetId
+
+  const weekEndingOptions = useMemo(() => {
+    const opts = getWeekEndingSundayOptions()
+    if (weekEnding && !opts.includes(weekEnding)) {
+      return [weekEnding, ...opts]
+    }
+    return opts
+  }, [weekEnding])
 
   const weekDates = getWeekDates(weekEnding)
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
@@ -576,15 +585,23 @@ export default function WeeklyTimesheetForm({
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Week Ending Date
               </label>
-              <input
-                type="date"
-                value={weekEnding}
-                onChange={(e) => {
-                  const newWeekEnding = e.target.value
-                  setWeekEnding(newWeekEnding)
-                }}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
-              />
+              {isNewTimesheet ? (
+                <select
+                  value={weekEnding}
+                  onChange={(e) => setWeekEnding(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                >
+                  {weekEndingOptions.map((date) => (
+                    <option key={date} value={date}>
+                      {formatWeekEnding(date)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="px-4 py-2 text-gray-900 dark:text-gray-100 font-medium">
+                  {formatWeekEnding(weekEnding)}
+                </p>
+              )}
             </div>
             {previousWeekData && (previousWeekData.entries?.length ?? 0) > 0 && (
               <div className="ml-4">
@@ -797,11 +814,16 @@ export default function WeeklyTimesheetForm({
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Unbillable Time</h2>
           
           <div className="overflow-x-auto">
-            {/* table-fixed + w-[3.5rem] day columns matches the billable table above. */}
-            <table className="min-w-full w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+            {/* Same colgroup as billable so Mon–Sun columns align vertically. */}
+            <table className="min-w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
               <colgroup>
-                <col className="w-[5.5rem]" />
+                <col className="w-10" />
                 <col />
+                <col className="w-28" />
+                <col />
+                <col className="w-24" />
+                <col className="w-24" />
+                <col className="w-24" />
                 {weekDates.days.map((_, idx) => (
                   <col key={idx} className="w-[3.5rem]" />
                 ))}
@@ -809,12 +831,17 @@ export default function WeeklyTimesheetForm({
               </colgroup>
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                     Description
                   </th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 min-w-0">
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 min-w-0">
                     Notes
                   </th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></th>
                   {weekDates.days.map((day, idx) => (
                     <th key={idx} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                       <div>{format(day, 'EEE')}</div>
@@ -829,10 +856,12 @@ export default function WeeklyTimesheetForm({
               <tbody>
                 {unbillableEntries.map((entry, entryIdx) => (
                   <tr key={entryIdx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></td>
+                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                       {entry.description}
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 min-w-0">
+                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></td>
+                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 min-w-0">
                       <input
                         type="text"
                         value={entry.notes ?? ''}
@@ -841,6 +870,9 @@ export default function WeeklyTimesheetForm({
                         className="w-full min-w-0 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-900 bg-white dark:bg-gray-700 dark:text-gray-100"
                       />
                     </td>
+                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></td>
+                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></td>
+                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2" aria-hidden="true"></td>
                     {days.map((day) => (
                       <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2">
                         <input
@@ -869,7 +901,7 @@ export default function WeeklyTimesheetForm({
                 
                 {/* Sub Totals Row */}
                 <tr className="bg-yellow-50 dark:bg-yellow-900/30 font-semibold">
-                  <td colSpan={2} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
+                  <td colSpan={7} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
                   {days.map((day) => (
                     <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-gray-900 dark:text-gray-100">
                       {formatHours(getUnbillableSubtotal(day))}
