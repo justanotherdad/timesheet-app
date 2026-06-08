@@ -866,12 +866,16 @@ export default function WeeklyTimesheetForm({
                           max="24"
                           value={entry[`${day}_hours`] || ''}
                           onChange={(e) => {
+                            const raw = e.target.value
+                            if (raw === '') {
+                              updateUnbillableEntry(entryIdx, day, 0)
+                              return
+                            }
                             const parsed = e.target.valueAsNumber
-                            updateUnbillableEntry(
-                              entryIdx,
-                              day,
-                              isNaN(parsed) ? entry[`${day}_hours`] : normalizeTimesheetHours(parsed)
-                            )
+                            if (isNaN(parsed)) {
+                              return
+                            }
+                            updateUnbillableEntry(entryIdx, day, normalizeTimesheetHours(parsed))
                           }}
                           className="w-full max-w-[3.25rem] min-w-[3rem] mx-auto px-1 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                         />
