@@ -1104,10 +1104,22 @@ export default function WeeklyTimesheetForm({
                     onChange={(value, customValue) => {
                       if (customValue) {
                         // Custom value - store in system_name, clear system_id
-                        setEditingEntry({ ...editingEntry, system_id: undefined, system_name: customValue })
+                        setEditingEntry({
+                          ...editingEntry,
+                          system_id: undefined,
+                          system_name: customValue,
+                          deliverable_id: undefined,
+                          activity_id: undefined,
+                        })
                       } else {
                         // Selected from dropdown - store in system_id, clear system_name
-                        setEditingEntry({ ...editingEntry, system_id: value || undefined, system_name: undefined })
+                        setEditingEntry({
+                          ...editingEntry,
+                          system_id: value || undefined,
+                          system_name: undefined,
+                          deliverable_id: undefined,
+                          activity_id: undefined,
+                        })
                       }
                     }}
                     placeholder="Select or type System..."

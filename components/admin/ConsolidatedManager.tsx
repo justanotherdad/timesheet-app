@@ -321,6 +321,7 @@ export default function ConsolidatedManager({
     const howToBill = formData.get('how_to_bill') as string || null
     const originalAmount = formData.get('original_po_amount') as string
     const poIssueDate = formData.get('po_issue_date') as string || null
+    const proposalNumber = formData.get('proposal_number') as string || null
     const attachmentFiles = formData.getAll('attachments') as File[]
 
     try {
@@ -338,6 +339,7 @@ export default function ConsolidatedManager({
           how_to_bill: howToBill || null,
           original_po_amount: originalAmount ? parseFloat(originalAmount) : null,
           po_issue_date: poIssueDate || null,
+          proposal_number: proposalNumber || null,
         })
         .select()
         .single()
@@ -812,14 +814,25 @@ export default function ConsolidatedManager({
                       />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date Issued *</label>
-                    <input
-                      type="date"
-                      name="po_issue_date"
-                      required
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white md:max-w-xs"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date Issued *</label>
+                      <input
+                        type="date"
+                        name="po_issue_date"
+                        required
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proposal #</label>
+                      <input
+                        type="text"
+                        name="proposal_number"
+                        placeholder="e.g. 2026-08 Rev #1"
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Attachments (PO / Proposal)</label>

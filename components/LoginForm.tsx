@@ -26,8 +26,7 @@ export default function LoginForm() {
     turnstileRef.current?.reset()
   }
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const submitLogin = async () => {
     setError(null)
 
     if (siteKey && !turnstileToken) {
@@ -70,6 +69,11 @@ export default function LoginForm() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await submitLogin()
   }
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -239,6 +243,12 @@ export default function LoginForm() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !loading && !showTurnstileConfigError) {
+                    e.preventDefault()
+                    void submitLogin()
+                  }
+                }}
                 required
                 className="w-full px-4 py-2.5 pr-10 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 placeholder:text-gray-400"
                 placeholder="••••••••"
