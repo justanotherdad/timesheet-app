@@ -17,6 +17,27 @@ const dayFields = ['mon_hours', 'tue_hours', 'wed_hours', 'thu_hours', 'fri_hour
 const sumHours = (obj: Record<string, unknown>) =>
   dayFields.reduce((s, f) => s + (Number(obj[f]) || 0), 0)
 
+const IN_CHUNK_SIZE = 150
+
+/**
+ * Run an `.in(column, ids)` query in chunks so a large id list doesn't blow
+ * past PostgREST's URL/filter length limit (which surfaces as "Bad Request").
+ */
+async function fetchByIdsInChunks<T>(
+  ids: string[],
+  runChunk: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>
+): Promise<T[]> {
+  if (ids.length === 0) return []
+  const out: T[] = []
+  for (let i = 0; i < ids.length; i += IN_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + IN_CHUNK_SIZE)
+    const { data, error } = await runChunk(chunk)
+    if (error) throw new Error(error.message)
+    if (data) out.push(...data)
+  }
+  return out
+}
+
 type ExpandedRow = {
   id: string
   entry_id: string
@@ -110,36 +131,38 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    let timesheetQuery = adminSupabase
-      .from('weekly_timesheets')
-      .select(`id, user_id, week_ending, status, user_profiles!user_id (name, email)`)
-      .in('user_id', userIdsToFetch)
-
-    if (status) timesheetQuery = timesheetQuery.eq('status', status)
-    if (startDate && endDate) {
-      const startDateObj = parseISO(startDate)
-      const weekStart = new Date(startDateObj)
+    let weekStartBound: string | null = null
+    let weekEndBound: string | null = null
+    if (startDate) {
+      const weekStart = new Date(parseISO(startDate))
       weekStart.setDate(weekStart.getDate() - 6)
-      const endDateObj = parseISO(endDate)
-      const weekEnd = new Date(endDateObj)
+      weekStartBound = formatInput(weekStart)
+    }
+    if (endDate) {
+      const weekEnd = new Date(parseISO(endDate))
       weekEnd.setDate(weekEnd.getDate() + 6)
-      timesheetQuery = timesheetQuery
-        .gte('week_ending', formatInput(weekStart))
-        .lte('week_ending', formatInput(weekEnd))
-    } else if (startDate) {
-      const startDateObj = parseISO(startDate)
-      const weekStart = new Date(startDateObj)
-      weekStart.setDate(weekStart.getDate() - 6)
-      timesheetQuery = timesheetQuery.gte('week_ending', formatInput(weekStart))
-    } else if (endDate) {
-      const endDateObj = parseISO(endDate)
-      const weekEnd = new Date(endDateObj)
-      weekEnd.setDate(weekEnd.getDate() + 6)
-      timesheetQuery = timesheetQuery.lte('week_ending', formatInput(weekEnd))
+      weekEndBound = formatInput(weekEnd)
     }
 
-    const { data: timesheets, error: tsError } = await timesheetQuery
-    if (tsError) throw tsError
+    type TimesheetRow = {
+      id: string
+      user_id: string
+      week_ending: string
+      status: string
+      user_profiles: unknown
+    }
+
+    const timesheets = await fetchByIdsInChunks<TimesheetRow>(userIdsToFetch, (chunk) => {
+      let q = adminSupabase
+        .from('weekly_timesheets')
+        .select(`id, user_id, week_ending, status, user_profiles!user_id (name, email)`)
+        .in('user_id', chunk)
+      if (status) q = q.eq('status', status)
+      if (weekStartBound) q = q.gte('week_ending', weekStartBound)
+      if (weekEndBound) q = q.lte('week_ending', weekEndBound)
+      return q
+    })
+
     if (!timesheets || timesheets.length === 0) {
       return NextResponse.json({
         expanded: [],
@@ -147,18 +170,16 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const timesheetIds = timesheets.map((t: { id: string }) => t.id)
+    const timesheetIds = timesheets.map((t) => t.id)
 
-    const [entriesResult, unbillableResult] = await Promise.all([
-      adminSupabase.from('timesheet_entries').select('*').in('timesheet_id', timesheetIds),
-      adminSupabase.from('timesheet_unbillable').select('*').in('timesheet_id', timesheetIds),
+    const [entries, unbillable] = await Promise.all([
+      fetchByIdsInChunks<Record<string, unknown>>(timesheetIds, (chunk) =>
+        adminSupabase.from('timesheet_entries').select('*').in('timesheet_id', chunk)
+      ),
+      fetchByIdsInChunks<Record<string, unknown>>(timesheetIds, (chunk) =>
+        adminSupabase.from('timesheet_unbillable').select('*').in('timesheet_id', chunk)
+      ),
     ])
-
-    if (entriesResult.error) throw entriesResult.error
-    if (unbillableResult.error) throw unbillableResult.error
-
-    const entries = (entriesResult.data || []) as Array<Record<string, unknown>>
-    const unbillable = (unbillableResult.data || []) as Array<Record<string, unknown>>
 
     const poIds = [...new Set(entries.map((e) => e.po_id as string).filter(Boolean))]
     const siteIdsFromEntries = [...new Set(entries.map((e) => e.client_project_id as string).filter(Boolean))]
@@ -166,47 +187,34 @@ export async function GET(request: NextRequest) {
     const activityIds = [...new Set(entries.map((e) => e.activity_id as string).filter(Boolean))]
     const deliverableIds = [...new Set(entries.map((e) => e.deliverable_id as string).filter(Boolean))]
 
-    const [posResult, sitesResult, systemsResult, activitiesResult, deliverablesResult, allSitesResult, allDeptsResult] =
+    const [posRows, sitesRows, systemsRows, activitiesRows, deliverablesRows, allSitesResult, allDeptsResult] =
       await Promise.all([
-        poIds.length > 0
-          ? adminSupabase
-              .from('purchase_orders')
-              .select('id, po_number, site_id, department_id')
-              .in('id', poIds)
-          : Promise.resolve({ data: [] }),
-        siteIdsFromEntries.length > 0
-          ? adminSupabase.from('sites').select('id, name').in('id', siteIdsFromEntries)
-          : Promise.resolve({ data: [] }),
-        systemIds.length > 0
-          ? adminSupabase.from('systems').select('id, name').in('id', systemIds)
-          : Promise.resolve({ data: [] }),
-        activityIds.length > 0
-          ? adminSupabase.from('activities').select('id, name').in('id', activityIds)
-          : Promise.resolve({ data: [] }),
-        deliverableIds.length > 0
-          ? adminSupabase.from('deliverables').select('id, name').in('id', deliverableIds)
-          : Promise.resolve({ data: [] }),
+        fetchByIdsInChunks<{ id: string; po_number: string; site_id?: string; department_id?: string }>(
+          poIds,
+          (chunk) =>
+            adminSupabase.from('purchase_orders').select('id, po_number, site_id, department_id').in('id', chunk)
+        ),
+        fetchByIdsInChunks<{ id: string; name: string }>(siteIdsFromEntries, (chunk) =>
+          adminSupabase.from('sites').select('id, name').in('id', chunk)
+        ),
+        fetchByIdsInChunks<{ id: string; name: string }>(systemIds, (chunk) =>
+          adminSupabase.from('systems').select('id, name').in('id', chunk)
+        ),
+        fetchByIdsInChunks<{ id: string; name: string }>(activityIds, (chunk) =>
+          adminSupabase.from('activities').select('id, name').in('id', chunk)
+        ),
+        fetchByIdsInChunks<{ id: string; name: string }>(deliverableIds, (chunk) =>
+          adminSupabase.from('deliverables').select('id, name').in('id', chunk)
+        ),
         adminSupabase.from('sites').select('id, name').order('name'),
         adminSupabase.from('departments').select('id, name, site_id').order('name'),
       ])
 
-    const posMap = Object.fromEntries(
-      ((posResult.data || []) as Array<{ id: string; po_number: string; site_id?: string; department_id?: string }>).map(
-        (p) => [p.id, p]
-      )
-    )
-    const sitesMap = Object.fromEntries(
-      ((sitesResult.data || []) as Array<{ id: string; name: string }>).map((s) => [s.id, s])
-    )
-    const systemsMap = Object.fromEntries(
-      ((systemsResult.data || []) as Array<{ id: string; name: string }>).map((s) => [s.id, s])
-    )
-    const activitiesMap = Object.fromEntries(
-      ((activitiesResult.data || []) as Array<{ id: string; name: string }>).map((s) => [s.id, s])
-    )
-    const deliverablesMap = Object.fromEntries(
-      ((deliverablesResult.data || []) as Array<{ id: string; name: string }>).map((s) => [s.id, s])
-    )
+    const posMap = Object.fromEntries(posRows.map((p) => [p.id, p]))
+    const sitesMap = Object.fromEntries(sitesRows.map((s) => [s.id, s]))
+    const systemsMap = Object.fromEntries(systemsRows.map((s) => [s.id, s]))
+    const activitiesMap = Object.fromEntries(activitiesRows.map((s) => [s.id, s]))
+    const deliverablesMap = Object.fromEntries(deliverablesRows.map((s) => [s.id, s]))
 
     const expanded: ExpandedRow[] = []
 
@@ -376,7 +384,11 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     console.error('Data view API error:', error)
-    const message = error instanceof Error ? error.message : 'Failed to fetch data'
+    let message = 'Failed to fetch data'
+    if (error instanceof Error) message = error.message
+    else if (error && typeof error === 'object' && 'message' in error) {
+      message = String((error as { message: unknown }).message)
+    }
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
