@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Upload, Trash2 } from 'lucide-react'
+import { Loader2, Upload, Trash2, ExternalLink } from 'lucide-react'
 
 type CalendarMeta = {
   calendar_year: number
@@ -19,11 +19,13 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
   const [selectedYear, setSelectedYear] = useState(defaultYear)
   const [uploadYear, setUploadYear] = useState(defaultYear)
   const [loadingList, setLoadingList] = useState(true)
+  const [loadingPdf, setLoadingPdf] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
-  /** Bumped after upload/delete so iframe reloads same-origin PDF stream. */
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
+  /** Bumped after upload/delete so the PDF stream reloads. */
   const [viewKey, setViewKey] = useState(0)
 
   const loadList = useCallback(async () => {
@@ -55,6 +57,63 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
   })()
 
   const hasCalendarForYear = calendars.some((c) => c.calendar_year === selectedYear)
+
+  useEffect(() => {
+    if (!hasCalendarForYear) {
+      setPdfBlobUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
+      return
+    }
+
+    const controller = new AbortController()
+    let createdUrl: string | null = null
+
+    const loadPdf = async () => {
+      setLoadingPdf(true)
+      setError(null)
+      try {
+        const res = await fetch(`/api/holiday-calendars/${selectedYear}/view`, {
+          credentials: 'include',
+          signal: controller.signal,
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err.error || `Failed to load PDF (${res.status})`)
+        }
+        const contentType = res.headers.get('content-type') || ''
+        if (!contentType.includes('pdf')) {
+          throw new Error('Server did not return a PDF file')
+        }
+        const blob = await res.blob()
+        if (blob.size === 0) {
+          throw new Error('PDF file is empty')
+        }
+        createdUrl = URL.createObjectURL(blob)
+        setPdfBlobUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev)
+          return createdUrl
+        })
+      } catch (e: unknown) {
+        if (controller.signal.aborted) return
+        setError(e instanceof Error ? e.message : 'Failed to load calendar PDF')
+        setPdfBlobUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev)
+          return null
+        })
+      } finally {
+        if (!controller.signal.aborted) setLoadingPdf(false)
+      }
+    }
+
+    loadPdf()
+
+    return () => {
+      controller.abort()
+      if (createdUrl) URL.revokeObjectURL(createdUrl)
+    }
+  }, [selectedYear, hasCalendarForYear, viewKey])
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -107,6 +166,10 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
     }
   }
 
+  const openInNewTab = () => {
+    window.open(`/api/holiday-calendars/${selectedYear}/view`, '_blank', 'noopener,noreferrer')
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       <div className="flex flex-wrap items-end gap-4 mb-4 print:hidden">
@@ -127,6 +190,17 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
             ))}
           </select>
         </div>
+
+        {hasCalendarForYear && (
+          <button
+            type="button"
+            onClick={openInNewTab}
+            className="inline-flex items-center gap-2 min-h-[42px] px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Open in new tab
+          </button>
+        )}
 
         {isAdmin && (
           <>
@@ -192,19 +266,31 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
         </div>
       )}
 
-      <div className="flex-1 min-h-0 bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        {loadingList ? (
+      <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {loadingList || loadingPdf ? (
           <div className="flex items-center justify-center h-full text-gray-600 dark:text-gray-400 gap-2">
             <Loader2 className="h-6 w-6 animate-spin" />
             Loading calendar…
           </div>
-        ) : hasCalendarForYear ? (
-          <iframe
+        ) : pdfBlobUrl ? (
+          <object
             key={`${selectedYear}-${viewKey}`}
-            src={`/api/holiday-calendars/${selectedYear}/view#view=FitH`}
-            title={`Holiday & Pay Calendar ${selectedYear}`}
-            className="w-full h-full border-0 bg-white"
-          />
+            data={`${pdfBlobUrl}#view=FitH`}
+            type="application/pdf"
+            className="w-full h-full block"
+          >
+            <div className="flex flex-col items-center justify-center h-full p-8 text-center text-gray-600">
+              <p className="mb-4">Your browser could not display the PDF inline.</p>
+              <button
+                type="button"
+                onClick={openInNewTab}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open PDF
+              </button>
+            </div>
+          </object>
         ) : (
           <div className="flex items-center justify-center h-full p-8 text-center text-gray-600 dark:text-gray-400">
             <div>

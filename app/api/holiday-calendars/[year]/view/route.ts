@@ -48,15 +48,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ year: s
     )
   }
 
-  const safeName = (row.file_name || `holiday-calendar-${year}.pdf`).replace(/[^\w.\-() ]+/g, '_')
-  const bytes = Buffer.from(await fileData.arrayBuffer())
+  const arrayBuffer = await fileData.arrayBuffer()
+  if (arrayBuffer.byteLength === 0) {
+    return NextResponse.json({ error: 'PDF file is empty in storage' }, { status: 500 })
+  }
 
-  return new NextResponse(bytes, {
+  const safeName = (row.file_name || `holiday-calendar-${year}.pdf`).replace(/[^\w.\-() ]+/g, '_')
+
+  return new NextResponse(arrayBuffer, {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="${safeName}"`,
+      'Content-Length': String(arrayBuffer.byteLength),
       'Cache-Control': 'private, no-store, max-age=0',
+      // Allow this PDF response to render inside our holiday-calendar iframe/embed.
+      'X-Frame-Options': 'SAMEORIGIN',
     },
   })
 }
