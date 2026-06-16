@@ -433,6 +433,25 @@ export default function WeeklyTimesheetForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    const incompleteRows = billableEntries
+      .map((entry, index) => ({ entry, rowNumber: index + 1 }))
+      .filter(({ entry }) => calculateTotal(entry) > 0)
+      .filter(({ entry }) => !entry.client_project_id || !entry.po_id)
+
+    if (incompleteRows.length > 0) {
+      const rowList = incompleteRows
+        .map(({ rowNumber, entry }) => {
+          const missing: string[] = []
+          if (!entry.client_project_id) missing.push('Client')
+          if (!entry.po_id) missing.push('PO')
+          return `Row ${rowNumber} (missing ${missing.join(' and ')})`
+        })
+        .join('; ')
+      setError(`Cannot submit: billable rows with hours must have Client and PO filled in. ${rowList}`)
+      return
+    }
+
     await saveTimesheet(true)
   }
 

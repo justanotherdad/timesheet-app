@@ -81,6 +81,13 @@ interface PurchaseOrder {
   department_id?: string
 }
 
+interface FilterOptions {
+  users: User[]
+  sites: Site[]
+  departments: Department[]
+  purchaseOrders: PurchaseOrder[]
+}
+
 interface DataViewManagerProps {
   users: User[]
   sites: Site[]
@@ -103,57 +110,61 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
   const [expandedEntries, setExpandedEntries] = useState<ExpandedEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null)
 
-  // Cascading filters: each filter narrows the options in the others
-  const filteredSites = useMemo(() => {
-    if (selectedDepartment) {
-      const dept = departments.find(d => d.id === selectedDepartment)
-      return dept ? sites.filter(s => s.id === dept.site_id) : sites
-    }
-    if (selectedPO) {
-      const po = purchaseOrders.find(p => p.id === selectedPO)
-      return po?.site_id ? sites.filter(s => s.id === po.site_id) : sites
-    }
-    return sites
-  }, [sites, departments, purchaseOrders, selectedDepartment, selectedPO])
+  const catalogUsers = filterOptions?.users ?? users
+  const catalogSites = filterOptions?.sites ?? sites
+  const catalogDepartments = filterOptions?.departments ?? departments
+  const catalogPOs = filterOptions?.purchaseOrders ?? purchaseOrders
 
-  const filteredDepartments = useMemo(() => {
-    if (selectedSite) {
-      return departments.filter(d => d.site_id === selectedSite)
-    }
-    if (selectedPO) {
-      const po = purchaseOrders.find(p => p.id === selectedPO)
-      return po?.department_id ? departments.filter(d => d.id === po.department_id) : departments
-    }
-    return departments
-  }, [departments, purchaseOrders, selectedSite, selectedPO])
+  const poSortKey = (s: string | null | undefined) =>
+    String(s ?? '')
+      .replace(/^[\s\u200B-\u200D\uFEFF]+/, '')
+      .trim()
+      .toUpperCase()
 
-  const filteredPOs = useMemo(() => {
-    let list = purchaseOrders
-    if (selectedSite) list = list.filter(po => po.site_id === selectedSite)
-    if (selectedDepartment) list = list.filter(po => po.department_id === selectedDepartment)
-    // Sort alphabetically by po_number using a trimmed, case-insensitive,
-    // numeric-aware comparator. Strips leading whitespace + invisible chars
-    // (zero-width space etc.) so a record with a stray leading char doesn't
-    // float to the top of the dropdown ahead of all the other POs.
-    const sortKey = (s: string | null | undefined) =>
-      String(s ?? '')
-        .replace(/^[\s\u200B-\u200D\uFEFF]+/, '')
-        .trim()
-        .toUpperCase()
-    return [...list].sort((a, b) =>
-      sortKey(a.po_number).localeCompare(sortKey(b.po_number), undefined, {
+  const sortPOs = (list: PurchaseOrder[]) =>
+    [...list].sort((a, b) =>
+      poSortKey(a.po_number).localeCompare(poSortKey(b.po_number), undefined, {
         sensitivity: 'base',
         numeric: true,
       })
     )
-  }, [purchaseOrders, selectedSite, selectedDepartment])
 
-  const filteredUsers = useMemo(() => {
-    // Users are filtered by site/dept/PO via the data - for now show all accessible users
-    // (Per-user timesheet PO scope is from bill rates, not used here; cascading works for Site/Dept/PO)
-    return users
-  }, [users])
+  // Progressive filters: API narrows options from loaded data; client cascades site/dept/po
+  const filteredSites = useMemo(() => {
+    if (selectedDepartment) {
+      const dept = catalogDepartments.find((d) => d.id === selectedDepartment)
+      return dept ? catalogSites.filter((s) => s.id === dept.site_id) : catalogSites
+    }
+    if (selectedPO) {
+      const po = catalogPOs.find((p) => p.id === selectedPO)
+      return po?.site_id ? catalogSites.filter((s) => s.id === po.site_id) : catalogSites
+    }
+    return catalogSites
+  }, [catalogSites, catalogDepartments, catalogPOs, selectedDepartment, selectedPO])
+
+  const filteredDepartments = useMemo(() => {
+    if (selectedSite) {
+      return catalogDepartments.filter((d) => d.site_id === selectedSite)
+    }
+    if (selectedPO) {
+      const po = catalogPOs.find((p) => p.id === selectedPO)
+      return po?.department_id
+        ? catalogDepartments.filter((d) => d.id === po.department_id)
+        : catalogDepartments
+    }
+    return catalogDepartments
+  }, [catalogDepartments, catalogPOs, selectedSite, selectedPO])
+
+  const filteredPOs = useMemo(() => {
+    let list = catalogPOs
+    if (selectedSite) list = list.filter((po) => po.site_id === selectedSite)
+    if (selectedDepartment) list = list.filter((po) => po.department_id === selectedDepartment)
+    return sortPOs(list)
+  }, [catalogPOs, selectedSite, selectedDepartment])
+
+  const filteredUsers = useMemo(() => catalogUsers, [catalogUsers])
 
   const clearAllFilters = () => {
     setSelectedUser('')
@@ -187,12 +198,15 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
         throw new Error(errData.error || `Failed to load data (${res.status})`)
       }
 
-      const { expanded } = await res.json()
+      const { expanded, filterOptions: nextFilterOptions } = await res.json()
       setEntries([])
       setExpandedEntries((expanded || []).map((e: any) => ({
         ...e,
         non_billable_hours: e.non_billable_hours ?? 0
       })))
+      if (nextFilterOptions) {
+        setFilterOptions(nextFilterOptions)
+      }
       setSelectedRowIds(new Set())
     } catch (err: any) {
       setError(err.message || 'Failed to load timesheet data')
@@ -368,8 +382,8 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                   setSelectedDepartment('')
                   setSelectedPO('')
                 } else {
-                  const deptsAtSite = departments.filter(d => d.site_id === newSite)
-                  const posAtSite = purchaseOrders.filter(p => p.site_id === newSite)
+                  const deptsAtSite = catalogDepartments.filter(d => d.site_id === newSite)
+                  const posAtSite = catalogPOs.filter(p => p.site_id === newSite)
                   if (!deptsAtSite.some(d => d.id === selectedDepartment)) setSelectedDepartment('')
                   if (!posAtSite.some(p => p.id === selectedPO)) setSelectedPO('')
                 }
@@ -392,7 +406,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
                 setSelectedDepartment(newDept)
                 if (!newDept) setSelectedPO('')
                 else {
-                  let posForDept = purchaseOrders.filter(p => p.department_id === newDept)
+                  let posForDept = catalogPOs.filter(p => p.department_id === newDept)
                   if (selectedSite) posForDept = posForDept.filter(p => p.site_id === selectedSite)
                   if (!posForDept.some(p => p.id === selectedPO)) setSelectedPO('')
                 }

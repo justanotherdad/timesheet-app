@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url)
-  const filterYear = searchParams.get('year') || ''
+  const includeDeactivated = searchParams.get('includeDeactivated') === 'true'
   const filterClient = searchParams.get('client') || ''
   const filterPO = searchParams.get('po') || ''
 
@@ -27,7 +27,9 @@ export async function GET(req: Request) {
   if (isAdminOrAbove) {
     const { data } = await adminSupabase
       .from('purchase_orders')
-      .select('id, po_number, site_id, project_name, description, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
+      .select(
+        'id, po_number, site_id, project_name, description, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate, active'
+      )
       .order('po_number')
     purchaseOrders = data || []
   } else {
@@ -37,27 +39,43 @@ export async function GET(req: Request) {
       .eq('user_id', user.id)
     const poIds = (accessRows || []).map((r: any) => r.purchase_order_id).filter(Boolean)
     if (poIds.length === 0) {
-      return NextResponse.json({ rows: [], clients: [], years: [] })
+      return NextResponse.json({ rows: [], clients: [], purchaseOrders: [] })
     }
     const { data } = await adminSupabase
       .from('purchase_orders')
-      .select('id, po_number, site_id, project_name, description, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate')
+      .select(
+        'id, po_number, site_id, project_name, description, original_po_amount, po_issue_date, po_balance, prior_amount_spent, prior_hours_billed, prior_hours_billed_rate, active'
+      )
       .in('id', poIds)
       .order('po_number')
     purchaseOrders = data || []
   }
 
+  if (!includeDeactivated) {
+    purchaseOrders = purchaseOrders.filter((p: any) => p.active !== false)
+  }
+
   const poIds = purchaseOrders.map((p: any) => p.id)
   if (poIds.length === 0) {
-    return NextResponse.json({ rows: [], clients: [], years: [] })
+    return NextResponse.json({ rows: [], clients: [], purchaseOrders: [] })
   }
 
   const siteIds = [...new Set(purchaseOrders.map((p: any) => p.site_id).filter(Boolean))]
   const { data: sites } = await adminSupabase.from('sites').select('id, name').in('id', siteIds)
-  const sitesMap = (sites || []).reduce((acc: Record<string, any>, s: any) => { acc[s.id] = s; return acc }, {})
+  const sitesMap = (sites || []).reduce((acc: Record<string, any>, s: any) => {
+    acc[s.id] = s
+    return acc
+  }, {})
 
-  const { data: cos } = await adminSupabase.from('po_change_orders').select('po_id, co_number, co_date, amount').in('po_id', poIds).order('co_date', { ascending: true })
-  const { data: invs } = await adminSupabase.from('po_invoices').select('po_id, amount, payment_received_date, invoice_date').in('po_id', poIds)
+  const { data: cos } = await adminSupabase
+    .from('po_change_orders')
+    .select('po_id, co_number, co_date, amount')
+    .in('po_id', poIds)
+    .order('co_date', { ascending: true })
+  const { data: invs } = await adminSupabase
+    .from('po_invoices')
+    .select('po_id, amount, payment_received_date, invoice_date')
+    .in('po_id', poIds)
 
   const cosByPo: Record<string, { co_number: string; co_date: string; amount: number }[]> = {}
   ;(cos || []).forEach((c: any) => {
@@ -82,38 +100,47 @@ export async function GET(req: Request) {
     .from('po_bill_rates')
     .select('po_id, user_id, rate, effective_from_date, effective_to_date')
     .in('po_id', poIds)
-  const { data: entries } = await adminSupabase.from('timesheet_entries').select('po_id, timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours').in('po_id', poIds)
+  const { data: entries } = await adminSupabase
+    .from('timesheet_entries')
+    .select(
+      'po_id, timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours'
+    )
+    .in('po_id', poIds)
   const tsIds = [...new Set((entries || []).map((e: any) => e.timesheet_id).filter(Boolean))]
-  const { data: timesheets } = tsIds.length > 0
-    ? await adminSupabase.from('weekly_timesheets').select('id, user_id, week_ending').in('id', tsIds).eq('status', 'approved')
-    : { data: [] }
+  const { data: timesheets } =
+    tsIds.length > 0
+      ? await adminSupabase
+          .from('weekly_timesheets')
+          .select('id, user_id, week_ending')
+          .in('id', tsIds)
+          .eq('status', 'approved')
+      : { data: [] }
 
   const getEffectiveRate = (poId: string, userId: string, dateStr: string) => {
     const rates = (billRates || []).filter((br: any) => br.po_id === poId && br.user_id === userId)
     return pickEffectiveRateForWeek(rates, dateStr)
   }
 
-  const tsMap = (timesheets || []).reduce((acc: Record<string, any>, t: any) => { acc[t.id] = t; return acc }, {})
-  let laborByPo: Record<string, number> = {}
+  const tsMap = (timesheets || []).reduce((acc: Record<string, any>, t: any) => {
+    acc[t.id] = t
+    return acc
+  }, {})
+  const laborByPo: Record<string, number> = {}
   for (const entry of entries || []) {
     const ts = tsMap[entry.timesheet_id]
     if (!ts) continue
-    const hours = (entry.mon_hours || 0) + (entry.tue_hours || 0) + (entry.wed_hours || 0) + (entry.thu_hours || 0) + (entry.fri_hours || 0) + (entry.sat_hours || 0) + (entry.sun_hours || 0)
+    const hours =
+      (entry.mon_hours || 0) +
+      (entry.tue_hours || 0) +
+      (entry.wed_hours || 0) +
+      (entry.thu_hours || 0) +
+      (entry.fri_hours || 0) +
+      (entry.sat_hours || 0) +
+      (entry.sun_hours || 0)
     if (hours <= 0) continue
     const rate = getEffectiveRate(entry.po_id, ts.user_id, ts.week_ending || '')
     laborByPo[entry.po_id] = (laborByPo[entry.po_id] || 0) + rate * hours
   }
-
-  const years = new Set<string>()
-  ;(invs || []).forEach((i: any) => {
-    if (i.invoice_date) years.add(String(i.invoice_date).slice(0, 4))
-  })
-  purchaseOrders.forEach((p: any) => {
-    if (p.po_issue_date) years.add(String(p.po_issue_date).slice(0, 4))
-  })
-  ;(cos || []).forEach((c: any) => {
-    if (c.co_date) years.add(String(c.co_date).slice(0, 4))
-  })
 
   const rows = purchaseOrders.map((po: any) => {
     const original = po.original_po_amount ?? 0
@@ -125,7 +152,8 @@ export async function GET(req: Request) {
     const totalOutstanding = invList.filter((i) => !i.payment_received_date).reduce((s, i) => s + i.amount, 0)
     const poBalance = original + coTotal - totalInvoiced
     const totalAvailable = original + coTotal
-    const priorCost = (po.prior_hours_billed ?? 0) * (po.prior_hours_billed_rate ?? 0) + (po.prior_amount_spent ?? 0)
+    const priorCost =
+      (po.prior_hours_billed ?? 0) * (po.prior_hours_billed_rate ?? 0) + (po.prior_amount_spent ?? 0)
     const laborCost = laborByPo[po.id] ?? 0
     const budgetBalance = totalAvailable - priorCost - laborCost
 
@@ -141,20 +169,11 @@ export async function GET(req: Request) {
       total_outstanding: totalOutstanding,
       po_balance: poBalance,
       budget_balance: budgetBalance,
+      active: po.active !== false,
     }
   })
 
-  // Apply filters
   let filtered = rows
-  if (filterYear) {
-    filtered = filtered.filter((r: any) => {
-      const po = purchaseOrders.find((p: any) => p.id === r.po_id)
-      const poYear = po?.po_issue_date ? String(po.po_issue_date).slice(0, 4) : ''
-      const hasInvYear = (invs || []).some((i: any) => i.po_id === r.po_id && String(i.invoice_date || '').slice(0, 4) === filterYear)
-      const hasCoYear = (cos || []).some((c: any) => c.po_id === r.po_id && String(c.co_date || '').slice(0, 4) === filterYear)
-      return poYear === filterYear || hasInvYear || hasCoYear
-    })
-  }
   if (filterClient) filtered = filtered.filter((r: any) => r.site_id === filterClient)
   if (filterPO) filtered = filtered.filter((r: any) => r.po_id === filterPO)
 
@@ -164,7 +183,10 @@ export async function GET(req: Request) {
   return NextResponse.json({
     rows: filtered,
     clients,
-    years: Array.from(years).sort().reverse(),
-    purchaseOrders: purchaseOrders.map((p: any) => ({ id: p.id, po_number: p.po_number, site_id: p.site_id })),
+    purchaseOrders: purchaseOrders.map((p: any) => ({
+      id: p.id,
+      po_number: p.po_number,
+      site_id: p.site_id,
+    })),
   })
 }

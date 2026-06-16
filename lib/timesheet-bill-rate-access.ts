@@ -25,6 +25,15 @@ export type BillRatePoSummaryRow = {
   project_description: string
 }
 
+type PoSummaryRow = {
+  id: string
+  site_id: string
+  po_number?: string | null
+  description?: string | null
+  project_name?: string | null
+  active?: boolean | null
+}
+
 /** One row per PO (deduped), sorted by site name then PO number. */
 export async function getBillRatePoSummaryForUser(
   admin: SupabaseClient,
@@ -35,9 +44,12 @@ export async function getBillRatePoSummaryForUser(
 
   const { data: pos, error } = await admin
     .from('purchase_orders')
-    .select('id, site_id, po_number, description, project_name')
+    .select('id, site_id, po_number, description, project_name, active')
     .in('id', poIds)
   if (error || !pos?.length) return []
+
+  const activePos = (pos as PoSummaryRow[]).filter((p) => p.active !== false)
+  if (activePos.length === 0) return []
 
   const siteIds = [...new Set(pos.map((p: { site_id: string }) => p.site_id).filter(Boolean))]
   const { data: siteRows } =
@@ -48,7 +60,7 @@ export async function getBillRatePoSummaryForUser(
     (siteRows || []).map((s: { id: string; name: string }) => [s.id, s.name || ''])
   )
 
-  const rows: BillRatePoSummaryRow[] = pos.map((p: any) => ({
+  const rows: BillRatePoSummaryRow[] = activePos.map((p) => ({
     po_id: p.id,
     site_id: p.site_id,
     site_name: siteNameById[p.site_id] || 'Unknown',
@@ -99,11 +111,13 @@ export async function getBillRatePoSummaryByUserIds(
 
   const { data: pos } = await admin
     .from('purchase_orders')
-    .select('id, site_id, po_number, description, project_name')
+    .select('id, site_id, po_number, description, project_name, active')
     .in('id', allPoIds)
-  const poById = Object.fromEntries((pos || []).map((p: any) => [p.id, p]))
+  const poById = Object.fromEntries(
+    ((pos || []) as PoSummaryRow[]).filter((p) => p.active !== false).map((p) => [p.id, p])
+  )
 
-  const siteIds = [...new Set((pos || []).map((p: any) => p.site_id).filter(Boolean))]
+  const siteIds = [...new Set((pos || []).map((p: PoSummaryRow) => p.site_id).filter(Boolean))]
   const { data: siteRows } =
     siteIds.length > 0 ? await admin.from('sites').select('id, name').in('id', siteIds) : { data: [] }
   const siteNameById = Object.fromEntries((siteRows || []).map((s: any) => [s.id, s.name || '']))

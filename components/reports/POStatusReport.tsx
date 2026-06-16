@@ -21,7 +21,6 @@ interface POStatusRow {
 interface POStatusData {
   rows: POStatusRow[]
   clients: { id: string; name: string }[]
-  years: string[]
   purchaseOrders: { id: string; po_number: string; site_id: string }[]
 }
 
@@ -35,7 +34,7 @@ export default function POStatusReport() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<POStatusData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [filterYear, setFilterYear] = useState('')
+  const [filterIncludeDeactivated, setFilterIncludeDeactivated] = useState(false)
   const [filterClient, setFilterClient] = useState('')
   const [filterPO, setFilterPO] = useState('')
   const [sortColumn, setSortColumn] = useState<SortColumn>('client')
@@ -46,7 +45,7 @@ export default function POStatusReport() {
     setError(null)
     try {
       const params = new URLSearchParams()
-      if (filterYear) params.set('year', filterYear)
+      if (filterIncludeDeactivated) params.set('includeDeactivated', 'true')
       if (filterClient) params.set('client', filterClient)
       if (filterPO) params.set('po', filterPO)
       const res = await fetch(`/api/reports/po-status?${params.toString()}`)
@@ -65,7 +64,7 @@ export default function POStatusReport() {
 
   useEffect(() => {
     fetchData()
-  }, [filterYear, filterClient, filterPO])
+  }, [filterIncludeDeactivated, filterClient, filterPO])
 
   const handleSort = (col: SortColumn) => {
     if (sortColumn === col) {
@@ -184,19 +183,29 @@ export default function POStatusReport() {
           </button>
         </div>
         <div className="flex flex-wrap gap-4 items-center print:hidden">
-          <label className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Year:</span>
-            <select
-              value={filterYear}
-              onChange={(e) => setFilterYear(e.target.value)}
-              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm"
-            >
-              <option value="">All</option>
-              {(data?.years || []).map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </label>
+          <fieldset className="flex items-center gap-4">
+            <legend className="sr-only">PO status</legend>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="po-status-filter"
+                checked={!filterIncludeDeactivated}
+                onChange={() => setFilterIncludeDeactivated(false)}
+                className="border-gray-300 dark:border-gray-600"
+              />
+              <span className="text-sm text-gray-600 dark:text-gray-400">Active POs only</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="po-status-filter"
+                checked={filterIncludeDeactivated}
+                onChange={() => setFilterIncludeDeactivated(true)}
+                className="border-gray-300 dark:border-gray-600"
+              />
+              <span className="text-sm text-gray-600 dark:text-gray-400">Include deactivated POs</span>
+            </label>
+          </fieldset>
           <label className="flex items-center gap-2">
             <span className="text-sm text-gray-600 dark:text-gray-400">Client:</span>
             <select

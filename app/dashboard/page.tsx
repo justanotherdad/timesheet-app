@@ -250,6 +250,23 @@ export default async function DashboardPage() {
             </div>
           </Link>
 
+          <a
+            href="/dashboard/holiday-calendar"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
+          >
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-lg">
+                <Calendar className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Holiday & Pay Calendar</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">View company holiday and pay schedule</p>
+              </div>
+            </div>
+          </a>
+
           {showTimesheetConfirmationsCard && (
             <Link
               href="/dashboard/timesheet-confirmations"

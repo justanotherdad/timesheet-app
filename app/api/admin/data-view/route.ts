@@ -1,13 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
+import { getAccessibleSiteIds } from '@/lib/access'
 import { parseISO, format } from 'date-fns'
+
 const formatInput = (d: Date) => format(d, 'yyyy-MM-dd')
 
-// Supabase relation can return object or array - extract name safely
 const getUserName = (userProfiles: unknown) => {
-  const p = Array.isArray(userProfiles) ? (userProfiles as { name?: string }[])[0] : (userProfiles as { name?: string } | null)
+  const p = Array.isArray(userProfiles)
+    ? (userProfiles as { name?: string }[])[0]
+    : (userProfiles as { name?: string } | null)
   return p?.name || 'N/A'
+}
+
+const dayFields = ['mon_hours', 'tue_hours', 'wed_hours', 'thu_hours', 'fri_hours', 'sat_hours', 'sun_hours'] as const
+const sumHours = (obj: Record<string, unknown>) =>
+  dayFields.reduce((s, f) => s + (Number(obj[f]) || 0), 0)
+
+type ExpandedRow = {
+  id: string
+  entry_id: string
+  timesheet_id: string
+  user_id: string
+  hours: number
+  non_billable_hours: number
+  user_name: string
+  site_name: string
+  site_id: string | null
+  po_number: string
+  po_id: string | null
+  department_id: string | null
+  task_description: string
+  system_name: string
+  activity_name: string
+  deliverable_name: string
+  status: string
+  week_ending: string
 }
 
 export async function GET(request: NextRequest) {
@@ -24,13 +52,19 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate') || ''
     const status = searchParams.get('status') || ''
 
-    // Get accessible user IDs based on role (same logic as users page)
     const { data: allProfiles } = await adminSupabase
       .from('user_profiles')
-      .select('id, supervisor_id, manager_id, final_approver_id, role')
+      .select('id, name, supervisor_id, manager_id, final_approver_id, role')
       .order('name')
 
-    const profiles = (allProfiles || []) as any[]
+    const profiles = (allProfiles || []) as Array<{
+      id: string
+      name: string
+      supervisor_id?: string | null
+      manager_id?: string | null
+      final_approver_id?: string | null
+      role: string
+    }>
     const role = user.profile.role
 
     let accessibleUserIds: string[] = []
@@ -38,7 +72,9 @@ export async function GET(request: NextRequest) {
       accessibleUserIds = profiles
         .filter(
           (p) =>
-            (p.supervisor_id === user.id || p.manager_id === user.id || p.final_approver_id === user.id) &&
+            (p.supervisor_id === user.id ||
+              p.manager_id === user.id ||
+              p.final_approver_id === user.id) &&
             p.role === 'employee'
         )
         .map((p) => p.id)
@@ -46,7 +82,9 @@ export async function GET(request: NextRequest) {
       accessibleUserIds = profiles
         .filter(
           (p) =>
-            (p.supervisor_id === user.id || p.manager_id === user.id || p.final_approver_id === user.id) &&
+            (p.supervisor_id === user.id ||
+              p.manager_id === user.id ||
+              p.final_approver_id === user.id) &&
             ['employee', 'supervisor'].includes(p.role)
         )
         .map((p) => p.id)
@@ -56,22 +94,25 @@ export async function GET(request: NextRequest) {
       accessibleUserIds = profiles.map((p) => p.id)
     }
 
-    // If user filter selected, restrict to that user (if they have access)
+    const accessibleSiteIds = await getAccessibleSiteIds(adminSupabase, user.id, role)
+    const siteScopeSet =
+      accessibleSiteIds === null ? null : new Set(accessibleSiteIds)
+
     const userIdsToFetch =
       selectedUser && accessibleUserIds.includes(selectedUser)
         ? [selectedUser]
         : accessibleUserIds
 
     if (userIdsToFetch.length === 0) {
-      return NextResponse.json({ timesheets: [], entries: [], unbillable: [], sites: [] })
+      return NextResponse.json({
+        expanded: [],
+        filterOptions: { users: [], sites: [], departments: [], purchaseOrders: [] },
+      })
     }
 
-    // Build timesheet query
     let timesheetQuery = adminSupabase
       .from('weekly_timesheets')
-      .select(
-        `id, user_id, week_ending, status, user_profiles!user_id (name, email)`
-      )
+      .select(`id, user_id, week_ending, status, user_profiles!user_id (name, email)`)
       .in('user_id', userIdsToFetch)
 
     if (status) timesheetQuery = timesheetQuery.eq('status', status)
@@ -82,7 +123,9 @@ export async function GET(request: NextRequest) {
       const endDateObj = parseISO(endDate)
       const weekEnd = new Date(endDateObj)
       weekEnd.setDate(weekEnd.getDate() + 6)
-      timesheetQuery = timesheetQuery.gte('week_ending', formatInput(weekStart)).lte('week_ending', formatInput(weekEnd))
+      timesheetQuery = timesheetQuery
+        .gte('week_ending', formatInput(weekStart))
+        .lte('week_ending', formatInput(weekEnd))
     } else if (startDate) {
       const startDateObj = parseISO(startDate)
       const weekStart = new Date(startDateObj)
@@ -98,100 +141,137 @@ export async function GET(request: NextRequest) {
     const { data: timesheets, error: tsError } = await timesheetQuery
     if (tsError) throw tsError
     if (!timesheets || timesheets.length === 0) {
-      return NextResponse.json({ expanded: [], sites: [] })
+      return NextResponse.json({
+        expanded: [],
+        filterOptions: { users: [], sites: [], departments: [], purchaseOrders: [] },
+      })
     }
 
-    const timesheetIds = timesheets.map((t: any) => t.id)
+    const timesheetIds = timesheets.map((t: { id: string }) => t.id)
 
-    // Fetch entries and unbillable
-    const [entriesResult, unbillableResult, sitesResult] = await Promise.all([
-      adminSupabase
-        .from('timesheet_entries')
-        .select(`
-          *,
-          systems (name),
-          activities (name),
-          deliverables (name),
-          purchase_orders (po_number, department_id)
-        `)
-        .in('timesheet_id', timesheetIds),
+    const [entriesResult, unbillableResult] = await Promise.all([
+      adminSupabase.from('timesheet_entries').select('*').in('timesheet_id', timesheetIds),
       adminSupabase.from('timesheet_unbillable').select('*').in('timesheet_id', timesheetIds),
-      adminSupabase.from('sites').select('id, name'),
     ])
 
     if (entriesResult.error) throw entriesResult.error
     if (unbillableResult.error) throw unbillableResult.error
 
-    const entries = (entriesResult.data || []) as any[]
-    const unbillable = (unbillableResult.data || []) as any[]
-    const sitesList = (sitesResult.data || []) as { id: string; name: string }[]
+    const entries = (entriesResult.data || []) as Array<Record<string, unknown>>
+    const unbillable = (unbillableResult.data || []) as Array<Record<string, unknown>>
 
-    const dayFields = ['mon_hours', 'tue_hours', 'wed_hours', 'thu_hours', 'fri_hours', 'sat_hours', 'sun_hours'] as const
-    const sumHours = (obj: any) => dayFields.reduce((s, f) => s + (obj[f] || 0), 0)
+    const poIds = [...new Set(entries.map((e) => e.po_id as string).filter(Boolean))]
+    const siteIdsFromEntries = [...new Set(entries.map((e) => e.client_project_id as string).filter(Boolean))]
+    const systemIds = [...new Set(entries.map((e) => e.system_id as string).filter(Boolean))]
+    const activityIds = [...new Set(entries.map((e) => e.activity_id as string).filter(Boolean))]
+    const deliverableIds = [...new Set(entries.map((e) => e.deliverable_id as string).filter(Boolean))]
 
-    // One row per timesheet entry with weekly total hours (no day expansion)
-    const expanded: any[] = []
+    const [posResult, sitesResult, systemsResult, activitiesResult, deliverablesResult, allSitesResult, allDeptsResult] =
+      await Promise.all([
+        poIds.length > 0
+          ? adminSupabase
+              .from('purchase_orders')
+              .select('id, po_number, site_id, department_id')
+              .in('id', poIds)
+          : Promise.resolve({ data: [] }),
+        siteIdsFromEntries.length > 0
+          ? adminSupabase.from('sites').select('id, name').in('id', siteIdsFromEntries)
+          : Promise.resolve({ data: [] }),
+        systemIds.length > 0
+          ? adminSupabase.from('systems').select('id, name').in('id', systemIds)
+          : Promise.resolve({ data: [] }),
+        activityIds.length > 0
+          ? adminSupabase.from('activities').select('id, name').in('id', activityIds)
+          : Promise.resolve({ data: [] }),
+        deliverableIds.length > 0
+          ? adminSupabase.from('deliverables').select('id, name').in('id', deliverableIds)
+          : Promise.resolve({ data: [] }),
+        adminSupabase.from('sites').select('id, name').order('name'),
+        adminSupabase.from('departments').select('id, name, site_id').order('name'),
+      ])
 
-    entries.forEach((entry: any) => {
-      const timesheet = timesheets.find((t: any) => t.id === entry.timesheet_id)
-      if (!timesheet) return
+    const posMap = Object.fromEntries(
+      ((posResult.data || []) as Array<{ id: string; po_number: string; site_id?: string; department_id?: string }>).map(
+        (p) => [p.id, p]
+      )
+    )
+    const sitesMap = Object.fromEntries(
+      ((sitesResult.data || []) as Array<{ id: string; name: string }>).map((s) => [s.id, s])
+    )
+    const systemsMap = Object.fromEntries(
+      ((systemsResult.data || []) as Array<{ id: string; name: string }>).map((s) => [s.id, s])
+    )
+    const activitiesMap = Object.fromEntries(
+      ((activitiesResult.data || []) as Array<{ id: string; name: string }>).map((s) => [s.id, s])
+    )
+    const deliverablesMap = Object.fromEntries(
+      ((deliverablesResult.data || []) as Array<{ id: string; name: string }>).map((s) => [s.id, s])
+    )
+
+    const expanded: ExpandedRow[] = []
+
+    for (const entry of entries) {
+      const timesheet = timesheets.find((t: { id: string }) => t.id === entry.timesheet_id)
+      if (!timesheet) continue
 
       const hours = sumHours(entry)
-      const siteName = entry.client_project_id
-        ? sitesList.find((s) => s.id === entry.client_project_id)?.name || 'N/A'
-        : 'N/A'
-      const poNumber = entry.purchase_orders?.po_number || 'N/A'
+      const po = entry.po_id ? posMap[entry.po_id as string] : undefined
+      const siteId = (entry.client_project_id as string) || po?.site_id || null
+
+      if (siteScopeSet !== null && siteId && !siteScopeSet.has(siteId)) continue
+
+      const siteName = siteId ? sitesMap[siteId]?.name || 'N/A' : 'N/A'
 
       expanded.push({
-        id: entry.id,
-        entry_id: entry.id,
-        timesheet_id: entry.timesheet_id,
+        id: entry.id as string,
+        entry_id: entry.id as string,
+        timesheet_id: entry.timesheet_id as string,
         user_id: timesheet.user_id,
         hours,
         non_billable_hours: 0,
         user_name: getUserName(timesheet.user_profiles),
         site_name: siteName,
-        po_number: poNumber,
-        task_description: entry.task_description || 'N/A',
-        system_name: entry.system_name || entry.systems?.name || 'N/A',
-        activity_name: entry.activities?.name || 'N/A',
-        deliverable_name: entry.deliverables?.name || 'N/A',
+        site_id: siteId,
+        po_number: po?.po_number || 'N/A',
+        po_id: (entry.po_id as string) || null,
+        department_id: po?.department_id || null,
+        task_description: (entry.task_description as string) || 'N/A',
+        system_name: (entry.system_name as string) || systemsMap[entry.system_id as string]?.name || 'N/A',
+        activity_name: activitiesMap[entry.activity_id as string]?.name || 'N/A',
+        deliverable_name: deliverablesMap[entry.deliverable_id as string]?.name || 'N/A',
         status: timesheet.status || 'N/A',
         week_ending: timesheet.week_ending || '',
-        purchase_orders: entry.purchase_orders,
-        client_project_id: entry.client_project_id,
       })
-    })
+    }
 
-    // Add unbillable rows: one per unbillable type per timesheet with weekly total
-    unbillable.forEach((u: any) => {
-      const timesheet = timesheets.find((t: any) => t.id === u.timesheet_id)
-      if (!timesheet) return
+    for (const u of unbillable) {
+      const timesheet = timesheets.find((t: { id: string }) => t.id === u.timesheet_id)
+      if (!timesheet) continue
       const nonBillableHours = sumHours(u)
-      if (nonBillableHours > 0) {
-        expanded.push({
-          id: `unbillable-${u.id}`,
-          entry_id: '',
-          timesheet_id: timesheet.id,
-          user_id: timesheet.user_id,
-          hours: 0,
-          non_billable_hours: nonBillableHours,
-          user_name: getUserName(timesheet.user_profiles),
-          site_name: 'N/A',
-          po_number: 'N/A',
-          task_description: u.description || 'Unbillable',
-          system_name: 'N/A',
-          activity_name: 'N/A',
-          deliverable_name: 'N/A',
-          status: timesheet.status || 'N/A',
-          week_ending: timesheet.week_ending || '',
-          purchase_orders: null,
-          client_project_id: null,
-        })
-      }
-    })
+      if (nonBillableHours <= 0) continue
 
-    // Filter by date range (week overlaps [startDate, endDate])
+      expanded.push({
+        id: `unbillable-${u.id}`,
+        entry_id: '',
+        timesheet_id: timesheet.id,
+        user_id: timesheet.user_id,
+        hours: 0,
+        non_billable_hours: nonBillableHours,
+        user_name: getUserName(timesheet.user_profiles),
+        site_name: 'N/A',
+        site_id: null,
+        po_number: 'N/A',
+        po_id: null,
+        department_id: null,
+        task_description: (u.description as string) || 'Unbillable',
+        system_name: 'N/A',
+        activity_name: 'N/A',
+        deliverable_name: 'N/A',
+        status: timesheet.status || 'N/A',
+        week_ending: timesheet.week_ending || '',
+      })
+    }
+
     let filtered = expanded
     if (startDate) filtered = filtered.filter((e) => e.week_ending >= startDate)
     if (endDate) {
@@ -199,17 +279,89 @@ export async function GET(request: NextRequest) {
       endPlus6.setDate(endPlus6.getDate() + 6)
       filtered = filtered.filter((e) => e.week_ending <= formatInput(endPlus6))
     }
-    if (selectedSite) filtered = filtered.filter((e) => e.client_project_id === selectedSite)
-    if (selectedDepartment) filtered = filtered.filter((e) => e.purchase_orders?.department_id === selectedDepartment)
-    if (selectedPO) {
-      filtered = filtered.filter((e) => {
-        if (!e.entry_id) return false // unbillable-only rows
-        const entry = entries.find((ent: any) => ent.id === e.entry_id)
-        return entry?.po_id === selectedPO
-      })
+
+    const matchesExcept = (
+      row: ExpandedRow,
+      skip: 'user' | 'site' | 'department' | 'po'
+    ) => {
+      if (skip !== 'user' && selectedUser && row.user_id !== selectedUser) return false
+      if (skip !== 'site' && selectedSite) {
+        if (row.entry_id && row.site_id !== selectedSite) return false
+        if (!row.entry_id && selectedSite) return false
+      }
+      if (skip !== 'department' && selectedDepartment) {
+        if (row.entry_id && row.department_id !== selectedDepartment) return false
+        if (!row.entry_id && selectedDepartment) return false
+      }
+      if (skip !== 'po' && selectedPO) {
+        if (row.entry_id && row.po_id !== selectedPO) return false
+        if (!row.entry_id && selectedPO) return false
+      }
+      return true
     }
 
-    // Sort by week_ending desc, then user, then task
+    const allSites = (allSitesResult.data || []) as Array<{ id: string; name: string }>
+    const allDepts = (allDeptsResult.data || []) as Array<{ id: string; name: string; site_id: string }>
+    const scopedSites =
+      siteScopeSet === null ? allSites : allSites.filter((s) => siteScopeSet.has(s.id))
+    const scopedSiteIdSet = new Set(scopedSites.map((s) => s.id))
+    const scopedDepts = allDepts.filter((d) => scopedSiteIdSet.has(d.site_id))
+
+    let scopedPos: Array<{ id: string; po_number: string; site_id?: string; department_id?: string }> = []
+    if (siteScopeSet === null) {
+      const { data: allPos } = await adminSupabase
+        .from('purchase_orders')
+        .select('id, po_number, site_id, department_id')
+        .order('po_number')
+      scopedPos = (allPos || []) as typeof scopedPos
+    } else if (scopedSiteIdSet.size > 0) {
+      const { data: sitePos } = await adminSupabase
+        .from('purchase_orders')
+        .select('id, po_number, site_id, department_id')
+        .in('site_id', [...scopedSiteIdSet])
+        .order('po_number')
+      scopedPos = (sitePos || []) as typeof scopedPos
+    }
+
+    const accessibleUsers = profiles
+      .filter((p) => accessibleUserIds.includes(p.id))
+      .map((p) => ({ id: p.id, name: p.name }))
+
+    const userIdsInPool = new Set(
+      filtered.filter((r) => matchesExcept(r, 'user')).map((r) => r.user_id)
+    )
+    const siteIdsInPool = new Set(
+      filtered
+        .filter((r) => matchesExcept(r, 'site') && r.site_id)
+        .map((r) => r.site_id as string)
+    )
+    const deptIdsInPool = new Set(
+      filtered
+        .filter((r) => matchesExcept(r, 'department') && r.department_id)
+        .map((r) => r.department_id as string)
+    )
+    const poIdsInPool = new Set(
+      filtered.filter((r) => matchesExcept(r, 'po') && r.po_id).map((r) => r.po_id as string)
+    )
+
+    const filterOptions = {
+      users: accessibleUsers.filter((u) => userIdsInPool.has(u.id)),
+      sites: scopedSites.filter((s) => siteIdsInPool.size === 0 || siteIdsInPool.has(s.id)),
+      departments: scopedDepts.filter((d) => deptIdsInPool.size === 0 || deptIdsInPool.has(d.id)),
+      purchaseOrders: scopedPos.filter((p) => poIdsInPool.size === 0 || poIdsInPool.has(p.id)),
+    }
+
+    if (selectedUser) filtered = filtered.filter((e) => e.user_id === selectedUser)
+    if (selectedSite) {
+      filtered = filtered.filter((e) => !e.entry_id || e.site_id === selectedSite)
+    }
+    if (selectedDepartment) {
+      filtered = filtered.filter((e) => !e.entry_id || e.department_id === selectedDepartment)
+    }
+    if (selectedPO) {
+      filtered = filtered.filter((e) => !e.entry_id || e.po_id === selectedPO)
+    }
+
     filtered.sort((a, b) => {
       const weekCmp = parseISO(b.week_ending).getTime() - parseISO(a.week_ending).getTime()
       if (weekCmp !== 0) return weekCmp
@@ -219,11 +371,12 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.json({
-      expanded: filtered.map(({ purchase_orders, client_project_id, ...rest }) => rest),
-      sites: sitesList,
+      expanded: filtered.map(({ site_id, po_id, department_id, user_id, ...rest }) => rest),
+      filterOptions,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Data view API error:', error)
-    return NextResponse.json({ error: error.message || 'Failed to fetch data' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Failed to fetch data'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
