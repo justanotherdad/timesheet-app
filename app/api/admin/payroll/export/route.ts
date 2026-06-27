@@ -17,10 +17,13 @@ function fmtHours(h: number): string {
   return String(Math.round((Number(h) || 0) * 1000) / 1000)
 }
 
+const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/
+
 /**
- * GET /api/admin/payroll/export?weekEnding=YYYY-MM-DD
+ * GET /api/admin/payroll/export?weeks=YYYY-MM-DD,YYYY-MM-DD
+ * (legacy: ?weekEnding=YYYY-MM-DD also accepted)
  *
- * Headerless CSV, one row per employee per earning type:
+ * Headerless CSV, one row per employee per earning type per week:
  *   Employee Name, Employee ID, DET, DETCODE, Hours
  */
 export async function GET(req: Request) {
@@ -30,23 +33,33 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const weekEnding = new URL(req.url).searchParams.get('weekEnding') || ''
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekEnding)) {
-    return NextResponse.json({ error: 'weekEnding (YYYY-MM-DD) is required' }, { status: 400 })
+  const params = new URL(req.url).searchParams
+  const raw = [
+    ...(params.get('weeks') || '').split(','),
+    ...params.getAll('weekEnding'),
+  ]
+  const weeks = [...new Set(raw.map((w) => w.trim()).filter((w) => WEEK_RE.test(w)))]
+  if (weeks.length === 0) {
+    return NextResponse.json({ error: 'At least one week (YYYY-MM-DD) is required' }, { status: 400 })
   }
 
-  const rows = await aggregatePayrollForWeek(weekEnding)
+  const rows = await aggregatePayrollForWeeks(weeks)
   const csv = rows
     .map((r) =>
       [csvCell(r.employeeName), csvCell(r.employeeId), csvCell(r.det), csvCell(r.detcode), csvCell(fmtHours(r.hours))].join(',')
     )
     .join('\r\n')
 
+  const filename =
+    weeks.length === 1
+      ? `payroll_${weeks[0]}.csv`
+      : `payroll_${[...weeks].sort()[0]}_to_${[...weeks].sort().at(-1)}_${weeks.length}weeks.csv`
+
   return new NextResponse(csv, {
     status: 200,
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="payroll_${weekEnding}.csv"`,
+      'Content-Disposition': `attachment; filename="${filename}"`,
       'Cache-Control': 'no-store',
     },
   })

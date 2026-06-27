@@ -19,16 +19,19 @@ const COLUMNS: Array<{ key: SortKey; label: string; numeric?: boolean }> = [
 
 export default function PayrollWeekView({
   rows,
-  weekEnding,
+  weekEndings,
 }: {
   rows: PayrollDetailRow[]
-  weekEnding: string
+  /** One or more week endings represented in `rows`; drives the export link. */
+  weekEndings: string[]
 }) {
   const [nameFilter, setNameFilter] = useState('')
   const [earningFilter, setEarningFilter] = useState('')
   const [detcodeFilter, setDetcodeFilter] = useState('')
-  const [sortKey, setSortKey] = useState<SortKey>('employeeName')
+  const [sortKey, setSortKey] = useState<SortKey>('weekEnding')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const exportHref = `/api/admin/payroll/export?weeks=${encodeURIComponent(weekEndings.join(','))}`
 
   const earningOptions = useMemo(
     () => [...new Set(rows.map((r) => r.earningType))].sort(),
@@ -110,7 +113,7 @@ export default function PayrollWeekView({
           </select>
         </div>
         <a
-          href={`/api/admin/payroll/export?weekEnding=${encodeURIComponent(weekEnding)}`}
+          href={exportHref}
           className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700"
         >
           Export CSV

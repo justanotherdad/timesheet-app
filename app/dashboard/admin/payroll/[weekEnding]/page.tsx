@@ -27,7 +27,7 @@ export default async function PayrollWeekPage({
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
               One row per employee per earning type (approved timesheets only).
             </p>
-            <PayrollWeekView rows={rows} weekEnding={weekEnding} />
+            <PayrollWeekView rows={rows} weekEndings={[weekEnding]} />
           </div>
         </div>
       </div>
