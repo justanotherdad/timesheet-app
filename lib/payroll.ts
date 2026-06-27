@@ -268,6 +268,29 @@ function sumDays(row: Record<string, unknown>): number {
   return DAY_FIELDS.reduce((s, f) => s + (Number(row[f]) || 0), 0)
 }
 
+/**
+ * Return the subset of the given user IDs whose employee_type is 'internal'.
+ * Payroll export/view only includes internal employees; external resources are
+ * excluded. Users with a null/unset type are treated as internal (matches the
+ * default elsewhere in the app).
+ */
+async function loadInternalUserIds(
+  admin: ReturnType<typeof createAdminClient>,
+  userIds: string[]
+): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set()
+  const { data } = await admin
+    .from('user_profiles')
+    .select('id, employee_type')
+    .in('id', userIds)
+  const internal = new Set<string>()
+  for (const p of (data || []) as Array<{ id: string; employee_type: string | null }>) {
+    const type = (p.employee_type || 'internal').toLowerCase()
+    if (type === 'internal') internal.add(p.id)
+  }
+  return internal
+}
+
 export interface PayrollWeekSummary {
   weekEnding: string
   billableHours: number
@@ -298,7 +321,12 @@ export async function listPayrollWeeks(): Promise<PayrollWeekSummary[]> {
     .select('id, user_id, week_ending, status')
     .eq('status', 'approved')
 
-  const tsList = (timesheets || []) as Array<{ id: string; user_id: string; week_ending: string }>
+  let tsList = (timesheets || []) as Array<{ id: string; user_id: string; week_ending: string }>
+  if (tsList.length === 0) return []
+
+  // Payroll only covers internal employees.
+  const internalIds = await loadInternalUserIds(admin, [...new Set(tsList.map((t) => t.user_id))])
+  tsList = tsList.filter((t) => internalIds.has(t.user_id))
   if (tsList.length === 0) return []
 
   const tsIds = tsList.map((t) => t.id)
@@ -360,7 +388,12 @@ export async function aggregatePayrollForWeek(weekEnding: string): Promise<Payro
     .eq('status', 'approved')
     .eq('week_ending', weekEnding)
 
-  const tsList = (timesheets || []) as Array<{ id: string; user_id: string; week_ending: string }>
+  let tsList = (timesheets || []) as Array<{ id: string; user_id: string; week_ending: string }>
+  if (tsList.length === 0) return []
+
+  // Payroll only covers internal employees.
+  const internalIds = await loadInternalUserIds(admin, [...new Set(tsList.map((t) => t.user_id))])
+  tsList = tsList.filter((t) => internalIds.has(t.user_id))
   if (tsList.length === 0) return []
 
   const tsIds = tsList.map((t) => t.id)
