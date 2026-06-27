@@ -78,6 +78,10 @@ export default function HierarchicalItemManager({
   const [bulkRemovePOs, setBulkRemovePOs] = useState<string[]>([])
   const [sortColumn, setSortColumn] = useState<string>('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  // Filters (#7): narrow the visible list by linked Department / PO. Options are
+  // populated from the selected site's departments and purchase orders.
+  const [filterDepartment, setFilterDepartment] = useState<string>('')
+  const [filterPO, setFilterPO] = useState<string>('')
   // Import CSV modal state (multi-step popup)
   const [showImportModal, setShowImportModal] = useState(false)
   const [importStep, setImportStep] = useState<1 | 2 | 3>(1)
@@ -260,6 +264,8 @@ export default function HierarchicalItemManager({
     await loadDepartments(siteId)
     setSelectedDepartments([])
     setSelectedPOs([])
+    setFilterDepartment('')
+    setFilterPO('')
     setSelectedItems([]) // Clear bulk selection when site changes
     setShowAddForm(false)
     setEditingItem(null)
@@ -625,7 +631,8 @@ export default function HierarchicalItemManager({
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedItems(items.map(item => item.id))
+      // Select only the currently-visible (filtered) items.
+      setSelectedItems(visibleItems.map(item => item.id))
     } else {
       setSelectedItems([])
     }
@@ -692,6 +699,20 @@ export default function HierarchicalItemManager({
     if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
     if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
     return 0
+  })
+
+  // PO filter options follow the selected department filter (if any).
+  const poFilterOptions = filterDepartment
+    ? allPurchaseOrders.filter((p) => p.department_id === filterDepartment)
+    : allPurchaseOrders
+
+  // Apply the Department / PO filters to the sorted list.
+  const visibleItems = sortedItems.filter((item) => {
+    if (!filterDepartment && !filterPO) return true
+    const a = itemAssignments[item.id] || { departments: [], purchaseOrders: [] }
+    if (filterDepartment && !a.departments.includes(filterDepartment)) return false
+    if (filterPO && !a.purchaseOrders.includes(filterPO)) return false
+    return true
   })
 
   // Load assignments for all items when items or site changes
@@ -1188,6 +1209,56 @@ export default function HierarchicalItemManager({
             </div>
           )}
 
+          {/* Department + PO filters (#7) */}
+          <div className="mb-4 flex flex-col sm:flex-row gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Filter by Department</label>
+              <select
+                value={filterDepartment}
+                onChange={(e) => {
+                  setFilterDepartment(e.target.value)
+                  // Clear PO filter if it no longer belongs to the chosen department
+                  if (e.target.value) {
+                    const stillValid = allPurchaseOrders.some(
+                      (p) => p.id === filterPO && p.department_id === e.target.value
+                    )
+                    if (!stillValid) setFilterPO('')
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 bg-white dark:bg-gray-700 dark:text-gray-100"
+              >
+                <option value="">All Departments</option>
+                {allDepartments.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Filter by PO</label>
+              <select
+                value={filterPO}
+                onChange={(e) => setFilterPO(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 bg-white dark:bg-gray-700 dark:text-gray-100"
+              >
+                <option value="">All POs</option>
+                {poFilterOptions.map((p) => (
+                  <option key={p.id} value={p.id}>{p.po_number}{p.description ? ` - ${p.description}` : ''}</option>
+                ))}
+              </select>
+            </div>
+            {(filterDepartment || filterPO) && (
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => { setFilterDepartment(''); setFilterPO('') }}
+                  className="px-3 py-2 text-sm rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500"
+                >
+                  Clear filters
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700">
@@ -1196,7 +1267,7 @@ export default function HierarchicalItemManager({
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-12">
                     <input
                       type="checkbox"
-                      checked={items.length > 0 && selectedItems.length === items.length}
+                      checked={visibleItems.length > 0 && visibleItems.every((i) => selectedItems.includes(i.id))}
                       onChange={(e) => handleSelectAll(e.target.checked)}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
@@ -1224,7 +1295,7 @@ export default function HierarchicalItemManager({
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {sortedItems.map((item) => {
+                {visibleItems.map((item) => {
                   const assignments = itemAssignments[item.id] || { departments: [], purchaseOrders: [] }
                   const deptNames = assignments.departments.map(deptId => allDepartments.find(d => d.id === deptId)?.name).filter(Boolean)
                   const poNumbers = assignments.purchaseOrders.map(poId => allPurchaseOrders.find(p => p.id === poId)?.po_number).filter(Boolean)

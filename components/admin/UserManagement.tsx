@@ -265,6 +265,11 @@ export default function UserManagement({
         typeof titleRaw === 'string'
           ? (titleRaw.trim() === '' ? null : titleRaw.trim())
           : undefined
+      const employeeIdRaw = formData.get('employee_id')
+      const employeeId =
+        typeof employeeIdRaw === 'string'
+          ? (employeeIdRaw.trim() === '' ? null : employeeIdRaw.trim())
+          : undefined
 
       const profileResult = await updateUserProfile(editingUser.id, {
         name,
@@ -275,6 +280,7 @@ export default function UserManagement({
         manager_id: managerId || null,
         final_approver_id: finalApproverId || null,
         ...(title !== undefined && { title }),
+        ...(employeeId !== undefined && { employee_id: employeeId }),
       })
       if (profileResult.error) throw new Error(profileResult.error)
 
@@ -291,6 +297,7 @@ export default function UserManagement({
                 manager_id: managerId || undefined,
                 final_approver_id: finalApproverId || undefined,
                 ...(title !== undefined && { title }),
+                ...(employeeId !== undefined && { employee_id: employeeId }),
               }
             : u
         )
@@ -525,6 +532,18 @@ export default function UserManagement({
           </div>
             {!assignmentsOnlyEdit && (
             <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Employee ID <span className="font-normal text-gray-500 dark:text-gray-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  name="employee_id"
+                  maxLength={60}
+                  placeholder="e.g. 10482"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Employee Type</label>
                 <select
@@ -920,6 +939,22 @@ export default function UserManagement({
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       Shown on the project budget &quot;By individual&quot; report. Leave blank to omit.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Employee ID <span className="font-normal text-gray-500 dark:text-gray-400">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="employee_id"
+                      defaultValue={(editingUser as { employee_id?: string | null }).employee_id ?? ''}
+                      maxLength={60}
+                      placeholder="e.g. 10482"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      Payroll/HR identifier. Used in the Payroll export.
                     </p>
                   </div>
                   <div>

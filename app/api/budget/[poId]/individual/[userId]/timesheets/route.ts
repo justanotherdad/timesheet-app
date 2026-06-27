@@ -66,14 +66,15 @@ export async function GET(
     .eq('id', userId)
     .maybeSingle()
 
-  // Pull every timesheet (regardless of status) belonging to this user, then
-  // intersect with timesheet_entries on this PO so we know which weeks are
-  // relevant. This avoids dragging in timesheets that have nothing to do
-  // with this project.
+  // Pull this user's APPROVED timesheets only, then intersect with
+  // timesheet_entries on this PO so we know which weeks are relevant. Draft,
+  // submitted, and rejected timesheets are intentionally excluded — the
+  // "By individual" modal only reflects approved (billable) work on this PO.
   const { data: tsRows } = await db
     .from('weekly_timesheets')
     .select('id, status, week_ending')
     .eq('user_id', userId)
+    .eq('status', 'approved')
 
   const tsList = (tsRows || []) as Array<{ id: string; status: string; week_ending: string }>
   if (tsList.length === 0) {

@@ -8,6 +8,8 @@ export interface User {
   name: string
   role: UserRole
   employee_type?: EmployeeType
+  /** Optional payroll/HR employee identifier; emitted in the payroll export. */
+  employee_id?: string | null
   active?: boolean
   reports_to_id?: string
   supervisor_id?: string

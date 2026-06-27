@@ -150,6 +150,7 @@ export async function createUser(formData: FormData) {
 
     const siteId = formData.get('site_id') as string || null
     const departmentId = formData.get('department_id') as string || null
+    const employeeIdRaw = (formData.get('employee_id') as string | null)?.trim() || null
     const resolvedSupervisorId = supervisorId || null
     const resolvedManagerId = managerId || null
     const resolvedFinalApproverId = finalApproverId || null
@@ -163,6 +164,7 @@ export async function createUser(formData: FormData) {
         name,
         role: effectiveRole,
         employee_type: employeeType,
+        employee_id: employeeIdRaw,
         site_id: siteId || null,
         department_id: departmentId || null,
         supervisor_id: resolvedSupervisorId || null,

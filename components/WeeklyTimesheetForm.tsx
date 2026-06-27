@@ -31,12 +31,25 @@ interface WeeklyTimesheetFormProps {
     string,
     Array<{ systemId: string; deliverableId: string; activityId: string }>
   >
+  /**
+   * Dropdown options for the unbillable "Description" field, keyed by row type.
+   * Populated from the org-wide payroll earning types (those flagged
+   * dropdown = 'Y'). Employees can pick one or type their own value.
+   */
+  unbillableDescriptionOptions?: Partial<Record<'HOLIDAY' | 'INTERNAL' | 'PTO', string[]>>
   defaultWeekEnding: string
   userId: string
   timesheetId?: string
   timesheetStatus?: string
   rejectionReason?: string
   timesheetNotes?: string
+  /**
+   * True when the current viewer is an admin/super_admin editing the
+   * timesheet. Admins can edit any timesheet at any status; when they save
+   * edits to an already-approved (or submitted) timesheet, the status is
+   * preserved in place so it stays in the budget/payroll views.
+   */
+  isAdminEditor?: boolean
   previousWeekData?: {
     entries?: Array<{
       client_project_id?: string
@@ -141,12 +154,14 @@ export default function WeeklyTimesheetForm({
   deliverableDepartmentIds = {},
   activityPOIds = {},
   projectBudgetCombosByPo = {},
+  unbillableDescriptionOptions = {},
   defaultWeekEnding,
   userId,
   timesheetId,
   timesheetStatus = 'draft',
   rejectionReason,
   timesheetNotes: initialTimesheetNotes = '',
+  isAdminEditor = false,
   initialData,
   previousWeekData,
 }: WeeklyTimesheetFormProps) {
@@ -159,6 +174,7 @@ export default function WeeklyTimesheetForm({
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingEntry, setEditingEntry] = useState<BillableEntry | null>(null)
   const [showCopyModal, setShowCopyModal] = useState(false)
+  const [showUnbillableTypeMenu, setShowUnbillableTypeMenu] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
   const isNewTimesheet = !timesheetId
 
@@ -318,7 +334,14 @@ export default function WeeklyTimesheetForm({
           updateData.submitted_at = new Date().toISOString()
           updateData.employee_signed_at = new Date().toISOString()
         } else if (!shouldSubmit) {
-          updateData.status = 'draft'
+          // Admins editing an already-approved/submitted timesheet save in
+          // place without demoting it to draft (so it stays in the budget and
+          // payroll views). Everyone else's "Save" lands as a draft.
+          const preserveStatus =
+            isAdminEditor && (currentStatus === 'approved' || currentStatus === 'submitted')
+          if (!preserveStatus) {
+            updateData.status = 'draft'
+          }
         }
 
         const { error: updateError } = await supabase
@@ -417,7 +440,13 @@ export default function WeeklyTimesheetForm({
         router.push('/dashboard/timesheets')
       } else {
         router.refresh()
-        router.push(`/dashboard/timesheets/${currentTimesheetId}/edit`)
+        const preservedAdminEdit =
+          isAdminEditor && (currentStatus === 'approved' || currentStatus === 'submitted')
+        router.push(
+          preservedAdminEdit
+            ? `/dashboard/timesheets/${currentTimesheetId}`
+            : `/dashboard/timesheets/${currentTimesheetId}/edit`
+        )
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred')
@@ -465,6 +494,18 @@ export default function WeeklyTimesheetForm({
     const updated = [...unbillableEntries]
     updated[index] = { ...updated[index], notes: value }
     setUnbillableEntries(updated)
+  }
+
+  const addUnbillableRow = (type: 'HOLIDAY' | 'INTERNAL' | 'PTO') => {
+    setUnbillableEntries((prev) => [
+      ...prev,
+      { description: type, notes: '', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
+    ])
+    setShowUnbillableTypeMenu(false)
+  }
+
+  const removeUnbillableRow = (index: number) => {
+    setUnbillableEntries((prev) => prev.filter((_, i) => i !== index))
   }
 
   // Filter POs by selected client (site) - when client is selected, only show POs assigned to that client
@@ -832,10 +873,17 @@ export default function WeeklyTimesheetForm({
         <div>
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Unbillable Time</h2>
           
+          {(['HOLIDAY', 'INTERNAL', 'PTO'] as const).map((t) => (
+            <datalist key={t} id={`unbillable-desc-${t}`}>
+              {(unbillableDescriptionOptions[t] || []).map((opt) => (
+                <option key={opt} value={opt} />
+              ))}
+            </datalist>
+          ))}
           <div className="overflow-x-auto">
             <table className="min-w-full w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
               <colgroup>
-                <col className="w-[5.5rem]" />
+                <col className="w-[6.5rem]" />
                 <col />
                 {weekDates.days.map((_, idx) => (
                   <col key={idx} className="w-[3.5rem]" />
@@ -845,10 +893,10 @@ export default function WeeklyTimesheetForm({
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
                   <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
-                    Description
+                    Type
                   </th>
                   <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 min-w-0">
-                    Notes
+                    Description
                   </th>
                   {weekDates.days.map((day, idx) => (
                     <th key={idx} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -865,14 +913,25 @@ export default function WeeklyTimesheetForm({
                 {unbillableEntries.map((entry, entryIdx) => (
                   <tr key={entryIdx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
-                      {entry.description}
+                      <div className="flex items-center justify-between gap-1">
+                        <span>{entry.description}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeUnbillableRow(entryIdx)}
+                          title="Remove row"
+                          className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 shrink-0"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                     <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 min-w-0">
                       <input
                         type="text"
+                        list={`unbillable-desc-${entry.description}`}
                         value={entry.notes ?? ''}
                         onChange={(e) => updateUnbillableNotes(entryIdx, e.target.value)}
-                        placeholder="Optional"
+                        placeholder={(unbillableDescriptionOptions[entry.description] || []).length ? 'Select or type…' : 'Optional'}
                         className="w-full min-w-0 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-900 bg-white dark:bg-gray-700 dark:text-gray-100"
                       />
                     </td>
@@ -921,6 +980,30 @@ export default function WeeklyTimesheetForm({
               </tbody>
             </table>
           </div>
+
+          <div className="mt-3 relative inline-block">
+            <button
+              type="button"
+              onClick={() => setShowUnbillableTypeMenu((s) => !s)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
+            >
+              <Plus className="h-4 w-4" /> Add Row
+            </button>
+            {showUnbillableTypeMenu && (
+              <div className="absolute z-10 mt-1 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1">
+                {(['HOLIDAY', 'INTERNAL', 'PTO'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => addUnbillableRow(t)}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    {t.charAt(0) + t.slice(1).toLowerCase()}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Notes Section */}
@@ -954,10 +1037,16 @@ export default function WeeklyTimesheetForm({
         <div className="flex flex-wrap gap-2 sm:gap-4">
           <button
             type="submit"
-            disabled={loading || (currentStatus !== 'draft' && currentStatus !== 'rejected')}
+            disabled={loading || (!isAdminEditor && currentStatus !== 'draft' && currentStatus !== 'rejected')}
             className="min-h-[44px] sm:min-h-0 bg-blue-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Saving...' : timesheetId ? 'Save Draft' : 'Save Timesheet'}
+            {loading
+              ? 'Saving...'
+              : isAdminEditor && currentStatus !== 'draft' && currentStatus !== 'rejected'
+                ? 'Save Changes'
+                : timesheetId
+                  ? 'Save Draft'
+                  : 'Save Timesheet'}
           </button>
           {(currentStatus === 'draft' || currentStatus === 'rejected') && (
             <button

@@ -14,8 +14,9 @@ import {
   formatHoursAmount,
 } from '@/lib/utils'
 import { format } from 'date-fns'
-import { CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, FileText, ChevronLeft, ChevronRight } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
+import { getPendingApprovalTimesheets, sortPendingApprovals } from '@/lib/approval-queue'
 import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
 import { parseConfirmationAssigneeIds, loadCompanySettingsMap } from '@/lib/timesheet-confirmation'
@@ -37,12 +38,16 @@ export default async function TimesheetDetailPage({
   // Rejects anything with double slashes, backslashes, or encoded characters that
   // could be used to bypass the startsWith('/dashboard') check.
   const ALLOWED_RETURN_PREFIXES = ['/dashboard/timesheets', '/dashboard/approvals', '/dashboard']
+  // Validate the path portion (before any query string) against the allow-list,
+  // so return targets like "/dashboard/approvals?sort=user&dir=asc" are honored
+  // while still blocking open-redirect attempts.
+  const returnPath = returnTo ? returnTo.split('?')[0] : ''
   const safeReturnTo =
     returnTo &&
-    ALLOWED_RETURN_PREFIXES.some((prefix) => returnTo === prefix || returnTo.startsWith(prefix + '/')) &&
+    ALLOWED_RETURN_PREFIXES.some((prefix) => returnPath === prefix || returnPath.startsWith(prefix + '/')) &&
     !returnTo.includes('//') &&
     !returnTo.includes('\\') &&
-    !returnTo.includes('%')
+    !returnPath.includes('%')
       ? returnTo
       : '/dashboard/timesheets'
   const user = await getCurrentUser()
@@ -188,6 +193,49 @@ export default async function TimesheetDetailPage({
     (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) ||
       (user.profile.role === 'employee' && timesheet.user_id !== user.id))
 
+  // ----- Pending Approvals Next/Previous navigation (#6) -----
+  // When we arrived here from the Pending Approvals queue, build the same
+  // ordered queue so the approver can step through timesheets without going
+  // back to the list. Approving advances to the next one automatically.
+  const fromApprovals = !!returnTo && returnTo.startsWith('/dashboard/approvals')
+  const buildDetailUrl = (tid: string) =>
+    `/dashboard/timesheets/${tid}?returnTo=${encodeURIComponent(returnTo || '/dashboard/approvals')}`
+  let approvalNav: {
+    prevUrl?: string
+    nextUrl?: string
+    afterApproveReturnTo: string
+    position: number
+    total: number
+  } | null = null
+  if (fromApprovals && canShowApproverActions) {
+    let sortBy = 'user'
+    let sortDir: 'asc' | 'desc' = 'asc'
+    const qIndex = returnTo!.indexOf('?')
+    if (qIndex >= 0) {
+      const sp = new URLSearchParams(returnTo!.slice(qIndex + 1))
+      sortBy = sp.get('sort') || 'user'
+      sortDir = (sp.get('dir') || 'asc') === 'desc' ? 'desc' : 'asc'
+    }
+    try {
+      const queue = sortPendingApprovals(await getPendingApprovalTimesheets(user), sortBy, sortDir)
+      const idx = queue.findIndex((t: { id: string }) => t.id === id)
+      const nextInQueue =
+        idx >= 0 ? queue[idx + 1] : queue.find((t: { id: string }) => t.id !== id)
+      const prevInQueue = idx > 0 ? queue[idx - 1] : undefined
+      approvalNav = {
+        prevUrl: prevInQueue ? buildDetailUrl(prevInQueue.id) : undefined,
+        nextUrl: nextInQueue ? buildDetailUrl(nextInQueue.id) : undefined,
+        // After approving this one, jump straight to the next pending; if none,
+        // fall back to the approvals list.
+        afterApproveReturnTo: nextInQueue ? buildDetailUrl(nextInQueue.id) : (returnTo || '/dashboard/approvals'),
+        position: idx >= 0 ? idx + 1 : 0,
+        total: queue.length,
+      }
+    } catch {
+      approvalNav = null
+    }
+  }
+
   // Budget access: Admin/Super Admin see all POs; others need po_budget_access grant
   const isAdminOrAbove = ['admin', 'super_admin'].includes(user.profile.role)
   let budgetAccessPoIds: string[] = []
@@ -300,6 +348,39 @@ export default async function TimesheetDetailPage({
       <Header title="Timesheet Details" showBack backUrl={safeReturnTo} user={user} />
       <div className="container mx-auto px-4 py-6 sm:py-8">
         <div className="max-w-7xl mx-auto">
+          {approvalNav && (
+            <div className="mb-4 flex items-center justify-between gap-3 bg-white dark:bg-gray-800 rounded-lg shadow px-4 py-3">
+              {approvalNav.prevUrl ? (
+                <Link
+                  href={approvalNav.prevUrl}
+                  className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600 font-medium"
+                >
+                  <ChevronLeft className="h-4 w-4" /> Previous
+                </Link>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-400 cursor-not-allowed font-medium">
+                  <ChevronLeft className="h-4 w-4" /> Previous
+                </span>
+              )}
+              <span className="text-sm text-gray-600 dark:text-gray-300">
+                {approvalNav.position > 0
+                  ? `Pending approval ${approvalNav.position} of ${approvalNav.total}`
+                  : `${approvalNav.total} pending approval${approvalNav.total === 1 ? '' : 's'}`}
+              </span>
+              {approvalNav.nextUrl ? (
+                <Link
+                  href={approvalNav.nextUrl}
+                  className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600 font-medium"
+                >
+                  Next <ChevronRight className="h-4 w-4" />
+                </Link>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-400 cursor-not-allowed font-medium">
+                  Next <ChevronRight className="h-4 w-4" />
+                </span>
+              )}
+            </div>
+          )}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start mb-6">
               <div className="min-w-0">
@@ -431,10 +512,10 @@ export default async function TimesheetDetailPage({
                       <thead>
                         <tr className="bg-gray-100 dark:bg-gray-700">
                           <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
-                            Description
+                            Type
                           </th>
                           <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm text-gray-900 dark:text-gray-100 min-w-0">
-                            Notes
+                            Description
                           </th>
                           {weekDates.days.map((day, idx) => (
                             <th key={idx} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm text-gray-900 dark:text-gray-100">
@@ -553,11 +634,23 @@ export default async function TimesheetDetailPage({
                   Edit & resubmit
                 </Link>
               )}
+              {/* Admins can edit any timesheet (incl. approved) — change PO,
+                  hours, systems, etc. Shown unless the owner-admin already
+                  sees an Edit button above for their own draft/rejected sheet. */}
+              {isAdminOrAbove &&
+                !(timesheet.user_id === user.id && (timesheet.status === 'draft' || timesheet.status === 'rejected')) && (
+                  <Link
+                    href={`/dashboard/timesheets/${timesheet.id}/edit`}
+                    className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 bg-amber-500 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-amber-600 transition-colors"
+                  >
+                    Edit (Admin)
+                  </Link>
+                )}
               {timesheet.status === 'submitted' && canShowApproverActions && (
                 <>
                   <ApproveTimesheetButton
                     timesheetId={timesheet.id}
-                    returnTo="/dashboard/approvals"
+                    returnTo={approvalNav ? approvalNav.afterApproveReturnTo : (fromApprovals ? (returnTo || '/dashboard/approvals') : '/dashboard/approvals')}
                     className="min-h-[44px] sm:min-h-0 bg-green-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                   >
                     <>

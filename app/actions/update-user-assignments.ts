@@ -20,6 +20,8 @@ export async function updateUserProfile(
      * Pass an empty string or null to clear it.
      */
     title?: string | null
+    /** Optional payroll/HR employee identifier. Empty string/null clears it. */
+    employee_id?: string | null
   }
 ) {
   try {
@@ -64,7 +66,7 @@ export async function updateUserProfile(
       }
     }
 
-    const { email, employee_type, title, ...profileUpdates } = updates
+    const { email, employee_type, title, employee_id, ...profileUpdates } = updates
 
     if (email !== undefined) {
       const { error: authError } = await adminClient.auth.admin.updateUserById(userId, { email })
@@ -78,6 +80,9 @@ export async function updateUserProfile(
       ...(title !== undefined && {
         // Persist title verbatim; the UI normalizes empty strings to null.
         title: title === null ? null : (typeof title === 'string' ? title.trim() || null : null),
+      }),
+      ...(employee_id !== undefined && {
+        employee_id: employee_id === null ? null : (typeof employee_id === 'string' ? employee_id.trim() || null : null),
       }),
     }
     if (updates.active !== undefined) updatePayload.active = updates.active

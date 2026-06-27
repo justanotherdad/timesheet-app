@@ -6,6 +6,7 @@ import WeeklyTimesheetForm from '@/components/WeeklyTimesheetForm'
 import { getWeekEnding, formatDateForInput } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import { loadTimesheetDropdownData } from '@/lib/timesheet-bill-rate-access'
+import { loadUnbillableDescriptionOptions } from '@/lib/payroll'
 import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
@@ -110,12 +111,13 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
     entryPoIds: [],
   })
 
-  // Previous week for "Copy Previous Week" is the week before the effective (current or next) week we're creating
-  const previousWeekEnding = new Date(effectiveWeekEnding)
-  previousWeekEnding.setDate(previousWeekEnding.getDate() - 7)
-  const previousWeekEndingStr = formatDateForInput(previousWeekEnding)
+  const unbillableDescriptionOptions = await loadUnbillableDescriptionOptions()
 
-  // Check if previous week timesheet exists
+  // "Copy Previous Week" pulls the employee's most recent APPROVED timesheet
+  // before the week we're creating (gap-tolerant — it doesn't have to be the
+  // immediately prior calendar week). Because edits/admin changes and matrix
+  // reassignments are written back to that timesheet's rows in place, this
+  // naturally reflects the latest version of that approved week.
   let previousWeekData: {
     entries?: Array<{
       client_project_id?: string
@@ -146,16 +148,18 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
     }>
   } | undefined = undefined
   try {
-    const previousTimesheetResult = await withQueryTimeout<{ id: string }>(() =>
+    const previousTimesheetResult = await withQueryTimeout<Array<{ id: string }>>(() =>
       supabase
         .from('weekly_timesheets')
-        .select('id')
+        .select('id, week_ending')
         .eq('user_id', user.id)
-        .eq('week_ending', previousWeekEndingStr)
-        .single()
+        .eq('status', 'approved')
+        .lt('week_ending', effectiveWeekEndingStr)
+        .order('week_ending', { ascending: false })
+        .limit(1)
     )
 
-    const previousTimesheet = previousTimesheetResult.data as { id: string } | null
+    const previousTimesheet = (previousTimesheetResult.data || [])[0] as { id: string } | undefined
     if (previousTimesheet?.id) {
       const previousTimesheetId = previousTimesheet.id
       // Fetch previous week's entries and unbillable
@@ -232,6 +236,7 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
               deliverableDepartmentIds={deliverableDepartmentIds}
               activityPOIds={activityPOIds}
               projectBudgetCombosByPo={projectBudgetCombosByPo}
+              unbillableDescriptionOptions={unbillableDescriptionOptions}
               defaultWeekEnding={effectiveWeekEndingStr}
               userId={user.id}
               previousWeekData={previousWeekData}

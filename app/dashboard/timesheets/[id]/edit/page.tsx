@@ -6,6 +6,7 @@ import WeeklyTimesheetForm from '@/components/WeeklyTimesheetForm'
 import { formatDateForInput } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import { loadTimesheetDropdownData } from '@/lib/timesheet-bill-rate-access'
+import { loadUnbillableDescriptionOptions } from '@/lib/payroll'
 import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
@@ -88,6 +89,8 @@ export default async function EditTimesheetPage({
     entryPoIds,
   })
 
+  const unbillableDescriptionOptions = await loadUnbillableDescriptionOptions()
+
   // Get existing unbillable entries
   const unbillableResult = await withQueryTimeout<Array<any>>(() =>
     supabase
@@ -130,21 +133,22 @@ export default async function EditTimesheetPage({
     }>
   } | undefined = undefined
   try {
-    const currentWeekEnding = new Date(timesheet.week_ending)
-    const previousWeekEnding = new Date(currentWeekEnding)
-    previousWeekEnding.setDate(previousWeekEnding.getDate() - 7)
-    const previousWeekEndingStr = formatDateForInput(previousWeekEnding)
+    // Most recent APPROVED timesheet before this week (gap-tolerant); reflects
+    // the latest edited version since edits are written back in place.
+    const currentWeekEndingStr = formatDateForInput(new Date(timesheet.week_ending))
 
-    const previousTimesheetResult = await withQueryTimeout<{ id: string }>(() =>
+    const previousTimesheetResult = await withQueryTimeout<Array<{ id: string }>>(() =>
       supabase
         .from('weekly_timesheets')
-        .select('id')
+        .select('id, week_ending')
         .eq('user_id', timesheetUserId)
-        .eq('week_ending', previousWeekEndingStr)
-        .single()
+        .eq('status', 'approved')
+        .lt('week_ending', currentWeekEndingStr)
+        .order('week_ending', { ascending: false })
+        .limit(1)
     )
 
-    const previousTimesheet = previousTimesheetResult.data as { id: string } | null
+    const previousTimesheet = (previousTimesheetResult.data || [])[0] as { id: string } | undefined
     if (previousTimesheet?.id) {
       const previousTimesheetId = previousTimesheet.id
       const [prevEntriesResult, prevUnbillableResult] = await Promise.all([
@@ -229,12 +233,14 @@ export default async function EditTimesheetPage({
               deliverableDepartmentIds={deliverableDepartmentIds}
               activityPOIds={activityPOIds}
               projectBudgetCombosByPo={projectBudgetCombosByPo}
+              unbillableDescriptionOptions={unbillableDescriptionOptions}
               defaultWeekEnding={formatDateForInput(new Date(timesheet.week_ending))}
               userId={user.id}
               timesheetId={timesheet.id}
               timesheetStatus={timesheet.status}
               rejectionReason={timesheet.rejection_reason ?? undefined}
               timesheetNotes={timesheet.notes ?? ''}
+              isAdminEditor={['admin', 'super_admin'].includes(user.profile.role)}
               initialData={{
                 entries: entries || [],
                 unbillable: unbillable || [],

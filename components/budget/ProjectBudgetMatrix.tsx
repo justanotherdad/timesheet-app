@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowDown, ArrowUp, ArrowUpDown, Download, Pencil, Plus, Printer, Trash2, X } from 'lucide-react'
 import { formatHours } from '@/lib/utils'
@@ -288,23 +288,58 @@ export default function ProjectBudgetMatrix({
 
   const bumpRefresh = () => onMatrixRefresh?.()
 
+  // Tracks POs we've already attempted a one-shot auto-link on this mount so we
+  // don't loop. Auto-link silently runs the safe fuzzy-match repair so budget
+  // owners rarely need the manual "Reassign" step (#13).
+  const autoLinkAttempted = useRef<Set<string>>(new Set())
+
   useEffect(() => {
     let cancelled = false
+    const fetchMatrix = async () => {
+      const res = await fetch(`/api/budget/${poId}/project-matrix`, {
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error((body as { error?: string }).error || `Could not load matrix (${res.status})`)
+      }
+      return (await res.json()) as MatrixPayload
+    }
     ;(async () => {
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch(`/api/budget/${poId}/project-matrix`, {
-          credentials: 'include',
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
-        })
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}))
-          throw new Error((body as { error?: string }).error || `Could not load matrix (${res.status})`)
-        }
-        const json = (await res.json()) as MatrixPayload
+        let json = await fetchMatrix()
         if (!cancelled) setData(json)
+
+        // Auto-link: when this budget owner can edit and there are unmatched
+        // timesheet hours, run the safe fuzzy-match once and reload so single
+        // safe candidates snap onto their matrix cell without a manual step.
+        if (
+          !cancelled &&
+          canEditMatrix &&
+          (json.totals?.unmatchedActualHours || 0) > 0 &&
+          !autoLinkAttempted.current.has(poId)
+        ) {
+          autoLinkAttempted.current.add(poId)
+          try {
+            const fixRes = await fetch(`/api/budget/${poId}/sync-timesheet-entries`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({}),
+            })
+            const fixBody = await fixRes.json().catch(() => ({}))
+            if (fixRes.ok && (Number((fixBody as { fixedCount?: number }).fixedCount) || 0) > 0) {
+              json = await fetchMatrix()
+              if (!cancelled) setData(json)
+            }
+          } catch {
+            /* best-effort; manual Reassign remains available */
+          }
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load project matrix')
       } finally {
@@ -314,7 +349,7 @@ export default function ProjectBudgetMatrix({
     return () => {
       cancelled = true
     }
-  }, [poId, refreshTick])
+  }, [poId, refreshTick, canEditMatrix])
 
   const filterOptions = useMemo(() => {
     if (!data?.rows.length) {

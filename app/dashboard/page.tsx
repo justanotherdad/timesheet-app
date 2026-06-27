@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import Link from 'next/link'
-import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList, FileBarChart, ClipboardCheck } from 'lucide-react'
+import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList, FileBarChart, ClipboardCheck, DollarSign } from 'lucide-react'
 import { formatWeekEnding, formatDate, getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
@@ -423,6 +423,22 @@ export default async function DashboardPage() {
                   </div>
                 </div>
               </Link>
+              {['admin', 'super_admin'].includes(user.profile.role) && (
+                <Link
+                  href="/dashboard/admin/payroll"
+                  className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow min-h-[72px] sm:min-h-0"
+                >
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="bg-emerald-100 dark:bg-emerald-900/30 p-3 rounded-lg">
+                      <DollarSign className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">Payroll</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Export &amp; view payroll hours by week</p>
+                    </div>
+                  </div>
+                </Link>
+              )}
               </>
               )}
             </>

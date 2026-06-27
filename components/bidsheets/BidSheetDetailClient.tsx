@@ -1286,6 +1286,10 @@ export default function BidSheetDetailClient({
 
   const handleConvert = async () => {
     setError(null)
+    if (!convertPoNumber.trim()) {
+      setError('A PO number is required to convert this bid sheet to a project budget.')
+      return
+    }
     if (Object.keys(hourDrafts).length > 0) {
       setError('Finish editing matrix hours (click outside hour fields so values save) before converting.')
       return
@@ -1308,7 +1312,7 @@ export default function BidSheetDetailClient({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          po_number: convertPoNumber || undefined,
+          po_number: convertPoNumber.trim(),
           project_name: convertProjectName || undefined,
           department_id: convertDepartmentId || undefined,
         }),
@@ -3195,12 +3199,13 @@ export default function BidSheetDetailClient({
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">PO Number</label>
+                <label className="block text-sm font-medium mb-1">PO Number <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={convertPoNumber}
                   onChange={(e) => setConvertPoNumber(e.target.value)}
-                  placeholder="Optional"
+                  placeholder="Required"
+                  required
                   className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
                 />
               </div>
@@ -3232,7 +3237,7 @@ export default function BidSheetDetailClient({
             </div>
             <div className="p-4 border-t flex justify-end gap-2">
               <button type="button" onClick={() => setConvertModal(false)} className="px-4 py-2 border rounded-lg">Cancel</button>
-              <button type="button" onClick={handleConvert} disabled={loading} className="px-4 py-2 bg-green-600 text-white rounded-lg disabled:opacity-50">Convert</button>
+              <button type="button" onClick={handleConvert} disabled={loading || !convertPoNumber.trim()} className="px-4 py-2 bg-green-600 text-white rounded-lg disabled:opacity-50">Convert</button>
             </div>
           </div>
         </div>

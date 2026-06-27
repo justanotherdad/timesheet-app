@@ -36,6 +36,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = (await req.json().catch(() => ({}))) || {}
   const { department_id, po_number, project_name } = body
 
+  // PO number is required when converting to a project budget — it is the key
+  // people log time against and the budget is keyed on. Don't auto-generate.
+  const poNumber = typeof po_number === 'string' ? po_number.trim() : ''
+  if (!poNumber) {
+    return NextResponse.json(
+      { error: 'A PO number is required to convert this bid sheet to a project budget.' },
+      { status: 400 }
+    )
+  }
+
   const adminSupabase = createAdminClient()
 
   const { data: items } = await adminSupabase
@@ -95,7 +105,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .insert({
       site_id: sheet.site_id,
       department_id: department_id || null,
-      po_number: po_number || `BS-${sheet.name?.slice(0, 20) || id.slice(0, 8)}`,
+      po_number: poNumber,
       description: project_name || sheet.name,
       project_name: project_name || sheet.name,
       budget_type: 'project',

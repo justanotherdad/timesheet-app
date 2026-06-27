@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, FileText, X } from 'lucide-react'
 import SiteDetailView from './SiteDetailView'
 import OptionsManager from './OptionsManager'
+import PayrollEarningTypesManager from './PayrollEarningTypesManager'
 
 interface Site {
   id: string
@@ -49,7 +50,7 @@ interface ConsolidatedManagerProps {
   isAdminOrAbove?: boolean
 }
 
-type TabType = 'sites' | 'departments' | 'purchase-orders' | 'expense-types' | 'company-info'
+type TabType = 'sites' | 'departments' | 'purchase-orders' | 'expense-types' | 'company-info' | 'payroll'
 
 export default function ConsolidatedManager({
   sites: initialSites,
@@ -470,7 +471,27 @@ export default function ConsolidatedManager({
         >
           Company Information
         </button>
+        {isAdminOrAbove && (
+          <button
+            onClick={() => {
+              setActiveTab('payroll')
+              setShowAddForm(false)
+            }}
+            className={`px-4 py-2 font-medium ${
+              activeTab === 'payroll'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            Payroll
+          </button>
+        )}
       </div>
+
+      {/* Payroll Tab (Admin or greater only) */}
+      {activeTab === 'payroll' && isAdminOrAbove && (
+        <PayrollEarningTypesManager readOnly={readOnly} />
+      )}
 
       {/* Sites Tab */}
       {activeTab === 'sites' && (
