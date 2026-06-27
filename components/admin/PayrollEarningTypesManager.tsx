@@ -11,6 +11,20 @@ import { formatDateTimeInEastern } from '@/lib/utils'
 
 type SortDir = 'asc' | 'desc'
 
+/** Proportional column widths (table-fixed) so the grid fits the viewport without horizontal scroll. */
+const COL_WIDTHS: Partial<Record<keyof PayrollEarningType, string>> = {
+  earning_type: '13%',
+  det: '5%',
+  detcode: '9%',
+  area: '10%',
+  dropdown: '8%',
+  where_value: '9%',
+  overtime: '8%',
+  rule: '11%',
+  rule_value: '6%',
+  looks_at: '11%',
+}
+
 const EMPTY_DRAFT: Partial<PayrollEarningType> = {
   earning_type: '',
   det: '',
@@ -170,13 +184,13 @@ export default function PayrollEarningTypesManager({ readOnly = false }: { readO
     col: (typeof PAYROLL_COLUMNS)[number],
     onChange: (v: string) => void
   ) => {
-    if (readOnly) return <span className="text-gray-900 dark:text-gray-100">{value || '—'}</span>
+    if (readOnly) return <span className="text-gray-900 dark:text-gray-100 break-words">{value || '—'}</span>
     if (col.kind === 'dropdown') {
       return (
         <select
           value={value ?? ''}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full min-w-[7rem] px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          className="h-9 w-full px-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 box-border"
         >
           {(col.options || []).map((opt) => (
             <option key={opt || 'blank'} value={opt}>{opt === '' ? '—' : opt}</option>
@@ -189,7 +203,7 @@ export default function PayrollEarningTypesManager({ readOnly = false }: { readO
         type="text"
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full min-w-[6rem] px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+        className="h-9 w-full px-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 box-border"
       />
     )
   }
@@ -241,8 +255,14 @@ export default function PayrollEarningTypesManager({ readOnly = false }: { readO
       {loading ? (
         <p className="text-gray-500 dark:text-gray-400 py-8 text-center">Loading…</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+        <div className="w-full">
+          <table className="w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+            <colgroup>
+              {PAYROLL_COLUMNS.map((col) => (
+                <col key={col.key} style={{ width: COL_WIDTHS[col.key] }} />
+              ))}
+              {!readOnly && <col style={{ width: '10%' }} />}
+            </colgroup>
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
                 {PAYROLL_COLUMNS.map((col) => {
@@ -251,42 +271,42 @@ export default function PayrollEarningTypesManager({ readOnly = false }: { readO
                     <th
                       key={col.key}
                       onClick={() => toggleSort(col.key)}
-                      className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                      className="px-1.5 py-2 text-left font-medium text-gray-600 dark:text-gray-300 cursor-pointer select-none"
                     >
-                      <span className="inline-flex items-center gap-1">
+                      <span className="inline-flex items-center gap-1 leading-tight">
                         {col.label}
-                        {active ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                        {active ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3 shrink-0" /> : <ArrowDown className="h-3 w-3 shrink-0" />) : <ArrowUpDown className="h-3 w-3 opacity-40 shrink-0" />}
                       </span>
                     </th>
                   )
                 })}
-                {!readOnly && <th className="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-300">Actions</th>}
+                {!readOnly && <th className="px-1.5 py-2 text-right font-medium text-gray-600 dark:text-gray-300">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
               {sortedRows.map((row) => {
                 const draft = drafts[row.id] || row
                 return (
-                  <tr key={row.id} className="align-top">
+                  <tr key={row.id} className="align-middle">
                     {PAYROLL_COLUMNS.map((col) => (
-                      <td key={col.key} className="px-3 py-2">
+                      <td key={col.key} className="px-1.5 py-2">
                         {renderCell(String(draft[col.key] ?? ''), col, (v) => updateDraft(row.id, col.key, v))}
                       </td>
                     ))}
                     {!readOnly && (
-                      <td className="px-3 py-2 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center gap-2">
+                      <td className="px-1.5 py-2 text-right">
+                        <div className="inline-flex items-center gap-1.5 justify-end">
                           <button
                             onClick={() => saveRow(row.id)}
                             disabled={savingId === row.id || !isDirty(row.id)}
-                            className="bg-green-600 text-white px-3 py-1 rounded text-xs font-semibold hover:bg-green-700 disabled:opacity-40"
+                            className="bg-green-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-green-700 disabled:opacity-40"
                           >
                             {savingId === row.id ? '…' : 'Save'}
                           </button>
                           <button
                             onClick={() => deleteRow(row.id)}
                             disabled={savingId === row.id}
-                            className="text-red-600 dark:text-red-400 hover:text-red-800"
+                            className="text-red-600 dark:text-red-400 hover:text-red-800 shrink-0"
                             title="Delete"
                           >
                             <Trash2 className="h-4 w-4" />
