@@ -379,6 +379,22 @@ export async function listPayrollWeeks(): Promise<PayrollWeekSummary[]> {
  * employee per applicable earning type, following the payroll config rules.
  */
 export async function aggregatePayrollForWeek(weekEnding: string): Promise<PayrollDetailRow[]> {
+  return aggregatePayrollForWeeks([weekEnding])
+}
+
+/**
+ * Build the detailed payroll rows across one or more week endings: one row per
+ * employee per applicable earning type **per week**, following the payroll
+ * config rules.
+ *
+ * Allocation is computed independently for each (employee, week) pair so the
+ * "up to 40 / over 40" rules apply to each week on its own — combining weeks
+ * would incorrectly cap or shift hours.
+ */
+export async function aggregatePayrollForWeeks(weekEndings: string[]): Promise<PayrollDetailRow[]> {
+  const weeks = [...new Set((weekEndings || []).map((w) => String(w).slice(0, 10)).filter((w) => /^\d{4}-\d{2}-\d{2}$/.test(w)))]
+  if (weeks.length === 0) return []
+
   const admin = createAdminClient()
   const config = await loadPayrollConfig()
 
@@ -386,7 +402,7 @@ export async function aggregatePayrollForWeek(weekEnding: string): Promise<Payro
     .from('weekly_timesheets')
     .select('id, user_id, week_ending')
     .eq('status', 'approved')
-    .eq('week_ending', weekEnding)
+    .in('week_ending', weeks)
 
   let tsList = (timesheets || []) as Array<{ id: string; user_id: string; week_ending: string }>
   if (tsList.length === 0) return []
@@ -410,39 +426,52 @@ export async function aggregatePayrollForWeek(weekEnding: string): Promise<Payro
     profileById.set(p.id, { name: p.name, employee_id: p.employee_id })
   }
 
-  const tsToUser = new Map<string, string>()
-  for (const t of tsList) tsToUser.set(t.id, t.user_id)
+  // timesheet_id -> { userId, week } so we can group allocation per employee per week.
+  const tsToUserWeek = new Map<string, { uid: string; week: string }>()
+  for (const t of tsList) tsToUserWeek.set(t.id, { uid: t.user_id, week: String(t.week_ending).slice(0, 10) })
 
-  // Accumulate per-user billable totals and unbillable rows.
-  const billableByUser = new Map<string, number>()
+  const groupKey = (uid: string, week: string) => `${uid}|${week}`
+
+  // Accumulate per (user, week) billable totals and unbillable rows.
+  const billableByGroup = new Map<string, number>()
   for (const r of (billable || []) as Array<Record<string, unknown>>) {
-    const uid = tsToUser.get(String(r.timesheet_id))
-    if (!uid) continue
-    billableByUser.set(uid, (billableByUser.get(uid) || 0) + sumDays(r))
+    const g = tsToUserWeek.get(String(r.timesheet_id))
+    if (!g) continue
+    const key = groupKey(g.uid, g.week)
+    billableByGroup.set(key, (billableByGroup.get(key) || 0) + sumDays(r))
   }
-  const unbillableByUser = new Map<string, Array<{ type: UnbillableType; description?: string | null; hours: number }>>()
+  const unbillableByGroup = new Map<string, Array<{ type: UnbillableType; description?: string | null; hours: number }>>()
   for (const r of (unbillable || []) as Array<Record<string, unknown>>) {
-    const uid = tsToUser.get(String(r.timesheet_id))
-    if (!uid) continue
-    const list = unbillableByUser.get(uid) || []
+    const g = tsToUserWeek.get(String(r.timesheet_id))
+    if (!g) continue
+    const key = groupKey(g.uid, g.week)
+    const list = unbillableByGroup.get(key) || []
     list.push({
       type: (String(r.description || 'INTERNAL').toUpperCase() as UnbillableType),
       description: (r.notes as string | null) ?? null,
       hours: sumDays(r),
     })
-    unbillableByUser.set(uid, list)
+    unbillableByGroup.set(key, list)
+  }
+
+  // Every (user, week) pair that has an approved timesheet, so allocation runs once each.
+  const groups = new Map<string, { uid: string; week: string }>()
+  for (const t of tsList) {
+    const week = String(t.week_ending).slice(0, 10)
+    groups.set(groupKey(t.user_id, week), { uid: t.user_id, week })
   }
 
   const rows: PayrollDetailRow[] = []
-  for (const uid of userIds) {
+  for (const { uid, week } of groups.values()) {
+    const key = groupKey(uid, week)
     const profile = profileById.get(uid)
     const alloc = allocatePayrollRows(config, {
-      billableHours: billableByUser.get(uid) || 0,
-      unbillable: unbillableByUser.get(uid) || [],
+      billableHours: billableByGroup.get(key) || 0,
+      unbillable: unbillableByGroup.get(key) || [],
     })
     for (const a of alloc) {
       rows.push({
-        weekEnding: String(weekEnding).slice(0, 10),
+        weekEnding: week,
         userId: uid,
         employeeName: profile?.name || 'Unknown',
         employeeId: profile?.employee_id || '',
