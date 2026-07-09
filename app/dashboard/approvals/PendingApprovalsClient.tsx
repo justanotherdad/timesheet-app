@@ -8,13 +8,22 @@ import ApproveTimesheetButton from '@/components/approvals/ApproveTimesheetButto
 import { CheckCircle, Clock, X } from 'lucide-react'
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
+interface HourTotals {
+  billable: number
+  unbillable: number
+}
+
 interface PendingApprovalsClientProps {
   timesheets: any[]
   sortBy: string
   sortDir: string
   currentUserName: string
   withLabel: string // e.g. "With Supervisor", "With Manager"
+  hourTotals?: Record<string, HourTotals>
 }
+
+const formatHours = (n: number) =>
+  (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
 export default function PendingApprovalsClient({
   timesheets,
@@ -22,6 +31,7 @@ export default function PendingApprovalsClient({
   sortDir,
   currentUserName,
   withLabel,
+  hourTotals = {},
 }: PendingApprovalsClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -270,6 +280,23 @@ export default function PendingApprovalsClient({
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">Submitted By</p>
                 <p className="font-medium text-gray-900 dark:text-gray-100">{currentUserName}</p>
+              </div>
+              <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-2">Weekly Hours</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg bg-green-50 dark:bg-green-900/20 px-3 py-2">
+                    <p className="text-xs text-green-700 dark:text-green-300">Billable</p>
+                    <p className="text-lg font-semibold text-green-800 dark:text-green-200">
+                      {formatHours(hourTotals[selectedTimesheet.id]?.billable ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-gray-100 dark:bg-gray-700/40 px-3 py-2">
+                    <p className="text-xs text-gray-600 dark:text-gray-300">Non-billable</p>
+                    <p className="text-lg font-semibold text-gray-800 dark:text-gray-100">
+                      {formatHours(hourTotals[selectedTimesheet.id]?.unbillable ?? 0)}
+                    </p>
+                  </div>
+                </div>
               </div>
               <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2">
                 <ApproveTimesheetButton

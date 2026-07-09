@@ -7,6 +7,11 @@ import { formatWeekEnding } from '@/lib/utils'
 import { CheckCircle, XCircle, Clock, FileText, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
 import DeleteTimesheetButton from '@/components/DeleteTimesheetButton'
 
+interface HourTotals {
+  billable: number
+  unbillable: number
+}
+
 interface ApprovedTimesheetsClientProps {
   timesheets: any[]
   filterUsers: { id: string; name: string }[]
@@ -18,7 +23,11 @@ interface ApprovedTimesheetsClientProps {
   signaturesByTimesheetId: Record<string, string[]>
   approverNamesById: Record<string, string>
   userRole?: string
+  hourTotals?: Record<string, HourTotals>
 }
+
+const formatHours = (n: number) =>
+  (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
 export default function ApprovedTimesheetsClient({
   timesheets,
@@ -31,6 +40,7 @@ export default function ApprovedTimesheetsClient({
   signaturesByTimesheetId,
   approverNamesById,
   userRole,
+  hourTotals = {},
 }: ApprovedTimesheetsClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -401,6 +411,23 @@ export default function ApprovedTimesheetsClient({
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">Created</p>
                 <p className="font-medium text-gray-900 dark:text-gray-100">{formatWeekEnding(selectedTimesheet.created_at)}</p>
+              </div>
+              <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-2">Weekly Hours</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg bg-green-50 dark:bg-green-900/20 px-3 py-2">
+                    <p className="text-xs text-green-700 dark:text-green-300">Billable</p>
+                    <p className="text-lg font-semibold text-green-800 dark:text-green-200">
+                      {formatHours(hourTotals[selectedTimesheet.id]?.billable ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-gray-100 dark:bg-gray-700/40 px-3 py-2">
+                    <p className="text-xs text-gray-600 dark:text-gray-300">Non-billable</p>
+                    <p className="text-lg font-semibold text-gray-800 dark:text-gray-100">
+                      {formatHours(hourTotals[selectedTimesheet.id]?.unbillable ?? 0)}
+                    </p>
+                  </div>
+                </div>
               </div>
               <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2">
                 {selectedTimesheet.status === 'approved' && (

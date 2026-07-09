@@ -273,6 +273,7 @@ export async function PATCH(
     prior_hours_billed_rate,
     prior_amount_spent,
     prior_period_notes,
+    notes,
     weekly_burn,
     target_end_date,
     active,
@@ -291,7 +292,8 @@ export async function PATCH(
         proposal_number !== undefined || project_name !== undefined || department_id !== undefined ||
         budget_type !== undefined || client_contact_name !== undefined || net_terms !== undefined ||
         how_to_bill !== undefined || prior_hours_billed !== undefined || prior_hours_billed_rate !== undefined ||
-        prior_amount_spent !== undefined || prior_period_notes !== undefined || weekly_burn !== undefined || target_end_date !== undefined ||
+        prior_amount_spent !== undefined || prior_period_notes !== undefined || notes !== undefined ||
+        weekly_burn !== undefined || target_end_date !== undefined ||
         active !== undefined) {
       const updateData: Record<string, unknown> = {}
       if (po_number !== undefined) updateData.po_number = po_number
@@ -311,6 +313,7 @@ export async function PATCH(
       if (prior_hours_billed_rate !== undefined) updateData.prior_hours_billed_rate = prior_hours_billed_rate === '' || prior_hours_billed_rate == null ? null : parseFloat(String(prior_hours_billed_rate))
       if (prior_amount_spent !== undefined) updateData.prior_amount_spent = prior_amount_spent === '' || prior_amount_spent == null ? null : parseFloat(String(prior_amount_spent))
       if (prior_period_notes !== undefined) updateData.prior_period_notes = prior_period_notes || null
+      if (notes !== undefined) updateData.notes = notes || null
       if (weekly_burn !== undefined) updateData.weekly_burn = weekly_burn === '' || weekly_burn == null ? null : parseFloat(String(weekly_burn))
       if (target_end_date !== undefined) updateData.target_end_date = target_end_date || null
       if (active !== undefined) {

@@ -189,19 +189,32 @@ export default async function DashboardPage() {
     }
   }
 
-  // Get approved timesheets from reports (for supervisors, managers, admins)
+  // Get approved timesheets from reports (for supervisors, managers, admins).
+  // Includes timesheets the approver already signed but that are still routed
+  // for final approval (status = 'submitted'), so approvers can see items
+  // they've acted on before the final approver signs.
   let approvedTimesheets: any[] = []
   if (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
     const adminSupabase = createAdminClient()
-    const reportsResult = await withQueryTimeout(() =>
-      adminSupabase
-        .from('user_profiles')
-        .select('id')
-        .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`)
-    )
-    const reports = (reportsResult.data || []) as Array<{ id: string }>
-    if (reports && reports.length > 0) {
-      const reportIds = reports.map(r => r.id)
+    const isAdminRole = ['admin', 'super_admin'].includes(user.profile.role)
+    let reportIds: string[] = []
+    if (isAdminRole) {
+      const allUsersResult = await withQueryTimeout(() =>
+        adminSupabase.from('user_profiles').select('id')
+      )
+      reportIds = ((allUsersResult.data || []) as Array<{ id: string }>).map((r) => r.id)
+    } else {
+      const reportsResult = await withQueryTimeout(() =>
+        adminSupabase
+          .from('user_profiles')
+          .select('id')
+          .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`)
+      )
+      reportIds = ((reportsResult.data || []) as Array<{ id: string }>).map((r) => r.id)
+    }
+
+    if (reportIds.length > 0) {
+      // 1. Fully approved
       const approvedResult = await withQueryTimeout(() =>
         adminSupabase
           .from('weekly_timesheets')
@@ -210,7 +223,41 @@ export default async function DashboardPage() {
           .eq('status', 'approved')
           .order('approved_at', { ascending: false })
       )
-      approvedTimesheets = (Array.isArray(approvedResult.data) ? approvedResult.data : []).slice(0, 5)
+      const fullyApproved = (Array.isArray(approvedResult.data) ? approvedResult.data : []) as any[]
+
+      // 2. Partially approved: submitted timesheets the current user has signed
+      let partiallyApproved: any[] = []
+      const signedResult = await withQueryTimeout(() =>
+        adminSupabase.from('timesheet_signatures').select('timesheet_id').eq('signer_id', user.id)
+      )
+      const signedIds = [...new Set(((signedResult.data || []) as { timesheet_id: string }[]).map((r) => r.timesheet_id))]
+      if (signedIds.length > 0) {
+        const partialResult = await withQueryTimeout(() =>
+          adminSupabase
+            .from('weekly_timesheets')
+            .select('*, user_profiles!user_id(name)')
+            .eq('status', 'submitted')
+            .in('id', signedIds)
+            .in('user_id', reportIds)
+            .order('submitted_at', { ascending: false })
+        )
+        partiallyApproved = (Array.isArray(partialResult.data) ? partialResult.data : []) as any[]
+      }
+
+      const seen = new Set<string>()
+      const merged: any[] = []
+      ;[...fullyApproved, ...partiallyApproved].forEach((ts) => {
+        if (!seen.has(ts.id)) {
+          seen.add(ts.id)
+          merged.push(ts)
+        }
+      })
+      merged.sort((a, b) => {
+        const aVal = a.approved_at || a.submitted_at || a.created_at || ''
+        const bVal = b.approved_at || b.submitted_at || b.created_at || ''
+        return bVal.localeCompare(aVal)
+      })
+      approvedTimesheets = merged.slice(0, 5)
     }
   }
 
@@ -554,14 +601,26 @@ export default async function DashboardPage() {
               </Link>
               {approvedTimesheets.length > 0 ? (
                 <div className="space-y-2">
-                  {approvedTimesheets.map((ts: any) => (
-                    <div key={ts.id} className="border border-green-200 dark:border-green-800 rounded p-3 bg-green-50 dark:bg-green-900/20">
+                  {approvedTimesheets.map((ts: any) => {
+                    const isPendingFinal = ts.status === 'submitted'
+                    return (
+                    <div
+                      key={ts.id}
+                      className={`border rounded p-3 ${isPendingFinal
+                        ? 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20'
+                        : 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'}`}
+                    >
                       <div className="flex justify-between items-center">
                         <div>
                           <p className="font-medium text-gray-900 dark:text-gray-100">{ts.user_profiles?.name || 'Unknown'}</p>
                           <p className="text-sm text-gray-600 dark:text-gray-300">
                             Week Ending: {formatWeekEnding(ts.week_ending)}
                           </p>
+                          {isPendingFinal && (
+                            <p className="text-xs font-medium text-orange-700 dark:text-orange-300 mt-0.5">
+                              Approved by you · awaiting final approval
+                            </p>
+                          )}
                         </div>
                         <Link
                           href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard/approvals/approved')}`}
@@ -571,7 +630,8 @@ export default async function DashboardPage() {
                         </Link>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <p className="text-gray-500 dark:text-gray-400">No approved timesheets.</p>

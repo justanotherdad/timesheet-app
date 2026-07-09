@@ -102,6 +102,9 @@ export default function BasicBudgetView({
     lastTimesheetWe: string | null
     totalAvailable?: number
     expenseTotal?: number
+    laborCost?: number
+    priorAmountSpent?: number
+    priorCostFromHours?: number
     personnelLineItems?: Array<{ user_id: string; userName: string; allocated: number; spent: number; remaining: number }>
   } | null>(null)
   const [budgetHealthForm, setBudgetHealthForm] = useState({ weekly_burn: '', target_end_date: '' })
@@ -116,6 +119,11 @@ export default function BasicBudgetView({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
+  const [notesValue, setNotesValue] = useState('')
+  const [notesDirty, setNotesDirty] = useState(false)
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [notesSaved, setNotesSaved] = useState(false)
+  const [notesError, setNotesError] = useState<string | null>(null)
   const [expenseTypesFallback, setExpenseTypesFallback] = useState<Array<{ id: string; name: string }>>([])
   const [containerAudit, setContainerAudit] = useState<{
     invoices: ContainerAuditRow[]
@@ -217,6 +225,9 @@ export default function BasicBudgetView({
           lastTimesheetWe: json.lastTimesheetWe ?? null,
           totalAvailable: json.totalAvailable,
           expenseTotal: json.expenseTotal,
+          laborCost: json.laborCost,
+          priorAmountSpent: json.priorAmountSpent,
+          priorCostFromHours: json.priorCostFromHours,
           personnelLineItems: json.personnelLineItems ?? [],
         })
       }
@@ -297,7 +308,16 @@ export default function BasicBudgetView({
   useEffect(() => {
     setExpenseTypesFallback([])
     setExpensesOverride(null)
+    setNotesDirty(false)
+    setNotesSaved(false)
+    setNotesError(null)
   }, [po.id])
+
+  // Keep the Notes editor in sync with the loaded PO unless the user is mid-edit.
+  const loadedNotes = (data?.po?.notes ?? (po as { notes?: string | null })?.notes ?? '') as string
+  useEffect(() => {
+    if (!notesDirty) setNotesValue(loadedNotes || '')
+  }, [loadedNotes, notesDirty])
 
   useEffect(() => {
     const load = async () => {
@@ -345,6 +365,9 @@ export default function BasicBudgetView({
             lastTimesheetWe: balJson.lastTimesheetWe ?? null,
             totalAvailable: balJson.totalAvailable,
             expenseTotal: balJson.expenseTotal,
+            laborCost: balJson.laborCost,
+            priorAmountSpent: balJson.priorAmountSpent,
+            priorCostFromHours: balJson.priorCostFromHours,
             personnelLineItems: balJson.personnelLineItems ?? [],
           })
         }
@@ -463,6 +486,13 @@ export default function BasicBudgetView({
     totalBudget - priorAmountSpent - priorCostFromHours - laborCost - expenseTotalForBalance
   const budgetBalance = balanceData?.budgetBalance ?? budgetBalanceComputed
   const expenseTotalShown = balanceData?.expenseTotal ?? expenseTotalForBalance
+  // Prefer the server-computed labor cost so the Budget Balance breakdown always
+  // reconciles with the (authoritative) Budget Balance total. The client-side
+  // recompute can read $0 when bill-rate data isn't fully hydrated at render time.
+  const laborCostShown = balanceData?.laborCost ?? laborCost
+  const priorAmountSpentShown = balanceData?.priorAmountSpent ?? priorAmountSpent
+  const priorCostFromHoursShown = balanceData?.priorCostFromHours ?? priorCostFromHours
+  const priorPeriodShown = priorAmountSpentShown + priorCostFromHoursShown
 
   const rows = billableData?.rows || []
   const weekEndings = billableData?.weekEndings || []
@@ -561,6 +591,41 @@ export default function BasicBudgetView({
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const saveNotes = async () => {
+    setSavingNotes(true)
+    setNotesError(null)
+    setNotesSaved(false)
+    try {
+      const res = await fetch(`/api/budget/${po.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ notes: notesValue }),
+      })
+      const text = await res.text()
+      let json: { error?: string; po?: Record<string, unknown> }
+      try {
+        json = JSON.parse(text)
+      } catch {
+        if (text.startsWith('<')) {
+          setNotesError(`Server returned an error page (${res.status}). Please refresh and try again.`)
+          return
+        }
+        throw new Error('Invalid response from server')
+      }
+      if (!res.ok) throw new Error(json.error || 'Failed to save notes')
+      if (json.po) {
+        setData((prev: any) => (prev ? { ...prev, po: json.po } : prev))
+      }
+      setNotesDirty(false)
+      setNotesSaved(true)
+    } catch (e) {
+      setNotesError(e instanceof Error ? e.message : 'Failed to save notes')
+    } finally {
+      setSavingNotes(false)
     }
   }
 
@@ -1510,15 +1575,15 @@ export default function BasicBudgetView({
                 <td className="text-right py-2">${pli.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
               </tr>
             ))}
-            {(priorAmountSpent > 0 || priorCostFromHours > 0) && (
+            {priorPeriodShown > 0 && (
               <tr className="border-b border-gray-100 dark:border-gray-700">
                 <td className="py-2 text-amber-700 dark:text-amber-300">Prior period (before this system)</td>
-                <td className="text-right py-2 text-amber-700 dark:text-amber-300">-${(priorAmountSpent + priorCostFromHours).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                <td className="text-right py-2 text-amber-700 dark:text-amber-300">-${priorPeriodShown.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
               </tr>
             )}
             <tr className="border-b border-gray-100 dark:border-gray-700">
               <td className="py-2">Labor cost (rates × hours from timesheets)</td>
-              <td className="text-right py-2">-${laborCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              <td className="text-right py-2">-${laborCostShown.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
             </tr>
             {expenseTotalShown > 0 && (
               <tr className="border-b border-gray-100 dark:border-gray-700">
@@ -1534,6 +1599,59 @@ export default function BasicBudgetView({
             </tr>
           </tbody>
         </table>
+      </div>
+      )}
+
+      {/* Notes — hidden for limited access */}
+      {!hasLimitedAccess && (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Notes</h2>
+          {notesSaved && !notesDirty && (
+            <span className="text-xs text-green-600 dark:text-green-400">Saved</span>
+          )}
+        </div>
+        {canEdit ? (
+          <>
+            <textarea
+              value={notesValue}
+              onChange={(e) => {
+                setNotesValue(e.target.value)
+                setNotesDirty(true)
+                setNotesSaved(false)
+              }}
+              rows={5}
+              placeholder="Add notes about this budget…"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 resize-y"
+            />
+            {notesError && <p className="text-sm text-red-600 dark:text-red-400 mt-2">{notesError}</p>}
+            <div className="flex items-center gap-3 mt-3">
+              <button
+                type="button"
+                onClick={saveNotes}
+                disabled={savingNotes || !notesDirty}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {savingNotes ? 'Saving…' : 'Save Notes'}
+              </button>
+              {notesDirty && (
+                <button
+                  type="button"
+                  onClick={() => { setNotesValue(loadedNotes || ''); setNotesDirty(false); setNotesError(null) }}
+                  className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 text-sm"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          notesValue ? (
+            <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{notesValue}</p>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No notes.</p>
+          )
+        )}
       </div>
       )}
 

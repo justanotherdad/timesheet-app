@@ -4,6 +4,7 @@ import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import { buildApproverDisplayNamesByNextId } from '@/lib/approval-delegation-display'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
+import { getTimesheetHourTotals } from '@/lib/timesheet-hour-totals'
 import Header from '@/components/Header'
 import ApprovedTimesheetsClient from './ApprovedTimesheetsClient'
 
@@ -217,6 +218,11 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
     filterUsers = all.sort((a, b) => a.name.localeCompare(b.name))
   }
 
+  const hourTotals = await getTimesheetHourTotals(
+    adminSupabase,
+    timesheets.map((t: any) => t.id)
+  )
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Approved Timesheets" showBack backUrl="/dashboard" user={user} />
@@ -233,6 +239,7 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
             signaturesByTimesheetId={signaturesByTimesheetId}
             approverNamesById={approverNamesById}
             userRole={user.profile.role}
+            hourTotals={hourTotals}
           />
         </div>
       </div>

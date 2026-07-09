@@ -155,22 +155,31 @@ export async function createUser(formData: FormData) {
     const resolvedManagerId = managerId || null
     const resolvedFinalApproverId = finalApproverId || null
 
+    // When an admin creates a brand-new user with an admin-set password, force a
+    // password change on first login (mirrors the "Set Password" flow). Invite-link
+    // users pick their own password during setup, so they don't need this flag.
+    const mustChangePassword = isNewUser && !!password && password.length >= 6
+
     // Create or update profile using admin client (bypasses RLS)
+    const profilePayload: Record<string, unknown> = {
+      id: userId,
+      email,
+      name,
+      role: effectiveRole,
+      employee_type: employeeType,
+      employee_id: employeeIdRaw,
+      site_id: siteId || null,
+      department_id: departmentId || null,
+      supervisor_id: resolvedSupervisorId || null,
+      manager_id: resolvedManagerId || null,
+      final_approver_id: resolvedFinalApproverId || null,
+    }
+    if (mustChangePassword) {
+      profilePayload.must_change_password = true
+    }
     const { error: profileError } = await adminClient
       .from('user_profiles')
-      .upsert({
-        id: userId,
-        email,
-        name,
-        role: effectiveRole,
-        employee_type: employeeType,
-        employee_id: employeeIdRaw,
-        site_id: siteId || null,
-        department_id: departmentId || null,
-        supervisor_id: resolvedSupervisorId || null,
-        manager_id: resolvedManagerId || null,
-        final_approver_id: resolvedFinalApproverId || null,
-      }, {
+      .upsert(profilePayload, {
         onConflict: 'id'
       })
 

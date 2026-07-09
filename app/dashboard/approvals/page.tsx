@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
+import { getTimesheetHourTotals } from '@/lib/timesheet-hour-totals'
 import Header from '@/components/Header'
 import PendingApprovalsClient from './PendingApprovalsClient'
 
@@ -150,6 +151,11 @@ export default async function ApprovalsPage(props: { searchParams: Promise<Searc
 
   const currentUserName = user.profile.name || 'You'
 
+  const hourTotals = await getTimesheetHourTotals(
+    adminSupabase,
+    timesheets.map((t: any) => t.id)
+  )
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Pending Approvals" titleHref="/dashboard/approvals" showBack backUrl="/dashboard" user={user} />
@@ -161,6 +167,7 @@ export default async function ApprovalsPage(props: { searchParams: Promise<Searc
             sortDir={sortDir}
             currentUserName={currentUserName}
             withLabel={withLabel}
+            hourTotals={hourTotals}
           />
         </div>
       </div>

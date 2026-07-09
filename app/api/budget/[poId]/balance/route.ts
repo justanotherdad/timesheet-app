@@ -187,6 +187,9 @@ export async function GET(
     lastTimesheetWe,
     totalAvailable,
     expenseTotal,
+    laborCost,
+    priorAmountSpent,
+    priorCostFromHours,
     personnelLineItems,
   })
 }
