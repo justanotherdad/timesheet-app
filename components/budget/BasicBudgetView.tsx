@@ -843,13 +843,11 @@ export default function BasicBudgetView({
     container.id = 'budget-paged-root'
     document.body.appendChild(container)
 
-    let previewer: { polisher?: { destroy?: () => void }; chunker?: { destroy?: () => void } } | null = null
+    let previewer: import('pagedjs').Previewer | null = null
     try {
       const { Previewer } = await import('pagedjs')
       previewer = new Previewer()
-      await (previewer as unknown as {
-        preview: (c: Node, s: Array<Record<string, string>>, r: HTMLElement) => Promise<unknown>
-      }).preview(source, [{ 'budget-report.css': BUDGET_PAGED_CSS }], container)
+      await previewer.preview(source, [{ 'budget-report.css': BUDGET_PAGED_CSS }], container)
     } catch (err) {
       console.error('Budget PDF export failed to paginate:', err)
       container.remove()
