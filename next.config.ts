@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   // Cloudflare Pages handles output automatically - no standalone needed
+
+  // Paged.js ships ESM source (with modern deps); transpile it for the client bundle.
+  transpilePackages: ['pagedjs'],
   
   // Add timeout configurations for Cloudflare Pages
   experimental: {

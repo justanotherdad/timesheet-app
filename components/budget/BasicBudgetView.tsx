@@ -23,6 +23,31 @@ import BudgetContainerAuditTrail, { type ContainerAuditRow } from './BudgetConta
 
 const ATTACHMENT_ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 
+/**
+ * Paged.js stylesheet for the budget PDF export (item 6). Only the @page rule
+ * is fed to Paged.js — it consumes the margins/size and renders the running
+ * footer ("Confidential Information" bottom-left) and page numbers ("Page X of
+ * Y" bottom-right) into every page. All visual styling of the report body comes
+ * from the app's existing (Tailwind) CSS, since the paginated pages live in the
+ * same document. Layout/width tweaks live in globals.css under `.pagedjs_*`.
+ */
+const BUDGET_PAGED_CSS = `
+@page {
+  size: letter portrait;
+  margin: 0.6in 0.5in 0.75in;
+  @bottom-left {
+    content: "Confidential Information";
+    font-size: 8pt;
+    color: #6b7280;
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 8pt;
+    color: #6b7280;
+  }
+}
+`
+
 /** YYYY-MM-DD for <input type="date"> — handles ISO strings, DB date strings, avoids empty edit field when co_date exists */
 function coDateForInput(v: unknown): string {
   if (v == null || v === '') return ''
@@ -93,6 +118,7 @@ export default function BasicBudgetView({
   const [billRateRemoveModal, setBillRateRemoveModal] = useState<any>(null)
   const [billableSortColumn, setBillableSortColumn] = useState<string>('employee')
   const [billableSortDir, setBillableSortDir] = useState<'asc' | 'desc'>('asc')
+  const [exporting, setExporting] = useState(false)
   const [laborCostData, setLaborCostData] = useState<any>(null)
   const [budgetAccessUsers, setBudgetAccessUsers] = useState<Array<{ id: string; name: string }>>([])
   const [budgetAccessModal, setBudgetAccessModal] = useState<'add' | null>(null)
@@ -769,17 +795,82 @@ export default function BasicBudgetView({
     }
   }
 
-  // Item 6: browser print-to-PDF of just this PO's budget report (portrait).
-  // Adds a body class so the print stylesheet shows only the report sections,
-  // then removes it once printing finishes/cancels.
-  const handleExportPdf = () => {
+  // Item 6: PDF export of just this PO's budget report (portrait), paginated
+  // with Paged.js so we get "Page X of Y" + a "Confidential Information" footer
+  // on every page. We clone the report sections into an off-screen container,
+  // strip interactive/UI chrome, paginate, then window.print() (Save as PDF).
+  const handleExportPdf = async () => {
+    if (exporting) return
+    setExporting(true)
+
+    const root = document.getElementById('budget-root')
+    if (!root) {
+      setExporting(false)
+      return
+    }
+
+    // 1. Collect the report sections (skip the on-screen footer marker; the
+    //    footer is rendered per-page via the @page margin box instead).
+    const source = document.createElement('div')
+    source.className = 'budget-report-source'
+    root.querySelectorAll('.budget-print-keep').forEach((el) => {
+      if (el.classList.contains('budget-print-footer')) return
+      source.appendChild(el.cloneNode(true))
+    })
+
+    // 2. Remove things that shouldn't appear in the report (items 2/3/7):
+    //    attachments + helper texts (tagged budget-print-hide), reveal
+    //    print-only bits, drop buttons/icons, and flatten sort headers to text.
+    source.querySelectorAll('.budget-print-hide').forEach((n) => n.remove())
+    source.querySelectorAll('.budget-print-only').forEach((n) => n.classList.remove('budget-print-only'))
+    source.querySelectorAll('button').forEach((b) => {
+      const th = b.closest('th')
+      if (th) {
+        // Keep the column label; drop the sort control and its arrow icon.
+        th.textContent = (b.textContent || '').trim()
+      } else {
+        b.remove()
+      }
+    })
+
+    // 3. Force light theme for the export regardless of the app's current theme.
+    const html = document.documentElement
+    const wasDark = html.classList.contains('dark')
+    if (wasDark) html.classList.remove('dark')
+
+    // 4. Paginate into an off-screen container with Paged.js.
+    const container = document.createElement('div')
+    container.id = 'budget-paged-root'
+    document.body.appendChild(container)
+
+    let previewer: { polisher?: { destroy?: () => void }; chunker?: { destroy?: () => void } } | null = null
+    try {
+      const { Previewer } = await import('pagedjs')
+      previewer = new Previewer()
+      await (previewer as unknown as {
+        preview: (c: Node, s: Array<Record<string, string>>, r: HTMLElement) => Promise<unknown>
+      }).preview(source, [{ 'budget-report.css': BUDGET_PAGED_CSS }], container)
+    } catch (err) {
+      console.error('Budget PDF export failed to paginate:', err)
+      container.remove()
+      if (wasDark) html.classList.add('dark')
+      setExporting(false)
+      return
+    }
+
+    document.body.classList.add('budget-paged-print')
+
     const cleanup = () => {
-      document.body.classList.remove('budget-print-mode')
       window.removeEventListener('afterprint', cleanup)
+      document.body.classList.remove('budget-paged-print')
+      container.remove()
+      try { previewer?.polisher?.destroy?.() } catch { /* noop */ }
+      try { previewer?.chunker?.destroy?.() } catch { /* noop */ }
+      if (wasDark) html.classList.add('dark')
+      setExporting(false)
     }
     window.addEventListener('afterprint', cleanup)
-    document.body.classList.add('budget-print-mode')
-    setTimeout(() => window.print(), 50)
+    setTimeout(() => window.print(), 150)
   }
 
   const exportDateLabel = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -797,7 +888,7 @@ export default function BasicBudgetView({
           <div>
             <div style={{ fontSize: '16pt', fontWeight: 700, color: '#111827' }}>Budget Report</div>
             <div style={{ fontSize: '10pt', color: '#374151' }}>
-              {(poData.sites?.name || 'Client')} — PO {poData.po_number || ''}
+              {(site.name || poData.sites?.name || 'Client')} — PO {poData.po_number || ''}
             </div>
             <div style={{ fontSize: '9pt', color: '#6b7280' }}>Exported {exportDateLabel}</div>
           </div>
@@ -822,11 +913,12 @@ export default function BasicBudgetView({
           <button
             type="button"
             onClick={handleExportPdf}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+            disabled={exporting}
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Export this PO's budget to PDF (portrait). In the print dialog choose 'Save as PDF'."
           >
             <FileDown className="h-4 w-4" />
-            Export PDF
+            {exporting ? 'Preparing…' : 'Export PDF'}
           </button>
           {poData.budget_type === 'project' && (
             <Link
@@ -1024,7 +1116,7 @@ export default function BasicBudgetView({
             </div>
           </div>
         )}
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+        <div className="budget-print-hide mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
           <p className="font-medium text-gray-500 dark:text-gray-400 mb-1">Attachments</p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Word, Excel, or PDF files</p>
           {attachmentError && (
@@ -1502,7 +1594,7 @@ export default function BasicBudgetView({
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Invoice History</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Invoices are entered by Admin. Running balance populates PO Balance in the PO popup.</p>
+            <p className="budget-print-hide text-xs text-gray-500 dark:text-gray-400 mt-1">Invoices are entered by Admin. Running balance populates PO Balance in the PO popup.</p>
           </div>
           {isAdmin && (
             <button type="button" onClick={() => setInvoiceModal({})} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">
@@ -1605,7 +1697,7 @@ export default function BasicBudgetView({
       {!hasLimitedAccess && (
       <div className="budget-print-keep bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Budget Balance</h2>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+        <p className="budget-print-hide text-xs text-gray-500 dark:text-gray-400 mb-4">
           Based on actual labor (rates × hours) and PO expenses. Differs from PO Balance when invoicing is scheduled or fixed amounts—PO Balance reflects invoices; Budget Balance reflects earned value from timesheets and recorded expenses.
         </p>
         <table className="w-full text-sm">
@@ -2036,7 +2128,7 @@ export default function BasicBudgetView({
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Additional Expenses</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Travel, equipment, mileage, etc.</p>
+            <p className="budget-print-hide text-xs text-gray-500 dark:text-gray-400 mt-1">Travel, equipment, mileage, etc.</p>
           </div>
           <button type="button" onClick={() => setExpenseModal({})} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">
             <Plus className="h-4 w-4" /> Add Expense
@@ -2083,7 +2175,7 @@ export default function BasicBudgetView({
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Bill Rates by Person</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <p className="budget-print-hide text-xs text-gray-500 dark:text-gray-400 mt-1">
               Rates can change over time. Use <span className="font-medium">Remove from PO</span> when offboarding—an end date is required there; add/edit does not require one.
             </p>
           </div>
