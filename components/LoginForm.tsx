@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
+import { SESSION_START_KEY } from '@/components/AutoLogout'
 
 const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
@@ -52,6 +53,13 @@ export default function LoginForm() {
 
       if (!res.ok) {
         throw new Error(typeof data.error === 'string' ? data.error : 'Sign-in failed')
+      }
+
+      // Anchor the absolute-session clock (AutoLogout) to this login.
+      try {
+        window.localStorage.setItem(SESSION_START_KEY, String(Date.now()))
+      } catch {
+        // Ignore storage access errors.
       }
 
       if (data.mustChangePassword) {

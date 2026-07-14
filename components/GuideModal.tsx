@@ -12,7 +12,6 @@ const SECTIONS: { id: string; title: string }[] = [
   { id: 'organization', title: 'Organization & Timesheet Options' },
   { id: 'budget-detail', title: 'Budget Detail' },
   { id: 'data-export', title: 'View Timesheet Data & Export' },
-  { id: 'quick-reference', title: 'Quick Reference by Role' },
   { id: 'need-help', title: 'Need Help?' },
 ]
 
@@ -301,7 +300,7 @@ function GuideContent() {
           5. Manage Users
         </h3>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-          <strong>Who can open it:</strong> Supervisors, Managers, Admins, Super Admins. <strong>Who appears in the list:</strong> Depends on your role (see Quick Reference by Role).
+          <strong>Who can open it:</strong> Supervisors, Managers, Admins, Super Admins. <strong>Who appears in the list:</strong> Depends on your role.
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">5.1 Opening Manage Users</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">From the Dashboard, click <strong>Manage Users</strong>.</p>
@@ -386,45 +385,6 @@ function GuideContent() {
         <p className="text-sm text-gray-700 dark:text-gray-300">
           <strong>Where:</strong> Dashboard → <strong>Export Timesheets</strong>. Export timesheet data for a chosen week (or range). Format and options depend on what is implemented (e.g. Excel/CSV). Use for payroll, billing, or reporting.
         </p>
-      </section>
-
-      <section data-section="quick-reference" className="scroll-mt-4">
-        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">
-          9. Quick Reference by Role
-        </h3>
-        <div className="overflow-x-auto -mx-2">
-          <table className="w-full text-xs border border-gray-300 dark:border-gray-600 border-collapse">
-            <thead>
-              <tr className="bg-gray-100 dark:bg-gray-700">
-                <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left font-semibold">Feature</th>
-                <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left">Employee</th>
-                <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left">Supervisor</th>
-                <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left">Manager</th>
-                <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left">Admin</th>
-                <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left">Super Admin</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-700 dark:text-gray-300">
-              <tr><td className="border px-2 py-1">Dashboard</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
-              <tr><td className="border px-2 py-1">New Timesheet</td><td className="border px-2 py-1">✓ (own)</td><td className="border px-2 py-1">✓ (own)</td><td className="border px-2 py-1">✓ (own)</td><td className="border px-2 py-1">✓ (own)</td><td className="border px-2 py-1">✓ (own)</td></tr>
-              <tr><td className="border px-2 py-1">My Timesheets</td><td className="border px-2 py-1">Own only</td><td className="border px-2 py-1">Own only</td><td className="border px-2 py-1">Own only</td><td className="border px-2 py-1">All</td><td className="border px-2 py-1">All</td></tr>
-              <tr><td className="border px-2 py-1">Copy Previous Week</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
-              <tr><td className="border px-2 py-1">Edit/Delete own (draft)</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
-              <tr><td className="border px-2 py-1">Edit any timesheet</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
-              <tr><td className="border px-2 py-1">Pending Approvals</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
-              <tr><td className="border px-2 py-1">Approved Timesheets</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓ (own + reports)</td><td className="border px-2 py-1">✓ (own + reports)</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
-              <tr><td className="border px-2 py-1">Approve / Reject</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓ (in chain)</td><td className="border px-2 py-1">✓ (in chain)</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
-              <tr><td className="border px-2 py-1">Manage Users</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">View only</td><td className="border px-2 py-1">Add/Edit (reports)</td><td className="border px-2 py-1">Full (no Super Admin)</td><td className="border px-2 py-1">Full</td></tr>
-              <tr><td className="border px-2 py-1">Delete user</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
-              <tr><td className="border px-2 py-1">Password/invite link</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">Reports only</td><td className="border px-2 py-1">Any</td><td className="border px-2 py-1">Any</td></tr>
-              <tr><td className="border px-2 py-1">Organization</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">View only</td><td className="border px-2 py-1">Edit (assigned)</td><td className="border px-2 py-1">Full</td><td className="border px-2 py-1">Full</td></tr>
-              <tr><td className="border px-2 py-1">Timesheet Options (Systems/Activities/Deliverables)</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">View only</td><td className="border px-2 py-1">Edit (assigned)</td><td className="border px-2 py-1">Full</td><td className="border px-2 py-1">Full</td></tr>
-              <tr><td className="border px-2 py-1">Budget Detail</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓ (if granted)</td><td className="border px-2 py-1">✓ (if granted)</td><td className="border px-2 py-1">✓ (all)</td><td className="border px-2 py-1">✓ (all)</td></tr>
-              <tr><td className="border px-2 py-1">View Timesheet Data</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
-              <tr><td className="border px-2 py-1">Export Timesheets</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">—</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td><td className="border px-2 py-1">✓</td></tr>
-            </tbody>
-          </table>
-        </div>
       </section>
 
       <section data-section="need-help" className="scroll-mt-4">

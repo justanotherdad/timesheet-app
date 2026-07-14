@@ -87,6 +87,9 @@ export default function ConsolidatedManager({
   const [confirmationUserIds, setConfirmationUserIds] = useState<string[]>([])
   const [confirmationUsersList, setConfirmationUsersList] = useState<Array<{ id: string; name: string }>>([])
   const [confirmationSaving, setConfirmationSaving] = useState(false)
+  const [confirmationSiteFilters, setConfirmationSiteFilters] = useState<Record<string, string[]>>({})
+  const [filterModalUser, setFilterModalUser] = useState<{ id: string; name: string } | null>(null)
+  const [filterModalSiteIds, setFilterModalSiteIds] = useState<string[]>([])
   
   const supabase = createClient()
 
@@ -98,6 +101,8 @@ export default function ConsolidatedManager({
           setCompanyEmail(data?.company_email ?? '')
           const ids = data?.timesheet_confirmation_user_ids
           setConfirmationUserIds(Array.isArray(ids) ? ids : [])
+          const filters = data?.timesheet_confirmation_site_filters
+          setConfirmationSiteFilters(filters && typeof filters === 'object' && !Array.isArray(filters) ? filters : {})
           setCompanyEmailLoaded(true)
         })
         .catch(() => setCompanyEmailLoaded(true))
@@ -137,6 +142,44 @@ export default function ConsolidatedManager({
       : [...confirmationUserIds, id]
     setConfirmationUserIds(next)
     void saveConfirmationAssignees(next)
+  }
+
+  const openFilterModal = (u: { id: string; name: string }) => {
+    setFilterModalUser(u)
+    setFilterModalSiteIds(confirmationSiteFilters[u.id] || [])
+  }
+
+  const toggleFilterSite = (siteId: string) => {
+    setFilterModalSiteIds((prev) =>
+      prev.includes(siteId) ? prev.filter((x) => x !== siteId) : [...prev, siteId]
+    )
+  }
+
+  const saveFilterModal = async () => {
+    if (!filterModalUser) return
+    const nextMap = { ...confirmationSiteFilters }
+    if (filterModalSiteIds.length === 0) {
+      delete nextMap[filterModalUser.id]
+    } else {
+      nextMap[filterModalUser.id] = [...new Set(filterModalSiteIds)]
+    }
+    setConfirmationSiteFilters(nextMap)
+    setFilterModalUser(null)
+    setConfirmationSaving(true)
+    try {
+      const res = await fetch('/api/company-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timesheet_confirmation_site_filters: nextMap }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        const filters = json?.timesheet_confirmation_site_filters
+        if (filters && typeof filters === 'object' && !Array.isArray(filters)) setConfirmationSiteFilters(filters)
+      }
+    } finally {
+      setConfirmationSaving(false)
+    }
   }
 
   const filteredDepartments = selectedSite 
@@ -960,6 +1003,7 @@ export default function ConsolidatedManager({
             tableName="po_expense_types"
             title="Expense Types"
             fields={[{ name: 'name', label: 'Name', type: 'text', required: true }]}
+            apiBasePath="/api/expense-types"
           />
         </div>
       )}
@@ -1012,7 +1056,8 @@ export default function ConsolidatedManager({
             </label>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
               People listed here see a <strong>Timesheet Confirmations</strong> area on the dashboard. Each must confirm
-              receipt of approved timesheets independently (per user). Editable by admins only.
+              receipt of approved timesheets independently (per user). Use the client link next to a selected person to
+              limit which clients they see confirmations for. Editable by admins only.
             </p>
             {isAdminOrAbove ? (
               <>
@@ -1020,20 +1065,35 @@ export default function ConsolidatedManager({
                   {confirmationUsersList.length === 0 ? (
                     <p className="text-sm text-gray-500 py-2">Loading users…</p>
                   ) : (
-                    confirmationUsersList.map((u) => (
-                      <label
-                        key={u.id}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={confirmationUserIds.includes(u.id)}
-                          onChange={() => toggleConfirmationUser(u.id)}
-                          className="rounded border-gray-300 dark:border-gray-600"
-                        />
-                        <span className="text-sm text-gray-900 dark:text-gray-100">{u.name}</span>
-                      </label>
-                    ))
+                    confirmationUsersList.map((u) => {
+                      const isAssigned = confirmationUserIds.includes(u.id)
+                      const filterCount = (confirmationSiteFilters[u.id] || []).length
+                      return (
+                        <div
+                          key={u.id}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                        >
+                          <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isAssigned}
+                              onChange={() => toggleConfirmationUser(u.id)}
+                              className="rounded border-gray-300 dark:border-gray-600"
+                            />
+                            <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{u.name}</span>
+                          </label>
+                          {isAssigned && (
+                            <button
+                              type="button"
+                              onClick={() => openFilterModal(u)}
+                              className="text-xs whitespace-nowrap text-blue-600 dark:text-blue-400 hover:underline"
+                            >
+                              {filterCount === 0 ? 'All clients' : `${filterCount} client${filterCount === 1 ? '' : 's'}`}
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })
                   )}
                 </div>
                 {confirmationSaving && <p className="text-xs text-gray-500 mt-2">Saving…</p>}
@@ -1043,6 +1103,67 @@ export default function ConsolidatedManager({
                 {confirmationUserIds.length === 0 ? '—' : `${confirmationUserIds.length} user(s) assigned`}
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Per-user client filter for timesheet confirmations */}
+      {filterModalUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setFilterModalUser(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Confirmation clients</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Choose which clients <strong>{filterModalUser.name}</strong> sees confirmations for. Select none to show all clients.
+              </p>
+            </div>
+            <div className="p-3 overflow-y-auto flex-1 space-y-1">
+              {sites.length === 0 ? (
+                <p className="text-sm text-gray-500 py-2 px-2">No clients found.</p>
+              ) : (
+                [...sites]
+                  .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                  .map((s) => (
+                    <label
+                      key={s.id}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={filterModalSiteIds.includes(s.id)}
+                        onChange={() => toggleFilterSite(s.id)}
+                        className="rounded border-gray-300 dark:border-gray-600"
+                      />
+                      <span className="text-sm text-gray-900 dark:text-gray-100">{s.name}</span>
+                    </label>
+                  ))
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setFilterModalSiteIds([])}
+                className="text-sm text-gray-600 dark:text-gray-300 hover:underline"
+              >
+                Clear (show all)
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFilterModalUser(null)}
+                  className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveFilterModal}
+                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

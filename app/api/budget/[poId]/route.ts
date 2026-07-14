@@ -5,6 +5,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { canAccessPoBudget } from '@/lib/access'
 import { normalizePoIssueDateForDb } from '@/lib/utils'
+import {
+  logPoBudgetContainerAudit,
+  buildBudgetSummaryUpdatedDescription,
+  buildNotesUpdatedDescription,
+} from '@/lib/po-budget-container-audit'
 
 /** Normalize CO/LI date from client (YYYY-MM-DD, ISO string, etc.) for Postgres date column */
 function parseCoDate(value: unknown): string | null {
@@ -287,6 +292,26 @@ export async function PATCH(
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
   }
 
+  // Snapshot of Budget Summary + Notes fields before writes, so we can log a
+  // change history for those two containers (item 8). Captured up-front because
+  // the change-order block below mutates po_change_orders in place.
+  const budgetSummaryTouched =
+    original_po_amount !== undefined || prior_hours_billed !== undefined ||
+    prior_hours_billed_rate !== undefined || prior_amount_spent !== undefined ||
+    prior_period_notes !== undefined || Array.isArray(changeOrdersPayload)
+  const { data: auditBefore } = await adminSupabase
+    .from('purchase_orders')
+    .select('original_po_amount, prior_hours_billed, prior_hours_billed_rate, prior_amount_spent, prior_period_notes, notes')
+    .eq('id', poId)
+    .maybeSingle()
+  let beforeCoTotal = 0
+  let beforeCoCount = 0
+  if (Array.isArray(changeOrdersPayload)) {
+    const { data: beforeCos } = await adminSupabase.from('po_change_orders').select('amount').eq('po_id', poId)
+    beforeCoCount = (beforeCos || []).length
+    beforeCoTotal = (beforeCos || []).reduce((s: number, c: { amount?: number }) => s + (Number(c.amount) || 0), 0)
+  }
+
   try {
     if (po_number !== undefined || original_po_amount !== undefined || po_issue_date !== undefined ||
         proposal_number !== undefined || project_name !== undefined || department_id !== undefined ||
@@ -379,6 +404,63 @@ export async function PATCH(
       else {
         const { data: plain } = await adminSupabase.from('purchase_orders').select('*').eq('id', poId).maybeSingle()
         if (plain) poAfter = plain as Record<string, unknown>
+      }
+    }
+
+    // Audit: Notes container (generic "a change was made") + Budget Summary
+    // container (detailed field-level diff). Fire-and-forget; never blocks the response.
+    const actorName = (user.profile as { name?: string | null }).name ?? null
+    if (notes !== undefined) {
+      const beforeNotes = (auditBefore?.notes ?? '').trim()
+      const afterNotes = (typeof notes === 'string' ? notes : '').trim()
+      if (beforeNotes !== afterNotes) {
+        await logPoBudgetContainerAudit({
+          poId,
+          container: 'notes',
+          actorId: user.id,
+          actorName,
+          description: buildNotesUpdatedDescription(),
+        })
+      }
+    }
+    if (budgetSummaryTouched) {
+      let afterCoTotal = beforeCoTotal
+      let afterCoCount = beforeCoCount
+      if (Array.isArray(changeOrdersPayload)) {
+        const { data: afterCos } = await adminSupabase.from('po_change_orders').select('amount').eq('po_id', poId)
+        afterCoCount = (afterCos || []).length
+        afterCoTotal = (afterCos || []).reduce((s: number, c: { amount?: number }) => s + (Number(c.amount) || 0), 0)
+      }
+      const usedCos = Array.isArray(changeOrdersPayload)
+      const after = (poAfter ?? {}) as Record<string, number | string | null>
+      const description = buildBudgetSummaryUpdatedDescription(
+        {
+          original_po_amount: auditBefore?.original_po_amount ?? null,
+          prior_hours_billed: auditBefore?.prior_hours_billed ?? null,
+          prior_hours_billed_rate: auditBefore?.prior_hours_billed_rate ?? null,
+          prior_amount_spent: auditBefore?.prior_amount_spent ?? null,
+          prior_period_notes: (auditBefore?.prior_period_notes as string | null) ?? null,
+          changeOrdersTotal: usedCos ? beforeCoTotal : null,
+          changeOrdersCount: usedCos ? beforeCoCount : null,
+        },
+        {
+          original_po_amount: (after.original_po_amount as number | null) ?? null,
+          prior_hours_billed: (after.prior_hours_billed as number | null) ?? null,
+          prior_hours_billed_rate: (after.prior_hours_billed_rate as number | null) ?? null,
+          prior_amount_spent: (after.prior_amount_spent as number | null) ?? null,
+          prior_period_notes: (after.prior_period_notes as string | null) ?? null,
+          changeOrdersTotal: usedCos ? afterCoTotal : null,
+          changeOrdersCount: usedCos ? afterCoCount : null,
+        }
+      )
+      if (!description.endsWith('(no field changes)')) {
+        await logPoBudgetContainerAudit({
+          poId,
+          container: 'budget_summary',
+          actorId: user.id,
+          actorName,
+          description,
+        })
       }
     }
 

@@ -7,7 +7,7 @@ import type { BudgetContainer } from '@/lib/po-budget-container-audit'
 
 export const dynamic = 'force-dynamic'
 
-const CONTAINERS: BudgetContainer[] = ['invoices', 'expenses', 'bill_rates']
+const CONTAINERS: BudgetContainer[] = ['invoices', 'expenses', 'bill_rates', 'budget_summary', 'notes']
 
 /** GET: Last 5 audit entries per container for this PO. Read-only for anyone with budget access. */
 export async function GET(
@@ -28,6 +28,8 @@ export async function GET(
       invoices: [],
       expenses: [],
       bill_rates: [],
+      budget_summary: [],
+      notes: [],
     }
 
     await Promise.all(
@@ -49,6 +51,8 @@ export async function GET(
       invoices: [],
       expenses: [],
       bill_rates: [],
+      budget_summary: [],
+      notes: [],
     })
   }
 }

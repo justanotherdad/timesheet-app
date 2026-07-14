@@ -22,9 +22,16 @@ interface OptionsManagerProps {
     type?: 'text' | 'number'
     required?: boolean
   }>
+  /**
+   * When set, create/update/delete go through this REST endpoint (POST /,
+   * PATCH /:id, DELETE /:id) instead of a direct Supabase call. Use for tables
+   * whose RLS blocks browser writes (e.g. po_expense_types), where writes must
+   * run server-side with the service-role client.
+   */
+  apiBasePath?: string
 }
 
-export default function OptionsManager({ options: initialOptions, tableName, title, fields }: OptionsManagerProps) {
+export default function OptionsManager({ options: initialOptions, tableName, title, fields, apiBasePath }: OptionsManagerProps) {
   const [options, setOptions] = useState(initialOptions)
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingOption, setEditingOption] = useState<Option | null>(null)
@@ -47,13 +54,25 @@ export default function OptionsManager({ options: initialOptions, tableName, tit
     })
 
     try {
-      const { data: newOption, error: insertError } = await supabase
-        .from(tableName)
-        .insert(data)
-        .select()
-        .single()
-
-      if (insertError) throw insertError
+      let newOption: Option
+      if (apiBasePath) {
+        const res = await fetch(apiBasePath, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(json?.error || 'Failed to add')
+        newOption = json as Option
+      } else {
+        const { data: inserted, error: insertError } = await supabase
+          .from(tableName)
+          .insert(data)
+          .select()
+          .single()
+        if (insertError) throw insertError
+        newOption = inserted as Option
+      }
 
       setOptions([...options, newOption])
       if (e.currentTarget) {
@@ -84,12 +103,21 @@ export default function OptionsManager({ options: initialOptions, tableName, tit
     })
 
     try {
-      const { error: updateError } = await supabase
-        .from(tableName)
-        .update(data)
-        .eq('id', editingOption.id)
-
-      if (updateError) throw updateError
+      if (apiBasePath) {
+        const res = await fetch(`${apiBasePath}/${editingOption.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(json?.error || 'Failed to save')
+      } else {
+        const { error: updateError } = await supabase
+          .from(tableName)
+          .update(data)
+          .eq('id', editingOption.id)
+        if (updateError) throw updateError
+      }
 
       setOptions(options.map(opt => opt.id === editingOption.id ? { ...opt, ...data } : opt))
       setEditingOption(null)
@@ -104,12 +132,19 @@ export default function OptionsManager({ options: initialOptions, tableName, tit
     if (!confirm('Are you sure you want to delete this item?')) return
 
     try {
-      const { error: deleteError } = await supabase
-        .from(tableName)
-        .delete()
-        .eq('id', id)
-
-      if (deleteError) throw deleteError
+      if (apiBasePath) {
+        const res = await fetch(`${apiBasePath}/${id}`, { method: 'DELETE' })
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}))
+          throw new Error(json?.error || 'Failed to delete')
+        }
+      } else {
+        const { error: deleteError } = await supabase
+          .from(tableName)
+          .delete()
+          .eq('id', id)
+        if (deleteError) throw deleteError
+      }
 
       setOptions(options.filter(opt => opt.id !== id))
     } catch (err: any) {

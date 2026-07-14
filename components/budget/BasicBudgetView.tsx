@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, UserMinus, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText, Eye, PowerOff } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, UserMinus, ArrowUpDown, ArrowUp, ArrowDown, X, Upload, FileText, Eye, PowerOff, FileDown } from 'lucide-react'
 import { pickEffectiveRateForWeek } from '@/lib/po-bill-rate-utils'
 import {
   formatDate,
@@ -85,7 +85,6 @@ export default function BasicBudgetView({
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
-  const [showAllMonths, setShowAllMonths] = useState(false)
   const [employeePopup, setEmployeePopup] = useState<{ userId: string; userName: string; weekData: Record<string, { hours: number; timesheetId: string }>; mode: 'hours' | 'cost' } | null>(null)
   const [invoiceDetailPopup, setInvoiceDetailPopup] = useState<any>(null)
   const [invoiceModal, setInvoiceModal] = useState<any>(null)
@@ -129,7 +128,9 @@ export default function BasicBudgetView({
     invoices: ContainerAuditRow[]
     expenses: ContainerAuditRow[]
     bill_rates: ContainerAuditRow[]
-  }>({ invoices: [], expenses: [], bill_rates: [] })
+    budget_summary: ContainerAuditRow[]
+    notes: ContainerAuditRow[]
+  }>({ invoices: [], expenses: [], bill_rates: [], budget_summary: [], notes: [] })
   const [clientPOForm, setClientPOForm] = useState({
     po_number: '',
     department_id: '',
@@ -245,6 +246,8 @@ export default function BasicBudgetView({
           invoices: Array.isArray(json.invoices) ? json.invoices : [],
           expenses: Array.isArray(json.expenses) ? json.expenses : [],
           bill_rates: Array.isArray(json.bill_rates) ? json.bill_rates : [],
+          budget_summary: Array.isArray(json.budget_summary) ? json.budget_summary : [],
+          notes: Array.isArray(json.notes) ? json.notes : [],
         })
       }
     } catch { /* ignore */ }
@@ -326,7 +329,7 @@ export default function BasicBudgetView({
       try {
         const [res, bhRes, coRes, invRes, brRes, laborRes] = await Promise.all([
           fetch(`/api/budget/${po.id}?${t}`, fetchOpts),
-          fetch(`/api/budget/${po.id}/billable-hours?${showAllMonths ? 'all=true' : `month=${selectedMonth.split('-')[1]}&year=${selectedMonth.split('-')[0]}`}&${t}`, fetchOpts),
+          fetch(`/api/budget/${po.id}/billable-hours?month=${selectedMonth.split('-')[1]}&year=${selectedMonth.split('-')[0]}&${t}`, fetchOpts),
           fetch(`/api/budget/${po.id}/change-orders?${t}`, fetchOpts),
           fetch(`/api/budget/${po.id}/invoices?${t}`, fetchOpts),
           fetch(`/api/budget/${po.id}/bill-rates?${t}`, fetchOpts),
@@ -381,7 +384,7 @@ export default function BasicBudgetView({
       }
     }
     load()
-  }, [po.id, selectedMonth, showAllMonths, user, fetchOpts, hasLimitedAccess, loadContainerAudit])
+  }, [po.id, selectedMonth, user, fetchOpts, hasLimitedAccess, loadContainerAudit])
 
   useEffect(() => {
     const p = data?.po ?? po
@@ -766,8 +769,46 @@ export default function BasicBudgetView({
     }
   }
 
+  // Item 6: browser print-to-PDF of just this PO's budget report (portrait).
+  // Adds a body class so the print stylesheet shows only the report sections,
+  // then removes it once printing finishes/cancels.
+  const handleExportPdf = () => {
+    const cleanup = () => {
+      document.body.classList.remove('budget-print-mode')
+      window.removeEventListener('afterprint', cleanup)
+    }
+    window.addEventListener('afterprint', cleanup)
+    document.body.classList.add('budget-print-mode')
+    setTimeout(() => window.print(), 50)
+  }
+
+  const exportDateLabel = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  const selectedMonthLabel = (() => {
+    const [y, m] = selectedMonth.split('-')
+    const mi = parseInt(m, 10) - 1
+    return `${new Date(2000, mi).toLocaleString('default', { month: 'long' })} ${y}`
+  })()
+
   return (
-    <div className="space-y-8">
+    <div id="budget-root" className="space-y-8">
+      {/* Print-only report header (CTG logo top-right + export date) */}
+      <div className="budget-print-keep budget-print-only budget-print-header">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #111827', paddingBottom: 8, marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: '16pt', fontWeight: 700, color: '#111827' }}>Budget Report</div>
+            <div style={{ fontSize: '10pt', color: '#374151' }}>
+              {(poData.sites?.name || 'Client')} — PO {poData.po_number || ''}
+            </div>
+            <div style={{ fontSize: '9pt', color: '#6b7280' }}>Exported {exportDateLabel}</div>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/ctg-logo.png" alt="CTG" style={{ height: 48, width: 'auto', objectFit: 'contain' }} />
+        </div>
+      </div>
+
+      {/* Print-only footer, repeats on each printed page */}
+      <div className="budget-print-keep budget-print-only budget-print-footer">Confidential Information</div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
@@ -778,6 +819,15 @@ export default function BasicBudgetView({
           Back to budget list
         </button>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+            title="Export this PO's budget to PDF (portrait). In the print dialog choose 'Save as PDF'."
+          >
+            <FileDown className="h-4 w-4" />
+            Export PDF
+          </button>
           {poData.budget_type === 'project' && (
             <Link
               href={`/dashboard/budget?poId=${po.id}&matrix=1`}
@@ -858,7 +908,7 @@ export default function BasicBudgetView({
       )}
 
       {/* 1. Client info + PO details */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="budget-print-keep bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Client & PO Information</h2>
           {canEdit && !editingClientPO && (
@@ -1307,7 +1357,7 @@ export default function BasicBudgetView({
 
       {/* 2. Budget table (original + change orders) — hidden for limited access */}
       {!hasLimitedAccess && (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="budget-print-keep bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Budget Summary</h2>
           {canEdit && !editingBudget && (
@@ -1442,12 +1492,13 @@ export default function BasicBudgetView({
             </tbody>
           </table>
         )}
+        {!editingBudget && <BudgetContainerAuditTrail entries={containerAudit.budget_summary} />}
       </div>
       )}
 
       {/* 3. Invoice history — hidden for limited access */}
       {!hasLimitedAccess && (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="budget-print-keep bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Invoice History</h2>
@@ -1552,7 +1603,7 @@ export default function BasicBudgetView({
 
       {/* 4. Budget Balance — hidden for limited access */}
       {!hasLimitedAccess && (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="budget-print-keep bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Budget Balance</h2>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
           Based on actual labor (rates × hours) and PO expenses. Differs from PO Balance when invoicing is scheduled or fixed amounts—PO Balance reflects invoices; Budget Balance reflects earned value from timesheets and recorded expenses.
@@ -1652,19 +1703,20 @@ export default function BasicBudgetView({
             <p className="text-sm text-gray-500 dark:text-gray-400">No notes.</p>
           )
         )}
+        <BudgetContainerAuditTrail entries={containerAudit.notes} />
       </div>
       )}
 
       {/* 5. Billable activities table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="budget-print-keep bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Activities (from Timesheets)</h2>
-        <div className="flex flex-wrap gap-4 mb-4">
+        <div className="budget-print-only" style={{ fontSize: '10pt', marginBottom: 8, color: '#374151' }}>Month: {selectedMonthLabel}</div>
+        <div className="budget-print-hide flex flex-wrap gap-4 mb-4">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium">Month:</label>
             <select
               value={selectedMonth.split('-')[1]}
               onChange={(e) => setSelectedMonth(`${selectedMonth.split('-')[0]}-${e.target.value}`)}
-              disabled={showAllMonths}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
@@ -1677,7 +1729,6 @@ export default function BasicBudgetView({
             <select
               value={selectedMonth.split('-')[0]}
               onChange={(e) => setSelectedMonth(`${e.target.value}-${selectedMonth.split('-')[1]}`)}
-              disabled={showAllMonths}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map((y) => (
@@ -1685,15 +1736,6 @@ export default function BasicBudgetView({
               ))}
             </select>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showAllMonths}
-              onChange={(e) => setShowAllMonths(e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-sm">View all months</span>
-          </label>
         </div>
         {/* Mobile: condensed table */}
         <div className="md:hidden">
@@ -1818,15 +1860,15 @@ export default function BasicBudgetView({
       </div>
 
       {/* 5b. Billable cost table (hours × rate) */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="budget-print-keep bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Cost (from Timesheets)</h2>
-        <div className="flex flex-wrap gap-4 mb-4">
+        <div className="budget-print-only" style={{ fontSize: '10pt', marginBottom: 8, color: '#374151' }}>Month: {selectedMonthLabel}</div>
+        <div className="budget-print-hide flex flex-wrap gap-4 mb-4">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium">Month:</label>
             <select
               value={selectedMonth.split('-')[1]}
               onChange={(e) => setSelectedMonth(`${selectedMonth.split('-')[0]}-${e.target.value}`)}
-              disabled={showAllMonths}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
@@ -1839,7 +1881,6 @@ export default function BasicBudgetView({
             <select
               value={selectedMonth.split('-')[0]}
               onChange={(e) => setSelectedMonth(`${e.target.value}-${selectedMonth.split('-')[1]}`)}
-              disabled={showAllMonths}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map((y) => (
@@ -1847,15 +1888,6 @@ export default function BasicBudgetView({
               ))}
             </select>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showAllMonths}
-              onChange={(e) => setShowAllMonths(e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-sm">View all months</span>
-          </label>
         </div>
         {/* Mobile: condensed table */}
         <div className="md:hidden">
@@ -2000,7 +2032,7 @@ export default function BasicBudgetView({
 
       {/* 6. Additional expenses — hidden for limited access */}
       {!hasLimitedAccess && (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="budget-print-keep bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Additional Expenses</h2>
@@ -2047,7 +2079,7 @@ export default function BasicBudgetView({
 
       {/* 7. Bill rates — hidden for limited access */}
       {!hasLimitedAccess && (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="budget-print-keep bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Bill Rates by Person</h2>

@@ -17,7 +17,7 @@ export default function BudgetContainerAuditTrail({ entries }: BudgetContainerAu
   if (!entries.length) return null
 
   return (
-    <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-600">
+    <div className="budget-print-hide print:hidden mt-6 pt-4 border-t border-gray-200 dark:border-gray-600">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
         Recent changes
       </h3>

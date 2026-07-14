@@ -1,5 +1,18 @@
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+
+/**
+ * Force Supabase auth cookies to be session cookies (no `Max-Age`/`Expires`) so
+ * the browser drops them when it is fully closed, requiring re-login. Cookie
+ * *deletions* (Max-Age <= 0, e.g. from signOut) are preserved untouched.
+ */
+export function toSessionCookieOptions(options: CookieOptions = {}): CookieOptions {
+  if (typeof options.maxAge === 'number' && options.maxAge <= 0) {
+    return options
+  }
+  const { maxAge: _maxAge, expires: _expires, ...rest } = options
+  return rest
+}
 
 export async function createClient() {
   const cookieStore = await cookies()
@@ -22,7 +35,7 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, toSessionCookieOptions(options))
             )
           } catch {
             // The `setAll` method was called from a Server Component.

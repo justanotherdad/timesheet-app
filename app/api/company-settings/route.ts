@@ -3,8 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/auth'
 import {
   TIMESHEET_CONFIRMATION_USER_IDS_KEY,
+  TIMESHEET_CONFIRMATION_SITE_FILTERS_KEY,
   parseConfirmationAssigneeIds,
   stringifyConfirmationAssigneeIds,
+  parseConfirmationSiteFilters,
+  stringifyConfirmationSiteFilters,
 } from '@/lib/timesheet-confirmation'
 
 export const dynamic = 'force-dynamic'
@@ -31,6 +34,7 @@ export async function GET() {
   return NextResponse.json({
     ...settings,
     timesheet_confirmation_user_ids: parseConfirmationAssigneeIds(settings),
+    timesheet_confirmation_site_filters: parseConfirmationSiteFilters(settings),
   })
 }
 
@@ -64,6 +68,21 @@ export async function PATCH(req: Request) {
     const cleaned = [...new Set((ids as unknown[]).filter((x): x is string => typeof x === 'string' && x.length > 0))]
     updates.push({ key: TIMESHEET_CONFIRMATION_USER_IDS_KEY, value: stringifyConfirmationAssigneeIds(cleaned) })
   }
+  if (body.timesheet_confirmation_site_filters !== undefined) {
+    const raw = body.timesheet_confirmation_site_filters
+    let map: Record<string, string[]> = {}
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      map = raw as Record<string, string[]>
+    } else if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) map = parsed as Record<string, string[]>
+      } catch {
+        map = {}
+      }
+    }
+    updates.push({ key: TIMESHEET_CONFIRMATION_SITE_FILTERS_KEY, value: stringifyConfirmationSiteFilters(map) })
+  }
 
   for (const { key, value } of updates) {
     const { error } = await supabase
@@ -82,5 +101,6 @@ export async function PATCH(req: Request) {
   return NextResponse.json({
     ...settings,
     timesheet_confirmation_user_ids: parseConfirmationAssigneeIds(settings),
+    timesheet_confirmation_site_filters: parseConfirmationSiteFilters(settings),
   })
 }

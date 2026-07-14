@@ -90,6 +90,59 @@ input[type="number"] {
   }
 }
 
+/* Budget detail: print-only report elements are hidden on screen */
+.budget-print-only {
+  display: none;
+}
+
+/* Budget detail export (item 6): print only the selected containers, portrait.
+   Activated by adding `budget-print-mode` to <body> right before window.print(). */
+@media print {
+  body.budget-print-mode {
+    background: #ffffff !important;
+  }
+  body.budget-print-mode header,
+  body.budget-print-mode nav {
+    display: none !important;
+  }
+  /* Portrait, with room at the bottom for the fixed "Confidential Information" footer */
+  @page {
+    size: portrait;
+    margin: 0.55in 0.5in 0.7in;
+  }
+  /* Hide every top-level budget block except the ones tagged to keep */
+  body.budget-print-mode #budget-root > *:not(.budget-print-keep) {
+    display: none !important;
+  }
+  /* Within kept blocks, drop interactive/edit-only bits and audit trails */
+  body.budget-print-mode .budget-print-hide {
+    display: none !important;
+  }
+  /* Reveal print-only elements (report header, footer, month labels) */
+  body.budget-print-mode .budget-print-only {
+    display: block !important;
+  }
+  body.budget-print-mode .budget-print-keep {
+    box-shadow: none !important;
+  }
+  body.budget-print-mode .budget-print-keep * {
+    color: #111827 !important;
+  }
+  body.budget-print-mode .budget-print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 9pt;
+    color: #6b7280 !important;
+    padding: 6px 0;
+  }
+  body.budget-print-mode .budget-print-header {
+    position: relative;
+  }
+}
+
 /* Reports: print-friendly styling */
 @media print {
   .report-print-container {

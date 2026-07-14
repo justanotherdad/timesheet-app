@@ -8,6 +8,11 @@ export function createClient() {
     throw new Error('Missing Supabase environment variables')
   }
 
-  return createBrowserClient(supabaseUrl, supabaseKey)
+  // Omit `maxAge` so cookies written on client-side token refresh stay
+  // session-scoped (dropped when the browser is fully closed), matching the
+  // server-side behavior and forcing re-login after a full browser quit.
+  return createBrowserClient(supabaseUrl, supabaseKey, {
+    cookieOptions: { maxAge: undefined },
+  })
 }
 

@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { formatDate, formatPeriodsList } from '@/lib/utils'
 
-export type BudgetContainer = 'invoices' | 'expenses' | 'bill_rates'
+export type BudgetContainer = 'invoices' | 'expenses' | 'bill_rates' | 'budget_summary' | 'notes'
 
 export interface PoBudgetContainerAuditEntry {
   id: string
@@ -275,6 +275,54 @@ export function buildBillRateDeletedDescription(
   employeeName: string
 ): string {
   return `Deleted bill rate for ${employeeName} (${formatMoney(rate.rate)}/hr)`
+}
+
+function formatHours(n: number | null | undefined): string {
+  return (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+export interface BudgetSummarySnapshot {
+  original_po_amount?: number | null
+  prior_hours_billed?: number | null
+  prior_hours_billed_rate?: number | null
+  prior_amount_spent?: number | null
+  prior_period_notes?: string | null
+  changeOrdersTotal?: number | null
+  changeOrdersCount?: number | null
+}
+
+/** Detailed, field-level description for a Budget Summary save (mirrors the other container trails). */
+export function buildBudgetSummaryUpdatedDescription(
+  before: BudgetSummarySnapshot,
+  after: BudgetSummarySnapshot
+): string {
+  const parts: string[] = []
+  appendFieldChange(parts, 'original PO amount', formatMoney(before.original_po_amount), formatMoney(after.original_po_amount))
+  appendFieldChange(parts, 'prior hours billed', formatHours(before.prior_hours_billed), formatHours(after.prior_hours_billed))
+  appendFieldChange(
+    parts,
+    'prior hours rate',
+    `${formatMoney(before.prior_hours_billed_rate)}/hr`,
+    `${formatMoney(after.prior_hours_billed_rate)}/hr`
+  )
+  appendFieldChange(parts, 'prior amount spent', formatMoney(before.prior_amount_spent), formatMoney(after.prior_amount_spent))
+  appendFieldChange(
+    parts,
+    'prior period notes',
+    (before.prior_period_notes ?? '').trim() || '—',
+    (after.prior_period_notes ?? '').trim() || '—'
+  )
+  if (before.changeOrdersCount != null || after.changeOrdersCount != null) {
+    appendFieldChange(parts, 'change orders', String(before.changeOrdersCount ?? 0), String(after.changeOrdersCount ?? 0))
+    appendFieldChange(parts, 'change order total', formatMoney(before.changeOrdersTotal), formatMoney(after.changeOrdersTotal))
+  }
+  if (!parts.length) return 'Updated Budget Summary (no field changes)'
+  return `Updated Budget Summary: ${parts.join('; ')}`
+}
+
+/** Generic description for a Notes save (per requirement: only that a change was made). */
+export function buildNotesUpdatedDescription(): string {
+  return 'Updated notes'
 }
 
 export async function fetchExpenseTypeNames(
