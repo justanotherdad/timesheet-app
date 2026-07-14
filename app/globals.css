@@ -108,20 +108,40 @@ input[type="number"] {
   width: 8.5in;
 }
 
-/* Paginated pages always render light (export forces light theme too). */
+/* Paginated pages always render light (the clone drops `dark:` classes). */
 .pagedjs_pages { background: #fff; }
-.pagedjs_page_content { color: #111827; }
-.pagedjs_page_content h2 { font-size: 12pt !important; }
+.pagedjs_page_content { color: #111827; font-size: 9pt; }
+
+/* De-box the report cards: no shadow / rounded border / card padding, just
+   clean sections with spacing between them (item 6, issue 3). */
+.pagedjs_page_content .budget-print-keep {
+  box-shadow: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 0 16px !important;
+  background: transparent !important;
+}
+
+/* Consistent typography across all sections. */
+.pagedjs_page_content h2 {
+  font-size: 12pt !important;
+  margin-bottom: 6px !important;
+}
 
 /* Reveal the print-only report header + month labels inside the pages. */
 .pagedjs_page_content .budget-print-only { display: block !important; }
 
 /* Fit wide tables (e.g. invoice history) within the portrait content width
-   so totals don't get clipped (item 6). */
+   so totals don't get clipped, and keep every table the same size (item 6). */
 .pagedjs_page_content table {
   width: 100% !important;
   border-collapse: collapse;
-  font-size: 8pt;
+}
+.pagedjs_page_content table,
+.pagedjs_page_content th,
+.pagedjs_page_content td {
+  font-size: 8pt !important;
 }
 .pagedjs_page_content th,
 .pagedjs_page_content td {

@@ -811,8 +811,6 @@ export default function BasicBudgetView({
       return
     }
 
-    const html = document.documentElement
-    const wasDark = html.classList.contains('dark')
     const container = document.createElement('div')
     container.id = 'budget-paged-root'
 
@@ -826,7 +824,6 @@ export default function BasicBudgetView({
       if (container.parentNode) container.remove()
       try { previewer?.polisher?.destroy?.() } catch { /* noop */ }
       try { previewer?.chunker?.destroy?.() } catch { /* noop */ }
-      if (wasDark) html.classList.add('dark')
       setExporting(false)
     }
 
@@ -842,21 +839,28 @@ export default function BasicBudgetView({
 
       // 2. Remove things that shouldn't appear in the report (items 2/3/7):
       //    attachments + helper texts (tagged budget-print-hide), reveal
-      //    print-only bits, drop buttons/icons, and flatten sort headers to text.
+      //    print-only bits.
       source.querySelectorAll('.budget-print-hide').forEach((n) => n.remove())
       source.querySelectorAll('.budget-print-only').forEach((n) => n.classList.remove('budget-print-only'))
+
+      // Buttons: table cells (td/th) hold real data (employee names, week
+      // values) or sortable column labels — keep their text. Buttons elsewhere
+      // (Edit/Add) or icon-only buttons (eyeball/pencil/trash) are dropped.
       source.querySelectorAll('button').forEach((b) => {
-        const th = b.closest('th')
-        if (th) {
-          // Keep the column label; drop the sort control and its arrow icon.
-          th.textContent = (b.textContent || '').trim()
+        if (b.closest('td, th')) {
+          b.replaceWith(document.createTextNode((b.textContent || '').trim()))
         } else {
           b.remove()
         }
       })
 
-      // 3. Force light theme for the export regardless of the app's theme.
-      if (wasDark) html.classList.remove('dark')
+      // 3. Force the export to render light regardless of the app's theme by
+      //    dropping Tailwind `dark:` variant classes from the clone (leaves the
+      //    live page's theme untouched — no on-screen flash).
+      source.querySelectorAll('[class]').forEach((el) => {
+        const darkTokens = Array.from(el.classList).filter((c) => c.startsWith('dark:'))
+        if (darkTokens.length) el.classList.remove(...darkTokens)
+      })
 
       // 4. Paginate into an off-screen container with Paged.js.
       document.body.appendChild(container)
