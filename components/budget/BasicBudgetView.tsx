@@ -119,6 +119,7 @@ export default function BasicBudgetView({
   const [billableSortColumn, setBillableSortColumn] = useState<string>('employee')
   const [billableSortDir, setBillableSortDir] = useState<'asc' | 'desc'>('asc')
   const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
   const [laborCostData, setLaborCostData] = useState<any>(null)
   const [budgetAccessUsers, setBudgetAccessUsers] = useState<Array<{ id: string; name: string }>>([])
   const [budgetAccessModal, setBudgetAccessModal] = useState<'add' | null>(null)
@@ -801,6 +802,7 @@ export default function BasicBudgetView({
   // strip interactive/UI chrome, paginate, then window.print() (Save as PDF).
   const handleExportPdf = async () => {
     if (exporting) return
+    setExportError(null)
     setExporting(true)
 
     const root = document.getElementById('budget-root')
@@ -809,66 +811,74 @@ export default function BasicBudgetView({
       return
     }
 
-    // 1. Collect the report sections (skip the on-screen footer marker; the
-    //    footer is rendered per-page via the @page margin box instead).
-    const source = document.createElement('div')
-    source.className = 'budget-report-source'
-    root.querySelectorAll('.budget-print-keep').forEach((el) => {
-      if (el.classList.contains('budget-print-footer')) return
-      source.appendChild(el.cloneNode(true))
-    })
-
-    // 2. Remove things that shouldn't appear in the report (items 2/3/7):
-    //    attachments + helper texts (tagged budget-print-hide), reveal
-    //    print-only bits, drop buttons/icons, and flatten sort headers to text.
-    source.querySelectorAll('.budget-print-hide').forEach((n) => n.remove())
-    source.querySelectorAll('.budget-print-only').forEach((n) => n.classList.remove('budget-print-only'))
-    source.querySelectorAll('button').forEach((b) => {
-      const th = b.closest('th')
-      if (th) {
-        // Keep the column label; drop the sort control and its arrow icon.
-        th.textContent = (b.textContent || '').trim()
-      } else {
-        b.remove()
-      }
-    })
-
-    // 3. Force light theme for the export regardless of the app's current theme.
     const html = document.documentElement
     const wasDark = html.classList.contains('dark')
-    if (wasDark) html.classList.remove('dark')
-
-    // 4. Paginate into an off-screen container with Paged.js.
     const container = document.createElement('div')
     container.id = 'budget-paged-root'
-    document.body.appendChild(container)
 
     let previewer: import('pagedjs').Previewer | null = null
-    try {
-      const { Previewer } = await import('pagedjs')
-      previewer = new Previewer()
-      await previewer.preview(source, [{ 'budget-report.css': BUDGET_PAGED_CSS }], container)
-    } catch (err) {
-      console.error('Budget PDF export failed to paginate:', err)
-      container.remove()
-      if (wasDark) html.classList.add('dark')
-      setExporting(false)
-      return
-    }
-
-    document.body.classList.add('budget-paged-print')
-
+    let cleaned = false
     const cleanup = () => {
+      if (cleaned) return
+      cleaned = true
       window.removeEventListener('afterprint', cleanup)
       document.body.classList.remove('budget-paged-print')
-      container.remove()
+      if (container.parentNode) container.remove()
       try { previewer?.polisher?.destroy?.() } catch { /* noop */ }
       try { previewer?.chunker?.destroy?.() } catch { /* noop */ }
       if (wasDark) html.classList.add('dark')
       setExporting(false)
     }
-    window.addEventListener('afterprint', cleanup)
-    setTimeout(() => window.print(), 150)
+
+    try {
+      // 1. Collect the report sections (skip the on-screen footer marker; the
+      //    footer is rendered per-page via the @page margin box instead).
+      const source = document.createElement('div')
+      source.className = 'budget-report-source'
+      root.querySelectorAll('.budget-print-keep').forEach((el) => {
+        if (el.classList.contains('budget-print-footer')) return
+        source.appendChild(el.cloneNode(true))
+      })
+
+      // 2. Remove things that shouldn't appear in the report (items 2/3/7):
+      //    attachments + helper texts (tagged budget-print-hide), reveal
+      //    print-only bits, drop buttons/icons, and flatten sort headers to text.
+      source.querySelectorAll('.budget-print-hide').forEach((n) => n.remove())
+      source.querySelectorAll('.budget-print-only').forEach((n) => n.classList.remove('budget-print-only'))
+      source.querySelectorAll('button').forEach((b) => {
+        const th = b.closest('th')
+        if (th) {
+          // Keep the column label; drop the sort control and its arrow icon.
+          th.textContent = (b.textContent || '').trim()
+        } else {
+          b.remove()
+        }
+      })
+
+      // 3. Force light theme for the export regardless of the app's theme.
+      if (wasDark) html.classList.remove('dark')
+
+      // 4. Paginate into an off-screen container with Paged.js.
+      document.body.appendChild(container)
+      const mod = await import('pagedjs')
+      const Previewer = mod.Previewer ?? (mod as { default?: { Previewer?: typeof mod.Previewer } }).default?.Previewer
+      if (typeof Previewer !== 'function') {
+        throw new Error('Paged.js Previewer unavailable')
+      }
+      previewer = new Previewer()
+      await previewer.preview(source, [{ 'budget-report.css': BUDGET_PAGED_CSS }], container)
+
+      // 5. Print. afterprint (or a safety timeout) tears everything back down.
+      document.body.classList.add('budget-paged-print')
+      window.addEventListener('afterprint', cleanup)
+      // Safety net in case afterprint never fires (e.g. print blocked/cancelled).
+      setTimeout(cleanup, 120000)
+      setTimeout(() => window.print(), 200)
+    } catch (err) {
+      console.error('Budget PDF export failed:', err)
+      setExportError(err instanceof Error ? err.message : 'Export failed. Please try again.')
+      cleanup()
+    }
   }
 
   const exportDateLabel = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -918,6 +928,9 @@ export default function BasicBudgetView({
             <FileDown className="h-4 w-4" />
             {exporting ? 'Preparing…' : 'Export PDF'}
           </button>
+          {exportError && (
+            <span className="text-xs text-red-600 dark:text-red-400 max-w-[220px] truncate" title={exportError}>{exportError}</span>
+          )}
           {poData.budget_type === 'project' && (
             <Link
               href={`/dashboard/budget?poId=${po.id}&matrix=1`}
