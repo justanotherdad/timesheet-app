@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored, prebuilt Paged.js ESM bundle (not our source).
+    "lib/vendor/**",
   ]),
 ]);
 

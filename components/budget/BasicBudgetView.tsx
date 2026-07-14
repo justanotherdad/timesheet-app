@@ -860,8 +860,12 @@ export default function BasicBudgetView({
 
       // 4. Paginate into an off-screen container with Paged.js.
       document.body.appendChild(container)
-      const mod = await import('pagedjs')
-      const Previewer = mod.Previewer ?? (mod as { default?: { Previewer?: typeof mod.Previewer } }).default?.Previewer
+      // Use the vendored, self-contained Paged.js ESM bundle. Importing the
+      // package source instead breaks under Turbopack due to CJS-interop in its
+      // dependencies (manifests as "o.call is not a function").
+      const mod: { Previewer?: new () => import('pagedjs').Previewer; default?: { Previewer?: new () => import('pagedjs').Previewer } } =
+        await import('@/lib/vendor/pagedjs.esm.js')
+      const Previewer = mod.Previewer ?? mod.default?.Previewer
       if (typeof Previewer !== 'function') {
         throw new Error('Paged.js Previewer unavailable')
       }
