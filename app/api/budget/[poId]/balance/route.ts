@@ -98,19 +98,45 @@ export async function GET(
     }
   }
 
-  const { data: entries } = await dbLabor
-    .from('timesheet_entries')
-    .select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
-    .eq('po_id', poId)
+  // Fetch ALL entries for the PO in pages. PostgREST caps a single select at
+  // ~1000 rows, so on high-volume POs the newest weeks' entries were being
+  // dropped — which stalled "Last Timesheet WE" on an older week and
+  // under-counted labor cost. Paging past the cap fixes both.
+  const PAGE_SIZE = 1000
+  const entries: Array<{
+    timesheet_id: string
+    mon_hours?: number
+    tue_hours?: number
+    wed_hours?: number
+    thu_hours?: number
+    fri_hours?: number
+    sat_hours?: number
+    sun_hours?: number
+  }> = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data: page } = await dbLabor
+      .from('timesheet_entries')
+      .select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
+      .eq('po_id', poId)
+      .order('timesheet_id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1)
+    if (!page || page.length === 0) break
+    entries.push(...(page as typeof entries))
+    if (page.length < PAGE_SIZE) break
+  }
 
   const tsIds = [...new Set((entries || []).map((e: any) => e.timesheet_id).filter(Boolean))]
-  const { data: timesheets } = tsIds.length > 0
-    ? await dbLabor
-        .from('weekly_timesheets')
-        .select('id, user_id, week_ending')
-        .in('id', tsIds)
-        .eq('status', 'approved')
-    : { data: [] }
+  // `.in()` is also chunked so a large id list stays within PostgREST limits.
+  const timesheets: Array<{ id: string; user_id: string; week_ending: string }> = []
+  for (let i = 0; i < tsIds.length; i += 150) {
+    const chunk = tsIds.slice(i, i + 150)
+    const { data: tsPage } = await dbLabor
+      .from('weekly_timesheets')
+      .select('id, user_id, week_ending')
+      .in('id', chunk)
+      .eq('status', 'approved')
+    if (tsPage) timesheets.push(...(tsPage as typeof timesheets))
+  }
 
   const hoursByUserWeek: Record<string, Record<string, number>> = {}
   let lastTimesheetWe: string | null = null

@@ -650,7 +650,8 @@ export default async function TimesheetDetailPage({
                 <>
                   <ApproveTimesheetButton
                     timesheetId={timesheet.id}
-                    returnTo={approvalNav ? approvalNav.afterApproveReturnTo : (fromApprovals ? (returnTo || '/dashboard/approvals') : '/dashboard/approvals')}
+                    returnTo={fromApprovals ? (returnTo || '/dashboard/approvals') : '/dashboard/approvals'}
+                    advanceToNext={fromApprovals && canShowApproverActions}
                     className="min-h-[44px] sm:min-h-0 bg-green-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                   >
                     <>

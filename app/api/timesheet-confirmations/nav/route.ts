@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
-import { loadCompanySettingsMap, parseConfirmationAssigneeIds } from '@/lib/timesheet-confirmation'
+import {
+  loadCompanySettingsMap,
+  parseConfirmationAssigneeIds,
+  getPendingConfirmationsForUser,
+} from '@/lib/timesheet-confirmation'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,24 +23,8 @@ export async function GET() {
     return NextResponse.json({ showLink: false, pendingCount: 0 })
   }
 
-  const { data: receipts } = await admin
-    .from('timesheet_confirmation_receipts')
-    .select('timesheet_id, approval_sequence')
-    .eq('user_id', user.id)
-  const receiptKey = new Set((receipts || []).map((r) => `${r.timesheet_id}:${r.approval_sequence}`))
+  // Honor the per-user client filter so the badge count matches the list.
+  const pending = await getPendingConfirmationsForUser(admin, user.id, settings)
 
-  const { data: approved } = await admin
-    .from('weekly_timesheets')
-    .select('id, approval_confirmation_sequence')
-    .eq('status', 'approved')
-
-  let pendingCount = 0
-  for (const row of approved || []) {
-    const seq = (row as { approval_confirmation_sequence?: number }).approval_confirmation_sequence ?? 0
-    if (seq <= 0) continue
-    const key = `${(row as { id: string }).id}:${seq}`
-    if (!receiptKey.has(key)) pendingCount += 1
-  }
-
-  return NextResponse.json({ showLink: true, pendingCount })
+  return NextResponse.json({ showLink: true, pendingCount: pending.length })
 }

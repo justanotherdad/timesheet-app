@@ -169,6 +169,8 @@ export async function upsertProjectDetailByNames(
     activityName: string
     budgetedHours: number
     description?: string | null
+    /** Per-row budget bill rate. undefined = leave as-is, null = clear. */
+    billRate?: number | null
   }
 ): Promise<{ id: string }> {
   const sn = input.systemName.trim()
@@ -202,6 +204,7 @@ export async function upsertProjectDetailByNames(
   if (existing?.id) {
     const upd: Record<string, unknown> = { budgeted_hours: hours }
     if (desc !== undefined) upd.description = desc
+    if (input.billRate !== undefined) upd.bill_rate = input.billRate
     const { error } = await admin.from('project_details').update(upd).eq('id', existing.id)
     if (error) throw new Error(error.message)
     return { id: existing.id }
@@ -216,6 +219,7 @@ export async function upsertProjectDetailByNames(
       activity_id: activityId,
       budgeted_hours: hours,
       description: desc !== undefined ? desc : null,
+      ...(input.billRate !== undefined ? { bill_rate: input.billRate } : {}),
     })
     .select('id')
     .single()

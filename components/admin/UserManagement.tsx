@@ -545,6 +545,18 @@ export default function UserManagement({
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Title <span className="font-normal text-gray-500 dark:text-gray-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  name="title"
+                  maxLength={120}
+                  placeholder="e.g. Senior Project Manager"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Employee Type</label>
                 <select
                   name="employee_type"

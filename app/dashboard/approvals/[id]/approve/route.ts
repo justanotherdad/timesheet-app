@@ -5,6 +5,7 @@ import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
 import { nextApprovalConfirmationSequence } from '@/lib/timesheet-confirmation'
+import { getPendingApprovalTimesheets, sortPendingApprovals } from '@/lib/approval-queue'
 import { NextResponse } from 'next/server'
 
 function getSafeReturnTo(request: Request, formData: FormData): string {
@@ -20,8 +21,50 @@ function wantsJsonResponse(request: Request): boolean {
   return (request.headers.get('accept') || '').includes('application/json')
 }
 
-function approvalSuccess(request: Request, formData: FormData, wantsJson: boolean) {
-  const path = getSafeReturnTo(request, formData)
+/**
+ * Resolves where to go after a successful approval. When the caller requests
+ * `advance` (the timesheet detail "Approve" button stepping through the queue),
+ * we compute the *fresh* pending queue AFTER this approval was written and
+ * return a detail URL for the next one. Computing it here — rather than at
+ * page render time — avoids the stale prefetch/router-cache result that made
+ * the flow bail out to the Pending Approvals list after a few approvals.
+ */
+async function resolveReturnTo(
+  request: Request,
+  formData: FormData,
+  user: { id: string },
+  justApprovedId: string
+): Promise<string> {
+  const base = getSafeReturnTo(request, formData)
+  if ((formData.get('advance') as string | null) !== '1') return base
+
+  let sortBy = 'user'
+  let sortDir: 'asc' | 'desc' = 'asc'
+  const qIndex = base.indexOf('?')
+  if (qIndex >= 0) {
+    const sp = new URLSearchParams(base.slice(qIndex + 1))
+    sortBy = sp.get('sort') || 'user'
+    sortDir = (sp.get('dir') || 'asc') === 'desc' ? 'desc' : 'asc'
+  }
+  try {
+    const queue = sortPendingApprovals(await getPendingApprovalTimesheets(user), sortBy, sortDir)
+    const idx = queue.findIndex((t: { id: string }) => t.id === justApprovedId)
+    const next = idx >= 0 ? queue[idx + 1] : queue.find((t: { id: string }) => t.id !== justApprovedId)
+    if (next) return `/dashboard/timesheets/${next.id}?returnTo=${encodeURIComponent(base)}`
+  } catch {
+    /* fall back to the list */
+  }
+  return base
+}
+
+async function approvalSuccess(
+  request: Request,
+  formData: FormData,
+  wantsJson: boolean,
+  user: { id: string },
+  justApprovedId: string
+) {
+  const path = await resolveReturnTo(request, formData, user, justApprovedId)
   if (wantsJson) return NextResponse.json({ ok: true as const, returnTo: path })
   return NextResponse.redirect(new URL(path, request.url))
 }
@@ -71,7 +114,7 @@ export async function POST(
 
     // If delegator has already signed (or user acting as self), treat as success (idempotent)
     if (signedIds.includes(user.id)) {
-      return approvalSuccess(request, formData, wantsJson)
+      return approvalSuccess(request, formData, wantsJson, user, id)
     }
 
     // Next approver is first in chain who hasn't signed; admins can always approve (treated as final)
@@ -147,7 +190,7 @@ export async function POST(
     if (signatureError) {
       if (signatureError.code === '23505' || signatureError.message?.includes('duplicate key')) {
         // Already signed (e.g. auto-approve ran, or double-click) - redirect as success
-        return approvalSuccess(request, formData, wantsJson)
+        return approvalSuccess(request, formData, wantsJson, user, id)
       }
       return NextResponse.json({ error: signatureError.message }, { status: 500 })
     }
@@ -174,7 +217,7 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    return approvalSuccess(request, formData, wantsJson)
+    return approvalSuccess(request, formData, wantsJson, user, id)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

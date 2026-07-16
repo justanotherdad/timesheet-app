@@ -324,6 +324,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
       `
       id,
       budgeted_hours,
+      bill_rate,
       description,
       system_id,
       deliverable_id,
@@ -403,10 +404,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
       : name || '—'
     const matchKey = matrixMatchKey(name, code ?? null, del?.name || '', act?.name || '')
     const bidInfo = bidSheetLineCosts.get(matchKey)
-    const budgetCost =
-      bidInfo && bidInfo.hours > EPS
-        ? budgeted * (bidInfo.lineCost / bidInfo.hours)
-        : budgeted * blendedRate
+    // Budget rate precedence (item #7):
+    //   1. explicit per-row bill_rate (manager-set or auto-filled from bid on convert)
+    //   2. bid-sheet effective rate for this cell (hours × bid rate)
+    //   3. blended average of the team's per-user PO bill rates
+    const explicitRate =
+      r.bill_rate != null && Number.isFinite(Number(r.bill_rate)) ? Number(r.bill_rate) : null
+    const effectiveBudgetRate =
+      explicitRate != null
+        ? explicitRate
+        : bidInfo && bidInfo.hours > EPS
+          ? bidInfo.lineCost / bidInfo.hours
+          : blendedRate
+    const budgetCost = budgeted * effectiveBudgetRate
     const actualCost = actualCostMap.get(key) || 0
     return {
       id: r.id as string,
@@ -415,6 +425,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
       activityName: act?.name || '—',
       description: (r.description as string | null | undefined) ?? null,
       budgetedHours: budgeted,
+      billRate: explicitRate,
+      effectiveBudgetRate,
       actualHours: actual,
       variance: budgeted - actual,
       budgetCost,

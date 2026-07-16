@@ -360,14 +360,18 @@ export async function GET(request: NextRequest) {
     }
 
     if (selectedUser) filtered = filtered.filter((e) => e.user_id === selectedUser)
+    // Site / Department / PO filters target billable entries. Unbillable rows
+    // (HOLIDAY/PTO, entry_id === '') have no site/PO, so they must be excluded
+    // whenever one of these filters is active — otherwise they leak through as
+    // "N/A" rows even though they don't belong to the selected site/PO.
     if (selectedSite) {
-      filtered = filtered.filter((e) => !e.entry_id || e.site_id === selectedSite)
+      filtered = filtered.filter((e) => e.entry_id !== '' && e.site_id === selectedSite)
     }
     if (selectedDepartment) {
-      filtered = filtered.filter((e) => !e.entry_id || e.department_id === selectedDepartment)
+      filtered = filtered.filter((e) => e.entry_id !== '' && e.department_id === selectedDepartment)
     }
     if (selectedPO) {
-      filtered = filtered.filter((e) => !e.entry_id || e.po_id === selectedPO)
+      filtered = filtered.filter((e) => e.entry_id !== '' && e.po_id === selectedPO)
     }
 
     filtered.sort((a, b) => {

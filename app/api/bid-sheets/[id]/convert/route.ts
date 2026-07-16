@@ -193,19 +193,44 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await adminSupabase.from('activity_purchase_orders').insert(actIds.map((activity_id) => ({ activity_id, purchase_order_id: po.id })))
     }
 
-    const projectDetailsRows = (items || [])
-      .map((r: any) => {
-        const sys = r.bid_sheet_systems as { name: string; code?: string } | null
-        const del = r.bid_sheet_deliverables as { name: string } | null
-        const act = r.bid_sheet_activities as { name: string } | null
-        if (!sys?.name || !del?.name || !act?.name) return null
-        const systemId = sysMap.get(`${sys.name}|${sys.code ?? ''}`)
-        const deliverableId = delMap.get(del.name)
-        const activityId = actMap.get(act.name)
-        if (!systemId || !deliverableId || !activityId) return null
-        return { po_id: po.id, system_id: systemId, deliverable_id: deliverableId, activity_id: activityId, budgeted_hours: r.budgeted_hours ?? 0 }
-      })
-      .filter(Boolean)
+    // Collapse bid items to one row per (system, deliverable, activity) combo,
+    // summing hours. The per-row budget bill rate (item #7) is auto-filled from
+    // the cell's bid rate so the matrix "Est. budget $" matches the proposal,
+    // while staying editable afterward. When multiple labor rows land on the
+    // same combo we take the hours-weighted average rate.
+    const combos = new Map<
+      string,
+      { system_id: string; deliverable_id: string; activity_id: string; hours: number; weightedRate: number }
+    >()
+    for (const r of (items || []) as any[]) {
+      const sys = r.bid_sheet_systems as { name: string; code?: string } | null
+      const del = r.bid_sheet_deliverables as { name: string } | null
+      const act = r.bid_sheet_activities as { name: string } | null
+      if (!sys?.name || !del?.name || !act?.name) continue
+      const systemId = sysMap.get(`${sys.name}|${sys.code ?? ''}`)
+      const deliverableId = delMap.get(del.name)
+      const activityId = actMap.get(act.name)
+      if (!systemId || !deliverableId || !activityId) continue
+      const hrs = Number(r.budgeted_hours) || 0
+      const lab = r.labor_id ? (laborById.get(r.labor_id) as { bid_rate?: number | null } | undefined) : undefined
+      const rate = Number(lab?.bid_rate) || 0
+      const comboKey = `${systemId}|${deliverableId}|${activityId}`
+      const cur = combos.get(comboKey) || { system_id: systemId, deliverable_id: deliverableId, activity_id: activityId, hours: 0, weightedRate: 0 }
+      cur.hours += hrs
+      cur.weightedRate += hrs * rate
+      combos.set(comboKey, cur)
+    }
+
+    const projectDetailsRows = [...combos.values()].map((c) => ({
+      po_id: po.id,
+      system_id: c.system_id,
+      deliverable_id: c.deliverable_id,
+      activity_id: c.activity_id,
+      budgeted_hours: c.hours,
+      // Hours-weighted average bid rate for this cell; null when no hours so the
+      // matrix falls back to its blended-rate estimate.
+      bill_rate: c.hours > 0 ? c.weightedRate / c.hours : null,
+    }))
 
     if (projectDetailsRows.length > 0) {
       await adminSupabase.from('project_details').insert(projectDetailsRows)

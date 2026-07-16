@@ -13,6 +13,7 @@ export default function ApproveTimesheetButton({
   className,
   children = 'Approve',
   onAfterSuccess,
+  advanceToNext = false,
 }: {
   timesheetId: string
   returnTo: string
@@ -20,6 +21,12 @@ export default function ApproveTimesheetButton({
   children?: React.ReactNode
   /** e.g. close mobile detail modal after approve */
   onAfterSuccess?: () => void
+  /**
+   * When true (timesheet detail view), the server computes the next pending
+   * timesheet *after* this approval and returns its URL, so we step straight
+   * to it. When false (approvals list), we stay on/refresh the list.
+   */
+  advanceToNext?: boolean
 }) {
   const router = useRouter()
   const [pending, setPending] = useState(false)
@@ -31,13 +38,14 @@ export default function ApproveTimesheetButton({
     try {
       const fd = new FormData()
       fd.append('returnTo', returnTo)
+      if (advanceToNext) fd.append('advance', '1')
       const res = await fetch(`/dashboard/approvals/${timesheetId}/approve`, {
         method: 'POST',
         body: fd,
         headers: { Accept: 'application/json' },
         credentials: 'same-origin',
       })
-      let data: { error?: string } = {}
+      let data: { error?: string; returnTo?: string } = {}
       try {
         data = await res.json()
       } catch {
@@ -48,12 +56,14 @@ export default function ApproveTimesheetButton({
         return
       }
       onAfterSuccess?.()
+      // Prefer the destination the server computed (fresh "next" in the queue).
+      const target = typeof data.returnTo === 'string' && data.returnTo ? data.returnTo : returnTo
       if (typeof window !== 'undefined') {
-        const url = new URL(returnTo, window.location.origin)
+        const url = new URL(target, window.location.origin)
         const same =
           window.location.pathname === url.pathname && window.location.search === url.search
         if (same) router.refresh()
-        else router.push(returnTo)
+        else router.push(target)
       } else {
         router.refresh()
       }

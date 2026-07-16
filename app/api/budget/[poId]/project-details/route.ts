@@ -25,13 +25,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ poId: s
   if (!po || po.budget_type !== 'project') return NextResponse.json({ error: 'Not a project PO' }, { status: 400 })
 
   const body = await req.json().catch(() => ({}))
-  const { system_name, system_code, deliverable_name, activity_name, budgeted_hours, description } = body as Record<string, unknown>
+  const { system_name, system_code, deliverable_name, activity_name, budgeted_hours, description, bill_rate } = body as Record<string, unknown>
 
   let admin: ReturnType<typeof createAdminClient>
   try {
     admin = createAdminClient()
   } catch {
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+  }
+
+  // Optional per-row budget bill rate (item #7). undefined = leave default,
+  // null / '' = clear, otherwise a non-negative number.
+  let billRate: number | null | undefined
+  if (bill_rate === undefined) billRate = undefined
+  else if (bill_rate === null || String(bill_rate).trim() === '') billRate = null
+  else {
+    const n = Number(bill_rate)
+    if (!Number.isFinite(n) || n < 0) {
+      return NextResponse.json({ error: 'bill_rate must be a non-negative number' }, { status: 400 })
+    }
+    billRate = n
   }
 
   try {
@@ -42,6 +55,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ poId: s
       activityName: String(activity_name || ''),
       budgetedHours: Number(budgeted_hours) || 0,
       description: description as string | null | undefined,
+      billRate,
     })
     return NextResponse.json({ id })
   } catch (e) {
@@ -61,10 +75,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ poId: 
   }
 
   const body = await req.json().catch(() => ({}))
-  const { id, budgeted_hours, description, status_pct, system_id, deliverable_id, activity_id } = body as {
+  const { id, budgeted_hours, description, status_pct, system_id, deliverable_id, activity_id, bill_rate } = body as {
     id?: string
     budgeted_hours?: number
     description?: string | null
+    bill_rate?: number | string | null
     /**
      * Manual completion override for this cell, as either a fraction (0..1)
      * or a percent (0..100). Pass null explicitly to clear the override and
@@ -96,6 +111,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ poId: 
   if (budgeted_hours !== undefined) updates.budgeted_hours = Number(budgeted_hours) || 0
   if (description !== undefined) {
     updates.description = description === null ? null : String(description).trim() || null
+  }
+  // Per-row budget bill rate (item #7): null / '' clears it (fall back to
+  // bid/blended rate); a number sets it. Omitted = leave as-is.
+  if (bill_rate !== undefined) {
+    if (bill_rate === null || String(bill_rate).trim() === '') {
+      updates.bill_rate = null
+    } else {
+      const n = Number(bill_rate)
+      if (!Number.isFinite(n) || n < 0) {
+        return NextResponse.json({ error: 'bill_rate must be a non-negative number' }, { status: 400 })
+      }
+      updates.bill_rate = n
+    }
   }
   if (status_pct !== undefined) {
     if (status_pct === null) {

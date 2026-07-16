@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Tailwind v4 keys the `dark:` variant off `prefers-color-scheme` by default.
+   This app controls dark mode by toggling a `.dark` class on <html> (see
+   ThemeScript / Header), so we redefine the variant to be class-based. Without
+   this, the theme toggle flips the class + icon but `dark:` utilities never
+   respond for users whose OS is set to light mode. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f9fafb;
   --foreground: #000000;
@@ -149,6 +156,15 @@ input[type="number"] {
   padding: 3px 4px !important;
   white-space: normal;
   word-break: break-word;
+}
+/* Numeric / currency cells are right-aligned. Never let them wrap or break
+   mid-number — Mac vs PC font metrics were breaking "$99,963.00" onto two
+   lines inconsistently. Forcing nowrap keeps every amount on one line and the
+   exported PDF identical across browsers/OSes (item #2). */
+.pagedjs_page_content th.text-right,
+.pagedjs_page_content td.text-right {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
 }
 .pagedjs_page_content .overflow-x-auto { overflow: visible !important; }
 

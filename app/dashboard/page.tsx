@@ -9,7 +9,7 @@ import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Cl
 import { formatWeekEnding, formatDate, getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
-import { loadCompanySettingsMap, parseConfirmationAssigneeIds } from '@/lib/timesheet-confirmation'
+import { loadCompanySettingsMap, parseConfirmationAssigneeIds, getPendingConfirmationsForUser } from '@/lib/timesheet-confirmation'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10 // Maximum duration for this route in seconds
@@ -172,21 +172,13 @@ export default async function DashboardPage() {
   const confirmationAssignees = parseConfirmationAssigneeIds(settingsForConfirm)
   if (confirmationAssignees.length > 0 && confirmationAssignees.includes(user.id)) {
     showTimesheetConfirmationsCard = true
-    const { data: confReceipts } = await adminSupabase
-      .from('timesheet_confirmation_receipts')
-      .select('timesheet_id, approval_sequence')
-      .eq('user_id', user.id)
-    const receiptKey = new Set((confReceipts || []).map((r) => `${r.timesheet_id}:${r.approval_sequence}`))
-    const { data: approvedForConfirm } = await adminSupabase
-      .from('weekly_timesheets')
-      .select('id, approval_confirmation_sequence')
-      .eq('status', 'approved')
-    for (const row of approvedForConfirm || []) {
-      const r = row as { id: string; approval_confirmation_sequence?: number }
-      const seq = r.approval_confirmation_sequence ?? 0
-      if (seq <= 0) continue
-      if (!receiptKey.has(`${r.id}:${seq}`)) timesheetConfirmationsPending += 1
-    }
+    // Honor the per-user client filter so this count matches the list + badge.
+    const pendingConfirmations = await getPendingConfirmationsForUser(
+      adminSupabase,
+      user.id,
+      settingsForConfirm
+    )
+    timesheetConfirmationsPending = pendingConfirmations.length
   }
 
   // Get approved timesheets from reports (for supervisors, managers, admins).

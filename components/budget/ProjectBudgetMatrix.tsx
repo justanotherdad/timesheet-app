@@ -76,9 +76,13 @@ type MatrixRow = {
   activityName: string
   description?: string | null
   budgetedHours: number
+  /** Explicit per-row budget bill rate ($/hr), or null when using the fallback rate. */
+  billRate?: number | null
+  /** Rate actually used for budgetCost (explicit bill_rate, else bid/blended). */
+  effectiveBudgetRate?: number
   actualHours: number
   variance: number
-  /** budgetedHours × blended PO bill rate (est.) */
+  /** budgetedHours × effective budget rate (est.) */
   budgetCost: number
   /** Sum of (hours × effective user rate) from approved timesheets for this matrix row */
   actualCost: number
@@ -205,12 +209,14 @@ export default function ProjectBudgetMatrix({
   const [addDel, setAddDel] = useState('')
   const [addAct, setAddAct] = useState('')
   const [addBudget, setAddBudget] = useState('0')
+  const [addBillRate, setAddBillRate] = useState('')
   const [addDesc, setAddDesc] = useState('')
   const [mutating, setMutating] = useState(false)
   const [mutateError, setMutateError] = useState<string | null>(null)
 
   const [editingRow, setEditingRow] = useState<MatrixRow | null>(null)
   const [editBudget, setEditBudget] = useState('')
+  const [editBillRate, setEditBillRate] = useState('')
   const [editDesc, setEditDesc] = useState('')
   // Cascading picks for the Edit matrix row dialog. Same dedup model as the
   // Reassign dialog: the user picks a system display label, then a
@@ -228,6 +234,17 @@ export default function ProjectBudgetMatrix({
   const [editingIndirect, setEditingIndirect] = useState<IndirectLineRow | null>(null)
   const [editIndirectLabel, setEditIndirectLabel] = useState('')
   const [editIndirectAmount, setEditIndirectAmount] = useState('')
+
+  // Add-indirect-cost form (item #8): create a new indirect line straight on
+  // the matrix without going back to a bid sheet. An "expense" creates a
+  // po_expense; a "loggable activity" creates an Indirect/Indirect/<name>
+  // project_details row people can log time against.
+  const [showAddIndirect, setShowAddIndirect] = useState(false)
+  const [addIndirectType, setAddIndirectType] = useState<'expense' | 'activity'>('expense')
+  const [addIndirectLabel, setAddIndirectLabel] = useState('')
+  const [addIndirectAmount, setAddIndirectAmount] = useState('')
+  const [addIndirectHours, setAddIndirectHours] = useState('')
+  const [addIndirectRate, setAddIndirectRate] = useState('')
 
   // State for the "missing activities" repair flow
   const [syncingActivities, setSyncingActivities] = useState(false)
@@ -495,6 +512,7 @@ export default function ProjectBudgetMatrix({
     setMutateError(null)
     setEditingRow(r)
     setEditBudget(String(r.budgetedHours))
+    setEditBillRate(r.billRate != null ? String(r.billRate) : '')
     setEditDesc((r.description ?? '') || '')
     // Reset cascading picks; we hydrate them once validCombos has loaded so
     // the dropdowns can display the row's current combo as the initial value.
@@ -562,6 +580,7 @@ export default function ProjectBudgetMatrix({
       const payload: Record<string, unknown> = {
         id: editingRow.id,
         budgeted_hours: Number(editBudget) || 0,
+        bill_rate: editBillRate.trim() === '' ? null : Number(editBillRate),
         description: editDesc.trim() || null,
       }
       // If the user picked a new (system, deliverable, activity) combo, send
@@ -1033,6 +1052,7 @@ export default function ProjectBudgetMatrix({
           deliverable_name: addDel.trim(),
           activity_name: addAct.trim(),
           budgeted_hours: Number(addBudget) || 0,
+          bill_rate: addBillRate.trim() === '' ? null : Number(addBillRate),
           description: addDesc.trim() || null,
         }),
       })
@@ -1043,11 +1063,67 @@ export default function ProjectBudgetMatrix({
       setAddDel('')
       setAddAct('')
       setAddBudget('0')
+      setAddBillRate('')
       setAddDesc('')
       setShowAddRow(false)
       bumpRefresh()
     } catch (e) {
       setMutateError(e instanceof Error ? e.message : 'Could not add row')
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  const handleAddIndirect = async () => {
+    const label = addIndirectLabel.trim()
+    if (!label) {
+      setMutateError('Name is required')
+      return
+    }
+    setMutating(true)
+    setMutateError(null)
+    try {
+      if (addIndirectType === 'expense') {
+        const amt = Number(addIndirectAmount)
+        if (!Number.isFinite(amt) || amt < 0) {
+          setMutateError('Amount must be a non-negative number')
+          setMutating(false)
+          return
+        }
+        const today = new Date().toISOString().slice(0, 10)
+        const res = await fetch(`/api/budget/${poId}/expenses`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ custom_type_name: label, amount: amt, expense_date: today }),
+        })
+        const body = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error((body as { error?: string }).error || 'Could not add indirect cost')
+      } else {
+        // Loggable activity → Indirect / Indirect / <name> matrix row.
+        const res = await fetch(`/api/budget/${poId}/project-details`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_name: 'Indirect',
+            deliverable_name: 'Indirect',
+            activity_name: label,
+            budgeted_hours: Number(addIndirectHours) || 0,
+            bill_rate: addIndirectRate.trim() === '' ? null : Number(addIndirectRate),
+          }),
+        })
+        const body = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error((body as { error?: string }).error || 'Could not add indirect cost')
+      }
+      setAddIndirectLabel('')
+      setAddIndirectAmount('')
+      setAddIndirectHours('')
+      setAddIndirectRate('')
+      setShowAddIndirect(false)
+      bumpRefresh()
+    } catch (e) {
+      setMutateError(e instanceof Error ? e.message : 'Could not add indirect cost')
     } finally {
       setMutating(false)
     }
@@ -1312,6 +1388,19 @@ export default function ProjectBudgetMatrix({
               {showAddRow ? 'Hide add row' : 'Add matrix row'}
             </button>
           )}
+          {canEditMatrix && (
+            <button
+              type="button"
+              onClick={() => {
+                setMutateError(null)
+                setShowAddIndirect((v) => !v)
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700"
+            >
+              <Plus className="h-4 w-4" />
+              {showAddIndirect ? 'Hide indirect' : 'Add indirect cost'}
+            </button>
+          )}
           <button
             type="button"
             onClick={exportCsv}
@@ -1484,6 +1573,21 @@ export default function ProjectBudgetMatrix({
                 className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
               />
             </label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Bill rate ($/hr)
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={addBillRate}
+                onChange={(e) => setAddBillRate(e.target.value)}
+                className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+                placeholder="Budget cost = budget h × rate"
+              />
+              <span className="mt-1 block font-normal text-[11px] text-gray-500 dark:text-gray-400">
+                Optional. Blank uses the PO&apos;s blended rate. Budget $ = budget h × rate.
+              </span>
+            </label>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 sm:col-span-2 lg:col-span-3">
               Description (optional)
               <textarea
@@ -1505,6 +1609,88 @@ export default function ProjectBudgetMatrix({
               Save row
             </button>
             <button type="button" onClick={() => setShowAddRow(false)} className="px-4 py-2 rounded-lg text-sm border border-gray-300 dark:border-gray-600">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {canEditMatrix && showAddIndirect && (
+        <div className="mb-6 p-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/30 print:hidden space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Add indirect cost</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Adds an indirect line to this project budget. An <strong>Expense</strong> tracks a dollar amount (e.g. Travel &amp; Living); a <strong>Loggable activity</strong> creates an Indirect line people can log time against (budget $ = hours × rate).
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Type
+              <select
+                value={addIndirectType}
+                onChange={(e) => setAddIndirectType(e.target.value as 'expense' | 'activity')}
+                className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+              >
+                <option value="expense">Expense</option>
+                <option value="activity">Loggable activity</option>
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 sm:col-span-1 lg:col-span-3">
+              Name / category *
+              <input
+                value={addIndirectLabel}
+                onChange={(e) => setAddIndirectLabel(e.target.value)}
+                className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+                placeholder="e.g. Project Management or Travel &amp; Living (FAT)"
+              />
+            </label>
+            {addIndirectType === 'expense' ? (
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                Amount ($)
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={addIndirectAmount}
+                  onChange={(e) => setAddIndirectAmount(e.target.value)}
+                  className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+                />
+              </label>
+            ) : (
+              <>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Budget (h)
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={addIndirectHours}
+                    onChange={(e) => setAddIndirectHours(e.target.value)}
+                    className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Bill rate ($/hr)
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={addIndirectRate}
+                    onChange={(e) => setAddIndirectRate(e.target.value)}
+                    className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+                  />
+                </label>
+              </>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={mutating || !addIndirectLabel.trim()}
+              onClick={handleAddIndirect}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              Save indirect cost
+            </button>
+            <button type="button" onClick={() => setShowAddIndirect(false)} className="px-4 py-2 rounded-lg text-sm border border-gray-300 dark:border-gray-600">
               Cancel
             </button>
           </div>
@@ -2104,6 +2290,25 @@ export default function ProjectBudgetMatrix({
                   onChange={(e) => setEditBudget(e.target.value)}
                   className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
                 />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Bill rate ($/hr)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={editBillRate}
+                  onChange={(e) => setEditBillRate(e.target.value)}
+                  className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                  placeholder={
+                    editingRow?.effectiveBudgetRate
+                      ? `Default: ${editingRow.effectiveBudgetRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : 'Blank uses blended rate'
+                  }
+                />
+                <span className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">
+                  Budget $ = budget h × rate. Blank falls back to the bid/blended rate.
+                </span>
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Description (optional)</span>
