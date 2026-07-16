@@ -59,7 +59,7 @@ export default async function DashboardPage() {
       .limit(5)
   )
 
-  let recentTimesheets = (recentTimesheetsResult.data || []) as any[]
+  const recentTimesheets = (recentTimesheetsResult.data || []) as any[]
 
   // Auto-approve any submitted timesheet if user is final approver with no one above
   for (let i = 0; i < recentTimesheets.length; i++) {

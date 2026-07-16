@@ -96,7 +96,7 @@ export async function POST(
   }
   if (toStr) payload.effective_to_date = toStr
 
-  let result = await db.from('po_bill_rates').insert(payload).select('*').single()
+  const result = await db.from('po_bill_rates').insert(payload).select('*').single()
 
   if (result.error && (result.error.code === '23505' || result.error.message?.includes('duplicate key'))) {
     const { data: before } = await db

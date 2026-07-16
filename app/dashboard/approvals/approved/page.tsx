@@ -129,7 +129,7 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
   }
 
   // Fetch signatures for With/With (person) columns
-  let signaturesByTimesheetId: Record<string, string[]> = {}
+  const signaturesByTimesheetId: Record<string, string[]> = {}
   let approverNamesById: Record<string, string> = {}
   if (timesheets.length > 0) {
     const sigResult = await withQueryTimeout(() =>

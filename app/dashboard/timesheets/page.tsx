@@ -103,7 +103,7 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
 
   // For admin/super_admin: fetch signatures (signer_id) to show "With" in approval workflow
   // Use admin client so RLS does not block reading signatures
-  let signaturesByTimesheetId: Record<string, { signer_id: string }[]> = {}
+  const signaturesByTimesheetId: Record<string, { signer_id: string }[]> = {}
   let approverNamesById: Record<string, string> = {}
   if (['admin', 'super_admin'].includes(user.profile.role) && timesheetsForDisplay.length > 0) {
     const ids = timesheetsForDisplay.map((ts: any) => ts.id)

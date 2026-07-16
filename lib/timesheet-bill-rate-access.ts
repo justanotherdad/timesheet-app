@@ -318,9 +318,9 @@ export async function loadTimesheetDropdownData(params: {
   deliverables = Array.from(new Map(deliverables.map((d: any) => [d.id, d])).values())
   activities = Array.from(new Map(activities.map((a: any) => [a.id, a])).values())
 
-  let deliverablePOIds: Record<string, string[]> = {}
-  let deliverableDepartmentIds: Record<string, string[]> = {}
-  let activityPOIds: Record<string, string[]> = {}
+  const deliverablePOIds: Record<string, string[]> = {}
+  const deliverableDepartmentIds: Record<string, string[]> = {}
+  const activityPOIds: Record<string, string[]> = {}
   if (deliverables.length > 0 || activities.length > 0) {
     const [delPORes, delDeptRes, actPORes] = await Promise.all([
       deliverables.length > 0
