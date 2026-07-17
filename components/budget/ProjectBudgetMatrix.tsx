@@ -564,9 +564,10 @@ export default function ProjectBudgetMatrix({
     // only touched hours/rate would silently re-point the row onto another
     // row's combo and trip the unique constraint. Using ids avoids that.
     const byId =
-      editingRow.deliverableId && editingRow.activityId
+      editingRow.systemId && editingRow.deliverableId && editingRow.activityId
         ? validCombos.find(
             (c) =>
+              c.systemId === editingRow.systemId &&
               c.deliverableId === editingRow.deliverableId &&
               c.activityId === editingRow.activityId
           )
@@ -608,7 +609,7 @@ export default function ProjectBudgetMatrix({
       // users were hitting). The system_id is resolved from the picked
       // deliverable (the same dedup model used in the Reassign dialog).
       if (editSystemLabel && editDeliverableId && editActivityId) {
-        const resolvedSystemId = resolveSystemIdForPick(editDeliverableId, editActivityId)
+        const resolvedSystemId = resolveSystemIdForPick(editSystemLabel, editDeliverableId, editActivityId)
         if (!resolvedSystemId) {
           setMutateError('Could not resolve the picked combo on this PO. Refresh and try again.')
           setMutating(false)
@@ -949,20 +950,28 @@ export default function ProjectBudgetMatrix({
   )
 
   /**
-   * Given a picked (deliverableId, activityId), return the concrete system_id
-   * that this combo belongs to. Used at save time to translate the user's
-   * deduped systemLabel pick back into the underlying row.
+   * Given a picked (systemLabel, deliverableId, activityId), return the concrete
+   * system_id that this combo belongs to. The systemLabel is required to
+   * disambiguate: the SAME deliverable+activity pair can belong to more than one
+   * system (e.g. "Dynamic Final Report / Approval" exists under both AVS and
+   * EMPV), so matching on deliverable+activity alone would pick the wrong
+   * system_id and re-point the row onto another system's combo.
    */
   const resolveSystemIdForPick = useCallback(
-    (deliverableId: string, activityId: string): string | null => {
+    (systemLabel: string, deliverableId: string, activityId: string): string | null => {
+      const wantedSys = systemLabel.trim().toLowerCase()
       for (const c of validCombos) {
-        if (c.deliverableId === deliverableId && c.activityId === activityId) {
+        if (
+          systemLabelFor(c).toLowerCase() === wantedSys &&
+          c.deliverableId === deliverableId &&
+          c.activityId === activityId
+        ) {
           return c.systemId
         }
       }
       return null
     },
-    [validCombos]
+    [validCombos, systemLabelFor]
   )
 
   const setReassignPick = (
@@ -1003,7 +1012,7 @@ export default function ProjectBudgetMatrix({
     }> = []
     for (const [entryId, p] of Object.entries(reassignPicks)) {
       if (!p.systemLabel || !p.deliverableId || !p.activityId) continue
-      const systemId = resolveSystemIdForPick(p.deliverableId, p.activityId)
+      const systemId = resolveSystemIdForPick(p.systemLabel, p.deliverableId, p.activityId)
       if (!systemId) continue
       assignments.push({
         entryId,
@@ -1597,6 +1606,7 @@ export default function ProjectBudgetMatrix({
                 step="0.01"
                 value={addBudget}
                 onChange={(e) => setAddBudget(e.target.value)}
+                onWheel={(e) => e.currentTarget.blur()}
                 className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
               />
             </label>
@@ -1608,6 +1618,7 @@ export default function ProjectBudgetMatrix({
                 step="0.01"
                 value={addBillRate}
                 onChange={(e) => setAddBillRate(e.target.value)}
+                onWheel={(e) => e.currentTarget.blur()}
                 className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
                 placeholder="Budget cost = budget h × rate"
               />
@@ -1678,6 +1689,7 @@ export default function ProjectBudgetMatrix({
                   step="0.01"
                   value={addIndirectAmount}
                   onChange={(e) => setAddIndirectAmount(e.target.value)}
+                  onWheel={(e) => e.currentTarget.blur()}
                   className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
                 />
               </label>
@@ -1691,6 +1703,7 @@ export default function ProjectBudgetMatrix({
                     step="0.01"
                     value={addIndirectHours}
                     onChange={(e) => setAddIndirectHours(e.target.value)}
+                    onWheel={(e) => e.currentTarget.blur()}
                     className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
                   />
                 </label>
@@ -1702,6 +1715,7 @@ export default function ProjectBudgetMatrix({
                     step="0.01"
                     value={addIndirectRate}
                     onChange={(e) => setAddIndirectRate(e.target.value)}
+                    onWheel={(e) => e.currentTarget.blur()}
                     className="mt-1 w-full h-9 px-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
                   />
                 </label>
@@ -2315,6 +2329,7 @@ export default function ProjectBudgetMatrix({
                   step="0.01"
                   value={editBudget}
                   onChange={(e) => setEditBudget(e.target.value)}
+                  onWheel={(e) => e.currentTarget.blur()}
                   className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
                 />
               </label>
@@ -2326,6 +2341,7 @@ export default function ProjectBudgetMatrix({
                   step="0.01"
                   value={editBillRate}
                   onChange={(e) => setEditBillRate(e.target.value)}
+                  onWheel={(e) => e.currentTarget.blur()}
                   className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
                   placeholder={
                     editingRow?.effectiveBudgetRate
