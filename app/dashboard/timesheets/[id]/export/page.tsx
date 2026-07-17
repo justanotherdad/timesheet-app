@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { getCurrentUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import WeeklyTimesheetExport from '@/components/WeeklyTimesheetExport'
@@ -47,9 +48,9 @@ export default async function ExportTimesheetPage({
           <div className="flex items-center justify-center min-h-[60vh]">
             <div className="text-center">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Timesheet not found</h1>
-              <a href="/dashboard/timesheets" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
+              <Link href="/dashboard/timesheets" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
                 ← Back
-              </a>
+              </Link>
             </div>
           </div>
         </div>

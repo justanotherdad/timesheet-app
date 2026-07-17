@@ -227,7 +227,7 @@ export default function SystemInput({
                           }}
                           className="w-full text-left px-4 py-2 hover:bg-green-50 dark:hover:bg-green-900 text-gray-900 dark:text-gray-100 border-t border-gray-200 dark:border-gray-700"
                         >
-                          <div className="font-medium">💡 Use "{searchTerm}" (custom - not saved to systems table)</div>
+                          <div className="font-medium">💡 Use &quot;{searchTerm}&quot; (custom - not saved to systems table)</div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">Press Enter or click to use custom value</div>
                         </button>
                       )}

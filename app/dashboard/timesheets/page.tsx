@@ -211,12 +211,12 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
       <div className="container mx-auto px-4 py-8">
         <div className="w-full max-w-[1920px] mx-auto">
           <div className="flex justify-end mb-6">
-            <a
+            <Link
               href="/dashboard/timesheets/new"
               className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors inline-block"
             >
               New Timesheet
-            </a>
+            </Link>
           </div>
 
           {['admin', 'super_admin'].includes(user.profile.role) && (
@@ -274,12 +274,12 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
               <FileText className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
               <p className="text-gray-600 dark:text-gray-300 mb-4">No timesheets found.</p>
-              <a
+              <Link
                 href="/dashboard/timesheets/new"
                 className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
               >
                 Create your first timesheet →
-              </a>
+              </Link>
             </div>
           )}
         </div>

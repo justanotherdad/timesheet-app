@@ -280,7 +280,8 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
 
       let htmlContent = ''
       timesheetData.forEach((data: any, index: number) => {
-        let { timesheet, entries, unbillable, user } = data
+        const { timesheet, user } = data
+        let { entries, unbillable } = data
         entries = entries.filter(filterEntry)
         if (!f.includeNonBillable) unbillable = []
         const weekDates = getWeekDates(timesheet.week_ending)

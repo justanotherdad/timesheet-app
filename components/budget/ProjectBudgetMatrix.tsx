@@ -71,6 +71,12 @@ const selectClass =
 
 type MatrixRow = {
   id: string
+  /** Concrete FK ids for this row's combo (used to seed the Edit dialog and
+   *  to detect whether the combo actually changed). Optional for safety on
+   *  older payloads / indirect rows. */
+  systemId?: string | null
+  deliverableId?: string | null
+  activityId?: string | null
   systemLabel: string
   deliverableName: string
   activityName: string
@@ -551,19 +557,31 @@ export default function ProjectBudgetMatrix({
     if (!editingRow) return
     if (validCombos.length === 0) return
     if (editSystemLabel || editDeliverableId || editActivityId) return
-    // Find a combo on this PO that matches the editing row's labels. The
-    // matrix row carries system/deliverable/activity *names*, not IDs, so we
-    // match by name where possible. systemLabel may contain a code suffix
-    // like "Indirect (079-IND-001)"; the underlying systems table stores
-    // just the name, so we strip a trailing "(...)" before comparing.
+    // Prefer matching on the row's concrete FK ids. Matching by *name* is
+    // ambiguous when a PO has duplicate-named deliverables/activities (e.g. two
+    // "Dynamic Final Report" deliverables with different ids): it would seed the
+    // dropdowns with the WRONG deliverable/activity id, so a later save that
+    // only touched hours/rate would silently re-point the row onto another
+    // row's combo and trip the unique constraint. Using ids avoids that.
+    const byId =
+      editingRow.deliverableId && editingRow.activityId
+        ? validCombos.find(
+            (c) =>
+              c.deliverableId === editingRow.deliverableId &&
+              c.activityId === editingRow.activityId
+          )
+        : undefined
+    // Fallback (older payloads without ids): match by name as before.
     const stripCode = (s: string) => s.replace(/\s*\([^)]*\)\s*$/, '').trim()
     const rowSysName = stripCode(editingRow.systemLabel)
-    const match = validCombos.find(
-      (c) =>
-        c.systemName.trim().toLowerCase() === rowSysName.toLowerCase() &&
-        c.deliverableName === editingRow.deliverableName &&
-        c.activityName === editingRow.activityName
-    )
+    const match =
+      byId ||
+      validCombos.find(
+        (c) =>
+          c.systemName.trim().toLowerCase() === rowSysName.toLowerCase() &&
+          c.deliverableName === editingRow.deliverableName &&
+          c.activityName === editingRow.activityName
+      )
     if (match) {
       setEditSystemLabel(match.systemName.trim())
       setEditDeliverableId(match.deliverableId)
@@ -583,8 +601,11 @@ export default function ProjectBudgetMatrix({
         bill_rate: editBillRate.trim() === '' ? null : Number(editBillRate),
         description: editDesc.trim() || null,
       }
-      // If the user picked a new (system, deliverable, activity) combo, send
-      // the concrete IDs. The system_id is resolved from the picked
+      // Only send the (system, deliverable, activity) combo when the user
+      // actually re-pointed the row. Comparing against the row's original ids
+      // means a plain hours/rate/description edit never touches the combo — so
+      // it can't collide with another row's combo (the unique-constraint error
+      // users were hitting). The system_id is resolved from the picked
       // deliverable (the same dedup model used in the Reassign dialog).
       if (editSystemLabel && editDeliverableId && editActivityId) {
         const resolvedSystemId = resolveSystemIdForPick(editDeliverableId, editActivityId)
@@ -593,9 +614,15 @@ export default function ProjectBudgetMatrix({
           setMutating(false)
           return
         }
-        payload.system_id = resolvedSystemId
-        payload.deliverable_id = editDeliverableId
-        payload.activity_id = editActivityId
+        const comboChanged =
+          resolvedSystemId !== editingRow.systemId ||
+          editDeliverableId !== editingRow.deliverableId ||
+          editActivityId !== editingRow.activityId
+        if (comboChanged) {
+          payload.system_id = resolvedSystemId
+          payload.deliverable_id = editDeliverableId
+          payload.activity_id = editActivityId
+        }
       }
       const res = await fetch(`/api/budget/${poId}/project-details`, {
         method: 'PATCH',

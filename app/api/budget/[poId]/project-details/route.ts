@@ -165,7 +165,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ poId: 
   }
 
   const { error } = await admin.from('project_details').update(updates).eq('id', id).eq('po_id', poId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    // 23505 = unique_violation on (po_id, system_id, deliverable_id, activity_id).
+    // Only reachable when the combo was actually re-pointed onto one that already
+    // exists on this PO — give a clear message instead of the raw constraint text.
+    if ((error as { code?: string }).code === '23505') {
+      return NextResponse.json(
+        {
+          error:
+            'That System / Deliverable / Activity combination already exists on this PO. Edit the existing row instead, or pick a different combination.',
+        },
+        { status: 409 }
+      )
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json({ ok: true })
 }
 

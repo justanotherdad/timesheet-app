@@ -18,7 +18,6 @@ export default function AutoLogout({
 
   useEffect(() => {
     let idleTimeoutId: ReturnType<typeof setTimeout> | undefined
-    let absoluteTimeoutId: ReturnType<typeof setTimeout> | undefined
     const activityListeners: Array<() => void> = []
     let loggedOut = false
 
@@ -59,7 +58,7 @@ export default function AutoLogout({
       void logout()
       return
     }
-    absoluteTimeoutId = setTimeout(() => {
+    const absoluteTimeoutId = setTimeout(() => {
       void logout()
     }, remaining)
 

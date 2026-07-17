@@ -420,6 +420,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
     const actualCost = actualCostMap.get(key) || 0
     return {
       id: r.id as string,
+      // Concrete FK ids for this row. The client uses these to seed the Edit
+      // dialog dropdowns unambiguously (matching by name breaks when duplicate-
+      // named deliverables/activities exist) and to detect whether the combo
+      // actually changed before re-pointing it.
+      systemId,
+      deliverableId,
+      activityId,
       systemLabel: systemLabel || '—',
       deliverableName: del?.name || '—',
       activityName: act?.name || '—',
