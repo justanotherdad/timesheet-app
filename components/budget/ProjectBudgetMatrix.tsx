@@ -252,6 +252,18 @@ export default function ProjectBudgetMatrix({
   const [defaultRateInput, setDefaultRateInput] = useState('')
   const [savingDefaultRate, setSavingDefaultRate] = useState(false)
 
+  // Import matrix structure from another project PO.
+  const [showImport, setShowImport] = useState(false)
+  const [importList, setImportList] = useState<
+    { id: string; poNumber: string; projectName: string; siteName: string; rowCount: number }[] | null
+  >(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importSearch, setImportSearch] = useState('')
+  const [importSourceId, setImportSourceId] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null)
+
   const [showAddIndirect, setShowAddIndirect] = useState(false)
   const [addIndirectType, setAddIndirectType] = useState<'expense' | 'activity'>('expense')
   const [addIndirectLabel, setAddIndirectLabel] = useState('')
@@ -1205,6 +1217,51 @@ export default function ProjectBudgetMatrix({
     }
   }
 
+  const openImport = async () => {
+    setShowImport(true)
+    setImportError(null)
+    setImportResult(null)
+    setImportSourceId('')
+    setImportSearch('')
+    setImportLoading(true)
+    try {
+      const res = await fetch(`/api/budget/${poId}/importable-matrices`, { credentials: 'include' })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Could not load matrices')
+      setImportList((body as { matrices?: typeof importList }).matrices || [])
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : 'Could not load matrices')
+      setImportList([])
+    } finally {
+      setImportLoading(false)
+    }
+  }
+
+  const handleImport = async () => {
+    if (!importSourceId) return
+    setImporting(true)
+    setImportError(null)
+    try {
+      const res = await fetch(`/api/budget/${poId}/import-matrix`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourcePoId: importSourceId }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Import failed')
+      setImportResult({
+        imported: (body as { imported?: number }).imported || 0,
+        skipped: (body as { skipped?: number }).skipped || 0,
+      })
+      bumpRefresh()
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : 'Import failed')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const SortIcon = ({ col }: { col: SortColumn }) => {
     if (sortColumn !== col) return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-50" />
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1 inline" /> : <ArrowDown className="h-3 w-3 ml-1 inline" />
@@ -1482,6 +1539,16 @@ export default function ProjectBudgetMatrix({
             >
               <Plus className="h-4 w-4" />
               {showAddIndirect ? 'Hide indirect' : 'Add indirect cost'}
+            </button>
+          )}
+          {canEditMatrix && (
+            <button
+              type="button"
+              onClick={openImport}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              <Download className="h-4 w-4 rotate-180" />
+              Import structure
             </button>
           )}
           {canEditMatrix && (
@@ -2300,6 +2367,133 @@ export default function ProjectBudgetMatrix({
               >
                 Save
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImport && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:hidden"
+          onClick={() => !importing && setShowImport(false)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Import matrix structure</h3>
+              <button
+                type="button"
+                onClick={() => !importing && setShowImport(false)}
+                className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3 text-sm overflow-y-auto">
+              {importResult ? (
+                <div className="space-y-3">
+                  <p className="text-gray-700 dark:text-gray-300">
+                    Imported <strong>{importResult.imported}</strong>{' '}
+                    {importResult.imported === 1 ? 'activity' : 'activities'}
+                    {importResult.skipped > 0 && (
+                      <> — skipped <strong>{importResult.skipped}</strong> already present.</>
+                    )}
+                    .
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    New rows were added with blank hours and no bill rate. Fill in budgeted hours and rates as needed.
+                  </p>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowImport(false)}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Copies the System / Deliverable / Activity rows from another project matrix you can access into this one.
+                    Only the structure is copied — <strong>hours and bill rates start blank</strong> — and rows that already
+                    exist here are left untouched. Indirect lines are not imported.
+                  </p>
+                  <input
+                    type="text"
+                    value={importSearch}
+                    onChange={(e) => setImportSearch(e.target.value)}
+                    placeholder="Search by PO #, project, or client…"
+                    className="w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                  />
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700 max-h-72 overflow-y-auto">
+                    {importLoading ? (
+                      <p className="p-4 text-gray-500 dark:text-gray-400">Loading…</p>
+                    ) : (importList || []).length === 0 ? (
+                      <p className="p-4 text-gray-500 dark:text-gray-400">
+                        No other project matrices you can access have rows to import.
+                      </p>
+                    ) : (
+                      (importList || [])
+                        .filter((m) => {
+                          const q = importSearch.trim().toLowerCase()
+                          if (!q) return true
+                          return (
+                            m.poNumber.toLowerCase().includes(q) ||
+                            m.projectName.toLowerCase().includes(q) ||
+                            m.siteName.toLowerCase().includes(q)
+                          )
+                        })
+                        .map((m) => (
+                          <label
+                            key={m.id}
+                            className="flex items-start gap-3 p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                          >
+                            <input
+                              type="radio"
+                              name="import-source"
+                              value={m.id}
+                              checked={importSourceId === m.id}
+                              onChange={() => setImportSourceId(m.id)}
+                              className="mt-1"
+                            />
+                            <span className="min-w-0">
+                              <span className="block font-medium text-gray-900 dark:text-gray-100 truncate">
+                                {m.poNumber}
+                                {m.projectName ? ` — ${m.projectName}` : ''}
+                              </span>
+                              <span className="block text-xs text-gray-500 dark:text-gray-400">
+                                {m.siteName ? `${m.siteName} · ` : ''}
+                                {m.rowCount} {m.rowCount === 1 ? 'activity' : 'activities'}
+                              </span>
+                            </span>
+                          </label>
+                        ))
+                    )}
+                  </div>
+                  {importError && <p className="text-red-600 dark:text-red-400 text-xs">{importError}</p>}
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => !importing && setShowImport(false)}
+                      className="px-4 py-2 rounded-lg text-sm border border-gray-300 dark:border-gray-600"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={importing || !importSourceId}
+                      onClick={handleImport}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {importing ? 'Importing…' : 'Import structure'}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
