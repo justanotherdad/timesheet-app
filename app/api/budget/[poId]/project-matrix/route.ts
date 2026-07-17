@@ -285,13 +285,23 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
     return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 
-  const { data: po } = await supabase.from('purchase_orders').select('id, budget_type, site_id').eq('id', poId).single()
+  const { data: po } = await supabase
+    .from('purchase_orders')
+    .select('id, budget_type, site_id, default_budget_bill_rate')
+    .eq('id', poId)
+    .single()
   if (!po) {
     return NextResponse.json({ error: 'PO not found' }, { status: 404 })
   }
   if (po.budget_type !== 'project') {
     return NextResponse.json({ error: 'Not a project budget' }, { status: 400 })
   }
+  // Per-PO manual default budget rate (this PO only). Used in place of the
+  // blended team rate for rows lacking an explicit / bid-sheet rate.
+  const poDefaultRate =
+    po.default_budget_bill_rate != null && Number.isFinite(Number(po.default_budget_bill_rate))
+      ? Number(po.default_budget_bill_rate)
+      : null
 
   let db = supabase
   try {
@@ -404,10 +414,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
       : name || '—'
     const matchKey = matrixMatchKey(name, code ?? null, del?.name || '', act?.name || '')
     const bidInfo = bidSheetLineCosts.get(matchKey)
-    // Budget rate precedence (item #7):
+    // Budget rate precedence:
     //   1. explicit per-row bill_rate (manager-set or auto-filled from bid on convert)
     //   2. bid-sheet effective rate for this cell (hours × bid rate)
-    //   3. blended average of the team's per-user PO bill rates
+    //   3. per-PO manual default rate (this PO only), when set
+    //   4. blended average of the team's per-user PO bill rates
     const explicitRate =
       r.bill_rate != null && Number.isFinite(Number(r.bill_rate)) ? Number(r.bill_rate) : null
     const effectiveBudgetRate =
@@ -415,7 +426,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
         ? explicitRate
         : bidInfo && bidInfo.hours > EPS
           ? bidInfo.lineCost / bidInfo.hours
-          : blendedRate
+          : poDefaultRate != null
+            ? poDefaultRate
+            : blendedRate
     const budgetCost = budgeted * effectiveBudgetRate
     const actualCost = actualCostMap.get(key) || 0
     return {
@@ -506,6 +519,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
       siteId: po.site_id ?? null,
       costModel: {
         blendedBudgetRate: blendedRate,
+        // Per-PO manual default (null = using the blended rate). Surfaced so the
+        // matrix can show/pre-fill the "Set default rate" control.
+        defaultBudgetBillRate: poDefaultRate,
         budgetCostLabel,
       },
       rows,

@@ -118,6 +118,8 @@ type MatrixPayload = {
   siteId?: string | null
   costModel?: {
     blendedBudgetRate: number
+    /** Per-PO manual default budget rate; null when falling back to the blended rate. */
+    defaultBudgetBillRate?: number | null
     budgetCostLabel: string
   }
   rows: MatrixRow[]
@@ -245,6 +247,11 @@ export default function ProjectBudgetMatrix({
   // the matrix without going back to a bid sheet. An "expense" creates a
   // po_expense; a "loggable activity" creates an Indirect/Indirect/<name>
   // project_details row people can log time against.
+  // Per-PO default budget rate modal (this PO only).
+  const [showDefaultRate, setShowDefaultRate] = useState(false)
+  const [defaultRateInput, setDefaultRateInput] = useState('')
+  const [savingDefaultRate, setSavingDefaultRate] = useState(false)
+
   const [showAddIndirect, setShowAddIndirect] = useState(false)
   const [addIndirectType, setAddIndirectType] = useState<'expense' | 'activity'>('expense')
   const [addIndirectLabel, setAddIndirectLabel] = useState('')
@@ -1165,6 +1172,39 @@ export default function ProjectBudgetMatrix({
     }
   }
 
+  const handleSaveDefaultRate = async () => {
+    const trimmed = defaultRateInput.trim()
+    let payload: number | null
+    if (trimmed === '') {
+      payload = null
+    } else {
+      const n = Number(trimmed)
+      if (!Number.isFinite(n) || n < 0) {
+        setMutateError('Default rate must be a non-negative number')
+        return
+      }
+      payload = n
+    }
+    setSavingDefaultRate(true)
+    setMutateError(null)
+    try {
+      const res = await fetch(`/api/budget/${poId}/default-rate`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ default_budget_bill_rate: payload }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Could not save default rate')
+      setShowDefaultRate(false)
+      bumpRefresh()
+    } catch (e) {
+      setMutateError(e instanceof Error ? e.message : 'Could not save default rate')
+    } finally {
+      setSavingDefaultRate(false)
+    }
+  }
+
   const SortIcon = ({ col }: { col: SortColumn }) => {
     if (sortColumn !== col) return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-50" />
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1 inline" /> : <ArrowDown className="h-3 w-3 ml-1 inline" />
@@ -1401,10 +1441,17 @@ export default function ProjectBudgetMatrix({
             {data?.costModel && (
               <>
                 <span className="block mt-1">{data.costModel.budgetCostLabel}</span>
-                {data.costModel.blendedBudgetRate > 0 && (
+                {data.costModel.defaultBudgetBillRate != null ? (
                   <span className="block mt-1 text-gray-600 dark:text-gray-400">
-                    Blended rate for budget $ estimate: ${fmtMoney(data.costModel.blendedBudgetRate)}/hr
+                    Default rate for budget $ estimate (this PO): ${fmtMoney(data.costModel.defaultBudgetBillRate)}/hr
+                    <span className="text-gray-500 dark:text-gray-500"> — applied to rows without a typed or bid-sheet rate.</span>
                   </span>
+                ) : (
+                  data.costModel.blendedBudgetRate > 0 && (
+                    <span className="block mt-1 text-gray-600 dark:text-gray-400">
+                      Blended rate for budget $ estimate: ${fmtMoney(data.costModel.blendedBudgetRate)}/hr
+                    </span>
+                  )
                 )}
               </>
             )}
@@ -1437,11 +1484,28 @@ export default function ProjectBudgetMatrix({
               {showAddIndirect ? 'Hide indirect' : 'Add indirect cost'}
             </button>
           )}
+          {canEditMatrix && (
+            <button
+              type="button"
+              onClick={() => {
+                setMutateError(null)
+                setDefaultRateInput(
+                  data?.costModel?.defaultBudgetBillRate != null
+                    ? String(data.costModel.defaultBudgetBillRate)
+                    : ''
+                )
+                setShowDefaultRate(true)
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              Set default rate
+            </button>
+          )}
           <button
             type="button"
             onClick={exportCsv}
-            disabled={!hasRows || (sortedRows.length === 0 && indirectLines.length === 0)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!hasRows}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="h-4 w-4" />
             Export CSV
@@ -1449,7 +1513,7 @@ export default function ProjectBudgetMatrix({
           <button
             type="button"
             onClick={handlePrint}
-            disabled={!hasRows || (sortedRows.length === 0 && indirectLines.length === 0)}
+            disabled={!hasRows}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Use your browser print dialog to save as PDF"
           >
@@ -2235,6 +2299,75 @@ export default function ProjectBudgetMatrix({
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDefaultRate && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:hidden"
+          onClick={() => !savingDefaultRate && setShowDefaultRate(false)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Set default budget rate</h3>
+              <button
+                type="button"
+                onClick={() => !savingDefaultRate && setShowDefaultRate(false)}
+                className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3 text-sm">
+              <p className="text-gray-600 dark:text-gray-400">
+                Sets a default bill rate for this PO&apos;s budget $ estimate. It only applies to matrix rows that
+                have <strong>no typed rate and no bid-sheet rate</strong> — replacing the blended team-average rate.
+                Rows you typed a rate into, and rates imported when converting a bid sheet, are never changed.
+                This setting affects <strong>this PO only</strong>.
+              </p>
+              <label className="block">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Default bill rate ($/hr)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={defaultRateInput}
+                  onChange={(e) => setDefaultRateInput(e.target.value)}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                  placeholder={
+                    data?.costModel?.blendedBudgetRate
+                      ? `Blank = blended rate (${fmtMoney(data.costModel.blendedBudgetRate)}/hr)`
+                      : 'Blank = blended rate'
+                  }
+                />
+                <span className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">
+                  Leave blank and save to clear the default and fall back to the blended rate.
+                </span>
+              </label>
+              {mutateError && <p className="text-red-600 dark:text-red-400 text-xs">{mutateError}</p>}
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => !savingDefaultRate && setShowDefaultRate(false)}
+                className="px-4 py-2 rounded-lg text-sm border border-gray-300 dark:border-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={savingDefaultRate}
+                onClick={handleSaveDefaultRate}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {savingDefaultRate ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
