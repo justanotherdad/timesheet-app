@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { User, UserRole } from '@/types/database'
 import { Plus, Edit, Trash2, Key, X, ArrowUpDown, ArrowUp, ArrowDown, Search, Eye, PowerOff } from 'lucide-react'
 import { createUser } from '@/app/actions/create-user'
@@ -82,6 +82,21 @@ export default function UserManagement({
   const [filterActive, setFilterActive] = useState<string>('active') // 'all' | 'active' | 'archived'
   
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Deep link: /dashboard/admin/users?user=<id> auto-opens that person's dialog
+  // (used by the "Bill Rates by Person" quick view). Clear the param afterwards
+  // so closing the dialog doesn't re-open it and the URL stays clean.
+  useEffect(() => {
+    const targetId = searchParams.get('user')
+    if (!targetId) return
+    const match = users.find((u) => u.id === targetId)
+    if (match) {
+      setError(null)
+      setEditingUser(match)
+    }
+    router.replace('/dashboard/admin/users', { scroll: false })
+  }, [searchParams, users, router])
 
   // Who can change role: super_admin any; admin can change admin or lower; manager can change manager or lower; supervisor cannot
   const canChangeRole = (target: User) => {

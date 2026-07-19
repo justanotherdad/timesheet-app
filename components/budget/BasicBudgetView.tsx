@@ -112,6 +112,36 @@ export default function BasicBudgetView({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
   const [employeePopup, setEmployeePopup] = useState<{ userId: string; userName: string; weekData: Record<string, { hours: number; timesheetId: string }>; mode: 'hours' | 'cost' } | null>(null)
+  const [billRatePersonPopup, setBillRatePersonPopup] = useState<{ userId: string; userName: string } | null>(null)
+  const [billRatePersonRows, setBillRatePersonRows] = useState<
+    { po_id: string; po_number: string; site_name: string; project_description: string; rate: number }[] | null
+  >(null)
+  const [billRatePersonLoading, setBillRatePersonLoading] = useState(false)
+  const canViewUserProfiles = ['supervisor', 'manager', 'admin', 'super_admin'].includes(user?.profile?.role || '')
+
+  useEffect(() => {
+    if (!billRatePersonPopup?.userId) {
+      setBillRatePersonRows(null)
+      return
+    }
+    let cancelled = false
+    setBillRatePersonLoading(true)
+    setBillRatePersonRows(null)
+    fetch(`/api/users/${billRatePersonPopup.userId}/bill-rate-pos?t=${Date.now()}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { rows: [] }))
+      .then((json) => {
+        if (!cancelled) setBillRatePersonRows(Array.isArray(json?.rows) ? json.rows : [])
+      })
+      .catch(() => {
+        if (!cancelled) setBillRatePersonRows([])
+      })
+      .finally(() => {
+        if (!cancelled) setBillRatePersonLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [billRatePersonPopup?.userId])
   const [invoiceDetailPopup, setInvoiceDetailPopup] = useState<any>(null)
   const [invoiceModal, setInvoiceModal] = useState<any>(null)
   const [expenseModal, setExpenseModal] = useState<any>(null)
@@ -2249,7 +2279,20 @@ export default function BasicBudgetView({
             ) : (
               billRates.map((br: any) => (
                 <tr key={br.id} className="border-b border-gray-100 dark:border-gray-700">
-                  <td className="py-2">{br.user_profiles?.name || 'Unknown'}</td>
+                  <td className="py-2">
+                    {br.user_id ? (
+                      <button
+                        type="button"
+                        onClick={() => setBillRatePersonPopup({ userId: br.user_id, userName: br.user_profiles?.name || 'Unknown' })}
+                        className="text-blue-600 dark:text-blue-400 hover:underline text-left"
+                        title="View this person's POs and bill rates"
+                      >
+                        {br.user_profiles?.name || 'Unknown'}
+                      </button>
+                    ) : (
+                      br.user_profiles?.name || 'Unknown'
+                    )}
+                  </td>
                   <td className="py-2">{br.effective_from_date ? formatDate(br.effective_from_date) : '—'}</td>
                   <td className="py-2">
                     {br.effective_to_date ? (
@@ -2389,6 +2432,63 @@ export default function BasicBudgetView({
             <button
               type="button"
               onClick={() => setEmployeePopup(null)}
+              className="mt-4 w-full py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Bill-rate person quick view: PO numbers + current rate for this employee */}
+      {billRatePersonPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setBillRatePersonPopup(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              {canViewUserProfiles ? (
+                <Link
+                  href={`/dashboard/admin/users?user=${billRatePersonPopup.userId}`}
+                  className="text-lg font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                  title="Open this person's profile in Manage Users"
+                >
+                  {billRatePersonPopup.userName} <ExternalLink className="h-4 w-4" />
+                </Link>
+              ) : (
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{billRatePersonPopup.userName}</h3>
+              )}
+              <button type="button" onClick={() => setBillRatePersonPopup(null)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">POs with a current bill rate:</p>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {billRatePersonLoading ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400 py-2">Loading…</p>
+              ) : (billRatePersonRows && billRatePersonRows.length > 0) ? (
+                billRatePersonRows.map((row) => (
+                  <div key={row.po_id} className="flex items-center justify-between gap-3 py-2 border-b border-gray-100 dark:border-gray-700">
+                    <div className="min-w-0">
+                      <Link
+                        href={`/dashboard/budget?poId=${row.po_id}`}
+                        className="text-blue-600 dark:text-blue-400 hover:underline font-medium truncate block"
+                        title="Open this budget"
+                      >
+                        {row.po_number}
+                      </Link>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate block">
+                        {row.site_name}{row.project_description && row.project_description !== '—' ? ` · ${row.project_description}` : ''}
+                      </span>
+                    </div>
+                    <span className="font-medium shrink-0">${(row.rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/hr</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400 py-2">No POs with a current bill rate.</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setBillRatePersonPopup(null)}
               className="mt-4 w-full py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               Close

@@ -57,7 +57,11 @@ export default async function BudgetPage({
   // round trip. Deactivated POs are never included.
   const activePoIds = purchaseOrders.filter((p: any) => p.active !== false).map((p: any) => p.id as string)
   const todayStr = new Date().toISOString().slice(0, 10)
+  // Awaiting Payment: every bill-rate person has a passed end date (no one active).
   const awaitingPaymentPoIds: string[] = []
+  // Active bill rates: at least one bill-rate person is still current (the
+  // complement used by the "Remove Awaiting Payment" filter).
+  const activeBillRatePoIds: string[] = []
   if (activePoIds.length > 0) {
     const rateRows: { po_id: string; effective_to_date: string | null }[] = []
     for (let i = 0; i < activePoIds.length; i += 100) {
@@ -77,7 +81,9 @@ export default async function BudgetPage({
       byPo.set(r.po_id, acc)
     }
     for (const [pid, acc] of byPo) {
-      if (acc.total > 0 && acc.expired === acc.total) awaitingPaymentPoIds.push(pid)
+      if (acc.total === 0) continue
+      if (acc.expired === acc.total) awaitingPaymentPoIds.push(pid)
+      else activeBillRatePoIds.push(pid) // at least one still-current rate
     }
   }
 
@@ -95,6 +101,7 @@ export default async function BudgetPage({
           user={user}
           hasLimitedAccess={hasLimitedAccess}
           awaitingPaymentPoIds={awaitingPaymentPoIds}
+          activeBillRatePoIds={activeBillRatePoIds}
         />
       </div>
     </div>

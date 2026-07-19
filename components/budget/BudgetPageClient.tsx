@@ -56,6 +56,8 @@ interface BudgetPageClientProps {
   hasLimitedAccess?: boolean
   /** Active PO ids where everyone in the bill-rate section has a passed end date. */
   awaitingPaymentPoIds?: string[]
+  /** Active PO ids with at least one still-current bill rate. */
+  activeBillRatePoIds?: string[]
 }
 
 function BudgetPageClientInner({
@@ -65,6 +67,7 @@ function BudgetPageClientInner({
   user,
   hasLimitedAccess = false,
   awaitingPaymentPoIds = [],
+  activeBillRatePoIds = [],
 }: BudgetPageClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -73,7 +76,9 @@ function BudgetPageClientInner({
   const [budgetRefreshKey, setBudgetRefreshKey] = useState(0)
   const [showArchivedPOs, setShowArchivedPOs] = useState(false)
   const [awaitingPaymentOnly, setAwaitingPaymentOnly] = useState(false)
+  const [activeBillRatesOnly, setActiveBillRatesOnly] = useState(false)
   const awaitingPaymentSet = useMemo(() => new Set(awaitingPaymentPoIds), [awaitingPaymentPoIds])
+  const activeBillRateSet = useMemo(() => new Set(activeBillRatePoIds), [activeBillRatePoIds])
   const [poSearch, setPoSearch] = useState('')
   const [poSortMode, setPoSortMode] = useState<PoSortMode>('po_number')
   const [selectedSiteId, setSelectedSiteId] = useState<string>(() => {
@@ -124,6 +129,11 @@ function BudgetPageClientInner({
       if (awaitingPaymentOnly) {
         return p.active !== false && awaitingPaymentSet.has(p.id)
       }
+      // "Remove Awaiting Payment": active POs that still have at least one current
+      // bill rate (the complement of Awaiting Payment). Also ignores archived.
+      if (activeBillRatesOnly) {
+        return p.active !== false && activeBillRateSet.has(p.id)
+      }
       // showArchivedPOs true → only archived (active === false); false → only active.
       return showArchivedPOs ? p.active === false : p.active !== false
     })
@@ -166,7 +176,7 @@ function BudgetPageClientInner({
       if (tb == null) return -1
       return poSortMode === 'archived_oldest' ? ta - tb : tb - ta
     })
-  }, [selectedSiteId, sortedPurchaseOrders, showArchivedPOs, awaitingPaymentOnly, awaitingPaymentSet, poSearch, poSortMode])
+  }, [selectedSiteId, sortedPurchaseOrders, showArchivedPOs, awaitingPaymentOnly, awaitingPaymentSet, activeBillRatesOnly, activeBillRateSet, poSearch, poSortMode])
 
   const selectedPO = selectedPoId
     ? purchaseOrders.find((p) => p.id === selectedPoId)
@@ -281,11 +291,11 @@ function BudgetPageClientInner({
               <input
                 type="checkbox"
                 checked={showArchivedPOs}
-                disabled={awaitingPaymentOnly}
+                disabled={awaitingPaymentOnly || activeBillRatesOnly}
                 onChange={(e) => setShowArchivedPOs(e.target.checked)}
                 className="rounded border-gray-300 dark:border-gray-600 disabled:opacity-50"
               />
-              <span className={`text-sm ${awaitingPaymentOnly ? 'text-gray-400 dark:text-gray-600' : 'text-gray-600 dark:text-gray-400'}`}>
+              <span className={`text-sm ${awaitingPaymentOnly || activeBillRatesOnly ? 'text-gray-400 dark:text-gray-600' : 'text-gray-600 dark:text-gray-400'}`}>
                 Show archived POs
               </span>
             </label>
@@ -296,11 +306,29 @@ function BudgetPageClientInner({
               checked={awaitingPaymentOnly}
               onChange={(e) => {
                 setAwaitingPaymentOnly(e.target.checked)
-                if (e.target.checked) setShowArchivedPOs(false)
+                if (e.target.checked) {
+                  setShowArchivedPOs(false)
+                  setActiveBillRatesOnly(false)
+                }
               }}
               className="rounded border-gray-300 dark:border-gray-600"
             />
             <span className="text-sm text-gray-600 dark:text-gray-400">Awaiting Payment</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer" title="Active POs that still have at least one current bill rate (hides those awaiting payment)">
+            <input
+              type="checkbox"
+              checked={activeBillRatesOnly}
+              onChange={(e) => {
+                setActiveBillRatesOnly(e.target.checked)
+                if (e.target.checked) {
+                  setShowArchivedPOs(false)
+                  setAwaitingPaymentOnly(false)
+                }
+              }}
+              className="rounded border-gray-300 dark:border-gray-600"
+            />
+            <span className="text-sm text-gray-600 dark:text-gray-400">Remove Awaiting Payment</span>
           </label>
         </div>
         <div>
@@ -359,11 +387,13 @@ function BudgetPageClientInner({
                     ? 'No purchase orders match your search.'
                     : awaitingPaymentOnly
                       ? 'No purchase orders awaiting payment for this client (all active POs still have someone with a current bill rate).'
-                      : showArchivedPOs
-                        ? 'No archived purchase orders for this client.'
-                        : hasArchived
-                          ? 'No active purchase orders. Check "Show archived POs" to view archived ones.'
-                          : 'No purchase orders for this client.'}
+                      : activeBillRatesOnly
+                        ? 'No active purchase orders with a current bill rate for this client.'
+                        : showArchivedPOs
+                          ? 'No archived purchase orders for this client.'
+                          : hasArchived
+                            ? 'No active purchase orders. Check "Show archived POs" to view archived ones.'
+                            : 'No purchase orders for this client.'}
                 </p>
               ) : (
                 sitePOsForSelector.map((po) => {
