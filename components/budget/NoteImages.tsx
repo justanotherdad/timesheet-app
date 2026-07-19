@@ -22,6 +22,7 @@ export default function NoteImages({ poId, canEdit }: { poId: string; canEdit: b
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [lightbox, setLightbox] = useState<{ src: string; name: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const load = useCallback(async () => {
@@ -45,6 +46,15 @@ export default function NoteImages({ poId, canEdit }: { poId: string; canEdit: b
     setLoading(true)
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!lightbox) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightbox(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightbox])
 
   const uploadFiles = useCallback(
     async (files: File[]) => {
@@ -166,17 +176,24 @@ export default function NoteImages({ poId, canEdit }: { poId: string; canEdit: b
                 key={img.id}
                 className="group relative rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-900"
               >
-                <a href={src} target="_blank" rel="noopener noreferrer" className="block">
-                  {isPdf(img) ? (
+                {isPdf(img) ? (
+                  <a href={src} target="_blank" rel="noopener noreferrer" className="block">
                     <div className="flex flex-col items-center justify-center h-48 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
                       <span className="text-3xl">PDF</span>
                       <span className="mt-2 px-2 text-xs text-center break-all">{img.file_name}</span>
                     </div>
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setLightbox({ src, name: img.file_name })}
+                    className="block w-full cursor-zoom-in"
+                    title="Click to enlarge"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={src} alt={img.file_name} className="w-full h-48 object-contain bg-gray-50 dark:bg-gray-800" />
-                  )}
-                </a>
+                  </button>
+                )}
                 {canEdit && (
                   <button
                     type="button"
@@ -189,6 +206,42 @@ export default function NoteImages({ poId, canEdit }: { poId: string; canEdit: b
               </div>
             )
           })}
+        </div>
+      )}
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <div className="relative max-w-[95vw] max-h-[95vh]" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lightbox.src}
+              alt={lightbox.name}
+              className="max-w-[95vw] max-h-[85vh] object-contain rounded-lg shadow-2xl bg-white"
+            />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <span className="text-sm text-white/90 truncate">{lightbox.name}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={lightbox.src}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-md bg-white/15 hover:bg-white/25 text-white text-sm px-3 py-1.5"
+                >
+                  Open full size
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setLightbox(null)}
+                  className="rounded-md bg-white/15 hover:bg-white/25 text-white text-sm px-3 py-1.5"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
