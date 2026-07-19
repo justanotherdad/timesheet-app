@@ -54,6 +54,8 @@ interface BudgetPageClientProps {
   initialPoId: string | null
   user: { id: string; profile: { role: string } }
   hasLimitedAccess?: boolean
+  /** Active PO ids where everyone in the bill-rate section has a passed end date. */
+  awaitingPaymentPoIds?: string[]
 }
 
 function BudgetPageClientInner({
@@ -62,6 +64,7 @@ function BudgetPageClientInner({
   initialPoId,
   user,
   hasLimitedAccess = false,
+  awaitingPaymentPoIds = [],
 }: BudgetPageClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -69,6 +72,8 @@ function BudgetPageClientInner({
 
   const [budgetRefreshKey, setBudgetRefreshKey] = useState(0)
   const [showArchivedPOs, setShowArchivedPOs] = useState(false)
+  const [awaitingPaymentOnly, setAwaitingPaymentOnly] = useState(false)
+  const awaitingPaymentSet = useMemo(() => new Set(awaitingPaymentPoIds), [awaitingPaymentPoIds])
   const [poSearch, setPoSearch] = useState('')
   const [poSortMode, setPoSortMode] = useState<PoSortMode>('po_number')
   const [selectedSiteId, setSelectedSiteId] = useState<string>(() => {
@@ -114,6 +119,11 @@ function BudgetPageClientInner({
     if (!selectedSiteId) return []
     const base = sortedPurchaseOrders.filter((p) => {
       if (p.site_id !== selectedSiteId) return false
+      // "Awaiting Payment" is an active-only view: only active POs where everyone
+      // in the bill-rate section has a passed end date. It ignores the archived toggle.
+      if (awaitingPaymentOnly) {
+        return p.active !== false && awaitingPaymentSet.has(p.id)
+      }
       // showArchivedPOs true → only archived (active === false); false → only active.
       return showArchivedPOs ? p.active === false : p.active !== false
     })
@@ -156,7 +166,7 @@ function BudgetPageClientInner({
       if (tb == null) return -1
       return poSortMode === 'archived_oldest' ? ta - tb : tb - ta
     })
-  }, [selectedSiteId, sortedPurchaseOrders, showArchivedPOs, poSearch, poSortMode])
+  }, [selectedSiteId, sortedPurchaseOrders, showArchivedPOs, awaitingPaymentOnly, awaitingPaymentSet, poSearch, poSortMode])
 
   const selectedPO = selectedPoId
     ? purchaseOrders.find((p) => p.id === selectedPoId)
@@ -265,17 +275,34 @@ function BudgetPageClientInner({
         Select a Budget to View
       </h2>
       <div className="space-y-4">
-        {hasArchived && (
-          <label className="flex items-center gap-2 cursor-pointer">
+        <div className="flex flex-wrap items-center gap-4">
+          {hasArchived && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showArchivedPOs}
+                disabled={awaitingPaymentOnly}
+                onChange={(e) => setShowArchivedPOs(e.target.checked)}
+                className="rounded border-gray-300 dark:border-gray-600 disabled:opacity-50"
+              />
+              <span className={`text-sm ${awaitingPaymentOnly ? 'text-gray-400 dark:text-gray-600' : 'text-gray-600 dark:text-gray-400'}`}>
+                Show archived POs
+              </span>
+            </label>
+          )}
+          <label className="flex items-center gap-2 cursor-pointer" title="Active POs where everyone in the bill-rate section has an end date that has passed (nobody active to log time)">
             <input
               type="checkbox"
-              checked={showArchivedPOs}
-              onChange={(e) => setShowArchivedPOs(e.target.checked)}
+              checked={awaitingPaymentOnly}
+              onChange={(e) => {
+                setAwaitingPaymentOnly(e.target.checked)
+                if (e.target.checked) setShowArchivedPOs(false)
+              }}
               className="rounded border-gray-300 dark:border-gray-600"
             />
-            <span className="text-sm text-gray-600 dark:text-gray-400">Show archived POs</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">Awaiting Payment</span>
           </label>
-        )}
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Client / Site
@@ -330,11 +357,13 @@ function BudgetPageClientInner({
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {poSearch.trim()
                     ? 'No purchase orders match your search.'
-                    : showArchivedPOs
-                      ? 'No archived purchase orders for this client.'
-                      : hasArchived
-                        ? 'No active purchase orders. Check "Show archived POs" to view archived ones.'
-                        : 'No purchase orders for this client.'}
+                    : awaitingPaymentOnly
+                      ? 'No purchase orders awaiting payment for this client (all active POs still have someone with a current bill rate).'
+                      : showArchivedPOs
+                        ? 'No archived purchase orders for this client.'
+                        : hasArchived
+                          ? 'No active purchase orders. Check "Show archived POs" to view archived ones.'
+                          : 'No purchase orders for this client.'}
                 </p>
               ) : (
                 sitePOsForSelector.map((po) => {

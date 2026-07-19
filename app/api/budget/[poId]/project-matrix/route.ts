@@ -152,10 +152,19 @@ export type IndirectLine = {
   label: string
   budgetCost: number
   actualCost: number
-  /** 'bidsheet_fallback' when synthesized from bid_sheet_indirect_labor (no real po_expense yet). */
-  source?: 'po_expense' | 'bidsheet_fallback'
+  /**
+   * Primary backing of the row (for the matrix action buttons):
+   *   'manual_budget'     — a po_indirect_budget row (Budget column; edit/delete).
+   *   'po_expense'        — a real po_expenses row (Actual column; edit/delete).
+   *   'bidsheet_fallback' — synthesized from bid_sheet_indirect_labor projection.
+   */
+  source?: 'po_expense' | 'bidsheet_fallback' | 'manual_budget'
   /** The bid_sheet_indirect_labor row ID — present on fallback rows for repair operations. */
   bidSheetRowId?: string
+  /** po_indirect_budget row id — present when a manual budget line backs this row. */
+  budgetLineId?: string
+  /** po_expenses row id — present when a single actual expense backs this row. */
+  expenseId?: string
 }
 
 export type MissingActivity = {
@@ -468,28 +477,88 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
   const totalActualCost = rows.reduce((s, r) => s + r.actualCost, 0)
 
   const { data: expenseRows } = await db.from('po_expenses').select('id, amount, custom_type_name').eq('po_id', poId)
+  const { data: budgetIndirectRows } = await db
+    .from('po_indirect_budget')
+    .select('id, label, amount')
+    .eq('po_id', poId)
 
-  // po_expenses entries are *actual* incurred costs the user logged during
-  // the project. Surface them with actualCost = amount and budgetCost = 0.
-  let indirectLines: IndirectLine[] = (expenseRows || []).map((e: Record<string, unknown>) => {
-    const amt = Number(e.amount) || 0
-    const label = String(e.custom_type_name || 'Expense').trim() || 'Expense'
+  // Indirect section combines three sources, merged by label (case-insensitive):
+  //   * BUDGET  — manual po_indirect_budget lines (built here, like a bid sheet)
+  //   * BUDGET  — bid-sheet projection fallback (expense-type indirect from the
+  //               source bid sheet); shown so converted budgets still surface it
+  //   * ACTUAL  — po_expenses (real spend entered in the Budget expense container)
+  // A budget line and its matching actual expense render as ONE row (Budget vs
+  // Actual). Manual budget lines never reduce budget balance — only po_expenses do.
+  const mergeAcc = new Map<
+    string,
+    {
+      label: string
+      budgetCost: number
+      actualCost: number
+      budgetLineId?: string
+      bidSheetRowId?: string
+      expenseId?: string
+      expenseCount: number
+    }
+  >()
+  const keyFor = (label: string) => label.trim().toLowerCase()
+  const ensureLine = (label: string) => {
+    const key = keyFor(label)
+    let acc = mergeAcc.get(key)
+    if (!acc) {
+      acc = { label: label.trim() || 'Indirect', budgetCost: 0, actualCost: 0, expenseCount: 0 }
+      mergeAcc.set(key, acc)
+    }
+    return acc
+  }
+
+  for (const row of (budgetIndirectRows || []) as Array<{ id: string; label?: string | null; amount?: number | null }>) {
+    const acc = ensureLine(String(row.label || 'Indirect'))
+    acc.budgetCost += Number(row.amount) || 0
+    if (!acc.budgetLineId) acc.budgetLineId = row.id
+  }
+  for (const line of await loadIndirectLinesFromBidSheetFallback(db, poId)) {
+    const acc = ensureLine(line.label)
+    acc.budgetCost += line.budgetCost
+    if (!acc.bidSheetRowId) acc.bidSheetRowId = line.bidSheetRowId
+  }
+  for (const e of (expenseRows || []) as Array<{ id: string; amount?: number | null; custom_type_name?: string | null }>) {
+    const acc = ensureLine(String(e.custom_type_name || 'Expense'))
+    acc.actualCost += Number(e.amount) || 0
+    acc.expenseCount += 1
+    if (!acc.expenseId) acc.expenseId = e.id
+  }
+
+  const indirectLines: IndirectLine[] = [...mergeAcc.values()].map((acc) => {
+    // Row "source" drives which action buttons the matrix shows. A manual budget
+    // line wins (it's editable here); then a single real expense; else projection.
+    const source: IndirectLine['source'] = acc.budgetLineId
+      ? 'manual_budget'
+      : acc.expenseId
+        ? 'po_expense'
+        : 'bidsheet_fallback'
+    const id = acc.budgetLineId
+      ? `budget:${acc.budgetLineId}`
+      : acc.expenseId
+        ? (acc.expenseId as string)
+        : acc.bidSheetRowId
+          ? `bid-sheet-indirect:${acc.bidSheetRowId}`
+          : `indirect:${keyFor(acc.label)}`
     return {
-      id: e.id as string,
-      label,
-      budgetCost: 0,
-      actualCost: amt,
-      source: 'po_expense' as const,
+      id,
+      label: acc.label,
+      budgetCost: acc.budgetCost,
+      actualCost: acc.actualCost,
+      source,
+      bidSheetRowId: acc.bidSheetRowId,
+      budgetLineId: acc.budgetLineId,
+      // Only expose a single-expense id for inline edit/delete; if several
+      // expenses merged into one row, they must be managed in the expense container.
+      expenseId: acc.expenseCount === 1 ? acc.expenseId : undefined,
     }
   })
-  // Fallback: when no real po_expenses exist yet, synthesize expense-type indirect
-  // lines from the bid sheet's projected indirect costs (projections only, actual = 0).
-  // Activity-type rows (PM, DocCoord, etc.) are excluded from the fallback — they
-  // belong in project_details and appear in the regular matrix.
-  const poActualSum = indirectLines.reduce((s, x) => s + x.actualCost, 0)
-  if (poActualSum <= EPS) {
-    indirectLines = await loadIndirectLinesFromBidSheetFallback(db, poId)
-  }
+  indirectLines.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
+
   const indirectBudgetTotal = indirectLines.reduce((s, x) => s + x.budgetCost, 0)
   const indirectActualTotal = indirectLines.reduce((s, x) => s + x.actualCost, 0)
 
@@ -509,9 +578,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
     bidSheetLineCosts.size > 0
       ? 'Est. budget $ uses the same effective labor rate as the source bid sheet (hours × bid rate per cell), scaled to current budgeted hours per line. Rows without a bid-sheet match use budgeted hours × the average of each team member’s bill rate on this PO. Actual $ sums approved timesheet hours × that person’s effective rate for each week.'
       : 'Est. budget $ uses budgeted hours × the average of each team member’s current bill rate on this PO. Actual $ sums approved timesheet hours × that person’s effective rate for each week.'
-  if (indirectBudgetTotal > EPS) {
+  if (indirectBudgetTotal > EPS || indirectActualTotal > EPS) {
     budgetCostLabel +=
-      ' Indirect / expense lines from this PO (e.g. imported from the bid sheet) appear below the labor matrix and are included in the grand total.'
+      ' Indirect lines appear below the labor matrix: the Budget column is built here (or imported from the bid sheet), and the Actual column reflects expenses recorded in the Budget screen’s Expense container. Both are included in the grand total.'
   }
 
   return NextResponse.json(

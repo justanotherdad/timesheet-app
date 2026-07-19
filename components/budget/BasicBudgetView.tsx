@@ -20,6 +20,7 @@ import ExpenseFormModal from './ExpenseFormModal'
 import BillRateFormModal from './BillRateFormModal'
 import BillRateRemoveModal from './BillRateRemoveModal'
 import BudgetContainerAuditTrail, { type ContainerAuditRow } from './BudgetContainerAuditTrail'
+import NoteImages from './NoteImages'
 
 const ATTACHMENT_ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 
@@ -145,6 +146,7 @@ export default function BasicBudgetView({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
+  const [notesTab, setNotesTab] = useState<'notes' | 'images'>('notes')
   const [notesValue, setNotesValue] = useState('')
   const [notesDirty, setNotesDirty] = useState(false)
   const [savingNotes, setSavingNotes] = useState(false)
@@ -1768,53 +1770,82 @@ export default function BasicBudgetView({
       {!hasLimitedAccess && (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Notes</h2>
-          {notesSaved && !notesDirty && (
+          <div className="flex items-center gap-1 border border-gray-200 dark:border-gray-700 rounded-lg p-1">
+            <button
+              type="button"
+              onClick={() => setNotesTab('notes')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                notesTab === 'notes'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              Notes
+            </button>
+            <button
+              type="button"
+              onClick={() => setNotesTab('images')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                notesTab === 'images'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              Images / Files
+            </button>
+          </div>
+          {notesTab === 'notes' && notesSaved && !notesDirty && (
             <span className="text-xs text-green-600 dark:text-green-400">Saved</span>
           )}
         </div>
-        {canEdit ? (
+        {notesTab === 'notes' ? (
           <>
-            <textarea
-              value={notesValue}
-              onChange={(e) => {
-                setNotesValue(e.target.value)
-                setNotesDirty(true)
-                setNotesSaved(false)
-              }}
-              rows={5}
-              placeholder="Add notes about this budget…"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 resize-y"
-            />
-            {notesError && <p className="text-sm text-red-600 dark:text-red-400 mt-2">{notesError}</p>}
-            <div className="flex items-center gap-3 mt-3">
-              <button
-                type="button"
-                onClick={saveNotes}
-                disabled={savingNotes || !notesDirty}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {savingNotes ? 'Saving…' : 'Save Notes'}
-              </button>
-              {notesDirty && (
-                <button
-                  type="button"
-                  onClick={() => { setNotesValue(loadedNotes || ''); setNotesDirty(false); setNotesError(null) }}
-                  className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 text-sm"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
+            {canEdit ? (
+              <>
+                <textarea
+                  value={notesValue}
+                  onChange={(e) => {
+                    setNotesValue(e.target.value)
+                    setNotesDirty(true)
+                    setNotesSaved(false)
+                  }}
+                  rows={5}
+                  placeholder="Add notes about this budget…"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 resize-y"
+                />
+                {notesError && <p className="text-sm text-red-600 dark:text-red-400 mt-2">{notesError}</p>}
+                <div className="flex items-center gap-3 mt-3">
+                  <button
+                    type="button"
+                    onClick={saveNotes}
+                    disabled={savingNotes || !notesDirty}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {savingNotes ? 'Saving…' : 'Save Notes'}
+                  </button>
+                  {notesDirty && (
+                    <button
+                      type="button"
+                      onClick={() => { setNotesValue(loadedNotes || ''); setNotesDirty(false); setNotesError(null) }}
+                      className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 text-sm"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              notesValue ? (
+                <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{notesValue}</p>
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No notes.</p>
+              )
+            )}
+            <BudgetContainerAuditTrail entries={containerAudit.notes} />
           </>
         ) : (
-          notesValue ? (
-            <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{notesValue}</p>
-          ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No notes.</p>
-          )
+          <NoteImages poId={po.id} canEdit={!!canEdit} />
         )}
-        <BudgetContainerAuditTrail entries={containerAudit.notes} />
       </div>
       )}
 

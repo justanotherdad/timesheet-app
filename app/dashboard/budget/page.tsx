@@ -50,6 +50,37 @@ export default async function BudgetPage({
     redirect('/dashboard/budget')
   }
 
+  // "Awaiting Payment" filter data: active POs where every person in the bill
+  // rate section has an end date that has already passed (nobody is currently
+  // active to log time against the budget). A PO with no bill-rate rows does not
+  // qualify. Computed here so the list can filter client-side without an extra
+  // round trip. Deactivated POs are never included.
+  const activePoIds = purchaseOrders.filter((p: any) => p.active !== false).map((p: any) => p.id as string)
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const awaitingPaymentPoIds: string[] = []
+  if (activePoIds.length > 0) {
+    const rateRows: { po_id: string; effective_to_date: string | null }[] = []
+    for (let i = 0; i < activePoIds.length; i += 100) {
+      const chunk = activePoIds.slice(i, i + 100)
+      const { data: rows } = await withQueryTimeout(() =>
+        supabase.from('po_bill_rates').select('po_id, effective_to_date').in('po_id', chunk)
+      )
+      if (Array.isArray(rows)) rateRows.push(...(rows as typeof rateRows))
+    }
+    const byPo = new Map<string, { total: number; expired: number }>()
+    for (const r of rateRows) {
+      const acc = byPo.get(r.po_id) || { total: 0, expired: 0 }
+      acc.total += 1
+      // A row counts as "active" when it has no end date (open-ended) or the end
+      // date is today or later. Passed = a real end date strictly before today.
+      if (r.effective_to_date != null && r.effective_to_date < todayStr) acc.expired += 1
+      byPo.set(r.po_id, acc)
+    }
+    for (const [pid, acc] of byPo) {
+      if (acc.total > 0 && acc.expired === acc.total) awaitingPaymentPoIds.push(pid)
+    }
+  }
+
   // Full view for all users with access: if granted budget access, they see all info (timesheets, hours, expenses, etc.)
   const hasLimitedAccess = false
 
@@ -63,6 +94,7 @@ export default async function BudgetPage({
           initialPoId={poId || null}
           user={user}
           hasLimitedAccess={hasLimitedAccess}
+          awaitingPaymentPoIds={awaitingPaymentPoIds}
         />
       </div>
     </div>

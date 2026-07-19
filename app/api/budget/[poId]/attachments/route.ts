@@ -44,6 +44,9 @@ export async function GET(
     .from('po_attachments')
     .select('id, file_name, storage_path, file_type')
     .eq('po_id', poId)
+    // Exclude Notes-tab images/files (category='note_image'); those are listed
+    // by the dedicated note-images route. Legacy rows have NULL category.
+    .or('category.is.null,category.eq.attachment')
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -118,6 +121,7 @@ export async function POST(
       storage_path: path,
       file_type: file.type,
       file_size: file.size,
+      category: 'attachment',
     })
     .select('id, file_name, storage_path, file_type')
     .single()

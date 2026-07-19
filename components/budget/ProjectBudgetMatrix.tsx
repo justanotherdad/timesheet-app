@@ -100,10 +100,14 @@ type IndirectLineRow = {
   label: string
   budgetCost: number
   actualCost: number
-  /** Distinguishes real po_expenses from bid-sheet projections used as a display fallback. */
-  source?: 'po_expense' | 'bidsheet_fallback'
+  /** Which backing drives this row's action buttons. */
+  source?: 'po_expense' | 'bidsheet_fallback' | 'manual_budget'
   /** Bid sheet row ID — present on fallback rows so we can create a real po_expense from them. */
   bidSheetRowId?: string
+  /** po_indirect_budget row id — present when a manual budget line backs this row. */
+  budgetLineId?: string
+  /** po_expenses row id — present when a single actual expense backs this row. */
+  expenseId?: string
 }
 
 type MissingActivity = {
@@ -685,11 +689,13 @@ export default function ProjectBudgetMatrix({
    * editing rows backed by a real po_expenses record.
    */
   const startEditIndirect = (ir: IndirectLineRow) => {
+    // Editable rows are manual budget lines (Budget column) or a single real
+    // expense (Actual column). Pure bid-sheet projections are not editable.
     if (ir.source === 'bidsheet_fallback') return
     setEditingIndirect(ir)
     setEditIndirectLabel(ir.label || '')
-    // Real po_expenses store the amount as actualCost; fallback rows use budgetCost.
-    setEditIndirectAmount(String(ir.source === 'po_expense' ? (ir.actualCost ?? 0) : (ir.budgetCost ?? 0)))
+    // Budget lines edit the budgetCost; expense lines edit the actualCost.
+    setEditIndirectAmount(String(ir.budgetLineId ? (ir.budgetCost ?? 0) : (ir.actualCost ?? 0)))
   }
 
   const handleSaveIndirect = async () => {
@@ -707,14 +713,18 @@ export default function ProjectBudgetMatrix({
     setMutating(true)
     setMutateError(null)
     try {
-      const res = await fetch(`/api/budget/${poId}/expenses/${encodeURIComponent(editingIndirect.id)}`, {
+      // Manual budget line → po_indirect_budget; single real expense → po_expenses.
+      const url = editingIndirect.budgetLineId
+        ? `/api/budget/${poId}/indirect-budget/${encodeURIComponent(editingIndirect.budgetLineId)}`
+        : `/api/budget/${poId}/expenses/${encodeURIComponent(editingIndirect.expenseId || editingIndirect.id)}`
+      const payload = editingIndirect.budgetLineId
+        ? { label: trimmed, amount: amt }
+        : { custom_type_name: trimmed, amount: amt }
+      const res = await fetch(url, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          custom_type_name: trimmed,
-          amount: amt,
-        }),
+        body: JSON.stringify(payload),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error((body as { error?: string }).error || 'Save failed')
@@ -728,20 +738,25 @@ export default function ProjectBudgetMatrix({
   }
 
   /**
-   * Delete an indirect / PO-expense line straight from the matrix view.
-   * Fallback bid-sheet rows (source==='bidsheet_fallback') are not deletable — the
-   * user should instead record a real expense via "Record Expense" or sync activities.
+   * Delete an indirect line from the matrix. Manual budget lines delete the
+   * po_indirect_budget row; single-expense rows delete the po_expenses row.
+   * Bid-sheet projection rows are not deletable here.
    */
-  const handleDeleteIndirect = async (id: string, label: string) => {
-    if (id.startsWith('bid-sheet-indirect:')) return
-    if (!confirm(`Delete this expense from the PO budget?\n${label}`)) return
+  const handleDeleteIndirect = async (ir: IndirectLineRow) => {
+    let url: string
+    if (ir.budgetLineId) {
+      if (!confirm(`Remove this budget indirect line?\n${ir.label}`)) return
+      url = `/api/budget/${poId}/indirect-budget/${encodeURIComponent(ir.budgetLineId)}`
+    } else if (ir.expenseId || ir.source === 'po_expense') {
+      if (!confirm(`Delete this expense from the PO budget?\n${ir.label}`)) return
+      url = `/api/budget/${poId}/expenses/${encodeURIComponent(ir.expenseId || ir.id)}`
+    } else {
+      return
+    }
     setMutating(true)
     setMutateError(null)
     try {
-      const res = await fetch(`/api/budget/${poId}/expenses/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      })
+      const res = await fetch(url, { method: 'DELETE', credentials: 'include' })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error((body as { error?: string }).error || 'Delete failed')
@@ -1145,12 +1160,13 @@ export default function ProjectBudgetMatrix({
           setMutating(false)
           return
         }
-        const today = new Date().toISOString().slice(0, 10)
-        const res = await fetch(`/api/budget/${poId}/expenses`, {
+        // Adds a BUDGET indirect line (projection), not an actual expense. Actual
+        // spend is recorded in the Budget screen's Expense container.
+        const res = await fetch(`/api/budget/${poId}/indirect-budget`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ custom_type_name: label, amount: amt, expense_date: today }),
+          body: JSON.stringify({ label, amount: amt }),
         })
         const body = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error((body as { error?: string }).error || 'Could not add indirect cost')
@@ -1788,7 +1804,7 @@ export default function ProjectBudgetMatrix({
         <div className="mb-6 p-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/30 print:hidden space-y-3">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Add indirect cost</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Adds an indirect line to this project budget. An <strong>Expense</strong> tracks a dollar amount (e.g. Travel &amp; Living); a <strong>Loggable activity</strong> creates an Indirect line people can log time against (budget $ = hours × rate).
+            Adds an indirect line to this project <strong>budget</strong> (a projection, like a bid sheet — it does not reduce the budget balance). An <strong>Expense</strong> adds a budgeted dollar amount (e.g. Travel &amp; Living); a <strong>Loggable activity</strong> creates an Indirect line people can log time against (budget $ = hours × rate). Record <em>actual</em> spend later in the Budget screen&apos;s Expense container — it will appear in the Actual column here.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
@@ -2184,9 +2200,16 @@ export default function ProjectBudgetMatrix({
                       ? 'text-red-600 dark:text-red-400'
                       : 'text-emerald-700 dark:text-emerald-400'
                     : ''
-                // Fallback rows are bid-sheet projections (no real po_expense yet).
-                // Real po_expense rows (source === 'po_expense') get Edit / Delete.
+                // Row backing drives the actions: bid-sheet projections offer
+                // "Record Expense"; manual budget lines and single expenses get
+                // Edit / Delete.
                 const isFallbackRow = ir.source === 'bidsheet_fallback'
+                const kindLabel =
+                  ir.source === 'manual_budget'
+                    ? 'Budget (indirect)'
+                    : ir.source === 'po_expense'
+                      ? 'Actual expense'
+                      : 'Projected (bid sheet)'
                 return (
                   <tr key={`indirect-${ir.id}`} className="border-b border-gray-100 dark:border-gray-700 bg-amber-50/40 dark:bg-amber-950/15">
                     <td className="py-2 pr-4 text-gray-800 dark:text-gray-200 align-top">Indirect</td>
@@ -2198,7 +2221,7 @@ export default function ProjectBudgetMatrix({
                     </td>
                     <td className="py-2 pr-4 text-gray-500 dark:text-gray-500 align-top">—</td>
                     <td className="py-2 pr-4 text-gray-500 dark:text-gray-500 align-top max-w-[220px] text-xs">
-                      {isFallbackRow ? 'Projected (bid sheet)' : 'PO expense'}
+                      {kindLabel}
                     </td>
                     <td className="text-right py-2 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
                     <td className="text-right py-2 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
@@ -2231,7 +2254,7 @@ export default function ProjectBudgetMatrix({
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDeleteIndirect(ir.id, ir.label)}
+                              onClick={() => handleDeleteIndirect(ir)}
                               disabled={mutating}
                               className="text-red-600 dark:text-red-400 hover:underline disabled:opacity-50"
                             >
@@ -2269,7 +2292,7 @@ export default function ProjectBudgetMatrix({
                 <>
                   <tr className="font-semibold bg-amber-50/60 dark:bg-amber-950/25 border-t border-amber-200/80 dark:border-amber-900/50">
                     <td className="py-3 pr-4" colSpan={4}>
-                      Indirect subtotal (PO expenses){hasActiveFilters ? ' — full PO, not filtered' : ''}
+                      Indirect subtotal{hasActiveFilters ? ' — full PO, not filtered' : ''}
                     </td>
                     <td className="text-right py-3 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
                     <td className="text-right py-3 px-2 tabular-nums text-gray-500 dark:text-gray-500">—</td>
