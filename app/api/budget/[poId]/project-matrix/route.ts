@@ -450,6 +450,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ poId: s
       deliverableId,
       activityId,
       systemLabel: systemLabel || '—',
+      // Raw name/code so the Edit dialog can prefill the rename fields.
+      systemName: name || '',
+      systemCode: (code ?? null) as string | null,
       deliverableName: del?.name || '—',
       activityName: act?.name || '—',
       description: (r.description as string | null | undefined) ?? null,

@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
         *
       `)
       .in('timesheet_id', timesheetIds)
+      .order('sort_order', { ascending: true, nullsFirst: true })
       .order('created_at')
 
     // Get unique site and PO IDs

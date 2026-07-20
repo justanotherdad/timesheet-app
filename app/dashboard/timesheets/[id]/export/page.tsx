@@ -112,6 +112,7 @@ export default async function ExportTimesheetPage({
         activities(name)
       `)
       .eq('timesheet_id', id)
+      .order('sort_order', { ascending: true, nullsFirst: true })
       .order('created_at')
   )
   const entries = (entriesResult.data || []) as any[]

@@ -60,6 +60,7 @@ export default async function EditTimesheetPage({
       .from('timesheet_entries')
       .select('*')
       .eq('timesheet_id', id)
+      .order('sort_order', { ascending: true, nullsFirst: true })
       .order('created_at')
   )
   const entries = Array.isArray(entriesResult.data)
@@ -157,6 +158,7 @@ export default async function EditTimesheetPage({
             .from('timesheet_entries')
             .select('*')
             .eq('timesheet_id', previousTimesheetId)
+            .order('sort_order', { ascending: true, nullsFirst: true })
             .order('created_at')
         ),
         withQueryTimeout<Array<any>>(() =>

@@ -268,6 +268,7 @@ export default async function TimesheetDetailPage({
           activities(name)
         `)
         .eq('timesheet_id', id)
+        .order('sort_order', { ascending: true, nullsFirst: true })
         .order('created_at')
     )
     entries = (entriesResult.data || []) as any[]

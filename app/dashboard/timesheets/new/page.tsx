@@ -169,6 +169,7 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
             .from('timesheet_entries')
             .select('*')
             .eq('timesheet_id', previousTimesheetId)
+            .order('sort_order', { ascending: true, nullsFirst: true })
             .order('created_at')
         ),
         withQueryTimeout<Array<any>>(() =>

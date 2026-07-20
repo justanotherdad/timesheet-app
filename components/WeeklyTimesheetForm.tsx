@@ -8,7 +8,7 @@ import SystemInput from './SystemInput'
 import DeleteTimesheetButton from './DeleteTimesheetButton'
 import { getWeekDates, formatDate, formatDateShort, formatDateForInput, formatHours, formatWeekEnding, getWeekEndingSundayOptions, normalizeTimesheetHours } from '@/lib/utils'
 import { format } from 'date-fns'
-import { Plus, Trash2, Edit2, X } from 'lucide-react'
+import { Plus, Trash2, Edit2, X, ChevronUp, ChevronDown } from 'lucide-react'
 
 interface WeeklyTimesheetFormProps {
   sites: Array<{ id: string; name: string; code?: string }>
@@ -171,6 +171,11 @@ export default function WeeklyTimesheetForm({
   const [loading, setLoading] = useState(false)
   const [weekEnding, setWeekEnding] = useState<string>(defaultWeekEnding)
   const [currentStatus, setCurrentStatus] = useState<string>(timesheetStatus)
+  // Remember a timesheet this form instance created (draft save on the /new page)
+  // so a subsequent Save/Submit UPDATEs that same row instead of INSERTing a
+  // second one. Without this, "save draft then submit" produced two rows
+  // (a draft and a submitted duplicate) for the same week.
+  const [createdTimesheetId, setCreatedTimesheetId] = useState<string | null>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingEntry, setEditingEntry] = useState<BillableEntry | null>(null)
   const [showCopyModal, setShowCopyModal] = useState(false)
@@ -306,12 +311,25 @@ export default function WeeklyTimesheetForm({
     }
   }
 
+  // Reorder a billable row up/down. Order is persisted via sort_order on save.
+  const moveEntry = (index: number, direction: -1 | 1) => {
+    const target = index + direction
+    if (target < 0 || target >= billableEntries.length) return
+    setBillableEntries((prev) => {
+      const next = [...prev]
+      ;[next[index], next[target]] = [next[target], next[index]]
+      return next
+    })
+  }
+
   const saveTimesheet = async (shouldSubmit: boolean = false) => {
     setError(null)
     setLoading(true)
 
     try {
-      let currentTimesheetId = timesheetId
+      // Prefer the prop id (edit page), then any row this form instance already
+      // created (so a save-then-submit on the /new page updates in place).
+      let currentTimesheetId = timesheetId || createdTimesheetId
       const newStatus = shouldSubmit ? 'submitted' : 'draft'
 
       if (currentTimesheetId) {
@@ -382,13 +400,18 @@ export default function WeeklyTimesheetForm({
           throw new Error('Failed to create timesheet')
         }
         currentTimesheetId = newTimesheet.id
+        // Remember it so any follow-up Save/Submit from this same form instance
+        // updates this row rather than inserting another one.
+        setCreatedTimesheetId(newTimesheet.id)
+        setCurrentStatus(newStatus)
       }
 
       // Insert billable entries
       const entriesToInsert = billableEntries
         .filter(e => e.task_description.trim() || calculateTotal(e) > 0)
-        .map(e => ({
+        .map((e, idx) => ({
           timesheet_id: currentTimesheetId!,
+          sort_order: idx,
           client_project_id: e.client_project_id || null,
           po_id: e.po_id || null,
           task_description: e.task_description,
@@ -755,6 +778,7 @@ export default function WeeklyTimesheetForm({
                 w-[3.5rem] as the unbillable table so both grids stay visually consistent. */}
             <table className="min-w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
               <colgroup>
+                <col className="w-12" />         {/* reorder up/down */}
                 <col className="w-10" />         {/* edit btn */}
                 <col />                           {/* Client — fills remaining space */}
                 <col className="w-28" />          {/* PO# */}
@@ -770,6 +794,7 @@ export default function WeeklyTimesheetForm({
               </colgroup>
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
+                  <th className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100" title="Reorder rows">↕</th>
                   <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100"></th>
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Client / Project #</th>
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">PO#</th>
@@ -790,6 +815,30 @@ export default function WeeklyTimesheetForm({
               <tbody>
                 {billableEntries.map((entry, entryIdx) => (
                   <tr key={entryIdx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center align-middle">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => moveEntry(entryIdx, -1)}
+                          disabled={entryIdx === 0}
+                          aria-label={`Move row ${entryIdx + 1} up`}
+                          title="Move up"
+                          className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <ChevronUp className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveEntry(entryIdx, 1)}
+                          disabled={entryIdx === billableEntries.length - 1}
+                          aria-label={`Move row ${entryIdx + 1} down`}
+                          title="Move down"
+                          className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <ChevronDown className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
                     <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center">
                       <button
                         type="button"
@@ -843,7 +892,7 @@ export default function WeeklyTimesheetForm({
                 
                 {/* Sub Totals Row */}
                 <tr className="bg-yellow-50 dark:bg-yellow-900/30 font-semibold">
-                  <td colSpan={7} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
+                  <td colSpan={8} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
                   {days.map((day) => (
                     <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-gray-900 dark:text-gray-100">
                       {formatHours(getBillableSubtotal(day))}

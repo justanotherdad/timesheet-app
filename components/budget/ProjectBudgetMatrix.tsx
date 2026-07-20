@@ -78,6 +78,9 @@ type MatrixRow = {
   deliverableId?: string | null
   activityId?: string | null
   systemLabel: string
+  /** Raw system name/code (for the Edit dialog's in-place rename fields). */
+  systemName?: string
+  systemCode?: string | null
   deliverableName: string
   activityName: string
   description?: string | null
@@ -230,6 +233,11 @@ export default function ProjectBudgetMatrix({
   const [editBudget, setEditBudget] = useState('')
   const [editBillRate, setEditBillRate] = useState('')
   const [editDesc, setEditDesc] = useState('')
+  // In-place system rename fields for the Edit dialog. Prefilled from the row's
+  // current system; saving a changed value renames the system for every row on
+  // this PO that uses it (rename in place).
+  const [editSystemName, setEditSystemName] = useState('')
+  const [editSystemCode, setEditSystemCode] = useState('')
   // Cascading picks for the Edit matrix row dialog. Same dedup model as the
   // Reassign dialog: the user picks a system display label, then a
   // deliverable (broadened across all underlying systems with that label),
@@ -543,6 +551,9 @@ export default function ProjectBudgetMatrix({
     setEditBudget(String(r.budgetedHours))
     setEditBillRate(r.billRate != null ? String(r.billRate) : '')
     setEditDesc((r.description ?? '') || '')
+    // Prefill the in-place rename fields with the row's current system.
+    setEditSystemName(r.systemName ?? '')
+    setEditSystemCode(r.systemCode ?? '')
     // Reset cascading picks; we hydrate them once validCombos has loaded so
     // the dropdowns can display the row's current combo as the initial value.
     setEditSystemLabel('')
@@ -619,6 +630,28 @@ export default function ProjectBudgetMatrix({
     setMutating(true)
     setMutateError(null)
     try {
+      // In-place system rename: if the name/code changed and we know the row's
+      // system id, rename that system first (affects every row using it).
+      const newSysName = editSystemName.trim()
+      const newSysCode = editSystemCode.trim()
+      const origSysName = (editingRow.systemName ?? '').trim()
+      const origSysCode = (editingRow.systemCode ?? '').trim()
+      const systemRenamed =
+        !!editingRow.systemId && !!newSysName && (newSysName !== origSysName || newSysCode !== origSysCode)
+      if (systemRenamed) {
+        const renameRes = await fetch(`/api/budget/${poId}/rename-system`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_id: editingRow.systemId,
+            name: newSysName,
+            code: newSysCode || null,
+          }),
+        })
+        const renameBody = await renameRes.json().catch(() => ({}))
+        if (!renameRes.ok) throw new Error((renameBody as { error?: string }).error || 'Rename failed')
+      }
       const payload: Record<string, unknown> = {
         id: editingRow.id,
         budgeted_hours: Number(editBudget) || 0,
@@ -2619,6 +2652,34 @@ export default function ProjectBudgetMatrix({
               {editCombosError && (
                 <p className="text-xs text-red-600 dark:text-red-400">{editCombosError}</p>
               )}
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Rename system</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <label className="block sm:col-span-2">
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">System name</span>
+                    <input
+                      value={editSystemName}
+                      onChange={(ev) => setEditSystemName(ev.target.value)}
+                      disabled={mutating}
+                      className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                      placeholder="e.g. HVAC"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Code (optional)</span>
+                    <input
+                      value={editSystemCode}
+                      onChange={(ev) => setEditSystemCode(ev.target.value)}
+                      disabled={mutating}
+                      className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                      placeholder="e.g. H1"
+                    />
+                  </label>
+                </div>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  Renaming updates this system for every row on this PO that uses it. To move only this row to a different system, use the dropdowns below instead.
+                </p>
+              </div>
               <label className="block">
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-300">System</span>
                 <select
