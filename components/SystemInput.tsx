@@ -16,6 +16,12 @@ interface SystemInputProps {
   onChange: (value: string | null, customValue?: string) => void
   placeholder?: string
   label?: string
+  /**
+   * When false, the user must pick from the options list — the "type custom
+   * value" affordances are hidden. Used for project-budget POs where entries
+   * must map to an existing matrix system.
+   */
+  allowCustom?: boolean
 }
 
 export default function SystemInput({
@@ -25,6 +31,7 @@ export default function SystemInput({
   onChange,
   placeholder = 'Select or type...',
   label,
+  allowCustom = true,
 }: SystemInputProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -151,7 +158,7 @@ export default function SystemInput({
                 <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
               </div>
             </button>
-            {!isOpen && (
+            {!isOpen && allowCustom && (
               <button
                 type="button"
                 onClick={() => {
@@ -173,7 +180,7 @@ export default function SystemInput({
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search or type new..."
+                    placeholder={allowCustom ? 'Search or type new...' : 'Search...'}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                     onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => {
@@ -182,7 +189,7 @@ export default function SystemInput({
                         if (matchingOption) {
                           // Select the matching option
                           handleSelectOption(matchingOption.id)
-                        } else {
+                        } else if (allowCustom) {
                           // Use as custom value
                           e.preventDefault()
                           setIsCustom(true)
@@ -215,7 +222,7 @@ export default function SystemInput({
                           )}
                         </button>
                       ))}
-                      {searchTerm.trim() && !filteredOptions.find(o => o.name.toLowerCase() === searchTerm.toLowerCase()) && (
+                      {allowCustom && searchTerm.trim() && !filteredOptions.find(o => o.name.toLowerCase() === searchTerm.toLowerCase()) && (
                         <button
                           type="button"
                           onClick={() => {

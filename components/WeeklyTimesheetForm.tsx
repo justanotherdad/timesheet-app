@@ -541,12 +541,6 @@ export default function WeeklyTimesheetForm({
     code: po.description,
   }))
 
-  const systemOptions = systems.map(s => ({
-    id: s.id,
-    name: s.name,
-    code: s.code,
-  }))
-
   // When the selected PO is a project budget, restrict dropdowns to combos
   // that exist as project_details rows. Honors the *current* row's other
   // selections (system / deliverable / activity) so each dropdown narrows
@@ -554,6 +548,25 @@ export default function WeeklyTimesheetForm({
   const projectCombosForPo: Array<{ systemId: string; deliverableId: string; activityId: string }> =
     editingEntry?.po_id ? projectBudgetCombosByPo[editingEntry.po_id] || [] : []
   const usingProjectCombos = projectCombosForPo.length > 0
+
+  // Systems/deliverables/activities are stored per project PO, so the same name
+  // (e.g. "Project", "EMPV") exists as many rows across the site — one per PO.
+  // In project-budget mode we MUST restrict the System dropdown to the exact
+  // system ids that appear in this PO's matrix; otherwise the user can pick a
+  // like-named system belonging to another PO whose id matches no combo here,
+  // and the Deliverable/Activity dropdowns come back empty.
+  const systemOptions = (
+    usingProjectCombos
+      ? (() => {
+          const allowedSystemIds = new Set(projectCombosForPo.map(c => c.systemId))
+          return systems.filter(s => allowedSystemIds.has(s.id))
+        })()
+      : systems
+  ).map(s => ({
+    id: s.id,
+    name: s.name,
+    code: s.code,
+  }))
 
   // Filter deliverables by client (site) and PO; deduplicate by id
   // When deliverable has no PO assignments: only show if its department matches the selected PO's department
@@ -1256,6 +1269,7 @@ export default function WeeklyTimesheetForm({
                   </label>
                   <SystemInput
                     options={systemOptions}
+                    allowCustom={!usingProjectCombos}
                     value={editingEntry.system_id || null}
                     customValue={editingEntry.system_name}
                     onChange={(value, customValue) => {
