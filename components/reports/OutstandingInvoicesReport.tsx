@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { differenceInDays, parseISO, startOfDay } from 'date-fns'
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Printer } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Printer, Download } from 'lucide-react'
 import { formatDateShort } from '@/lib/utils'
 
 interface OutstandingRow {
@@ -267,6 +267,59 @@ export default function OutstandingInvoicesReport() {
     window.print()
   }
 
+  const handleExportCsv = () => {
+    const q = (v: string | number | null | undefined) => {
+      const s = String(v ?? '')
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const header = [
+      'Client',
+      'PO #',
+      'Project Name',
+      'Invoice #',
+      'Invoice Date',
+      'Days Outstanding',
+      'PO Balance',
+      'Invoice Amount',
+    ]
+    const lines: string[] = [header.map(q).join(',')]
+    for (const group of clientGroups) {
+      for (const r of group.rows) {
+        const days = daysOutstanding(r.invoice_date)
+        lines.push(
+          [
+            q(r.client),
+            q(r.po_number),
+            q(r.project_name),
+            q((r.invoice_number || '').trim()),
+            q(r.invoice_date || ''),
+            q(days === null ? '' : days),
+            q((r.current_po_balance ?? 0).toFixed(2)),
+            q((r.invoice_amount ?? 0).toFixed(2)),
+          ].join(',')
+        )
+      }
+      lines.push(
+        [q(`Subtotal — ${group.client}`), q(''), q(''), q(''), q(''), q(''), q(''), q(group.sum.toFixed(2))].join(',')
+      )
+    }
+    if (clientGroups.length > 1) {
+      lines.push(
+        [q('Grand total (all visible rows)'), q(''), q(''), q(''), q(''), q(''), q(''), q(grandTotal.toFixed(2))].join(',')
+      )
+    }
+    const csvContent = '\uFEFF' + lines.join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `outstanding-invoices_${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -295,16 +348,28 @@ export default function OutstandingInvoicesReport() {
               </span>
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handlePrint}
-            disabled={sortedRows.length === 0}
-            className="print:hidden flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 transition-colors disabled:opacity-50 shrink-0"
-            title="Print or save as PDF"
-          >
-            <Printer className="h-5 w-5" />
-            Print / Export to PDF
-          </button>
+          <div className="print:hidden flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={sortedRows.length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+              title="Export current view to CSV"
+            >
+              <Download className="h-5 w-5" />
+              Export CSV
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={sortedRows.length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 transition-colors disabled:opacity-50"
+              title="Print or save as PDF"
+            >
+              <Printer className="h-5 w-5" />
+              Print / Export to PDF
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-4 items-center print:hidden">
           <label className="flex items-center gap-2">

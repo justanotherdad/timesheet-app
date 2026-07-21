@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
-import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Printer } from 'lucide-react'
+import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Printer, Download } from 'lucide-react'
 
 interface POStatusRow {
   client: string
@@ -162,6 +162,77 @@ export default function POStatusReport() {
     window.print()
   }
 
+  const handleExportCsv = () => {
+    const q = (v: string | number | null | undefined) => {
+      const s = String(v ?? '')
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const n = (v: number | null | undefined) => (v ?? 0).toFixed(2)
+    const header = [
+      'Client',
+      'PO #',
+      'Project Name',
+      'Original PO Amount (incl. COs)',
+      'Total Invoiced',
+      'Total Paid',
+      'Total Outstanding',
+      'PO Balance',
+      'Budget Balance',
+    ]
+    const lines: string[] = [header.map(q).join(',')]
+    for (const [clientName, clientRows] of Array.from(rowsByClient.entries()).sort(([a], [b]) => a.localeCompare(b))) {
+      for (const r of clientRows) {
+        lines.push(
+          [
+            q(r.client),
+            q(r.po_number),
+            q(r.project_name),
+            q(n(r.original_po_amount_incl_cos)),
+            q(n(r.total_invoiced)),
+            q(n(r.total_paid)),
+            q(n(r.total_outstanding)),
+            q(n(r.po_balance)),
+            q(n(r.budget_balance)),
+          ].join(',')
+        )
+      }
+      const t = clientRows.reduce(
+        (acc, r) => ({
+          original_po_amount_incl_cos: acc.original_po_amount_incl_cos + (r.original_po_amount_incl_cos ?? 0),
+          total_invoiced: acc.total_invoiced + (r.total_invoiced ?? 0),
+          total_paid: acc.total_paid + (r.total_paid ?? 0),
+          total_outstanding: acc.total_outstanding + (r.total_outstanding ?? 0),
+          po_balance: acc.po_balance + (r.po_balance ?? 0),
+          budget_balance: acc.budget_balance + (r.budget_balance ?? 0),
+        }),
+        { original_po_amount_incl_cos: 0, total_invoiced: 0, total_paid: 0, total_outstanding: 0, po_balance: 0, budget_balance: 0 }
+      )
+      lines.push(
+        [
+          q(`Subtotal: ${clientName}`),
+          q(''),
+          q(''),
+          q(n(t.original_po_amount_incl_cos)),
+          q(n(t.total_invoiced)),
+          q(n(t.total_paid)),
+          q(n(t.total_outstanding)),
+          q(n(t.po_balance)),
+          q(n(t.budget_balance)),
+        ].join(',')
+      )
+    }
+    const csvContent = '\uFEFF' + lines.join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `po-status_${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden report-print-container">
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 space-y-4">
@@ -172,15 +243,27 @@ export default function POStatusReport() {
               Full PO status by client with Original PO, Change Orders, Invoices, Balances. Each client has a subtotal.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="print:hidden flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 transition-colors shrink-0"
-            title="Print or save as PDF"
-          >
-            <Printer className="h-5 w-5" />
-            Print / Export to PDF
-          </button>
+          <div className="print:hidden flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={sortedRows.length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+              title="Export current view to CSV"
+            >
+              <Download className="h-5 w-5" />
+              Export CSV
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 transition-colors"
+              title="Print or save as PDF"
+            >
+              <Printer className="h-5 w-5" />
+              Print / Export to PDF
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-4 items-center print:hidden">
           <fieldset className="flex items-center gap-4">
