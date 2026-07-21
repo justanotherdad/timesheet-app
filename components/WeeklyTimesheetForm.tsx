@@ -522,6 +522,30 @@ export default function WeeklyTimesheetForm({
       return
     }
 
+    // Block regular employees from submitting a second timesheet for a week they
+    // already have one for. Admin/manager editors are exempt so they can still
+    // make corrections. The timesheet currently being edited/created is excluded.
+    if (!isAdminEditor) {
+      const currentId = timesheetId || createdTimesheetIdRef.current
+      let dupQuery = supabase
+        .from('weekly_timesheets')
+        .select('id, status')
+        .eq('user_id', userId)
+        .eq('week_ending', weekEnding)
+      if (currentId) dupQuery = dupQuery.neq('id', currentId)
+      const { data: existing, error: dupError } = await dupQuery
+      if (dupError) {
+        setError('Could not verify existing timesheets. Please try again.')
+        return
+      }
+      if (existing && existing.length > 0) {
+        setError(
+          `You already have a timesheet for week ending ${formatDate(weekDates.end)}. Please edit or delete the existing one instead of submitting another copy.`
+        )
+        return
+      }
+    }
+
     await saveTimesheet(true)
   }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { formatWeekEnding } from '@/lib/utils'
@@ -46,6 +46,20 @@ export default function ApprovedTimesheetsClient({
   const searchParams = useSearchParams()
   const [selectedTimesheet, setSelectedTimesheet] = useState<any>(null)
 
+  // Controlled filter inputs. Keeping these in state (instead of native form
+  // GET submit) lets us navigate client-side — a full page reload would flash
+  // the theme back to light because ThemeScript re-evaluates on reload. It also
+  // makes the Clear button actually reset the dropdown selection, which an
+  // uncontrolled <select defaultValue> would not do on client navigation.
+  const [startInput, setStartInput] = useState(filterStart)
+  const [endInput, setEndInput] = useState(filterEnd)
+  const [userInput, setUserInput] = useState(filterUser)
+
+  // Re-sync when the server sends new filter props (after navigation / back-fwd).
+  useEffect(() => setStartInput(filterStart), [filterStart])
+  useEffect(() => setEndInput(filterEnd), [filterEnd])
+  useEffect(() => setUserInput(filterUser), [filterUser])
+
   const buildUrl = (updates: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString())
     Object.entries(updates).forEach(([k, v]) => {
@@ -53,6 +67,18 @@ export default function ApprovedTimesheetsClient({
       else params.delete(k)
     })
     return `/dashboard/approvals/approved?${params.toString()}`
+  }
+
+  const handleApplyFilters = (e: React.FormEvent) => {
+    e.preventDefault()
+    router.push(buildUrl({ start: startInput, end: endInput, user: userInput }))
+  }
+
+  const handleClearFilters = () => {
+    setStartInput('')
+    setEndInput('')
+    setUserInput('')
+    router.push(buildUrl({ start: '', end: '', user: '' }))
   }
 
   const handleSort = (column: string) => {
@@ -126,19 +152,17 @@ export default function ApprovedTimesheetsClient({
     <div className="space-y-6">
       {/* Filters */}
       <form
-        method="get"
-        action="/dashboard/approvals/approved"
+        onSubmit={handleApplyFilters}
         className="flex flex-col lg:flex-row gap-4 p-4 rounded-lg"
       >
-        <input type="hidden" name="sort" value={sortBy} />
-        <input type="hidden" name="dir" value={sortDir} />
         <div className="flex flex-col gap-4 lg:w-48 lg:shrink-0 lg:border-r lg:border-gray-200 dark:lg:border-gray-600 lg:pr-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date (Week Ending)</label>
             <input
               type="date"
               name="start"
-              defaultValue={filterStart}
+              value={startInput}
+              onChange={(e) => setStartInput(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             />
           </div>
@@ -147,7 +171,8 @@ export default function ApprovedTimesheetsClient({
             <input
               type="date"
               name="end"
-              defaultValue={filterEnd}
+              value={endInput}
+              onChange={(e) => setEndInput(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             />
           </div>
@@ -157,7 +182,8 @@ export default function ApprovedTimesheetsClient({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">User</label>
             <select
               name="user"
-              defaultValue={filterUser}
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             >
               <option value="">All Users</option>
@@ -173,12 +199,13 @@ export default function ApprovedTimesheetsClient({
             >
               Apply Filters
             </button>
-            <Link
-              href="/dashboard/approvals/approved"
+            <button
+              type="button"
+              onClick={handleClearFilters}
               className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 inline-flex items-center"
             >
               Clear
-            </Link>
+            </button>
           </div>
         </div>
       </form>
