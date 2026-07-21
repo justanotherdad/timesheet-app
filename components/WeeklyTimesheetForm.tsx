@@ -176,6 +176,14 @@ export default function WeeklyTimesheetForm({
   // second one. Without this, "save draft then submit" produced two rows
   // (a draft and a submitted duplicate) for the same week.
   const [createdTimesheetId, setCreatedTimesheetId] = useState<string | null>(null)
+  // Ref mirror of the id above. State is subject to stale-closure/timing races:
+  // if the user clicks "Save Timesheet" then "Submit for Approval" quickly on the
+  // /new page (before the draft-save navigation/re-render settles), the submit
+  // handler could still read the old null state and INSERT a second row. The ref
+  // updates synchronously so the follow-up save always UPDATEs the same row.
+  const createdTimesheetIdRef = useRef<string | null>(null)
+  // Hard guard against overlapping saves (double-click / rapid Save+Submit).
+  const savingRef = useRef(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingEntry, setEditingEntry] = useState<BillableEntry | null>(null)
   const [showCopyModal, setShowCopyModal] = useState(false)
@@ -323,13 +331,19 @@ export default function WeeklyTimesheetForm({
   }
 
   const saveTimesheet = async (shouldSubmit: boolean = false) => {
+    // Ignore a second save that lands while the first is still running (e.g. a
+    // fast Save-then-Submit). Without this the two calls can race and each
+    // INSERT its own row for the same week.
+    if (savingRef.current) return
+    savingRef.current = true
     setError(null)
     setLoading(true)
 
     try {
       // Prefer the prop id (edit page), then any row this form instance already
-      // created (so a save-then-submit on the /new page updates in place).
-      let currentTimesheetId = timesheetId || createdTimesheetId
+      // created (so a save-then-submit on the /new page updates in place). The
+      // ref is authoritative because it is set synchronously on create.
+      let currentTimesheetId = timesheetId || createdTimesheetIdRef.current || createdTimesheetId
       const newStatus = shouldSubmit ? 'submitted' : 'draft'
 
       if (currentTimesheetId) {
@@ -401,7 +415,10 @@ export default function WeeklyTimesheetForm({
         }
         currentTimesheetId = newTimesheet.id
         // Remember it so any follow-up Save/Submit from this same form instance
-        // updates this row rather than inserting another one.
+        // updates this row rather than inserting another one. The ref is set
+        // first so an immediate follow-up save sees it without waiting for the
+        // state update / re-render.
+        createdTimesheetIdRef.current = newTimesheet.id
         setCreatedTimesheetId(newTimesheet.id)
         setCurrentStatus(newStatus)
       }
@@ -475,6 +492,7 @@ export default function WeeklyTimesheetForm({
       setError(err.message || 'An error occurred')
     } finally {
       setLoading(false)
+      savingRef.current = false
     }
   }
 
