@@ -314,11 +314,11 @@ function GuideContent() {
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">5.4 Manager: add and edit users</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          You see <strong>employees and supervisors</strong> who report to you. <strong>Add user:</strong> Click <strong>Add User</strong>, fill in name, email, role (Employee, Supervisor, or Manager), <strong>Supervisor</strong> (one field), Manager, and Final Approver. Timesheet PO access is set on each PO budget (<strong>Bill Rates by Person</strong>), not on this screen. <strong>Edit user:</strong> Open the user with <strong>View</strong>, then use <strong>Edit</strong>. There is a single <strong>Supervisor</strong> field. You can <strong>generate a password/invite link</strong> for users who report to you.
+          You see <strong>employees and supervisors</strong> who report to you. <strong>Add user:</strong> Click <strong>Add User</strong>, fill in name, email, role (Employee, Supervisor, or Manager), <strong>Supervisor</strong> (one field), Manager, and Final Approver. Timesheet PO access is set on each PO budget (<strong>Bill Rates by Person</strong>), not on this screen. <strong>Edit user:</strong> Open the user with <strong>View</strong>, then use <strong>Edit</strong>. There is a single <strong>Supervisor</strong> field. You can use <strong>Set Password</strong> for users who report to you.
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">5.5 Admin / Super Admin: full user management</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <strong>Admin:</strong> Sees all users except Super Admins. Can add and edit users (any role except Super Admin), delete users (except self), and generate password links for any user. <strong>Super Admin:</strong> Sees all users including Super Admins. Can add, edit, and delete any user (except self) and set any role, including Super Admin.
+          <strong>Admin:</strong> Sees all users except Super Admins. Can add and edit users (any role except Super Admin), delete users (except self), and set passwords for any user. <strong>Super Admin:</strong> Sees all users including Super Admins. Can add, edit, and delete any user (except self) and set any role, including Super Admin.
         </p>
       </section>
 

@@ -61,91 +61,67 @@ export async function createUser(formData: FormData) {
       return { error: 'Server configuration error: ' + (err.message || 'Missing SUPABASE_SERVICE_ROLE_KEY environment variable') }
     }
 
+    // A password is always required now. The old "leave blank to send an invite
+    // link" fallback created the auth user with email_confirm:false, so anyone
+    // who never clicked the link was permanently blocked at login with
+    // "Email not confirmed".
+    if (!password || password.length < 6) {
+      return { error: 'A password of at least 6 characters is required. The user will be prompted to change it on first login.' }
+    }
+
+    // listUsers() pages at 50 by default, so walk the pages — otherwise an
+    // existing login past the first page is missed and createUser fails with a
+    // duplicate-email error.
+    const findAuthUserByEmail = async (targetEmail: string) => {
+      const needle = targetEmail.toLowerCase()
+      const perPage = 200
+      for (let page = 1; page <= 100; page++) {
+        const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage })
+        if (error) throw new Error(error.message)
+        const hit = data.users?.find((u: { email?: string | null }) => u.email?.toLowerCase() === needle)
+        if (hit) return hit
+        if (!data.users || data.users.length < perPage) return null
+      }
+      return null
+    }
+
     let userId: string
     let isNewUser = false
-    let invitationLink: string | null = null
+    let reusedExistingLogin = false
 
-    // Check if user already exists
-    const { data: { users }, error: listError } = await adminClient.auth.admin.listUsers()
-    
-    if (listError) {
-      return { error: 'Failed to check existing user: ' + listError.message }
+    let existingUser: { id: string } | null
+    try {
+      existingUser = await findAuthUserByEmail(email)
+    } catch (err: any) {
+      return { error: 'Failed to check existing user: ' + (err?.message || 'unknown error') }
     }
-    
-    const existingUser = users?.find((u: { email?: string | null }) => u.email?.toLowerCase() === email.toLowerCase())
 
     if (existingUser) {
-      // User already exists, use their ID
+      // Apply the password the admin just typed and confirm the address, so the
+      // account is actually usable instead of silently keeping its old password.
       userId = existingUser.id
-    } else {
-      // Create new user - with password (admin-set) or invite link
-      if (password && password.length >= 6) {
-        // Admin sets password - user must change on first login
-        const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: { name }
-        })
-
-        if (createError || !newUser.user) {
-          return { error: createError?.message || 'Failed to create auth user' }
-        }
-
-        userId = newUser.user.id
-        isNewUser = true
-        // must_change_password will be set in profile upsert below
-      } else {
-        // Fallback: invite link (no password provided)
-        const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-          email,
-          email_confirm: false,
-          user_metadata: { name }
-        })
-
-        if (createError || !newUser.user) {
-          return { error: createError?.message || 'Failed to create auth user' }
-        }
-
-        userId = newUser.user.id
-        isNewUser = true
-
-        let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://ctgtimesheet.com'
-        if (siteUrl.includes('localhost')) siteUrl = 'https://ctgtimesheet.com'
-        const redirectUrl = siteUrl.replace('www.', '')
-        const redirectToUrl = `${redirectUrl}/auth/setup-password`
-
-        const { data: linkData, error: inviteError } = await adminClient.auth.admin.generateLink({
-          type: 'invite',
-          email,
-          options: { redirectTo: redirectToUrl }
-        })
-
-        if (!inviteError && linkData?.properties?.action_link) {
-          const wrappedLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(linkData.properties.action_link)}`
-          invitationLink = wrappedLink
-        } else {
-          const { data: magicLinkData, error: magicError } = await adminClient.auth.admin.generateLink({
-            type: 'magiclink',
-            email,
-            options: { redirectTo: redirectToUrl }
-          })
-          if (!magicError && magicLinkData?.properties?.action_link) {
-            invitationLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(magicLinkData.properties.action_link)}`
-          } else {
-            const { data: resetLinkData, error: resetError } = await adminClient.auth.admin.generateLink({
-              type: 'recovery',
-              email,
-              options: { redirectTo: redirectToUrl }
-            })
-            if (!resetError && resetLinkData?.properties?.action_link) {
-              invitationLink = `${redirectUrl}/auth/invite?link=${encodeURIComponent(resetLinkData.properties.action_link)}`
-            } else {
-              return { error: 'User created but failed to generate invitation link. Use "Generate Password Link" for this user.' }
-            }
-          }
-        }
+      reusedExistingLogin = true
+      const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
+        password,
+        email_confirm: true,
+      })
+      if (updateError) {
+        return { error: 'A login already exists for this email but could not be updated: ' + updateError.message }
       }
+    } else {
+      const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { name }
+      })
+
+      if (createError || !newUser.user) {
+        return { error: createError?.message || 'Failed to create auth user' }
+      }
+
+      userId = newUser.user.id
+      isNewUser = true
     }
 
     const siteId = formData.get('site_id') as string || null
@@ -156,10 +132,9 @@ export async function createUser(formData: FormData) {
     const resolvedManagerId = managerId || null
     const resolvedFinalApproverId = finalApproverId || null
 
-    // When an admin creates a brand-new user with an admin-set password, force a
-    // password change on first login (mirrors the "Set Password" flow). Invite-link
-    // users pick their own password during setup, so they don't need this flag.
-    const mustChangePassword = isNewUser && !!password && password.length >= 6
+    // The admin always sets the password here, so always force a change on first
+    // login (mirrors the "Set Password" flow).
+    const mustChangePassword = true
 
     // Create or update profile using admin client (bypasses RLS)
     const profilePayload: Record<string, unknown> = {
@@ -190,20 +165,15 @@ export async function createUser(formData: FormData) {
     }
 
     revalidatePath('/dashboard/admin/users')
-    
-    const usedPassword = isNewUser && !!password && password.length >= 6
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       userId,
-      emailSent: isNewUser && !!invitationLink && !usedPassword,
-      invitationLink: invitationLink || null,
-      message: isNewUser 
-        ? (usedPassword 
-          ? 'User created successfully. They must change their password on first login.'
-          : (invitationLink 
-            ? 'User created successfully. Copy the invitation link below to send to the user.' 
-            : 'User created successfully, but could not generate invitation link. Use "Generate Password Link" for this user.'))
-        : 'User profile updated successfully. (User already exists in auth system)'
+      message: isNewUser
+        ? 'User created successfully. Give them the password you entered — they must change it on first login.'
+        : reusedExistingLogin
+          ? 'A login already existed for this email. Its password was reset to the one you entered and the profile was updated. They must change it on first login.'
+          : 'User profile updated successfully.'
     }
   } catch (error: any) {
     console.error('Error in createUser server action:', error)

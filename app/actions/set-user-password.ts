@@ -55,8 +55,12 @@ export async function setUserPassword(
       return { error: 'Password must be at least 6 characters' }
     }
 
+    // email_confirm heals accounts left unconfirmed by the old invite-link flow.
+    // Without it, the user gets "Email not confirmed" at login even though the
+    // admin just gave them a valid password. It's a no-op for confirmed users.
     const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
       password: newPassword,
+      email_confirm: true,
     })
     if (updateError) {
       return { error: updateError.message }

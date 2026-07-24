@@ -39,8 +39,16 @@ export async function POST(request: Request) {
   })
 
   if (signInError) {
+    // Supabase's raw "Email not confirmed" tells the user nothing they can act
+    // on — they can't self-serve out of it either, since password resets aren't
+    // emailed to unconfirmed addresses.
+    const isUnconfirmed = /email not confirmed/i.test(signInError.message || '')
     return NextResponse.json(
-      { error: signInError.message || 'Invalid email or password.' },
+      {
+        error: isUnconfirmed
+          ? 'Your account has not been activated yet. Please contact your administrator to have your password set.'
+          : signInError.message || 'Invalid email or password.',
+      },
       { status: 401 }
     )
   }

@@ -8,7 +8,6 @@ import { createUser } from '@/app/actions/create-user'
 import { deleteUser } from '@/app/actions/delete-user'
 import type { BillRatePoSummaryRow } from '@/lib/timesheet-bill-rate-access'
 import { updateUserProfile } from '@/app/actions/update-user-assignments'
-import { generatePasswordLink } from '@/app/actions/generate-password-link'
 import { setUserPassword } from '@/app/actions/set-user-password'
 
 interface UserManagementProps {
@@ -61,7 +60,6 @@ export default function UserManagement({
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [invitationLink, setInvitationLink] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showSetPasswordModal, setShowSetPasswordModal] = useState(false)
   const [setPasswordUser, setSetPasswordUser] = useState<User | null>(null)
@@ -222,27 +220,16 @@ export default function UserManagement({
         throw new Error(result.error)
       }
 
-      // Show success message and invitation link if available
       if (result.message) {
         setSuccess(result.message)
-        const hasInvitationLink = !!(result as any).invitationLink
-        if (hasInvitationLink) {
-          setInvitationLink((result as any).invitationLink)
-        }
         // Clear form
         if (e.currentTarget) {
           e.currentTarget.reset()
         }
         setShowAddForm(false)
-        
-        // If there's an invitation link, don't reload - keep the link visible
-        // User can manually refresh the page after copying/dismissing the link
-        if (!hasInvitationLink) {
-          // Only reload if there's no invitation link to show
-          setTimeout(() => {
-            window.location.reload()
-          }, 2000)
-        }
+        setTimeout(() => {
+          window.location.reload()
+        }, 2000)
       } else {
         // Refresh immediately if no message
         setShowAddForm(false)
@@ -388,27 +375,6 @@ export default function UserManagement({
     }
   }
 
-  const handleGeneratePasswordLink = async (email: string, targetUserId?: string) => {
-    setError(null)
-    setSuccess(null)
-    setLoading(true)
-    try {
-      const result = await generatePasswordLink(email, targetUserId)
-      if (result.error) {
-        throw new Error(result.error)
-      }
-      if (result.link) {
-        setInvitationLink(result.link)
-        setSuccess('Password / invite link generated. Copy and send it to the user.')
-        setEditingUser(null)
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to generate link')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 w-full flex flex-col min-h-0 flex-1 overflow-hidden">
       <div className="flex justify-between items-center mb-6">
@@ -432,67 +398,7 @@ export default function UserManagement({
 
       {success && (
         <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 px-4 py-3 rounded mb-4">
-          <p className="mb-2">{success}</p>
-          {invitationLink && (
-            <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded border border-green-300 dark:border-green-700">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Invitation Link (Copy and send this to the user):
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={invitationLink}
-                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-900 bg-white dark:bg-gray-700 font-mono"
-                  onClick={(e) => (e.target as HTMLInputElement).select()}
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (invitationLink) {
-                      try {
-                        await navigator.clipboard.writeText(invitationLink)
-                        const originalMessage = success
-                        setSuccess('Link copied to clipboard! You can copy it again if needed.')
-                        setTimeout(() => {
-                          setSuccess(originalMessage)
-                        }, 3000)
-                      } catch (err) {
-                        // Fallback: select the text
-                        const input = document.querySelector('input[readonly]') as HTMLInputElement
-                        if (input) {
-                          input.select()
-                          document.execCommand('copy')
-                          setSuccess('Link selected - press Ctrl+C (or Cmd+C) to copy')
-                        }
-                      }
-                    }
-                  }}
-                  className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-blue-700"
-                >
-                  Copy Link
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInvitationLink(null)
-                    setSuccess(null)
-                    // Reload to show the updated user list after dismissing the link
-                    window.location.reload()
-                  }}
-                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded text-sm font-semibold hover:bg-gray-300 dark:hover:bg-gray-500"
-                >
-                  Dismiss & Refresh
-                </button>
-              </div>
-              <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-                The user can click this link to set their password and log in.
-              </p>
-              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2 font-semibold">
-                ⚠️ Important: This link expires in 1 day. Send it to the user and have them click it. If Teams/Slack previews the link, it may consume the token.
-              </p>
-            </div>
-          )}
+          <p>{success}</p>
         </div>
       )}
 
@@ -522,10 +428,11 @@ export default function UserManagement({
                   name="password"
                   placeholder="Password (min 6 chars)"
                   minLength={6}
+                  required
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                   autoComplete="new-password"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400">User must change on first login. Leave blank to send invite link instead.</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Required. Give this password to the user — they must change it on first login.</p>
               </div>
             )}
             {assignmentsOnlyEdit ? (
@@ -1101,15 +1008,6 @@ export default function UserManagement({
                   className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600"
                 >
                   Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => editingUser && handleGeneratePasswordLink(editingUser.email, editingUser.id)}
-                  className="inline-flex items-center gap-1 bg-amber-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-amber-700 disabled:opacity-50"
-                >
-                  <Key className="h-4 w-4" />
-                  Generate Password Link
                 </button>
                 {!assignmentsOnlyEdit && canEditUser(editingUser) && (
                 <button
