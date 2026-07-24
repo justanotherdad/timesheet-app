@@ -6,9 +6,10 @@ import Link from 'next/link'
 interface POLinkWithBalanceTooltipProps {
   poId: string
   poNumber: string
+  projectName?: string | null
 }
 
-export default function POLinkWithBalanceTooltip({ poId, poNumber }: POLinkWithBalanceTooltipProps) {
+export default function POLinkWithBalanceTooltip({ poId, poNumber, projectName }: POLinkWithBalanceTooltipProps) {
   const [balance, setBalance] = useState<{ budgetBalance: number } | null>(null)
   const [loading, setLoading] = useState(false)
   const [show, setShow] = useState(false)
@@ -68,12 +69,20 @@ export default function POLinkWithBalanceTooltip({ poId, poNumber }: POLinkWithB
       </Link>
       {show && (
         <div
-          className="fixed z-50 px-3 py-2 text-sm bg-gray-900 dark:bg-gray-700 text-white rounded-lg shadow-lg whitespace-nowrap"
+          className="fixed z-50 px-3 py-2 text-sm bg-gray-900 text-white rounded-lg shadow-lg max-w-xs"
           style={{ top: pos.top, left: pos.left }}
           role="tooltip"
         >
-          <span className="text-gray-300 dark:text-gray-400">Budget Balance: </span>
-          <span className="font-semibold">{formattedBalance}</span>
+          {projectName ? (
+            <div className="mb-1">
+              <span className="text-gray-400">Project: </span>
+              <span className="font-semibold text-white break-words">{projectName}</span>
+            </div>
+          ) : null}
+          <div className="whitespace-nowrap">
+            <span className="text-gray-400">Budget Balance: </span>
+            <span className="font-semibold text-white">{formattedBalance}</span>
+          </div>
         </div>
       )}
     </span>

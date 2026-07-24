@@ -262,7 +262,7 @@ export default async function TimesheetDetailPage({
         .select(`
           *,
           sites(name, code),
-          purchase_orders(po_number, description),
+          purchase_orders(po_number, description, project_name),
           systems(name),
           deliverables(name),
           activities(name)
@@ -433,6 +433,11 @@ export default async function TimesheetDetailPage({
                               <POLinkWithBalanceTooltip
                                 poId={entry.po_id}
                                 poNumber={entry.purchase_orders?.po_number || 'N/A'}
+                                projectName={
+                                  entry.purchase_orders?.project_name ||
+                                  entry.purchase_orders?.description ||
+                                  null
+                                }
                               />
                             ) : (
                               entry.purchase_orders?.po_number || 'N/A'

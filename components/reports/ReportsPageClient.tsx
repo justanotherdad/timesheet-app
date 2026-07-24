@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Receipt, BarChart3 } from 'lucide-react'
+import { Receipt, BarChart3, FileBarChart } from 'lucide-react'
 import OutstandingInvoicesReport from './OutstandingInvoicesReport'
 import POStatusReport from './POStatusReport'
+import GenerateReportPanel from './GenerateReportPanel'
 
-type ReportType = 'outstanding-invoices' | 'po-status' | null
+type ReportType = 'outstanding-invoices' | 'po-status' | 'generate' | null
 
 export default function ReportsPageClient() {
   const [activeReport, setActiveReport] = useState<ReportType>(null)
@@ -50,11 +51,30 @@ export default function ReportsPageClient() {
             <p className="text-sm text-gray-600 dark:text-gray-400">Full PO status by client with totals and filters</p>
           </div>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveReport(activeReport === 'generate' ? null : 'generate')}
+          className={`flex items-center gap-4 p-4 rounded-lg border-2 transition-colors text-left ${
+            activeReport === 'generate'
+              ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+              : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-orange-300 dark:hover:border-orange-700'
+          }`}
+        >
+          <div className="p-3 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+            <FileBarChart className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Generate Report</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Budget status report for selected PO(s), saved for 1 year</p>
+          </div>
+        </button>
         </div>
       </div>
 
       {activeReport === 'outstanding-invoices' && <OutstandingInvoicesReport />}
       {activeReport === 'po-status' && <POStatusReport />}
+      {activeReport === 'generate' && <GenerateReportPanel />}
     </div>
   )
 }
