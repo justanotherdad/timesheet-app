@@ -30,7 +30,7 @@ function SummaryTable({ po, includeHours }: { po: ReportPoSummary; includeHours:
     )
   }
   return (
-    <table className="w-full text-sm border border-gray-300 dark:border-gray-600">
+    <table className="gr-summary-table w-full text-sm border border-gray-300 dark:border-gray-600">
       <thead>
         <tr className="bg-gray-100 dark:bg-gray-700">
           <th className="text-left px-3 py-2 font-semibold text-gray-900 dark:text-gray-100 print:text-black">Metric</th>
@@ -55,12 +55,12 @@ function OveragesTable({ po }: { po: ReportPoSummary }) {
   if (po.budgetType !== 'project' || po.overages.length === 0) return null
   return (
     <div className="mt-4">
-      <div className="bg-red-700 text-white text-sm font-bold uppercase tracking-wide px-3 py-2 rounded-t">
+      <div className="gr-overage-banner bg-red-700 text-white text-sm font-bold uppercase tracking-wide px-3 py-2 rounded-t">
         Overages — actual hours exceed budget
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border border-gray-300 dark:border-gray-600">
-          <thead>
+      <div className="overflow-x-auto print:overflow-visible">
+        <table className="gr-overage-table w-full text-sm border border-gray-300 dark:border-gray-600">
+          <thead className="gr-overage-head">
             <tr className="bg-red-800 text-white">
               <th className="text-left px-3 py-2">System</th>
               <th className="text-left px-3 py-2">Deliverable</th>
@@ -101,17 +101,39 @@ interface GeneratedReportViewProps {
 }
 
 export default function GeneratedReportView({ title, snapshot, onBack }: GeneratedReportViewProps) {
-  const dollarData = snapshot.chartDollars.map((c) => ({
-    label: `PO ${c.poNumber}`,
-    values: [c.budgetRemaining, c.originalBudget],
-  }))
-  const hoursData = (snapshot.chartHours || []).map((c) => ({
-    label: `PO ${c.poNumber}`,
-    values: [c.remainingHours, c.originalHours],
-  }))
+  const generatedLabel = `Generated ${new Date(snapshot.generatedAt).toLocaleString('en-US')} by ${snapshot.generatedByName}. Figures are frozen as of generation time.`
+
+  /**
+   * Browsers name the "Save as PDF" file after document.title, so swap in the
+   * report name for the duration of the print. A temporary @page rule forces
+   * landscape (the overages table has 9 columns and is clipped in portrait).
+   */
+  const handlePrint = () => {
+    const previousTitle = document.title
+    const safeTitle = (title || 'Report').replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Report'
+    document.title = safeTitle
+
+    const style = document.createElement('style')
+    style.setAttribute('data-generated-report-print', '')
+    style.textContent = '@page { size: letter landscape; margin: 0.45in; }'
+    document.head.appendChild(style)
+
+    let restored = false
+    const cleanup = () => {
+      if (restored) return
+      restored = true
+      document.title = previousTitle
+      style.remove()
+      window.removeEventListener('afterprint', cleanup)
+    }
+    window.addEventListener('afterprint', cleanup)
+    window.print()
+    // Safety net in case afterprint never fires.
+    window.setTimeout(cleanup, 60000)
+  }
 
   return (
-    <div className="report-print-container bg-white dark:bg-gray-800 rounded-lg shadow">
+    <div className="generated-report report-print-container bg-white dark:bg-gray-800 rounded-lg shadow">
       <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700 print:hidden">
         <div className="flex items-center gap-3">
           {onBack && (
@@ -127,7 +149,7 @@ export default function GeneratedReportView({ title, snapshot, onBack }: Generat
         </div>
         <button
           type="button"
-          onClick={() => window.print()}
+          onClick={handlePrint}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700"
         >
           <Printer className="h-5 w-5" /> Print / Export to PDF
@@ -135,54 +157,90 @@ export default function GeneratedReportView({ title, snapshot, onBack }: Generat
       </div>
 
       <div className="p-4 space-y-8">
-        <div className="print:block hidden">
-          <h1 className="text-xl font-bold text-black">{title}</h1>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 print:text-black">
-          Generated {new Date(snapshot.generatedAt).toLocaleString('en-US')} by {snapshot.generatedByName}. Figures are frozen as of generation time.
-        </p>
-
-        {/* Charts */}
-        <div className="grid grid-cols-1 gap-8">
-          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-            <GroupedBarChart
-              title="All POs — Budget Overview ($)"
-              data={dollarData}
-              seriesLabels={['Budget Remaining', 'Original Budget']}
-              seriesColors={['#4a90e2', '#f5b800']}
-              formatValue={(n) => n.toLocaleString('en-US')}
-            />
-          </div>
-          {snapshot.includeHours && hoursData.length > 0 && (
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-              <GroupedBarChart
-                title="All POs — Hours Overview"
-                data={hoursData}
-                seriesLabels={['Remaining Hours', 'Original Hours']}
-                seriesColors={['#22a06b', '#f5b800']}
-                formatValue={(n) => n.toLocaleString('en-US')}
-              />
+        {/* Print-only report header (CTG logo top-right), first page only. */}
+        <div className="hidden print:block gr-print-header">
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              borderBottom: '2px solid #111827',
+              paddingBottom: 8,
+              marginBottom: 12,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '16pt', fontWeight: 700 }}>{title}</div>
+              <div style={{ fontSize: '9pt' }}>{generatedLabel}</div>
             </div>
-          )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/ctg-logo.png" alt="CTG" style={{ height: 48, width: 'auto', objectFit: 'contain' }} />
+          </div>
         </div>
 
-        {/* Per-PO sections */}
-        {snapshot.pos.map((po) => (
-          <div key={po.poId} className="space-y-3 break-inside-avoid">
-            <div className="border-b border-gray-200 dark:border-gray-700 pb-1">
-              <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 print:text-black">
-                {po.poNumber}
-                {po.projectName ? ` — ${po.projectName}` : ''}
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 print:text-black">
-                {po.clientName} · {po.budgetType === 'project' ? 'Project budget' : 'Basic budget'}
-                {po.budgetType === 'basic' && po.blendedRate ? ` · blended rate ${money(po.blendedRate)}/hr` : ''}
-              </p>
-            </div>
-            <SummaryTable po={po} includeHours={snapshot.includeHours} />
-            <OveragesTable po={po} />
-          </div>
-        ))}
+        <p className="text-xs text-gray-500 dark:text-gray-400 print:hidden">{generatedLabel}</p>
+
+        {/* One section per PO: summary + overages first, then that PO's charts. */}
+        {snapshot.pos.map((po) => {
+          const dollarData = [
+            {
+              label: `PO ${po.poNumber}`,
+              values: [po.remainingDollars, po.totalBudgetDollars],
+            },
+          ]
+          const showHoursChart =
+            snapshot.includeHours && po.remainingHours != null && po.totalBudgetHours != null
+          const hoursData = showHoursChart
+            ? [
+                {
+                  label: `PO ${po.poNumber}`,
+                  values: [po.remainingHours as number, po.totalBudgetHours as number],
+                },
+              ]
+            : []
+
+          return (
+            <section key={po.poId} className="gr-po-section space-y-3">
+              <div className="border-b border-gray-200 dark:border-gray-700 pb-1">
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 print:text-black">
+                  {po.poNumber}
+                  {po.projectName ? ` — ${po.projectName}` : ''}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 print:text-black">
+                  {po.clientName} · {po.budgetType === 'project' ? 'Project budget' : 'Basic budget'}
+                  {po.budgetType === 'basic' && po.blendedRate ? ` · blended rate ${money(po.blendedRate)}/hr` : ''}
+                </p>
+              </div>
+
+              <SummaryTable po={po} includeHours={snapshot.includeHours} />
+              <OveragesTable po={po} />
+
+              {/* Both charts for this PO stay together on one page. */}
+              <div className="gr-charts grid grid-cols-1 lg:grid-cols-2 print:grid-cols-2 gap-6 pt-2">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 print:border-gray-400">
+                  <GroupedBarChart
+                    title={`PO ${po.poNumber} — Budget Overview ($)`}
+                    data={dollarData}
+                    seriesLabels={['Budget Remaining', 'Original Budget']}
+                    seriesColors={['#4a90e2', '#f5b800']}
+                    formatValue={(n) => n.toLocaleString('en-US')}
+                  />
+                </div>
+                {showHoursChart && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 print:border-gray-400">
+                    <GroupedBarChart
+                      title={`PO ${po.poNumber} — Hours Overview`}
+                      data={hoursData}
+                      seriesLabels={['Remaining Hours', 'Original Hours']}
+                      seriesColors={['#22a06b', '#f5b800']}
+                      formatValue={(n) => n.toLocaleString('en-US')}
+                    />
+                  </div>
+                )}
+              </div>
+            </section>
+          )
+        })}
       </div>
     </div>
   )

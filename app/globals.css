@@ -221,3 +221,66 @@ input[type="number"] {
     color: #b45309 !important;
   }
 }
+
+/* Generated Report (Budget Status Report) PDF export.
+   handlePrint injects `@page { size: letter landscape }` for the duration of
+   the print; these rules make the content fit that page. */
+@media print {
+  /* Keep chart/legend/banner colors — browsers drop backgrounds by default. */
+  .generated-report,
+  .generated-report * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Each PO starts a new page; its charts never split across pages. */
+  .generated-report .gr-po-section {
+    break-after: page;
+    page-break-after: always;
+  }
+  .generated-report .gr-po-section:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .generated-report .gr-charts {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .generated-report .gr-charts > div {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Fit the 9-column overages table inside the page width. */
+  .generated-report table {
+    width: 100% !important;
+    border-collapse: collapse;
+  }
+  .generated-report th,
+  .generated-report td {
+    font-size: 8pt !important;
+    padding: 3px 5px !important;
+    word-break: break-word;
+  }
+  /* Never split a number across lines. */
+  .generated-report th.text-right,
+  .generated-report td.text-right {
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+  }
+  /* Repeat the overages header when the table spans pages. */
+  .generated-report .gr-overage-table thead {
+    display: table-header-group;
+  }
+  .generated-report .gr-overage-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Red banner + header row keep white text (overrides the container's
+     blanket dark-text rule, which would be unreadable on red). */
+  .generated-report .gr-overage-banner,
+  .generated-report .gr-overage-banner *,
+  .generated-report .gr-overage-head th {
+    color: #ffffff !important;
+  }
+}
