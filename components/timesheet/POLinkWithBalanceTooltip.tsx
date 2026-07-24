@@ -68,20 +68,23 @@ export default function POLinkWithBalanceTooltip({ poId, poNumber, projectName }
         {poNumber}
       </Link>
       {show && (
+        // Use a dedicated class + hex colors. Light-mode overrides in globals.css
+        // remap bg-gray-900 → white and text-gray-400 → near-black, which made
+        // text-white values invisible on the remapped white background.
         <div
-          className="fixed z-50 px-3 py-2 text-sm bg-gray-900 text-white rounded-lg shadow-lg max-w-xs"
+          className="po-hover-tooltip fixed z-50 px-3 py-2 text-sm rounded-lg shadow-lg max-w-xs"
           style={{ top: pos.top, left: pos.left }}
           role="tooltip"
         >
           {projectName ? (
             <div className="mb-1">
-              <span className="text-gray-400">Project: </span>
-              <span className="font-semibold text-white break-words">{projectName}</span>
+              <span className="po-hover-tooltip-label">Project: </span>
+              <span className="po-hover-tooltip-value break-words">{projectName}</span>
             </div>
           ) : null}
           <div className="whitespace-nowrap">
-            <span className="text-gray-400">Budget Balance: </span>
-            <span className="font-semibold text-white">{formattedBalance}</span>
+            <span className="po-hover-tooltip-label">Budget Balance: </span>
+            <span className="po-hover-tooltip-value">{formattedBalance}</span>
           </div>
         </div>
       )}

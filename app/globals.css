@@ -66,6 +66,22 @@ html:not(.dark) .dark\:text-gray-400 {
   color: #111827;
 }
 
+/* PO hover tooltip: always dark surface + light text in both themes.
+   Must not use bg-gray-900 / text-gray-400 / text-white alone — light-mode
+   overrides above remapped those and made values unreadable. */
+.po-hover-tooltip {
+  background-color: #111827 !important;
+  color: #ffffff !important;
+  border: 1px solid #374151;
+}
+.po-hover-tooltip .po-hover-tooltip-label {
+  color: #9ca3af !important;
+}
+.po-hover-tooltip .po-hover-tooltip-value {
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
 /* Consistent form input/select height across site */
 input[type="text"],
 input[type="number"],

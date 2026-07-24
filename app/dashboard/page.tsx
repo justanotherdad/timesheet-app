@@ -181,32 +181,25 @@ export default async function DashboardPage() {
     timesheetConfirmationsPending = pendingConfirmations.length
   }
 
-  // Get approved timesheets from reports (for supervisors, managers, admins).
-  // Includes timesheets the approver already signed but that are still routed
-  // for final approval (status = 'submitted'), so approvers can see items
-  // they've acted on before the final approver signs.
+  // Approved timesheets for people in THIS user's approval chain (reports_to /
+  // supervisor / manager / final_approver). Same rule for admin/super_admin —
+  // they must not see company-wide approved sheets here (use My Timesheets for
+  // that). Also includes submitted sheets this user already signed that are
+  // still awaiting a later approver.
   let approvedTimesheets: any[] = []
   if (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
     const adminSupabase = createAdminClient()
-    const isAdminRole = ['admin', 'super_admin'].includes(user.profile.role)
-    let reportIds: string[] = []
-    if (isAdminRole) {
-      const allUsersResult = await withQueryTimeout(() =>
-        adminSupabase.from('user_profiles').select('id')
-      )
-      reportIds = ((allUsersResult.data || []) as Array<{ id: string }>).map((r) => r.id)
-    } else {
-      const reportsResult = await withQueryTimeout(() =>
-        adminSupabase
-          .from('user_profiles')
-          .select('id')
-          .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`)
-      )
-      reportIds = ((reportsResult.data || []) as Array<{ id: string }>).map((r) => r.id)
-    }
+    const reportsResult = await withQueryTimeout(() =>
+      adminSupabase
+        .from('user_profiles')
+        .select('id')
+        .or(
+          `reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`
+        )
+    )
+    const reportIds = ((reportsResult.data || []) as Array<{ id: string }>).map((r) => r.id)
 
     if (reportIds.length > 0) {
-      // 1. Fully approved
       const approvedResult = await withQueryTimeout(() =>
         adminSupabase
           .from('weekly_timesheets')
@@ -217,12 +210,15 @@ export default async function DashboardPage() {
       )
       const fullyApproved = (Array.isArray(approvedResult.data) ? approvedResult.data : []) as any[]
 
-      // 2. Partially approved: submitted timesheets the current user has signed
       let partiallyApproved: any[] = []
       const signedResult = await withQueryTimeout(() =>
         adminSupabase.from('timesheet_signatures').select('timesheet_id').eq('signer_id', user.id)
       )
-      const signedIds = [...new Set(((signedResult.data || []) as { timesheet_id: string }[]).map((r) => r.timesheet_id))]
+      const signedIds = [
+        ...new Set(
+          ((signedResult.data || []) as { timesheet_id: string }[]).map((r) => r.timesheet_id)
+        ),
+      ]
       if (signedIds.length > 0) {
         const partialResult = await withQueryTimeout(() =>
           adminSupabase
