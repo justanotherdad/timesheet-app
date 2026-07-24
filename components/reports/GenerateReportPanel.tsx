@@ -236,6 +236,15 @@ function GenerateWizard({
       return next
     })
 
+  const selectAllFiltered = () =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      for (const o of filteredOptions) next.add(o.id)
+      return next
+    })
+
+  const clearSelection = () => setSelected(new Set())
+
   const ratesNeeded = includeHours === true && selectedBasic.length > 0
   const ratesValid = !ratesNeeded || selectedBasic.every((o) => Number(rates[o.id]) > 0)
   const canGenerate = selected.size > 0 && includeHours !== null && ratesValid && !submitting
@@ -281,13 +290,38 @@ function GenerateWizard({
         <div className="p-5 space-y-6">
           {/* Step 1: choose POs */}
           <section>
-            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">1. Choose PO(s) to include</h4>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">1. Choose PO(s) to include</h4>
+              {!loading && options.length > 0 && (
+                <div className="flex items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={selectAllFiltered}
+                    className="text-orange-600 dark:text-orange-400 hover:underline font-medium"
+                  >
+                    Select all{poSearch.trim() ? ' filtered' : ''}
+                  </button>
+                  <span className="text-gray-300 dark:text-gray-600">|</span>
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    disabled={selected.size === 0}
+                    className="text-gray-600 dark:text-gray-400 hover:underline font-medium disabled:opacity-40 disabled:no-underline"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+              Check each PO you want in the report. Only POs you can access are listed.
+            </p>
             <div className="relative mb-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 value={poSearch}
                 onChange={(e) => setPoSearch(e.target.value)}
-                placeholder="Filter by PO, project, client…"
+                placeholder="Filter this list by PO, project, or client…"
                 className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
               />
             </div>
@@ -295,28 +329,64 @@ function GenerateWizard({
               <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-orange-600" /></div>
             ) : options.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400 py-4">You don’t have budget access to any POs.</p>
+            ) : filteredOptions.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400 py-4">No POs match your filter.</p>
             ) : (
-              <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+              <div className="max-h-72 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
                 {groupedByClient.map(([client, opts]) => (
                   <div key={client}>
-                    <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-700/50 text-xs font-semibold text-gray-600 dark:text-gray-300 sticky top-0">{client}</div>
-                    {opts.map((o) => (
-                      <label key={o.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40">
-                        <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggle(o.id)} className="rounded border-gray-300" />
-                        <span className="min-w-0 flex-1">
-                          <span className="text-sm text-gray-900 dark:text-gray-100">{o.poNumber}</span>
-                          {o.projectName ? <span className="text-sm text-gray-500 dark:text-gray-400"> — {o.projectName}</span> : null}
-                        </span>
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full ${o.budgetType === 'project' ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
-                          {o.budgetType}
-                        </span>
-                      </label>
-                    ))}
+                    <div className="px-3 py-1.5 bg-gray-100 dark:bg-gray-700/70 text-xs font-semibold text-gray-700 dark:text-gray-200 sticky top-0 border-b border-gray-200 dark:border-gray-700">
+                      {client}
+                    </div>
+                    <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {opts.map((o) => {
+                        const checked = selected.has(o.id)
+                        return (
+                          <li key={o.id}>
+                            <label
+                              className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
+                                checked
+                                  ? 'bg-orange-50 dark:bg-orange-900/20'
+                                  : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggle(o.id)}
+                                className="h-4 w-4 shrink-0 rounded border-gray-400 dark:border-gray-500 text-orange-600 focus:ring-orange-500 focus:ring-offset-0 dark:bg-gray-800"
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                                  PO {o.poNumber}
+                                </span>
+                                {o.projectName ? (
+                                  <span className="block text-xs text-gray-500 dark:text-gray-400 truncate">
+                                    {o.projectName}
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span
+                                className={`text-[11px] px-2 py-0.5 rounded shrink-0 ${
+                                  o.budgetType === 'project'
+                                    ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300'
+                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                }`}
+                              >
+                                {o.budgetType}
+                              </span>
+                            </label>
+                          </li>
+                        )
+                      })}
+                    </ul>
                   </div>
                 ))}
               </div>
             )}
-            {selected.size > 0 && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{selected.size} PO(s) selected</p>}
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+              {selected.size === 0 ? 'No POs selected yet.' : `${selected.size} PO(s) selected`}
+            </p>
           </section>
 
           {/* Step 2: include hours? */}
