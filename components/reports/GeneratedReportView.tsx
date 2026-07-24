@@ -182,10 +182,11 @@ export default function GeneratedReportView({ title, snapshot, onBack }: Generat
 
         {/* One section per PO: summary + overages first, then that PO's charts. */}
         {snapshot.pos.map((po) => {
+          // Original on the left, Remaining on the right.
           const dollarData = [
             {
               label: `PO ${po.poNumber}`,
-              values: [po.remainingDollars, po.totalBudgetDollars],
+              values: [po.totalBudgetDollars, po.remainingDollars],
             },
           ]
           const showHoursChart =
@@ -194,7 +195,7 @@ export default function GeneratedReportView({ title, snapshot, onBack }: Generat
             ? [
                 {
                   label: `PO ${po.poNumber}`,
-                  values: [po.remainingHours as number, po.totalBudgetHours as number],
+                  values: [po.totalBudgetHours as number, po.remainingHours as number],
                 },
               ]
             : []
@@ -221,8 +222,8 @@ export default function GeneratedReportView({ title, snapshot, onBack }: Generat
                   <GroupedBarChart
                     title={`PO ${po.poNumber} — Budget Overview ($)`}
                     data={dollarData}
-                    seriesLabels={['Budget Remaining', 'Original Budget']}
-                    seriesColors={['#4a90e2', '#f5b800']}
+                    seriesLabels={['Original Budget', 'Budget Remaining']}
+                    seriesColors={['#f5b800', '#4a90e2']}
                     formatValue={(n) => n.toLocaleString('en-US')}
                   />
                 </div>
@@ -231,8 +232,8 @@ export default function GeneratedReportView({ title, snapshot, onBack }: Generat
                     <GroupedBarChart
                       title={`PO ${po.poNumber} — Hours Overview`}
                       data={hoursData}
-                      seriesLabels={['Remaining Hours', 'Original Hours']}
-                      seriesColors={['#22a06b', '#f5b800']}
+                      seriesLabels={['Original Hours', 'Remaining Hours']}
+                      seriesColors={['#f5b800', '#22a06b']}
                       formatValue={(n) => n.toLocaleString('en-US')}
                     />
                   </div>

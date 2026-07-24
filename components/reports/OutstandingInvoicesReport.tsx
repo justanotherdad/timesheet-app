@@ -444,15 +444,18 @@ export default function OutstandingInvoicesReport() {
 
       <div className="overflow-x-auto max-w-full">
         <table className="w-full min-w-[720px] text-xs sm:text-sm divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
+          {/* Widths total 100%. PO # and Invoice # hold long IDs (e.g.
+              SNFITQ00002257) and wrap rather than spilling into the next
+              column on laptop-width screens. */}
           <colgroup>
             <col className="w-[11%]" />
-            <col className="w-[9%]" />
-            <col className="w-[17%]" />
-            <col className="w-[9%]" />
+            <col className="w-[13%]" />
+            <col className="w-[20%]" />
+            <col className="w-[13%]" />
             <col className="w-[9%]" />
             <col className="w-[8%]" />
-            <col className="w-[12%]" />
-            <col className="w-[14%]" />
+            <col className="w-[13%]" />
+            <col className="w-[13%]" />
           </colgroup>
           <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>
@@ -537,7 +540,7 @@ export default function OutstandingInvoicesReport() {
                         <td className="px-2 sm:px-3 py-2 sm:py-3 text-gray-900 dark:text-gray-100 align-top break-words">
                           {row.client}
                         </td>
-                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-gray-900 dark:text-gray-100 align-top whitespace-nowrap">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-gray-900 dark:text-gray-100 align-top break-words">
                           <Link href={`/dashboard/budget?poId=${row.po_id}`} className="text-blue-600 dark:text-blue-400 hover:underline">
                             {row.po_number}
                           </Link>
@@ -545,7 +548,7 @@ export default function OutstandingInvoicesReport() {
                         <td className="px-2 sm:px-3 py-2 sm:py-3 text-gray-900 dark:text-gray-100 align-top break-words">
                           {row.project_name}
                         </td>
-                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-gray-900 dark:text-gray-100 align-top whitespace-nowrap">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-gray-900 dark:text-gray-100 align-top break-words">
                           {displayInvoiceNumber(row)}
                         </td>
                         <td className="px-2 sm:px-3 py-2 sm:py-3 text-gray-900 dark:text-gray-100 align-top whitespace-nowrap tabular-nums">
