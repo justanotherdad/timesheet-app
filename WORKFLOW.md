@@ -32,6 +32,8 @@ Your editor will still provide:
 
 ---
 
+
+
 ### 2. **Test Locally (When Ready)**
 
 When you want to test your changes:
@@ -55,6 +57,8 @@ npm run dev
 ```
 
 ---
+
+
 
 ### 3. **Deploy to Vercel (When Ready)**
 
@@ -89,7 +93,11 @@ git push
 
 ---
 
+
+
 ## 📋 Quick Reference
+
+
 
 ### Work Offline
 
@@ -97,6 +105,8 @@ git push
 # Just edit files - nothing to run
 # Your editor handles everything
 ```
+
+
 
 ### Test Changes
 
@@ -117,6 +127,8 @@ npm run dev
 #    (Server stops, resources freed)
 ```
 
+
+
 ### Deploy Changes
 
 ```bash
@@ -124,7 +136,7 @@ npm run dev
     git add .
 
     # 2. Commit with a short message describing the change
-    git commit -m "fixes"
+    git commit -m "fix"
 
     # 3. Push to GitHub (triggers Vercel deployment)
     git push
@@ -133,6 +145,8 @@ npm run dev
 After pushing, Vercel will build and deploy; usually 2–3 minutes.
 
 ---
+
+
 
 ## Bid Sheet → Project Flow
 
@@ -145,13 +159,19 @@ After pushing, Vercel will build and deploy; usually 2–3 minutes.
 
 ---
 
+
+
 ## Deactivate / Archive
+
+
 
 ### Purchase Orders
 
 - **Deactivate** from Budget Detail (Deactivate button on a PO). Archived POs are removed from timesheet dropdowns but remain accessible to admins.
 - **Budget selector**: By default only active POs are shown. Check "Show archived POs" to include archived when selecting a budget.
 - **Reactivate** to bring a PO back to the active list.
+
+
 
 ### Employees (Users)
 
@@ -160,6 +180,8 @@ After pushing, Vercel will build and deploy; usually 2–3 minutes.
 - **Reactivate** to restore access; they regain access to their history (unless the profile was fully deleted).
 
 ---
+
+
 
 ## 🔍 Verify Deployment
 
@@ -177,7 +199,11 @@ After pushing:
 
 ---
 
+
+
 ## 💡 Tips
+
+
 
 ### Only Run Dev Server When Testing
 
@@ -185,11 +211,15 @@ After pushing:
 - **Do** start it only when you need to test
 - **Do** stop it (Ctrl+C) when done testing
 
+
+
 ### Git Best Practices
 
 - Commit frequently with clear messages
 - Push when changes are ready
 - Each push triggers a new deployment
+
+
 
 ### If Build Fails
 
@@ -206,6 +236,8 @@ After pushing:
 - **Environment variable issues:** Make sure all required vars are set in Vercel
 
 ---
+
+
 
 ## 🚀 Example Session
 
@@ -246,7 +278,11 @@ git push
 
 ---
 
+
+
 ## ⚠️ Important Notes
+
+
 
 ### Environment Variables
 
@@ -262,15 +298,21 @@ git push
 - Production: Vercel Dashboard → Settings → Environment Variables
 - **Important:** After adding/changing env vars in Vercel, you may need to redeploy
 
+
+
 ### Database Connection
 
 - Local dev connects to your Supabase project
 - Production connects to the same Supabase project
 - No database changes needed between environments
 
+
+
 ### Session / idle logout (dashboard)
 
 - The dashboard layout uses `**AutoLogout`** (`components/AutoLogout.tsx`): after **one hour** of no mouse, keyboard, scroll, or touch activity, the client signs out via Supabase and redirects to `/login`. Timer resets on activity. To change duration, edit `timeoutMinutes` on `<AutoLogout />` in `app/dashboard/layout.tsx` (default prop in `AutoLogout.tsx` should stay in sync for clarity).
+
+
 
 ### Build Time
 
@@ -280,7 +322,11 @@ git push
 
 ---
 
+
+
 ## 🆘 Troubleshooting
+
+
 
 ### "Changes not showing on site"
 
@@ -288,11 +334,15 @@ git push
 - Check Cloudflare deployment status
 - Wait a few minutes for DNS propagation
 
+
+
 ### "Build failed"
 
 - Check build logs in Cloudflare dashboard
 - Run `npm run build` locally to test
 - Fix errors, then push again
+
+
 
 ### "Dev server won't start"
 
@@ -301,6 +351,8 @@ git push
 - Check for port 3000 conflicts
 
 ---
+
+
 
 ## 📞 Quick Links
 
@@ -311,9 +363,11 @@ git push
 
 ---
 
+
+
 ## 📖 Related documentation
 
-- **JOB_AID.md** – How to use the site (employees through admins): timesheets, approvals, manage users, timesheet POs from **Bill Rates by Person** on each PO budget (not from user site/PO pickers), activities/deliverables/systems filtered by those POs’ sites, single Supervisor field in edit user, approval chain (Supervisor → Manager → Final Approver; skip none).
+- **JOB_AID.md** – Pointer only. The end-user job aid is the in-app **Site Guide**, maintained in `components/GuideModal.tsx` and opened from the header book icon or the menu. Edit that component when site behavior changes.
 - **Access Levels.md** – Role-based access; My Timesheets (own only for non-admins); Pending Approvals / Approved Timesheets; bill-rate–driven timesheet dropdowns; `user_sites` for org/bid sheets; Budget Balance API / billable labor aggregation (service-role where needed).
 
 ---

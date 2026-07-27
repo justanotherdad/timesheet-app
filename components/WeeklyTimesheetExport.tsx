@@ -274,7 +274,7 @@ export default function WeeklyTimesheetExport({
 
         <!-- Unbillable table (same day-column widths as billable for visual alignment) -->
         <div style="margin-top:5px;">
-          <h3 style="font-size:8.5pt;font-weight:bold;margin-bottom:3px;">UNBILLABLE TIME</h3>
+          <h3 style="font-size:8.5pt;font-weight:bold;margin-bottom:3px;">NON-BILLABLE TIME</h3>
           <table style="width:100%;border-collapse:collapse;font-size:7.5pt;table-layout:fixed;">
             <colgroup>
               <col style="width:0.65in"/>

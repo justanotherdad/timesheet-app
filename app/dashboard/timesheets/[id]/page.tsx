@@ -483,7 +483,7 @@ export default async function TimesheetDetailPage({
                   Billable Total: {formatHoursAmount(billableTotal)} hours
                   {entries.length > 6 && (
                     <a href="#unbillable-section" className="ml-3 text-blue-600 dark:text-blue-400 hover:underline text-sm">
-                      ↓ Jump to Unbillable Time
+                      ↓ Jump to Non-Billable Time
                     </a>
                   )}
                 </p>
@@ -504,7 +504,7 @@ export default async function TimesheetDetailPage({
                 : unbillableRows.reduce((sum, e) => sum + calculateTotal(e), 0)
               return (
                 <div id="unbillable-section" className="mb-6 scroll-mt-4">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Unbillable Time</h2>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Non-Billable Time</h2>
                   <div className="overflow-x-auto">
                     <table className="min-w-full w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
                       <colgroup>
@@ -556,7 +556,7 @@ export default async function TimesheetDetailPage({
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Unbillable Total: {formatHoursAmount(displayUnbillableTotal)} hours</p>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Non-Billable Total: {formatHoursAmount(displayUnbillableTotal)} hours</p>
                 </div>
               )
             })()}

@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { UserRole } from '@/types/database'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { billRateIsActiveOnDate } from '@/lib/po-bill-rate-utils'
 
 /**
  * Get user IDs that report to the given manager (directly or through supervisor).
@@ -18,15 +20,69 @@ export async function getSubordinateUserIds(
 }
 
 /**
- * Get site IDs the current user can access for org/systems/activities/deliverables.
- * - Admin/Super admin: null = all sites (caller should not filter).
- * - Manager: sites assigned to them or their subordinates (user_sites).
- * - Supervisor: sites assigned to them (user_sites).
+ * Site IDs implied by the given users' active PO bill rates.
+ *
+ * Bill Rates by Person is the current source of truth for which POs someone
+ * works on, so the sites behind those POs count as assigned sites. Without this,
+ * a manager set up entirely through PO bill rates has no `user_sites` rows and
+ * sees an empty site list on every admin screen.
+ *
+ * Uses the service-role client: this is an internal authorization lookup, and
+ * `po_bill_rates` is not readable by every role.
  */
-export async function getAccessibleSiteIds(
+async function getBillRateSiteIds(userIds: string[]): Promise<string[]> {
+  if (userIds.length === 0) return []
+
+  let admin: SupabaseClient
+  try {
+    admin = createAdminClient()
+  } catch (err) {
+    console.error('getBillRateSiteIds could not create admin client:', err)
+    return []
+  }
+
+  const { data: rateRows, error: rateError } = await admin
+    .from('po_bill_rates')
+    .select('po_id, effective_from_date, effective_to_date')
+    .in('user_id', userIds)
+  if (rateError || !rateRows?.length) {
+    if (rateError) console.error('getBillRateSiteIds bill rate query failed:', rateError)
+    return []
+  }
+
+  const today = new Date().toISOString().slice(0, 10)
+  const poIds = [
+    ...new Set(
+      (rateRows as { po_id: string; effective_from_date?: string | null; effective_to_date?: string | null }[])
+        .filter((r) => r.po_id && billRateIsActiveOnDate(r, today))
+        .map((r) => r.po_id)
+    ),
+  ]
+  if (poIds.length === 0) return []
+
+  const { data: pos, error: poError } = await admin
+    .from('purchase_orders')
+    .select('site_id, active')
+    .in('id', poIds)
+  if (poError || !pos?.length) {
+    if (poError) console.error('getBillRateSiteIds purchase order query failed:', poError)
+    return []
+  }
+
+  return [
+    ...new Set(
+      (pos as { site_id?: string | null; active?: boolean | null }[])
+        .filter((p) => p.active !== false && p.site_id)
+        .map((p) => p.site_id as string)
+    ),
+  ]
+}
+
+async function resolveSiteIds(
   supabase: SupabaseClient,
   userId: string,
-  role: UserRole
+  role: UserRole,
+  includeBillRateSites: boolean
 ): Promise<string[] | null> {
   if (role === 'admin' || role === 'super_admin') {
     return null
@@ -41,10 +97,12 @@ export async function getAccessibleSiteIds(
     userIdsToCheck = [userId, ...subordinateIds]
   }
 
-  const { data, error } = await supabase
-    .from('user_sites')
-    .select('site_id')
-    .in('user_id', userIdsToCheck)
+  const [assignedResult, billRateSiteIds] = await Promise.all([
+    supabase.from('user_sites').select('site_id').in('user_id', userIdsToCheck),
+    includeBillRateSites ? getBillRateSiteIds(userIdsToCheck) : Promise.resolve([]),
+  ])
+
+  const { data, error } = assignedResult
   if (error) {
     // Return null (not []) so callers can distinguish a DB failure from a user
     // who genuinely has no site assignments. Returning [] on error would silently
@@ -52,9 +110,24 @@ export async function getAccessibleSiteIds(
     console.error('getAccessibleSiteIds query failed:', error)
     return null
   }
-  if (!data) return []
-  const siteIds = [...new Set((data as { site_id: string }[]).map((r) => r.site_id))]
-  return siteIds
+
+  const assignedSiteIds = ((data || []) as { site_id: string }[]).map((r) => r.site_id)
+  return [...new Set([...assignedSiteIds, ...billRateSiteIds])]
+}
+
+/**
+ * Get site IDs the current user can access for org/systems/activities/deliverables.
+ * - Admin/Super admin: null = all sites (caller should not filter).
+ * - Manager: sites assigned to them or their subordinates, via explicit
+ *   `user_sites` rows plus the sites behind their active PO bill rates.
+ * - Supervisor: the same two sources, for themselves only.
+ */
+export async function getAccessibleSiteIds(
+  supabase: SupabaseClient,
+  userId: string,
+  role: UserRole
+): Promise<string[] | null> {
+  return resolveSiteIds(supabase, userId, role, true)
 }
 
 /**
@@ -105,7 +178,10 @@ export async function getAccessibleBidSheetIds(
     return accessIds.length > 0 ? accessIds : []
   }
 
-  const accessibleSiteIds = await getAccessibleSiteIds(supabase, userId, role)
+  // Explicit `user_sites` assignments only. The bid sheet detail page and its
+  // write routes gate on a direct `user_sites` lookup, so widening the list here
+  // to bill-rate sites would surface sheets that bounce back on open.
+  const accessibleSiteIds = await resolveSiteIds(supabase, userId, role, false)
   if (accessibleSiteIds && accessibleSiteIds.length > 0) {
     const { data: siteSheets } = await supabase
       .from('bid_sheets')

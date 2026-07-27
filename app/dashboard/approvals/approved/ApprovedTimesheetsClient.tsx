@@ -449,7 +449,7 @@ export default function ApprovedTimesheetsClient({
                     </p>
                   </div>
                   <div className="rounded-lg bg-gray-100 dark:bg-gray-700/40 px-3 py-2">
-                    <p className="text-xs text-gray-600 dark:text-gray-300">Non-billable</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-300">Non-Billable</p>
                     <p className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                       {formatHours(hourTotals[selectedTimesheet.id]?.unbillable ?? 0)}
                     </p>

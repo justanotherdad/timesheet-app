@@ -892,22 +892,33 @@ export default function HierarchicalItemManager({
         </div>
       )}
 
-      {/* Site Selection */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Select Site <span className="text-red-500">*</span>
-        </label>
-        <select
-          value={selectedSite}
-          onChange={(e) => handleSiteChange(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-        >
-          <option value="">-- Select Site --</option>
-          {sites.map(site => (
-            <option key={site.id} value={site.id}>{site.name}</option>
-          ))}
-        </select>
-      </div>
+      {sites.length === 0 ? (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 px-4 py-3 rounded mb-4">
+          <p className="font-medium">No sites available</p>
+          <p className="text-sm mt-1">
+            You don&apos;t have access to any sites yet. Site access comes from the purchase
+            orders you&apos;re listed on under Bill Rates by Person, so ask an administrator to add
+            you to a PO for the site you need.
+          </p>
+        </div>
+      ) : (
+        /* Site Selection */
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Select Site <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={selectedSite}
+            onChange={(e) => handleSiteChange(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+          >
+            <option value="">-- Select Site --</option>
+            {sites.map(site => (
+              <option key={site.id} value={site.id}>{site.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
 
       {selectedSite && (

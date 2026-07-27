@@ -975,7 +975,7 @@ export default function WeeklyTimesheetForm({
 
         {/* Unbillable Time */}
         <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Unbillable Time</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Non-Billable Time</h2>
           
           {(['HOLIDAY', 'INTERNAL', 'PTO'] as const).map((t) => (
             <datalist key={t} id={`unbillable-desc-${t}`}>

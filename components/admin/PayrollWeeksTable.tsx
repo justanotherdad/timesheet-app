@@ -83,7 +83,7 @@ export default function PayrollWeeksTable({ weeks }: { weeks: PayrollWeekSummary
               <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Week Ending</th>
               <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Employees</th>
               <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Billable</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Non-billable</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Non-Billable</th>
               <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Total</th>
               <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Actions</th>
             </tr>

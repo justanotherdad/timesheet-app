@@ -271,7 +271,7 @@ export async function GET(request: NextRequest) {
         po_number: 'N/A',
         po_id: null,
         department_id: null,
-        task_description: (u.description as string) || 'Unbillable',
+        task_description: (u.description as string) || 'Non-Billable',
         system_name: 'N/A',
         activity_name: 'N/A',
         deliverable_name: 'N/A',
