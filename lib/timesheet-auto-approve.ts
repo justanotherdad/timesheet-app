@@ -12,10 +12,10 @@ import { nextApprovalConfirmationSequence } from '@/lib/timesheet-confirmation'
 
 /** Ordered approvers: first line (supervisor or reports-to) → manager → final. Exported for approve/delegate logic. */
 export function buildApprovalChain(profile: {
-  reports_to_id?: string
-  supervisor_id?: string
-  manager_id?: string
-  final_approver_id?: string
+  reports_to_id?: string | null
+  supervisor_id?: string | null
+  manager_id?: string | null
+  final_approver_id?: string | null
 } | null): string[] {
   if (!profile) return []
   const chain: string[] = []
