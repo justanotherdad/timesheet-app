@@ -124,7 +124,7 @@ export interface TimesheetSignature {
   id: string
   timesheet_id: string
   signer_id: string
-  signer_role: 'supervisor' | 'manager' | 'final_approver'
+  signer_role: 'budget_approver' | 'supervisor' | 'manager' | 'final_approver'
   signer_name?: string // Snapshot of signer name at approval time (doesn't change if profile is updated)
   signed_at: string
   signature_data?: string // For storing signature image/data

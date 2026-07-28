@@ -47,6 +47,78 @@ interface HierarchicalItemManagerProps {
   embedded?: boolean
 }
 
+/** Map raw Supabase/Postgres errors to actionable messages for managers. */
+function formatWriteError(err: { message?: string; code?: string } | null | undefined, itemName: string): string {
+  const msg = err?.message || ''
+  if (err?.code === '42501' || /row-level security/i.test(msg)) {
+    return `You don't have permission to change ${itemName.toLowerCase()}s. If you need access, ask an admin.`
+  }
+  if (/unsupported Unicode escape/i.test(msg) || /\\u0000/i.test(msg)) {
+    return 'Import failed: the file has invalid characters (often a UTF-16 Excel CSV or Excel workbook). Save as CSV UTF-8 (Comma delimited) and try again.'
+  }
+  return msg || 'An error occurred'
+}
+
+/** Decode CSV text, handling UTF-16 (Excel "Unicode Text") and stripping NULs. */
+async function readCsvText(file: File): Promise<string> {
+  const name = (file.name || '').toLowerCase()
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    throw new Error(
+      'Excel workbook files (.xlsx / .xls) are not supported. In Excel, use File → Save As → CSV UTF-8 (Comma delimited), then import that .csv file.'
+    )
+  }
+  const buf = await file.arrayBuffer()
+  const bytes = new Uint8Array(buf)
+  let text: string
+  // UTF-16 LE BOM
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    text = new TextDecoder('utf-16le').decode(bytes)
+  } else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    text = new TextDecoder('utf-16be').decode(bytes)
+  } else if (
+    // Heuristic: lots of NULs in the first chunk → likely UTF-16 without BOM
+    bytes.length >= 4 &&
+    bytes.filter((b, i) => i < 64 && b === 0).length > 8
+  ) {
+    text = new TextDecoder('utf-16le').decode(bytes)
+  } else {
+    text = new TextDecoder('utf-8').decode(bytes)
+  }
+  // Strip BOM and NULs/control chars that Postgres rejects as \u0000
+  return text.replace(/^\uFEFF/, '').replace(/\u0000/g, '')
+}
+
+/** Minimal CSV line split that respects double-quoted fields. */
+function splitCsvLine(line: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"'
+          i++
+        } else {
+          inQuotes = false
+        }
+      } else {
+        cur += ch
+      }
+    } else if (ch === '"') {
+      inQuotes = true
+    } else if (ch === ',') {
+      out.push(cur)
+      cur = ''
+    } else {
+      cur += ch
+    }
+  }
+  out.push(cur)
+  return out.map((v) => v.trim().replace(/\r$/, ''))
+}
+
 export default function HierarchicalItemManager({
   sites: initialSites,
   tableName,
@@ -357,7 +429,7 @@ export default function HierarchicalItemManager({
       setSuccess(`${itemName} added successfully`)
       setTimeout(() => setSuccess(null), 3000)
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(formatWriteError(err, itemName))
     } finally {
       setLoading(false)
     }
@@ -439,7 +511,7 @@ export default function HierarchicalItemManager({
       setSuccess(`${itemName} updated successfully`)
       setTimeout(() => setSuccess(null), 3000)
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(formatWriteError(err, itemName))
     } finally {
       setLoading(false)
     }
@@ -460,7 +532,7 @@ export default function HierarchicalItemManager({
       setSelectedItems(selectedItems.filter(itemId => itemId !== id))
       router.refresh()
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(formatWriteError(err, itemName))
     }
   }
 
@@ -487,7 +559,7 @@ export default function HierarchicalItemManager({
       setSuccess(`Successfully deleted ${selectedItems.length} ${itemName.toLowerCase()}${selectedItems.length > 1 ? 's' : ''}`)
       setTimeout(() => setSuccess(null), 5000)
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(formatWriteError(err, itemName))
     } finally {
       setLoading(false)
     }
@@ -623,7 +695,7 @@ export default function HierarchicalItemManager({
       setSuccess(`Successfully ${messages.join(', ')} for ${selectedItems.length} ${itemName.toLowerCase()}${selectedItems.length > 1 ? 's' : ''}`)
       setTimeout(() => setSuccess(null), 5000)
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(formatWriteError(err, itemName))
     } finally {
       setLoading(false)
     }
@@ -762,19 +834,19 @@ export default function HierarchicalItemManager({
       return false
     }
 
-    const text = await file.text()
-    const lines = text.split(/\r?\n/).filter(line => line.trim())
-    if (lines.length < 2) {
-      setError('CSV file must have at least a header row and one data row')
-      return false
-    }
-    
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\r$/, ''))
     setLoading(true)
     setError(null)
     setSuccess(null)
 
     try {
+      const text = await readCsvText(file)
+      const lines = text.split(/\r?\n/).filter(line => line.trim())
+      if (lines.length < 2) {
+        setError('CSV file must have at least a header row and one data row')
+        return false
+      }
+
+      const headers = splitCsvLine(lines[0]).map(h => h.toLowerCase())
       let nameIdx = headers.findIndex((h: string) => h.includes('name'))
       if (nameIdx === -1 && tableName === 'deliverables') nameIdx = headers.findIndex((h: string) => h.includes('deliverable'))
       if (nameIdx === -1 && tableName === 'activities') nameIdx = headers.findIndex((h: string) => h.includes('activity'))
@@ -783,20 +855,20 @@ export default function HierarchicalItemManager({
       if (nameIdx === -1) nameIdx = 0
 
       const itemsToAdd = lines.slice(1).map(line => {
-        const rawValues = line.split(',').map(v => v.trim().replace(/\r$/, ''))
-        const values = rawValues
+        const values = splitCsvLine(line)
+        // Strip leftover control characters that Postgres rejects as unicode escapes.
+        const rawName = (values[nameIdx] || '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim()
 
         const insertData: any = {
           site_id: selectedSite,
-          name: (values[nameIdx] || '').trim(),
+          name: rawName,
         }
-        // Skip description for systems - the column may not exist (causes "Could not find description" error)
-        if (tableName === 'systems') {
-          // Systems: import name only
-        } else {
+        // Systems table has no description column — name only.
+        if (tableName !== 'systems') {
           const descriptionIdx = headers.findIndex((h: string) => h.includes('description') || h.includes('desc'))
           if (descriptionIdx >= 0) {
-            insertData.description = values[descriptionIdx] || null
+            const desc = (values[descriptionIdx] || '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim()
+            insertData.description = desc || null
           }
         }
 
@@ -820,7 +892,7 @@ export default function HierarchicalItemManager({
       const junctionTables = getJunctionTableNames()
       if (deptIds.length > 0 || poIds.length > 0) {
         const junctionInserts: any[] = []
-        
+
         insertedItems?.forEach((item: any) => {
           deptIds.forEach(deptId => {
             junctionInserts.push({
@@ -837,15 +909,16 @@ export default function HierarchicalItemManager({
         })
 
         if (junctionInserts.length > 0) {
-          // Split into department and PO inserts
           const deptInserts = junctionInserts.filter(j => j.department_id)
           const poInserts = junctionInserts.filter(j => j.purchase_order_id)
-          
+
           if (deptInserts.length > 0) {
-            await supabase.from(junctionTables.departments).insert(deptInserts)
+            const { error: deptErr } = await supabase.from(junctionTables.departments).insert(deptInserts)
+            if (deptErr) throw deptErr
           }
           if (poInserts.length > 0) {
-            await supabase.from(junctionTables.purchaseOrders).insert(poInserts)
+            const { error: poErr } = await supabase.from(junctionTables.purchaseOrders).insert(poInserts)
+            if (poErr) throw poErr
           }
         }
       }
@@ -856,7 +929,7 @@ export default function HierarchicalItemManager({
       setTimeout(() => setSuccess(null), 5000)
       return true
     } catch (err: any) {
-      setError(err.message || 'Failed to import items')
+      setError(formatWriteError(err, itemName))
       throw err
     } finally {
       setLoading(false)
@@ -959,8 +1032,10 @@ export default function HierarchicalItemManager({
                     {importStep === 1 && (
                       <>
                         <div className="text-sm text-gray-600 dark:text-gray-400 space-y-3">
-                          <p><strong>CSV format:</strong> Use a .csv file (filename does not matter). First row must be a header row with column names. One required column for the {itemName.toLowerCase()} name—use a header that includes &quot;name&quot;, &quot;{itemName.toLowerCase()}&quot;, &quot;item&quot;, or &quot;title&quot; (e.g. <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Name</code> or <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Deliverable</code>). Each following row is one {itemName.toLowerCase()}. Empty rows are skipped.</p>
-                          {tableName === 'systems' && (
+                          <p><strong>CSV format:</strong> Use a .csv file saved as <strong>CSV UTF-8 (Comma delimited)</strong> from Excel. Excel workbooks (.xlsx / .xls) are not supported. First row must be a header row with column names. One required column for the {itemName.toLowerCase()} name—use a header that includes &quot;name&quot;, &quot;{itemName.toLowerCase()}&quot;, &quot;item&quot;, or &quot;title&quot; (e.g. <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Name</code> or <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Deliverable</code>). Each following row is one {itemName.toLowerCase()}. Empty rows are skipped.</p>
+                          {tableName === 'systems' ? (
+                            <p>Systems import uses the name column only (no description column).</p>
+                          ) : (
                             <p>Optional column: <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">description</code> or <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">desc</code>.</p>
                           )}
                           <p>In the next step, choose departments and purchase orders to assign to all imported items. You can skip to apply to all, or import without assignments and edit later.</p>
@@ -1048,7 +1123,7 @@ export default function HierarchicalItemManager({
                     {/* Step 3: Choose file */}
                     {importStep === 3 && (
                       <>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Select your CSV file to import.</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Select your CSV UTF-8 file to import (.csv only — not Excel workbooks).</p>
                         <div className="flex justify-between items-center">
                           <button type="button" onClick={() => setImportStep(2)} className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
                             ← Back
@@ -1058,7 +1133,7 @@ export default function HierarchicalItemManager({
                             Import CSV File
                             <input
                               type="file"
-                              accept=".csv,.xlsx,.xls"
+                              accept=".csv,text/csv"
                               className="hidden"
                               onChange={async (e) => {
                                 const file = e.target.files?.[0]

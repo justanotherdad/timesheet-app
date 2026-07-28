@@ -279,7 +279,7 @@ function GuideContent() {
         <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
           <li>Fill in all required rows and hours.</li>
           <li>Click <strong>Submit</strong>.</li>
-          <li>The timesheet becomes <strong>Submitted</strong> and enters the approval chain: <strong>Employee → Supervisor → Manager → Final Approver</strong>. Where a field on your profile is set to “None,” the next person in the chain is used.</li>
+          <li>The timesheet becomes <strong>Submitted</strong> and enters approval. If any charged PO has granted users marked <strong>Timesheet approver</strong> (and they are not already on your profile chain), those people must all approve first in parallel. Then the normal chain runs one by one: <strong>Employee → Supervisor → Manager → Final Approver</strong>. Where a field on your profile is set to “None,” the next person in the chain is used.</li>
           <li>If you are your own final approver with nobody above you, the timesheet is approved automatically.</li>
         </ol>
         <h4 className="text-sm font-semibold mt-3 mb-1">3.5 Viewing a timesheet</h4>
@@ -516,7 +516,7 @@ function GuideContent() {
           <li><strong>Billable hours</strong> – Review hours and cost, broken down by system and by individual, and drill into the timesheets behind a figure.</li>
           <li><strong>Change Orders</strong> – Record changes to the PO value.</li>
           <li><strong>Attachments and notes</strong> – Keep supporting documents and images with the budget.</li>
-          <li><strong>Budget Access</strong> (admins) – Grant or revoke access for a user: select the PO, open <strong>Budget Access</strong>, then <strong>Grant Access</strong> and choose the name.</li>
+          <li><strong>Budget Access</strong> (admins) – Grant or revoke access for a user: select the PO, open <strong>Budget Access</strong>, then <strong>Grant Access</strong> and choose the name. Optionally check <strong>Timesheet approver</strong> so they must approve timesheets with hours on that PO before the employee&apos;s normal approval chain (unchecked by default).</li>
         </ul>
       </section>
 

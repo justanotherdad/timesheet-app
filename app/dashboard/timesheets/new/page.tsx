@@ -99,6 +99,8 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
     systems,
     deliverables,
     activities,
+    systemPOIds,
+    systemDepartmentIds,
     deliverablePOIds,
     deliverableDepartmentIds,
     activityPOIds,
@@ -233,6 +235,8 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
               systems={systems}
               deliverables={deliverables}
               activities={activities}
+              systemPOIds={systemPOIds}
+              systemDepartmentIds={systemDepartmentIds}
               deliverablePOIds={deliverablePOIds}
               deliverableDepartmentIds={deliverableDepartmentIds}
               activityPOIds={activityPOIds}

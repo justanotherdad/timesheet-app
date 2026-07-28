@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
-import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
+import { getPendingApprovalTimesheets, sortPendingApprovals } from '@/lib/approval-queue'
 import Link from 'next/link'
 import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList, FileBarChart, ClipboardCheck, DollarSign } from 'lucide-react'
 import { formatWeekEnding, formatDate, getCalendarDateStringInAppTimezone } from '@/lib/utils'
@@ -77,19 +77,11 @@ export default async function DashboardPage() {
     }
   }
 
-  // Pending approvals: same scope as /dashboard/approvals (direct reports + expansion when user is an active delegate)
+  // Pending approvals: same scope as /dashboard/approvals (profile chain + budget approvers + delegation)
   let pendingApprovals: any[] = []
   let pendingApprovalsCount = 0
   let hasActiveDelegationAsDelegate = false
   const adminSupabase = createAdminClient()
-  const reportsResult = await withQueryTimeout(() =>
-    adminSupabase
-      .from('user_profiles')
-      .select('id')
-      .or(`reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`)
-  )
-  let reports = (reportsResult.data || []) as Array<{ id: string }>
-
   const today = getCalendarDateStringInAppTimezone()
   const { data: delegationRows } = await adminSupabase
     .from('approval_delegations')
@@ -97,74 +89,15 @@ export default async function DashboardPage() {
     .eq('delegate_id', user.id)
     .lte('start_date', today)
     .gte('end_date', today)
-  const delegatorIds = [...new Set((delegationRows || []).map((r: { delegator_id: string }) => r.delegator_id))]
-  hasActiveDelegationAsDelegate = delegatorIds.length > 0
-  const delegatedByIds = new Set(delegatorIds)
-  const hasOutgoingDelegation = await hasActiveOutgoingDelegation(adminSupabase, user.id, today)
-  if (delegatorIds.length > 0) {
-    const seen = new Set(reports.map((r) => r.id))
-    for (const delegatorId of delegatorIds) {
-      const delegatorReportsResult = await withQueryTimeout(() =>
-        adminSupabase
-          .from('user_profiles')
-          .select('id')
-          .or(`reports_to_id.eq.${delegatorId},supervisor_id.eq.${delegatorId},manager_id.eq.${delegatorId},final_approver_id.eq.${delegatorId}`)
-      )
-      const delegatorReports = (delegatorReportsResult.data || []) as Array<{ id: string }>
-      for (const r of delegatorReports) {
-        if (!seen.has(r.id)) {
-          seen.add(r.id)
-          reports = [...reports, r]
-        }
-      }
-    }
-  }
+  hasActiveDelegationAsDelegate = (delegationRows || []).length > 0
 
-  if (reports.length > 0) {
-    const reportIds = reports.map((r) => r.id)
-    const pendingResult = await withQueryTimeout(() =>
-      adminSupabase
-        .from('weekly_timesheets')
-        .select('*, user_profiles!user_id!inner(name, reports_to_id, supervisor_id, manager_id, final_approver_id)')
-        .in('user_id', reportIds)
-        .eq('status', 'submitted')
-        .order('submitted_at', { ascending: true })
-    )
-
-    const allPending = (pendingResult.data || []) as any[]
-
-    const signaturesResult = allPending.length > 0
-      ? await withQueryTimeout(() =>
-          adminSupabase
-            .from('timesheet_signatures')
-            .select('timesheet_id, signer_id')
-            .in('timesheet_id', allPending.map((t: any) => t.id))
-        )
-      : { data: [] }
-    const sigs = (signaturesResult.data || []) as { timesheet_id: string; signer_id: string }[]
-    const signedByTimesheet: Record<string, Set<string>> = {}
-    sigs.forEach((s) => {
-      if (!signedByTimesheet[s.timesheet_id]) signedByTimesheet[s.timesheet_id] = new Set()
-      signedByTimesheet[s.timesheet_id].add(s.signer_id)
-    })
-
-    const allPendingForUser = allPending.filter((ts: any) => {
-      const profile = ts.user_profiles as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string }
-      const chain: string[] = []
-      const firstApprover = profile?.supervisor_id || profile?.reports_to_id
-      if (firstApprover) chain.push(firstApprover)
-      if (profile?.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
-      if (profile?.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
-      const signedIds = signedByTimesheet[ts.id] || new Set<string>()
-      const nextId = chain.find((uid) => !signedIds.has(uid))
-      if (nextId === user.id && hasOutgoingDelegation) {
-        return false
-      }
-      return nextId === user.id || (nextId != null && delegatedByIds.has(nextId))
-    })
-    pendingApprovals = allPendingForUser.slice(0, 5)
-    pendingApprovalsCount = allPendingForUser.length
-  }
+  const allPendingForUser = sortPendingApprovals(
+    await getPendingApprovalTimesheets(user),
+    'submitted_at',
+    'asc'
+  )
+  pendingApprovals = allPendingForUser.slice(0, 5)
+  pendingApprovalsCount = allPendingForUser.length
 
   let showTimesheetConfirmationsCard = false
   let timesheetConfirmationsPending = 0

@@ -13,9 +13,11 @@ import { Plus, Trash2, Edit2, X, ChevronUp, ChevronDown } from 'lucide-react'
 interface WeeklyTimesheetFormProps {
   sites: Array<{ id: string; name: string; code?: string }>
   purchaseOrders: Array<{ id: string; po_number: string; description?: string; site_id?: string; department_id?: string }>
-  systems?: Array<{ id: string; name: string; code?: string; site_id?: string }>
-  deliverables?: Array<{ id: string; name: string; code?: string; site_id?: string }>
-  activities?: Array<{ id: string; name: string; code?: string; site_id?: string }>
+  systems?: Array<{ id: string; name: string; code?: string; site_id?: string; project_po_id?: string | null }>
+  deliverables?: Array<{ id: string; name: string; code?: string; site_id?: string; project_po_id?: string | null }>
+  activities?: Array<{ id: string; name: string; code?: string; site_id?: string; project_po_id?: string | null }>
+  systemPOIds?: Record<string, string[]>
+  systemDepartmentIds?: Record<string, string[]>
   deliverablePOIds?: Record<string, string[]>
   deliverableDepartmentIds?: Record<string, string[]>
   activityPOIds?: Record<string, string[]>
@@ -150,6 +152,8 @@ export default function WeeklyTimesheetForm({
   systems = [],
   deliverables = [],
   activities = [],
+  systemPOIds = {},
+  systemDepartmentIds = {},
   deliverablePOIds = {},
   deliverableDepartmentIds = {},
   activityPOIds = {},
@@ -597,18 +601,49 @@ export default function WeeklyTimesheetForm({
   // system ids that appear in this PO's matrix; otherwise the user can pick a
   // like-named system belonging to another PO whose id matches no combo here,
   // and the Deliverable/Activity dropdowns come back empty.
-  const systemOptions = (
-    usingProjectCombos
-      ? (() => {
-          const allowedSystemIds = new Set(projectCombosForPo.map(c => c.systemId))
-          return systems.filter(s => allowedSystemIds.has(s.id))
-        })()
-      : systems
-  ).map(s => ({
-    id: s.id,
-    name: s.name,
-    code: s.code,
-  }))
+  //
+  // In basic-budget mode we only show globally-scoped rows (project_po_id IS
+  // NULL), then filter by site + PO/department the same way Deliverable does.
+  // That stops project-matrix systems from leaking into other POs' dropdowns.
+  // If this entry already has a system_id that falls outside the allowlist
+  // (legacy bad data), keep it in the options so the saved value still displays.
+  const systemOptions = (() => {
+    let list = systems
+    if (usingProjectCombos) {
+      const allowedSystemIds = new Set(projectCombosForPo.map(c => c.systemId))
+      list = list.filter(s => allowedSystemIds.has(s.id))
+    } else {
+      list = list.filter(s => !s.project_po_id)
+      if (editingEntry?.client_project_id) {
+        list = list.filter(s => s.site_id === editingEntry.client_project_id)
+      }
+      if (editingEntry?.po_id) {
+        const selectedPO = purchaseOrders.find(p => p.id === editingEntry.po_id)
+        const poDepartmentId = selectedPO?.department_id
+        list = list.filter(s => {
+          const poIds = systemPOIds[s.id] || []
+          if (poIds.length > 0) {
+            return poIds.includes(editingEntry.po_id!)
+          }
+          const sysDeptIds = systemDepartmentIds[s.id] || []
+          if (sysDeptIds.length === 0) return true
+          if (!poDepartmentId) return false
+          return sysDeptIds.includes(poDepartmentId)
+        })
+      }
+    }
+    // Preserve a previously-saved selection that is no longer in the allowlist
+    // so edit view still shows the value; it just won't be offered as a new pick.
+    if (editingEntry?.system_id && !list.some(s => s.id === editingEntry.system_id)) {
+      const saved = systems.find(s => s.id === editingEntry.system_id)
+      if (saved) list = [...list, saved]
+    }
+    return list.map(s => ({
+      id: s.id,
+      name: s.name,
+      code: s.code,
+    }))
+  })()
 
   // Filter deliverables by client (site) and PO; deduplicate by id
   // When deliverable has no PO assignments: only show if its department matches the selected PO's department
@@ -629,6 +664,8 @@ export default function WeeklyTimesheetForm({
         }
         list = list.filter(d => allowedIds.has(d.id))
       } else {
+        // Basic budget: never offer project-scoped private rows.
+        list = list.filter(d => !d.project_po_id)
         const selectedPO = purchaseOrders.find(p => p.id === editingEntry.po_id)
         const poDepartmentId = selectedPO?.department_id
         list = list.filter(d => {
@@ -643,6 +680,10 @@ export default function WeeklyTimesheetForm({
           return delDeptIds.includes(poDepartmentId)
         })
       }
+    }
+    if (editingEntry?.deliverable_id && !list.some(d => d.id === editingEntry.deliverable_id)) {
+      const saved = deliverables.find(d => d.id === editingEntry.deliverable_id)
+      if (saved) list = [...list, saved]
     }
     return Array.from(new Map(list.map(d => [d.id, d])).values())
   })()
@@ -670,11 +711,16 @@ export default function WeeklyTimesheetForm({
         }
         list = list.filter(a => allowedIds.has(a.id))
       } else {
+        list = list.filter(a => !a.project_po_id)
         list = list.filter(a => {
           const poIds = activityPOIds[a.id] || []
           return poIds.length === 0 || poIds.includes(editingEntry.po_id!)
         })
       }
+    }
+    if (editingEntry?.activity_id && !list.some(a => a.id === editingEntry.activity_id)) {
+      const saved = activities.find(a => a.id === editingEntry.activity_id)
+      if (saved) list = [...list, saved]
     }
     return Array.from(new Map(list.map(a => [a.id, a])).values())
   })()

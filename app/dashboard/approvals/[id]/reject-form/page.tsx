@@ -5,6 +5,7 @@ import { APPROVAL_PARTICIPANT_ROLES } from '@/lib/approval-access'
 import { requireRole } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
+import { getRequiredBudgetApproverIds } from '@/lib/budget-timesheet-approvers'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
@@ -53,16 +54,26 @@ export default async function RejectTimesheetPage({
         .eq('id', ts.user_id)
         .single()
     )
-    const owner = ownerResult.data as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string } | null
+    const owner = ownerResult.data as {
+      reports_to_id?: string
+      supervisor_id?: string
+      manager_id?: string
+      final_approver_id?: string
+    } | null
+    const budgetRequired = ts.user_id
+      ? await getRequiredBudgetApproverIds(adminSupabase, id, ts.user_id, owner)
+      : []
     const isApprover =
       owner?.reports_to_id === user.id ||
       owner?.supervisor_id === user.id ||
       owner?.manager_id === user.id ||
-      owner?.final_approver_id === user.id
+      owner?.final_approver_id === user.id ||
+      budgetRequired.includes(user.id)
     let allowed = isApprover
     if (!allowed && owner) {
       const today = getCalendarDateStringInAppTimezone()
-      for (const approverId of buildApprovalChain(owner)) {
+      const candidates = [...buildApprovalChain(owner), ...budgetRequired]
+      for (const approverId of [...new Set(candidates)]) {
         const { data: activeDelegation } = await adminSupabase
           .from('approval_delegations')
           .select('id')

@@ -152,7 +152,7 @@ export default function BasicBudgetView({
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [laborCostData, setLaborCostData] = useState<any>(null)
-  const [budgetAccessUsers, setBudgetAccessUsers] = useState<Array<{ id: string; name: string }>>([])
+  const [budgetAccessUsers, setBudgetAccessUsers] = useState<Array<{ id: string; name: string; timesheetApprover: boolean }>>([])
   const [budgetAccessModal, setBudgetAccessModal] = useState<'add' | null>(null)
   const [balanceData, setBalanceData] = useState<{
     budgetBalance: number
@@ -269,7 +269,13 @@ export default function BasicBudgetView({
       const res = await fetch(`/api/budget/${po.id}/budget-access`, fetchOpts)
       if (res.ok) {
         const json = await res.json()
-        setBudgetAccessUsers(json.users || [])
+        setBudgetAccessUsers(
+          (json.users || []).map((u: { id: string; name: string; timesheetApprover?: boolean }) => ({
+            id: u.id,
+            name: u.name,
+            timesheetApprover: !!u.timesheetApprover,
+          }))
+        )
       }
     } catch { /* ignore */ }
   }, [po.id, user])
@@ -416,7 +422,13 @@ export default function BasicBudgetView({
           const accRes = await fetch(`/api/budget/${po.id}/budget-access`, fetchOpts)
           if (accRes.ok) {
             const accJson = await accRes.json()
-            setBudgetAccessUsers(accJson.users || [])
+            setBudgetAccessUsers(
+              (accJson.users || []).map((u: { id: string; name: string; timesheetApprover?: boolean }) => ({
+                id: u.id,
+                name: u.name,
+                timesheetApprover: !!u.timesheetApprover,
+              }))
+            )
           }
         }
         const balRes = await fetch(`/api/budget/${po.id}/balance`, fetchOpts)
@@ -1315,7 +1327,7 @@ export default function BasicBudgetView({
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Budget Access</h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Grant access to this PO budget for users with a profile.</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Grant access to this PO budget. Check Timesheet approver only if they must approve timesheets with hours on this PO (before the employee&apos;s profile chain).</p>
               </div>
               <button
                 type="button"
@@ -1340,8 +1352,42 @@ export default function BasicBudgetView({
               ) : (
                 <ul className="divide-y divide-gray-200 dark:divide-gray-600">
                   {budgetAccessUsers.map((u) => (
-                    <li key={u.id} className="flex items-center justify-between py-2">
-                      <span className="text-gray-900 dark:text-gray-100">{u.name}</span>
+                    <li key={u.id} className="flex items-center justify-between gap-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-gray-900 dark:text-gray-100 block truncate">{u.name}</span>
+                        <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!u.timesheetApprover}
+                            onChange={async (e) => {
+                              const checked = e.target.checked
+                              setBudgetAccessUsers((prev) =>
+                                prev.map((row) =>
+                                  row.id === u.id ? { ...row, timesheetApprover: checked } : row
+                                )
+                              )
+                              const res = await fetch(`/api/budget/${po.id}/budget-access`, {
+                                ...fetchOpts,
+                                method: 'PATCH',
+                                headers: {
+                                  ...(fetchOpts.headers || {}),
+                                  'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ userId: u.id, timesheetApprover: checked }),
+                              })
+                              if (!res.ok) {
+                                setBudgetAccessUsers((prev) =>
+                                  prev.map((row) =>
+                                    row.id === u.id ? { ...row, timesheetApprover: !checked } : row
+                                  )
+                                )
+                              }
+                            }}
+                            className="rounded border-gray-300 dark:border-gray-600"
+                          />
+                          Timesheet approver
+                        </label>
+                      </div>
                       <button
                         type="button"
                         onClick={async () => {
@@ -1349,7 +1395,7 @@ export default function BasicBudgetView({
                           await fetch(`/api/budget/${po.id}/budget-access?userId=${u.id}`, { method: 'DELETE', ...fetchOpts })
                           loadBudgetAccess()
                         }}
-                        className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                        className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded shrink-0"
                         title="Revoke access"
                       >
                         <Trash2 className="h-4 w-4" />

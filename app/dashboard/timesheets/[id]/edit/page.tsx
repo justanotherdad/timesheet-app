@@ -78,6 +78,8 @@ export default async function EditTimesheetPage({
     systems,
     deliverables,
     activities,
+    systemPOIds,
+    systemDepartmentIds,
     deliverablePOIds,
     deliverableDepartmentIds,
     activityPOIds,
@@ -231,6 +233,8 @@ export default async function EditTimesheetPage({
               systems={systems}
               deliverables={deliverables}
               activities={activities}
+              systemPOIds={systemPOIds}
+              systemDepartmentIds={systemDepartmentIds}
               deliverablePOIds={deliverablePOIds}
               deliverableDepartmentIds={deliverableDepartmentIds}
               activityPOIds={activityPOIds}

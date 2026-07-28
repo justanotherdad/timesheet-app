@@ -302,6 +302,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { error: accessErr } = await adminSupabase.from('po_budget_access').insert({
       user_id: accessUserId,
       purchase_order_id: po.id,
+      timesheet_approver: false,
     })
     if (accessErr && accessErr.code !== '23505') {
       console.error('convert: po_budget_access insert failed', { accessUserId, error: accessErr })

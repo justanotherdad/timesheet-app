@@ -6,6 +6,11 @@ import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import Link from 'next/link'
 import { formatWeekEnding, getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { buildApproverDisplayNamesByNextId } from '@/lib/approval-delegation-display'
+import {
+  getRequiredBudgetApproverIdsByTimesheet,
+  resolveApprovalStage,
+  type ApprovalProfileFields,
+} from '@/lib/budget-timesheet-approvers'
 import { FileText, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
@@ -105,6 +110,7 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
   // Use admin client so RLS does not block reading signatures
   const signaturesByTimesheetId: Record<string, { signer_id: string }[]> = {}
   let approverNamesById: Record<string, string> = {}
+  const pendingBudgetApproverIdsByTimesheetId: Record<string, string[]> = {}
   if (['admin', 'super_admin'].includes(user.profile.role) && timesheetsForDisplay.length > 0) {
     const ids = timesheetsForDisplay.map((ts: any) => ts.id)
     const adminSupabase = createAdminClient()
@@ -120,20 +126,27 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
       signaturesByTimesheetId[s.timesheet_id].push({ signer_id: s.signer_id })
     })
 
-    // Collect next-approver user IDs for submitted timesheets (need chain from user_profiles)
+    const submitted = timesheetsForDisplay.filter((ts: any) => ts.status === 'submitted')
+    const requiredByTs = await getRequiredBudgetApproverIdsByTimesheet(
+      adminSupabase,
+      submitted.map((ts: any) => ({
+        id: ts.id,
+        user_id: ts.user_id,
+        user_profiles: ts.user_profiles as ApprovalProfileFields,
+      }))
+    )
+
     const nextApproverIds = new Set<string>()
-    timesheetsForDisplay.forEach((ts: any) => {
-      if (ts.status !== 'submitted') return
-      const profile = ts.user_profiles as { reports_to_id?: string; manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
-      if (!profile) return
-      const chain: string[] = []
-      const firstApprover = profile.supervisor_id || profile.reports_to_id
-      if (firstApprover) chain.push(firstApprover)
-      if (profile.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
-      if (profile.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
+    submitted.forEach((ts: any) => {
+      const profile = ts.user_profiles as ApprovalProfileFields | undefined
       const signedIds = (signaturesByTimesheetId[ts.id] || []).map((s: { signer_id: string }) => s.signer_id)
-      const nextId = chain.find((uid) => !signedIds.includes(uid))
-      if (nextId) nextApproverIds.add(nextId)
+      const stage = resolveApprovalStage(requiredByTs[ts.id] || [], profile || null, signedIds)
+      if (stage.kind === 'budget') {
+        pendingBudgetApproverIdsByTimesheetId[ts.id] = stage.pendingIds
+        stage.pendingIds.forEach((uid) => nextApproverIds.add(uid))
+      } else if (stage.kind === 'profile') {
+        nextApproverIds.add(stage.nextId)
+      }
     })
     if (nextApproverIds.size > 0) {
       approverNamesById = await buildApproverDisplayNamesByNextId(
@@ -268,6 +281,7 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
                 user={user}
                 signaturesByTimesheetId={signaturesByTimesheetId}
                 approverNamesById={approverNamesById}
+                pendingBudgetApproverIdsByTimesheetId={pendingBudgetApproverIdsByTimesheetId}
               />
             </>
           ) : (

@@ -155,6 +155,8 @@ export type TimesheetDropdownPayload = {
   systems: any[]
   deliverables: any[]
   activities: any[]
+  systemPOIds: Record<string, string[]>
+  systemDepartmentIds: Record<string, string[]>
   deliverablePOIds: Record<string, string[]>
   deliverableDepartmentIds: Record<string, string[]>
   activityPOIds: Record<string, string[]>
@@ -213,6 +215,8 @@ export async function loadTimesheetDropdownData(params: {
         systems: [],
         deliverables: [],
         activities: [],
+        systemPOIds: {},
+        systemDepartmentIds: {},
         deliverablePOIds: {},
         deliverableDepartmentIds: {},
         activityPOIds: {},
@@ -239,6 +243,8 @@ export async function loadTimesheetDropdownData(params: {
         systems: [],
         deliverables: [],
         activities: [],
+        systemPOIds: {},
+        systemDepartmentIds: {},
         deliverablePOIds: {},
         deliverableDepartmentIds: {},
         activityPOIds: {},
@@ -318,11 +324,29 @@ export async function loadTimesheetDropdownData(params: {
   deliverables = Array.from(new Map(deliverables.map((d: any) => [d.id, d])).values())
   activities = Array.from(new Map(activities.map((a: any) => [a.id, a])).values())
 
+  const systemPOIds: Record<string, string[]> = {}
+  const systemDepartmentIds: Record<string, string[]> = {}
   const deliverablePOIds: Record<string, string[]> = {}
   const deliverableDepartmentIds: Record<string, string[]> = {}
   const activityPOIds: Record<string, string[]> = {}
-  if (deliverables.length > 0 || activities.length > 0) {
-    const [delPORes, delDeptRes, actPORes] = await Promise.all([
+  if (systems.length > 0 || deliverables.length > 0 || activities.length > 0) {
+    const [sysPORes, sysDeptRes, delPORes, delDeptRes, actPORes] = await Promise.all([
+      systems.length > 0
+        ? withQueryTimeout<Array<{ system_id: string; purchase_order_id: string }>>(() =>
+            supabase
+              .from('system_purchase_orders')
+              .select('system_id,purchase_order_id')
+              .in('system_id', systems.map((s: any) => s.id))
+          )
+        : Promise.resolve({ data: [] }),
+      systems.length > 0
+        ? withQueryTimeout<Array<{ system_id: string; department_id: string }>>(() =>
+            supabase
+              .from('system_departments')
+              .select('system_id,department_id')
+              .in('system_id', systems.map((s: any) => s.id))
+          )
+        : Promise.resolve({ data: [] }),
       deliverables.length > 0
         ? withQueryTimeout<Array<{ deliverable_id: string; purchase_order_id: string }>>(() =>
             supabase
@@ -348,6 +372,14 @@ export async function loadTimesheetDropdownData(params: {
           )
         : Promise.resolve({ data: [] }),
     ])
+    ;(sysPORes.data || []).forEach((r: any) => {
+      if (!systemPOIds[r.system_id]) systemPOIds[r.system_id] = []
+      systemPOIds[r.system_id].push(r.purchase_order_id)
+    })
+    ;(sysDeptRes.data || []).forEach((r: any) => {
+      if (!systemDepartmentIds[r.system_id]) systemDepartmentIds[r.system_id] = []
+      systemDepartmentIds[r.system_id].push(r.department_id)
+    })
     ;(delPORes.data || []).forEach((r: any) => {
       if (!deliverablePOIds[r.deliverable_id]) deliverablePOIds[r.deliverable_id] = []
       deliverablePOIds[r.deliverable_id].push(r.purchase_order_id)
@@ -398,6 +430,8 @@ export async function loadTimesheetDropdownData(params: {
     systems,
     deliverables,
     activities,
+    systemPOIds,
+    systemDepartmentIds,
     deliverablePOIds,
     deliverableDepartmentIds,
     activityPOIds,

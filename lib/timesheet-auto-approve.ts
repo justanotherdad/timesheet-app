@@ -4,6 +4,10 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import {
+  getRequiredBudgetApproverIds,
+  isBudgetStageComplete,
+} from '@/lib/budget-timesheet-approvers'
 import { nextApprovalConfirmationSequence } from '@/lib/timesheet-confirmation'
 
 /** Ordered approvers: first line (supervisor or reports-to) → manager → final. Exported for approve/delegate logic. */
@@ -48,6 +52,20 @@ export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<b
 
   const chain = buildApprovalChain(profile)
   if (chain.length > 0) return false
+
+  // Budget "Timesheet approver" stage must be finished (or empty) first.
+  const budgetRequired = await getRequiredBudgetApproverIds(
+    adminSupabase,
+    timesheetId,
+    timesheet.user_id,
+    profile
+  )
+  const { data: existingSigs } = await adminSupabase
+    .from('timesheet_signatures')
+    .select('signer_id')
+    .eq('timesheet_id', timesheetId)
+  const signedIds = new Set((existingSigs || []).map((s: { signer_id: string }) => s.signer_id))
+  if (!isBudgetStageComplete(budgetRequired, signedIds)) return false
 
   // Empty chain: no one to approve. Auto-approve as the employee approving themselves.
   const userId = timesheet.user_id

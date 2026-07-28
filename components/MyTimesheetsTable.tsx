@@ -14,6 +14,8 @@ interface MyTimesheetsTableProps {
   user: { id: string; profile: { role: string } }
   signaturesByTimesheetId?: Record<string, { signer_id: string }[]>
   approverNamesById?: Record<string, string>
+  /** When submitted and in budget stage, pending budget approver ids (parallel). */
+  pendingBudgetApproverIdsByTimesheetId?: Record<string, string[]>
 }
 
 export default function MyTimesheetsTable({
@@ -23,6 +25,7 @@ export default function MyTimesheetsTable({
   user,
   signaturesByTimesheetId = {},
   approverNamesById = {},
+  pendingBudgetApproverIdsByTimesheetId = {},
 }: MyTimesheetsTableProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -48,6 +51,8 @@ export default function MyTimesheetsTable({
 
   const getNextApproverId = (ts: any): string | undefined => {
     if (ts.status !== 'submitted') return undefined
+    const pendingBudget = pendingBudgetApproverIdsByTimesheetId[ts.id]
+    if (pendingBudget && pendingBudget.length > 0) return pendingBudget[0]
     const profile = ts.user_profiles as { reports_to_id?: string; manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
     if (!profile) return undefined
     const chain: string[] = []
@@ -64,6 +69,10 @@ export default function MyTimesheetsTable({
     if (ts.status === 'rejected') return 'Rejected'
     if (ts.status === 'approved') return 'Approved'
     if (ts.status === 'submitted') {
+      const pendingBudget = pendingBudgetApproverIdsByTimesheetId[ts.id]
+      if (pendingBudget && pendingBudget.length > 0) {
+        return pendingBudget.length === 1 ? 'With Budget Approver' : 'With Budget Approvers'
+      }
       const nextId = getNextApproverId(ts)
       if (!nextId) return 'Approved'
       const profile = ts.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
@@ -80,6 +89,12 @@ export default function MyTimesheetsTable({
     if (ts.status === 'rejected') return 'Rejected'
     if (ts.status === 'approved') return 'Approved'
     if (ts.status === 'submitted') {
+      const pendingBudget = pendingBudgetApproverIdsByTimesheetId[ts.id]
+      if (pendingBudget && pendingBudget.length > 0) {
+        const names = pendingBudget.map((id) => approverNamesById[id]).filter(Boolean)
+        if (names.length > 0) return names.join(', ')
+        return getWithLabel(ts)
+      }
       const nextId = getNextApproverId(ts)
       if (!nextId) return 'Approved'
       return approverNamesById[nextId] || getWithLabel(ts)

@@ -43,24 +43,32 @@ export async function GET(
 
   const { data: accessRows } = await supabase
     .from('po_budget_access')
-    .select('user_id')
+    .select('user_id, timesheet_approver')
     .eq('purchase_order_id', poId)
 
   const userIds = [...new Set((accessRows || []).map((r: any) => r.user_id).filter(Boolean))]
-  let users: Array<{ id: string; name: string }> = []
+  let users: Array<{ id: string; name: string; timesheetApprover: boolean }> = []
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
       .from('user_profiles')
       .select('id, name')
       .in('id', userIds)
       .order('name')
-    users = (profiles || []).map((p: any) => ({ id: p.id, name: p.name || 'Unknown' }))
+    const approverByUser = new Map<string, boolean>()
+    for (const row of accessRows || []) {
+      approverByUser.set(row.user_id, !!row.timesheet_approver)
+    }
+    users = (profiles || []).map((p: any) => ({
+      id: p.id,
+      name: p.name || 'Unknown',
+      timesheetApprover: approverByUser.get(p.id) === true,
+    }))
   }
 
   return NextResponse.json({ users })
 }
 
-/** POST: Grant budget access to a user (admin only) */
+/** POST: Grant budget access to a user (admin only). timesheet_approver defaults false. */
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ poId: string }> }
@@ -91,7 +99,7 @@ export async function POST(
   const adminSupabase = createAdminClient()
   const { error } = await adminSupabase
     .from('po_budget_access')
-    .insert({ user_id: userId, purchase_order_id: poId })
+    .insert({ user_id: userId, purchase_order_id: poId, timesheet_approver: false })
 
   if (error) {
     if (error.code === '23505') return NextResponse.json({ ok: true }) // already granted
@@ -100,7 +108,51 @@ export async function POST(
   return NextResponse.json({ ok: true })
 }
 
-/** DELETE: Revoke budget access. Body: { userId } */
+/** PATCH: Update timesheet_approver flag for a granted user. Body: { userId, timesheetApprover } */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ poId: string }> }
+) {
+  const { poId } = await params
+  const user = await getCurrentUser()
+  if (!user || !['admin', 'super_admin'].includes(user.profile.role)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const supabase = await createClient()
+  const { data: po } = await supabase
+    .from('purchase_orders')
+    .select('site_id')
+    .eq('id', poId)
+    .single()
+
+  if (!po) {
+    return NextResponse.json({ error: 'PO not found' }, { status: 404 })
+  }
+
+  const body = await req.json()
+  const { userId, timesheetApprover } = body
+  if (!userId || typeof userId !== 'string') {
+    return NextResponse.json({ error: 'userId required' }, { status: 400 })
+  }
+  if (typeof timesheetApprover !== 'boolean') {
+    return NextResponse.json({ error: 'timesheetApprover boolean required' }, { status: 400 })
+  }
+
+  const adminSupabase = createAdminClient()
+  const { error } = await adminSupabase
+    .from('po_budget_access')
+    .update({ timesheet_approver: timesheetApprover })
+    .eq('purchase_order_id', poId)
+    .eq('user_id', userId)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  return NextResponse.json({ ok: true })
+}
+
+/** DELETE: Revoke budget access. Query: ?userId= */
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ poId: string }> }

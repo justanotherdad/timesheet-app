@@ -19,6 +19,12 @@ import { withQueryTimeout } from '@/lib/timeout'
 import { getPendingApprovalTimesheets, sortPendingApprovals } from '@/lib/approval-queue'
 import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
+import {
+  getRequiredBudgetApproverIds,
+  resolveApprovalStage,
+  userIsCurrentApprover,
+  type ApprovalProfileFields,
+} from '@/lib/budget-timesheet-approvers'
 import { parseConfirmationAssigneeIds, loadCompanySettingsMap } from '@/lib/timesheet-confirmation'
 import Header from '@/components/Header'
 import ApproveTimesheetButton from '@/components/approvals/ApproveTimesheetButton'
@@ -110,26 +116,38 @@ export default async function TimesheetDetailPage({
     timesheet.timesheet_signatures = signatures
   }
 
-  // Check if user can approve this timesheet (owner's reports_to, supervisor, or manager)
+  // Check if user can approve this timesheet (profile chain, budget approver, or admin)
   let canApprove = false
+  const ownerResult = await withQueryTimeout(() =>
+    adminSupabase
+      .from('user_profiles')
+      .select('reports_to_id, supervisor_id, manager_id, final_approver_id')
+      .eq('id', timesheet.user_id)
+      .single()
+  )
+  const owner = ownerResult.data as ApprovalProfileFields | null
+  const signedIdSet = new Set(signatures.map((s: { signer_id: string }) => s.signer_id))
+  const requiredBudget = await getRequiredBudgetApproverIds(
+    adminSupabase,
+    id,
+    timesheet.user_id,
+    owner
+  )
+  const approvalStage = resolveApprovalStage(requiredBudget, owner, signedIdSet)
+
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
-    const ownerResult = await withQueryTimeout(() =>
-      adminSupabase
-        .from('user_profiles')
-        .select('reports_to_id, supervisor_id, manager_id, final_approver_id')
-        .eq('id', timesheet.user_id)
-        .single()
-    )
-    const owner = ownerResult.data as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string } | null
+    const profileChain = buildApprovalChain(owner)
     let isApprover =
-      owner?.reports_to_id === user.id ||
-      owner?.supervisor_id === user.id ||
-      owner?.manager_id === user.id ||
-      owner?.final_approver_id === user.id
+      profileChain.includes(user.id) || requiredBudget.includes(user.id)
+
     if (!isApprover) {
-      const approverIds = buildApprovalChain(owner)
       const today = getCalendarDateStringInAppTimezone()
-      for (const approverId of approverIds) {
+      const candidateDelegators = [
+        ...profileChain,
+        ...(approvalStage.kind === 'budget' ? approvalStage.pendingIds : []),
+        ...(approvalStage.kind === 'profile' ? [approvalStage.nextId] : []),
+      ]
+      for (const approverId of [...new Set(candidateDelegators)]) {
         const { data: activeDelegation } = await adminSupabase
           .from('approval_delegations')
           .select('id')
@@ -153,39 +171,42 @@ export default async function TimesheetDetailPage({
       if (!allowAsConfirmationAssignee) {
         redirect('/dashboard')
       }
-    } else {
-      canApprove = true
+    } else if (timesheet.status === 'submitted') {
+      // Only the current actor(s) get Approve; others in the eventual chain can view.
+      const today = getCalendarDateStringInAppTimezone()
+      if (userIsCurrentApprover(approvalStage, user.id)) {
+        canApprove = !(await hasActiveOutgoingDelegation(adminSupabase, user.id, today))
+      } else if (approvalStage.kind === 'budget') {
+        for (const pendingId of approvalStage.pendingIds) {
+          const { data: activeDelegation } = await adminSupabase
+            .from('approval_delegations')
+            .select('id')
+            .eq('delegator_id', pendingId)
+            .eq('delegate_id', user.id)
+            .lte('start_date', today)
+            .gte('end_date', today)
+            .limit(1)
+            .maybeSingle()
+          if (activeDelegation) {
+            canApprove = true
+            break
+          }
+        }
+      } else if (approvalStage.kind === 'profile') {
+        const { data: activeDelegation } = await adminSupabase
+          .from('approval_delegations')
+          .select('id')
+          .eq('delegator_id', approvalStage.nextId)
+          .eq('delegate_id', user.id)
+          .lte('start_date', today)
+          .gte('end_date', today)
+          .limit(1)
+          .maybeSingle()
+        canApprove = !!activeDelegation
+      }
     }
   } else if (['admin', 'super_admin'].includes(user.profile.role)) {
     canApprove = true
-  }
-
-  if (
-    canApprove &&
-    timesheet.user_id !== user.id &&
-    !['admin', 'super_admin'].includes(user.profile.role) &&
-    timesheet.status === 'submitted'
-  ) {
-    const ownerForChain = await withQueryTimeout(() =>
-      adminSupabase
-        .from('user_profiles')
-        .select('reports_to_id, supervisor_id, manager_id, final_approver_id')
-        .eq('id', timesheet.user_id)
-        .single()
-    )
-    const ownerProfile = ownerForChain.data as {
-      reports_to_id?: string
-      supervisor_id?: string
-      manager_id?: string
-      final_approver_id?: string
-    } | null
-    const chain = buildApprovalChain(ownerProfile)
-    const signedIds = new Set(signatures.map((s: { signer_id: string }) => s.signer_id))
-    const nextId = chain.find((uid) => !signedIds.has(uid))
-    const today = getCalendarDateStringInAppTimezone()
-    if (nextId === user.id && (await hasActiveOutgoingDelegation(adminSupabase, user.id, today))) {
-      canApprove = false
-    }
   }
 
   const canShowApproverActions =
@@ -577,7 +598,11 @@ export default async function TimesheetDetailPage({
                   {timesheet.timesheet_signatures.map((sig: any, index: number) => (
                     <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded">
                       <div>
-                        <p className="font-medium text-gray-900 dark:text-gray-100 capitalize">{sig.signer_role}</p>
+                        <p className="font-medium text-gray-900 dark:text-gray-100 capitalize">
+                          {sig.signer_role === 'budget_approver'
+                            ? 'Budget Approver'
+                            : String(sig.signer_role || '').replace(/_/g, ' ')}
+                        </p>
                         <p className="text-sm text-gray-600 dark:text-gray-300">{sig.signer_name || sig.user_profiles?.name || 'Unknown'}</p>
                       </div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">

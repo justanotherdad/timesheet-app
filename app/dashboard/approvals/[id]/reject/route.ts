@@ -3,6 +3,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
+import {
+  getRequiredBudgetApproverIds,
+  resolveApprovalStage,
+  type ApprovalProfileFields,
+} from '@/lib/budget-timesheet-approvers'
 import { NextResponse } from 'next/server'
 
 export async function POST(
@@ -14,7 +19,6 @@ export async function POST(
     const adminSupabase = createAdminClient()
     const { id } = await params
 
-    // Use admin client so RLS does not block supervisors/managers from reading the employee's timesheet
     const { data: timesheet, error: fetchError } = await adminSupabase
       .from('weekly_timesheets')
       .select(`
@@ -28,7 +32,10 @@ export async function POST(
       return NextResponse.json({ error: 'Timesheet not found' }, { status: 404 })
     }
 
-    const ownerProfile = timesheet.user_profiles as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string; email?: string; name?: string }
+    const ownerProfile = timesheet.user_profiles as ApprovalProfileFields & {
+      email?: string
+      name?: string
+    }
     let canReject =
       ownerProfile?.reports_to_id === user.id ||
       ownerProfile?.supervisor_id === user.id ||
@@ -37,10 +44,32 @@ export async function POST(
       timesheet.user_id === user.id ||
       ['admin', 'super_admin'].includes(user.profile.role)
 
+    const requiredBudget = await getRequiredBudgetApproverIds(
+      adminSupabase,
+      id,
+      timesheet.user_id,
+      ownerProfile
+    )
+    const { data: existingSignatures } = await adminSupabase
+      .from('timesheet_signatures')
+      .select('signer_id')
+      .eq('timesheet_id', id)
+    const signedIds = new Set((existingSignatures || []).map((s: { signer_id: string }) => s.signer_id))
+    const stage = resolveApprovalStage(requiredBudget, ownerProfile, signedIds)
+
     if (!canReject) {
-      const approverIds = buildApprovalChain(ownerProfile)
+      if (stage.kind === 'budget' && (stage.pendingIds.includes(user.id) || stage.requiredIds.includes(user.id))) {
+        canReject = true
+      }
+    }
+
+    if (!canReject) {
+      const approverIds = [
+        ...buildApprovalChain(ownerProfile),
+        ...(stage.kind === 'budget' ? stage.pendingIds : []),
+      ]
       const today = getCalendarDateStringInAppTimezone()
-      for (const approverId of approverIds) {
+      for (const approverId of [...new Set(approverIds)]) {
         const { data: activeDelegation } = await adminSupabase
           .from('approval_delegations')
           .select('id')
@@ -63,12 +92,6 @@ export async function POST(
 
     const baseUrl = new URL(request.url).origin
 
-    // Idempotent short-circuit: a double-submitted reject form (e.g. user clicks
-    // the button twice, browser auto-retry) used to fail on the second POST with
-    // "Timesheet must be submitted or approved to reject" and never redirected,
-    // which also meant the email-draft popup never opened. If the timesheet is
-    // already in the 'rejected' state we treat the request as a no-op success
-    // and head straight to the rejected page so the mailto handler still fires.
     if (timesheet.status === 'rejected') {
       const queryParams = new URLSearchParams({
         email: ownerProfile?.email || '',
@@ -82,15 +105,11 @@ export async function POST(
       return NextResponse.json({ error: 'Timesheet must be submitted or approved to reject' }, { status: 400 })
     }
 
-    // Get rejection reason from form data and prepend rejector name
     const formData = await request.formData()
     const note = (formData.get('reason') as string)?.trim() || 'No note provided'
     const rejectorName = (user.profile as { name?: string }).name || 'Approver'
     const rejectionReason = `Rejected by ${rejectorName}: ${note}`
 
-    // Delete signatures on reject so the workflow resets. When employee resubmits and
-    // approvers sign again, they get fresh timestamps. Required for both 'submitted'
-    // (e.g. supervisor signed, manager rejects) and 'approved' (fully approved, then rejected).
     const { error: deleteError } = await adminSupabase
       .from('timesheet_signatures')
       .delete()
@@ -100,7 +119,6 @@ export async function POST(
       return NextResponse.json({ error: deleteError.message }, { status: 500 })
     }
 
-    // Clear approved fields when rejecting after full approval
     const updatePayload: Record<string, unknown> = {
       status: 'rejected',
       rejected_by_id: user.id,
@@ -121,7 +139,6 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    // Redirect to rejected page which opens default email client with pre-filled draft
     const queryParams = new URLSearchParams({
       email: ownerProfile?.email || '',
       reason: rejectionReason,
@@ -132,4 +149,3 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
-

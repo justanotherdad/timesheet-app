@@ -3,7 +3,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
 import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
-import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
+import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
+import {
+  getRequiredBudgetApproverIds,
+  resolveApprovalStage,
+  type ApprovalProfileFields,
+} from '@/lib/budget-timesheet-approvers'
 import { nextApprovalConfirmationSequence } from '@/lib/timesheet-confirmation'
 import { getPendingApprovalTimesheets, sortPendingApprovals } from '@/lib/approval-queue'
 import { NextResponse } from 'next/server'
@@ -25,9 +30,7 @@ function wantsJsonResponse(request: Request): boolean {
  * Resolves where to go after a successful approval. When the caller requests
  * `advance` (the timesheet detail "Approve" button stepping through the queue),
  * we compute the *fresh* pending queue AFTER this approval was written and
- * return a detail URL for the next one. Computing it here — rather than at
- * page render time — avoids the stale prefetch/router-cache result that made
- * the flow bail out to the Pending Approvals list after a few approvals.
+ * return a detail URL for the next one.
  */
 async function resolveReturnTo(
   request: Request,
@@ -80,7 +83,6 @@ export async function POST(
     const adminSupabase = createAdminClient()
     const { id } = await params
 
-    // Use admin client so RLS does not block supervisors/managers from reading the employee's timesheet
     const { data: timesheet, error: fetchError } = await adminSupabase
       .from('weekly_timesheets')
       .select('*, user_profiles!user_id(manager_id, supervisor_id, reports_to_id, final_approver_id)')
@@ -91,45 +93,68 @@ export async function POST(
       return NextResponse.json({ error: 'Timesheet not found' }, { status: 404 })
     }
 
-    const profile = timesheet.user_profiles as {
-      manager_id?: string
-      supervisor_id?: string
-      reports_to_id?: string
-      final_approver_id?: string
-    }
-    // Must match approvals page, auto-approve, etc.: first approver is supervisor OR reports_to
-    const chain = buildApprovalChain(profile)
+    const profile = timesheet.user_profiles as ApprovalProfileFields
 
-    // Allow approval of submitted timesheets, or allow admins to approve any status
     if (timesheet.status !== 'submitted' && !['admin', 'super_admin'].includes(user.profile.role)) {
       return NextResponse.json({ error: 'Timesheet is not in submitted status' }, { status: 400 })
     }
 
-    // Who has already signed (by signer_id)
     const { data: existingSignatures } = await adminSupabase
       .from('timesheet_signatures')
       .select('signer_id, signer_role')
       .eq('timesheet_id', id)
     const signedIds = (existingSignatures || []).map((s: { signer_id: string }) => s.signer_id)
 
-    // If delegator has already signed (or user acting as self), treat as success (idempotent)
     if (signedIds.includes(user.id)) {
       return approvalSuccess(request, formData, wantsJson, user, id)
     }
 
-    // Next approver is first in chain who hasn't signed; admins can always approve (treated as final)
-    const nextApproverId = chain.find((uid) => !signedIds.includes(uid))
+    const requiredBudget = await getRequiredBudgetApproverIds(
+      adminSupabase,
+      id,
+      timesheet.user_id,
+      profile
+    )
+    const stage = resolveApprovalStage(requiredBudget, profile, signedIds)
     const isAdmin = ['admin', 'super_admin'].includes(user.profile.role)
     const today = getCalendarDateStringInAppTimezone()
 
     let canApprove = false
+    let actingForId: string | null = null
     let delegationForDelegate: { include_delegation_note_in_approval?: boolean } | null = null
+
     if (isAdmin) {
       canApprove = true
-    } else if (nextApproverId !== undefined) {
+    } else if (stage.kind === 'budget') {
+      if (stage.pendingIds.includes(user.id)) {
+        const delegatedAway = await hasActiveOutgoingDelegation(adminSupabase, user.id, today)
+        canApprove = !delegatedAway
+        actingForId = user.id
+      } else {
+        for (const pendingId of stage.pendingIds) {
+          const { data: activeDelegation } = await adminSupabase
+            .from('approval_delegations')
+            .select('id, include_delegation_note_in_approval')
+            .eq('delegator_id', pendingId)
+            .eq('delegate_id', user.id)
+            .lte('start_date', today)
+            .gte('end_date', today)
+            .limit(1)
+            .maybeSingle()
+          if (activeDelegation) {
+            canApprove = true
+            actingForId = pendingId
+            delegationForDelegate = activeDelegation
+            break
+          }
+        }
+      }
+    } else if (stage.kind === 'profile') {
+      const nextApproverId = stage.nextId
       if (nextApproverId === user.id) {
         const delegatedAway = await hasActiveOutgoingDelegation(adminSupabase, user.id, today)
         canApprove = !delegatedAway
+        actingForId = user.id
       } else {
         const { data: activeDelegation } = await adminSupabase
           .from('approval_delegations')
@@ -142,6 +167,7 @@ export async function POST(
           .maybeSingle()
         delegationForDelegate = activeDelegation
         canApprove = !!activeDelegation
+        if (canApprove) actingForId = nextApproverId
       }
     }
 
@@ -152,14 +178,18 @@ export async function POST(
       )
     }
 
-    // Admins always sign as themselves (name + id), not as the "next" chain person.
+    // Admins always sign as themselves. If admin acts during budget stage, treat as
+    // final (existing shortcut). If admin acts during profile and is final, same.
     const actingAsDelegate =
-      !isAdmin && !!nextApproverId && nextApproverId !== user.id && canApprove
-    const signerId = isAdmin ? user.id : actingAsDelegate ? nextApproverId : user.id
+      !isAdmin && !!actingForId && actingForId !== user.id && canApprove
+    const signerId = isAdmin ? user.id : actingAsDelegate ? actingForId! : user.id
 
-    // Determine signer role based on who is signing (delegator or self)
-    let signerRole: 'manager' | 'supervisor' | 'final_approver'
-    if (isAdmin || signerId === profile?.final_approver_id) {
+    let signerRole: 'budget_approver' | 'manager' | 'supervisor' | 'final_approver'
+    if (isAdmin) {
+      signerRole = 'final_approver'
+    } else if (stage.kind === 'budget') {
+      signerRole = 'budget_approver'
+    } else if (signerId === profile?.final_approver_id) {
       signerRole = 'final_approver'
     } else if (signerId === profile?.manager_id) {
       signerRole = 'manager'
@@ -167,7 +197,6 @@ export async function POST(
       signerRole = 'supervisor'
     }
 
-    // Signer name: when acting as delegate, either delegator only or "Delegate (on behalf of Delegator)" if the delegation requests it
     let signerName = user.profile?.name || 'Unknown'
     if (actingAsDelegate) {
       const { data: signerProfile } = await adminSupabase.from('user_profiles').select('name').eq('id', signerId).single()
@@ -178,6 +207,7 @@ export async function POST(
         signerName = delegatorName
       }
     }
+
     const { error: signatureError } = await adminSupabase
       .from('timesheet_signatures')
       .insert({
@@ -189,15 +219,13 @@ export async function POST(
 
     if (signatureError) {
       if (signatureError.code === '23505' || signatureError.message?.includes('duplicate key')) {
-        // Already signed (e.g. auto-approve ran, or double-click) - redirect as success
         return approvalSuccess(request, formData, wantsJson, user, id)
       }
       return NextResponse.json({ error: signatureError.message }, { status: 500 })
     }
 
-    // Only set to approved when final approver signs (or admin); then locked to employee
     const isFinalApproval = signerRole === 'final_approver'
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     }
     if (isFinalApproval) {
@@ -215,6 +243,15 @@ export async function POST(
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    // After the last budget approver signs, empty profile chain should auto-approve.
+    if (!isFinalApproval && stage.kind === 'budget') {
+      const signedAfter = new Set([...signedIds, signerId])
+      const stageAfter = resolveApprovalStage(requiredBudget, profile, signedAfter)
+      if (stageAfter.kind === 'done') {
+        await checkAndAutoApproveIfFinal(id)
+      }
     }
 
     return approvalSuccess(request, formData, wantsJson, user, id)
