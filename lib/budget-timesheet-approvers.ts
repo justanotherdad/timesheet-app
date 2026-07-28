@@ -208,3 +208,114 @@ export async function getRequiredBudgetApproverIdsByTimesheet(
 
   return result
 }
+
+/** Format: "approving for PO 12345" or "approving for PO 12345, PO 67890". */
+export function formatApprovingForPoLabel(poNumbers: string[]): string {
+  const cleaned = poNumbers.map((n) => String(n || '').trim()).filter(Boolean)
+  if (cleaned.length === 0) return ''
+  return `approving for ${cleaned.map((n) => (n.toUpperCase().startsWith('PO ') ? n : `PO ${n}`)).join(', ')}`
+}
+
+/** Format: "Jane Smith - approving for PO 12345". Falls back to name only if no POs. */
+export function formatBudgetApproverDisplayName(name: string, poNumbers: string[]): string {
+  const base = (name || 'Unknown').trim() || 'Unknown'
+  const label = formatApprovingForPoLabel(poNumbers)
+  return label ? `${base} - ${label}` : base
+}
+
+/**
+ * For each timesheet, map each budget timesheet-approver user id → PO numbers
+ * (charged hours only, excluding submitter / profile-chain people).
+ */
+export async function getBudgetApproverPoNumbersByTimesheet(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  adminSupabase: any,
+  timesheets: Array<{
+    id: string
+    user_id: string
+    user_profiles?: ApprovalProfileFields | null
+  }>
+): Promise<Record<string, Record<string, string[]>>> {
+  const result: Record<string, Record<string, string[]>> = {}
+  if (timesheets.length === 0) return result
+  for (const ts of timesheets) result[ts.id] = {}
+
+  const timesheetIds = timesheets.map((t) => t.id)
+  const { data: entries } = await adminSupabase
+    .from('timesheet_entries')
+    .select('timesheet_id, po_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
+    .in('timesheet_id', timesheetIds)
+
+  const chargedPoIdsByTimesheet: Record<string, string[]> = {}
+  const allChargedPoIds = new Set<string>()
+  const entriesByTs: Record<string, EntryHoursRow[]> = {}
+  for (const row of entries || []) {
+    const tid = row.timesheet_id as string
+    if (!entriesByTs[tid]) entriesByTs[tid] = []
+    entriesByTs[tid].push(row as EntryHoursRow)
+  }
+  for (const ts of timesheets) {
+    const charged = poIdsWithHours(entriesByTs[ts.id] || [])
+    chargedPoIdsByTimesheet[ts.id] = charged
+    charged.forEach((id) => allChargedPoIds.add(id))
+  }
+  if (allChargedPoIds.size === 0) return result
+
+  const { data: poRows } = await adminSupabase
+    .from('purchase_orders')
+    .select('id, po_number')
+    .in('id', [...allChargedPoIds])
+  const poNumberById: Record<string, string> = {}
+  for (const row of poRows || []) {
+    if (row?.id) poNumberById[row.id] = String(row.po_number || row.id)
+  }
+
+  const { data: accessRows } = await adminSupabase
+    .from('po_budget_access')
+    .select('user_id, purchase_order_id')
+    .in('purchase_order_id', [...allChargedPoIds])
+    .eq('timesheet_approver', true)
+
+  const poIdsByUser: Record<string, string[]> = {}
+  for (const row of accessRows || []) {
+    const poId = row.purchase_order_id as string
+    const uid = row.user_id as string
+    if (!poId || !uid) continue
+    if (!poIdsByUser[uid]) poIdsByUser[uid] = []
+    if (!poIdsByUser[uid].includes(poId)) poIdsByUser[uid].push(poId)
+  }
+
+  for (const ts of timesheets) {
+    const profile = (ts.user_profiles || null) as ApprovalProfileFields | null
+    const profileChain = new Set(buildApprovalChain(profile))
+    const charged = new Set(chargedPoIdsByTimesheet[ts.id] || [])
+    const byUser: Record<string, string[]> = {}
+    for (const [uid, poIds] of Object.entries(poIdsByUser)) {
+      if (uid === ts.user_id) continue
+      if (profileChain.has(uid)) continue
+      const nums = poIds
+        .filter((poId) => charged.has(poId))
+        .map((poId) => poNumberById[poId] || poId)
+        .sort((a, b) => a.localeCompare(b))
+      if (nums.length > 0) byUser[uid] = nums
+    }
+    result[ts.id] = byUser
+  }
+
+  return result
+}
+
+/** Convenience: PO numbers one budget approver is covering on one timesheet. */
+export async function getBudgetApproverPoNumbersForUser(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  adminSupabase: any,
+  timesheetId: string,
+  employeeUserId: string,
+  profile: ApprovalProfileFields | null,
+  approverUserId: string
+): Promise<string[]> {
+  const map = await getBudgetApproverPoNumbersByTimesheet(adminSupabase, [
+    { id: timesheetId, user_id: employeeUserId, user_profiles: profile },
+  ])
+  return map[timesheetId]?.[approverUserId] || []
+}

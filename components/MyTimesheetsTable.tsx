@@ -16,6 +16,8 @@ interface MyTimesheetsTableProps {
   approverNamesById?: Record<string, string>
   /** When submitted and in budget stage, pending budget approver ids (parallel). */
   pendingBudgetApproverIdsByTimesheetId?: Record<string, string[]>
+  /** timesheetId → userId → "Name - approving for PO …" for budget approvers. */
+  budgetApproverDisplayByTimesheetId?: Record<string, Record<string, string>>
 }
 
 export default function MyTimesheetsTable({
@@ -26,6 +28,7 @@ export default function MyTimesheetsTable({
   signaturesByTimesheetId = {},
   approverNamesById = {},
   pendingBudgetApproverIdsByTimesheetId = {},
+  budgetApproverDisplayByTimesheetId = {},
 }: MyTimesheetsTableProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -91,8 +94,10 @@ export default function MyTimesheetsTable({
     if (ts.status === 'submitted') {
       const pendingBudget = pendingBudgetApproverIdsByTimesheetId[ts.id]
       if (pendingBudget && pendingBudget.length > 0) {
-        const names = pendingBudget.map((id) => approverNamesById[id]).filter(Boolean)
-        if (names.length > 0) return names.join(', ')
+        const labels = pendingBudget.map((id) => {
+          return budgetApproverDisplayByTimesheetId[ts.id]?.[id] || approverNamesById[id]
+        }).filter(Boolean)
+        if (labels.length > 0) return labels.join('; ')
         return getWithLabel(ts)
       }
       const nextId = getNextApproverId(ts)

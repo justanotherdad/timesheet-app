@@ -7,6 +7,8 @@ import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import {
   getRequiredBudgetApproverIds,
   resolveApprovalStage,
+  formatBudgetApproverDisplayName,
+  getBudgetApproverPoNumbersForUser,
   type ApprovalProfileFields,
 } from '@/lib/budget-timesheet-approvers'
 import { nextApprovalConfirmationSequence } from '@/lib/timesheet-confirmation'
@@ -206,6 +208,16 @@ export async function POST(
       } else {
         signerName = delegatorName
       }
+    }
+    if (signerRole === 'budget_approver') {
+      const poNumbers = await getBudgetApproverPoNumbersForUser(
+        adminSupabase,
+        id,
+        timesheet.user_id,
+        profile,
+        signerId
+      )
+      signerName = formatBudgetApproverDisplayName(signerName, poNumbers)
     }
 
     const { error: signatureError } = await adminSupabase

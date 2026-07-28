@@ -8,6 +8,8 @@ import { formatWeekEnding, getCalendarDateStringInAppTimezone } from '@/lib/util
 import { buildApproverDisplayNamesByNextId } from '@/lib/approval-delegation-display'
 import {
   getRequiredBudgetApproverIdsByTimesheet,
+  getBudgetApproverPoNumbersByTimesheet,
+  formatBudgetApproverDisplayName,
   resolveApprovalStage,
   type ApprovalProfileFields,
 } from '@/lib/budget-timesheet-approvers'
@@ -111,6 +113,7 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
   const signaturesByTimesheetId: Record<string, { signer_id: string }[]> = {}
   let approverNamesById: Record<string, string> = {}
   const pendingBudgetApproverIdsByTimesheetId: Record<string, string[]> = {}
+  const budgetApproverDisplayByTimesheetId: Record<string, Record<string, string>> = {}
   if (['admin', 'super_admin'].includes(user.profile.role) && timesheetsForDisplay.length > 0) {
     const ids = timesheetsForDisplay.map((ts: any) => ts.id)
     const adminSupabase = createAdminClient()
@@ -127,14 +130,13 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
     })
 
     const submitted = timesheetsForDisplay.filter((ts: any) => ts.status === 'submitted')
-    const requiredByTs = await getRequiredBudgetApproverIdsByTimesheet(
-      adminSupabase,
-      submitted.map((ts: any) => ({
-        id: ts.id,
-        user_id: ts.user_id,
-        user_profiles: ts.user_profiles as ApprovalProfileFields,
-      }))
-    )
+    const submittedMeta = submitted.map((ts: any) => ({
+      id: ts.id,
+      user_id: ts.user_id,
+      user_profiles: ts.user_profiles as ApprovalProfileFields,
+    }))
+    const requiredByTs = await getRequiredBudgetApproverIdsByTimesheet(adminSupabase, submittedMeta)
+    const poNumsByTs = await getBudgetApproverPoNumbersByTimesheet(adminSupabase, submittedMeta)
 
     const nextApproverIds = new Set<string>()
     submitted.forEach((ts: any) => {
@@ -147,6 +149,9 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
       } else if (stage.kind === 'profile') {
         nextApproverIds.add(stage.nextId)
       }
+      for (const uid of Object.keys(poNumsByTs[ts.id] || {})) {
+        nextApproverIds.add(uid)
+      }
     })
     if (nextApproverIds.size > 0) {
       approverNamesById = await buildApproverDisplayNamesByNextId(
@@ -154,6 +159,16 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
         [...nextApproverIds],
         getCalendarDateStringInAppTimezone()
       )
+    }
+    for (const ts of submitted) {
+      const poByUser = poNumsByTs[ts.id] || {}
+      budgetApproverDisplayByTimesheetId[ts.id] = {}
+      for (const [uid, nums] of Object.entries(poByUser)) {
+        budgetApproverDisplayByTimesheetId[ts.id][uid] = formatBudgetApproverDisplayName(
+          approverNamesById[uid] || 'Unknown',
+          nums
+        )
+      }
     }
   }
 
@@ -282,6 +297,7 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
                 signaturesByTimesheetId={signaturesByTimesheetId}
                 approverNamesById={approverNamesById}
                 pendingBudgetApproverIdsByTimesheetId={pendingBudgetApproverIdsByTimesheetId}
+                budgetApproverDisplayByTimesheetId={budgetApproverDisplayByTimesheetId}
               />
             </>
           ) : (

@@ -17,8 +17,8 @@ interface PendingApprovalsClientProps {
   timesheets: any[]
   sortBy: string
   sortDir: string
-  currentUserName: string
-  withLabel: string // e.g. "With Supervisor", "With Manager"
+  withLabelByTimesheetId?: Record<string, string>
+  withPersonByTimesheetId?: Record<string, string>
   hourTotals?: Record<string, HourTotals>
 }
 
@@ -29,8 +29,8 @@ export default function PendingApprovalsClient({
   timesheets,
   sortBy,
   sortDir,
-  currentUserName,
-  withLabel,
+  withLabelByTimesheetId = {},
+  withPersonByTimesheetId = {},
   hourTotals = {},
 }: PendingApprovalsClientProps) {
   const router = useRouter()
@@ -182,10 +182,10 @@ export default function PendingApprovalsClient({
                       </span>
                     </td>
                     <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 break-words align-top">
-                      {withLabel}
+                      {withLabelByTimesheetId[ts.id] || 'With Approver'}
                     </td>
                     <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100 break-words align-top">
-                      {currentUserName}
+                      {withPersonByTimesheetId[ts.id] || '—'}
                     </td>
                     <td className="px-3 lg:px-6 py-3 text-sm text-gray-900 dark:text-gray-100">
                       {formatWeekEnding(ts.created_at)}
@@ -275,11 +275,15 @@ export default function PendingApprovalsClient({
               </div>
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">With</p>
-                <p className="font-medium text-gray-900 dark:text-gray-100">{withLabel}</p>
+                <p className="font-medium text-gray-900 dark:text-gray-100">
+                  {withLabelByTimesheetId[selectedTimesheet.id] || 'With Approver'}
+                </p>
               </div>
               <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">Submitted By</p>
-                <p className="font-medium text-gray-900 dark:text-gray-100">{currentUserName}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">With (Person)</p>
+                <p className="font-medium text-gray-900 dark:text-gray-100">
+                  {withPersonByTimesheetId[selectedTimesheet.id] || '—'}
+                </p>
               </div>
               <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
                 <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-2">Weekly Hours</p>

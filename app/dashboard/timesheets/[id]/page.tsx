@@ -21,6 +21,8 @@ import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
 import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
 import {
   getRequiredBudgetApproverIds,
+  getBudgetApproverPoNumbersByTimesheet,
+  formatBudgetApproverDisplayName,
   resolveApprovalStage,
   userIsCurrentApprover,
   type ApprovalProfileFields,
@@ -134,6 +136,12 @@ export default async function TimesheetDetailPage({
     owner
   )
   const approvalStage = resolveApprovalStage(requiredBudget, owner, signedIdSet)
+  const budgetPoNumsByUser =
+    (
+      await getBudgetApproverPoNumbersByTimesheet(adminSupabase, [
+        { id, user_id: timesheet.user_id, user_profiles: owner },
+      ])
+    )[id] || {}
 
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
     const profileChain = buildApprovalChain(owner)
@@ -595,7 +603,16 @@ export default async function TimesheetDetailPage({
               <div className="border-t pt-6 mt-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Approvals</h3>
                 <div className="space-y-3">
-                  {timesheet.timesheet_signatures.map((sig: any, index: number) => (
+                  {timesheet.timesheet_signatures.map((sig: any, index: number) => {
+                    const rawName = sig.signer_name || sig.user_profiles?.name || 'Unknown'
+                    const displayName =
+                      sig.signer_role === 'budget_approver' && !/approving for PO/i.test(String(rawName))
+                        ? formatBudgetApproverDisplayName(
+                            rawName,
+                            budgetPoNumsByUser[sig.signer_id] || []
+                          )
+                        : rawName
+                    return (
                     <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded">
                       <div>
                         <p className="font-medium text-gray-900 dark:text-gray-100 capitalize">
@@ -603,13 +620,14 @@ export default async function TimesheetDetailPage({
                             ? 'Budget Approver'
                             : String(sig.signer_role || '').replace(/_/g, ' ')}
                         </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-300">{sig.signer_name || sig.user_profiles?.name || 'Unknown'}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">{displayName}</p>
                       </div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         {formatDateTimeInEastern(sig.signed_at)}
                       </p>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
