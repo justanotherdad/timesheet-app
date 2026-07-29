@@ -11,10 +11,17 @@ import type {
   ReportPoSummary,
   DollarChartDatum,
   HoursChartDatum,
+  ReportBillableActivitiesMonth,
+  ReportBillableCostMonth,
 } from '@/lib/generated-report'
+import {
+  buildBillableTablesForPoMonth,
+  listActivityMonthsForPos,
+} from '@/lib/generated-report-billable'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 const EPS = 1e-6
 
@@ -57,6 +64,15 @@ async function callInternal<T>(
   }
 }
 
+function parseMonthKeys(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return [
+    ...new Set(
+      raw.filter((x): x is string => typeof x === 'string' && /^\d{4}-\d{2}$/.test(x))
+    ),
+  ].sort()
+}
+
 export async function POST(req: Request) {
   const user = await getCurrentUser()
   if (!user) {
@@ -68,6 +84,10 @@ export async function POST(req: Request) {
     includeHours?: unknown
     blendedRates?: unknown
     title?: unknown
+    includeBillableActivities?: unknown
+    includeBillableCost?: unknown
+    billableMonthsAll?: unknown
+    billableMonths?: unknown
   }
   const poIds = Array.isArray(body.poIds) ? (body.poIds.filter((x) => typeof x === 'string') as string[]) : []
   const includeHours = body.includeHours !== false
@@ -76,9 +96,20 @@ export async function POST(req: Request) {
       ? (body.blendedRates as Record<string, number>)
       : {}
   const titleInput = typeof body.title === 'string' ? body.title.trim() : ''
+  const includeBillableActivities = body.includeBillableActivities === true
+  const includeBillableCost = body.includeBillableCost === true
+  const billableMonthsAll = body.billableMonthsAll === true
+  const requestedMonths = parseMonthKeys(body.billableMonths)
 
   if (poIds.length === 0) {
     return NextResponse.json({ error: 'Select at least one PO.' }, { status: 400 })
+  }
+
+  if ((includeBillableActivities || includeBillableCost) && !billableMonthsAll && requestedMonths.length === 0) {
+    return NextResponse.json(
+      { error: 'Select at least one month, or choose All months, for billable tables.' },
+      { status: 400 }
+    )
   }
 
   const supabase = await createClient()
@@ -89,10 +120,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
   }
 
-  // Access check: user must be able to access every selected PO.
   for (const poId of poIds) {
     if (!(await canAccessPoBudget(supabase, user.id, user.profile.role, poId))) {
       return NextResponse.json({ error: 'Access denied for one or more selected POs.' }, { status: 403 })
+    }
+  }
+
+  let billableMonths: string[] = []
+  if (includeBillableActivities || includeBillableCost) {
+    if (billableMonthsAll) {
+      billableMonths = await listActivityMonthsForPos(admin, poIds)
+    } else {
+      billableMonths = requestedMonths
     }
   }
 
@@ -121,7 +160,6 @@ export async function POST(req: Request) {
   const chartDollars: DollarChartDatum[] = []
   const chartHours: HoursChartDatum[] = []
 
-  // Preserve the caller's selection order.
   for (const poId of poIds) {
     const po = poById.get(poId)
     if (!po) continue
@@ -129,6 +167,8 @@ export async function POST(req: Request) {
     const projectName = (po.project_name || po.description || '').trim()
     const clientName = siteName.get(po.site_id || '') || 'Unknown'
     const budgetType: 'project' | 'basic' = po.budget_type === 'project' ? 'project' : 'basic'
+
+    let summary: ReportPoSummary
 
     if (budgetType === 'project') {
       const matrix = await callInternal<MatrixResponse>(projectMatrixGET, poId)
@@ -162,7 +202,7 @@ export async function POST(req: Request) {
         })
         .sort((a, b) => b.overHours - a.overHours)
 
-      pos.push({
+      summary = {
         poId,
         poNumber,
         projectName,
@@ -178,7 +218,7 @@ export async function POST(req: Request) {
         overageLineItems: overages.length,
         onTrackLineItems: Math.max(0, rows.length - overages.length),
         overages,
-      })
+      }
 
       chartDollars.push({ poNumber, originalBudget: totalBudgetDollars, budgetRemaining: remainingDollars })
       if (includeHours) {
@@ -200,7 +240,7 @@ export async function POST(req: Request) {
         totalActualHours = totalBudgetHours - remainingHours
       }
 
-      pos.push({
+      summary = {
         poId,
         poNumber,
         projectName,
@@ -216,13 +256,30 @@ export async function POST(req: Request) {
         overageLineItems: null,
         onTrackLineItems: null,
         overages: [],
-      })
+      }
 
       chartDollars.push({ poNumber, originalBudget: totalBudgetDollars, budgetRemaining: remainingDollars })
       if (includeHours && totalBudgetHours != null && remainingHours != null) {
         chartHours.push({ poNumber, originalHours: totalBudgetHours, remainingHours })
       }
     }
+
+    if ((includeBillableActivities || includeBillableCost) && billableMonths.length > 0) {
+      const activitiesByMonth: ReportBillableActivitiesMonth[] = []
+      const costByMonth: ReportBillableCostMonth[] = []
+      for (const monthKey of billableMonths) {
+        const built = await buildBillableTablesForPoMonth(admin, poId, monthKey, {
+          includeActivities: includeBillableActivities,
+          includeCost: includeBillableCost,
+        })
+        if (built.activities) activitiesByMonth.push(built.activities)
+        if (built.cost) costByMonth.push(built.cost)
+      }
+      if (includeBillableActivities) summary.billableActivitiesByMonth = activitiesByMonth
+      if (includeBillableCost) summary.billableCostByMonth = costByMonth
+    }
+
+    pos.push(summary)
   }
 
   if (pos.length === 0) {
@@ -233,6 +290,9 @@ export async function POST(req: Request) {
     generatedAt: new Date().toISOString(),
     generatedByName: user.profile.name || user.profile.email || 'Unknown',
     includeHours,
+    includeBillableActivities,
+    includeBillableCost,
+    billableMonths,
     pos,
     chartDollars,
     chartHours: includeHours && chartHours.length > 0 ? chartHours : null,

@@ -13,6 +13,44 @@ export interface ReportOverageRow {
   overDollars: number
 }
 
+/** One employee row in a monthly Billable Activities (hours) table. */
+export interface ReportBillableActivitiesRow {
+  userId: string
+  userName: string
+  /** weekEnding YYYY-MM-DD → hours */
+  weekHours: Record<string, number>
+  rowTotal: number
+}
+
+/** Frozen Billable Activities table for one calendar month (matches budget UI). */
+export interface ReportBillableActivitiesMonth {
+  monthKey: string
+  monthLabel: string
+  weekEndings: string[]
+  rows: ReportBillableActivitiesRow[]
+  columnTotals: Record<string, number>
+  grandTotal: number
+}
+
+/** One employee row in a monthly Billable Cost ($) table. */
+export interface ReportBillableCostRow {
+  userId: string
+  userName: string
+  /** weekEnding YYYY-MM-DD → dollars */
+  weekCosts: Record<string, number>
+  rowTotal: number
+}
+
+/** Frozen Billable Cost table for one calendar month (matches budget UI). */
+export interface ReportBillableCostMonth {
+  monthKey: string
+  monthLabel: string
+  weekEndings: string[]
+  rows: ReportBillableCostRow[]
+  columnTotals: Record<string, number>
+  grandTotal: number
+}
+
 export interface ReportPoSummary {
   poId: string
   poNumber: string
@@ -32,6 +70,10 @@ export interface ReportPoSummary {
   overageLineItems: number | null
   onTrackLineItems: number | null
   overages: ReportOverageRow[]
+  /** Present when the wizard included Billable Activities for selected months. */
+  billableActivitiesByMonth?: ReportBillableActivitiesMonth[]
+  /** Present when the wizard included Billable Cost for selected months. */
+  billableCostByMonth?: ReportBillableCostMonth[]
 }
 
 export interface DollarChartDatum {
@@ -50,6 +92,12 @@ export interface GeneratedReportSnapshot {
   generatedAt: string
   generatedByName: string
   includeHours: boolean
+  /** Whether Billable Activities (hours) tables were requested. */
+  includeBillableActivities?: boolean
+  /** Whether Billable Cost ($) tables were requested. */
+  includeBillableCost?: boolean
+  /** Months included for billable tables (`YYYY-MM`), empty if neither table included. */
+  billableMonths?: string[]
   pos: ReportPoSummary[]
   chartDollars: DollarChartDatum[]
   chartHours: HoursChartDatum[] | null

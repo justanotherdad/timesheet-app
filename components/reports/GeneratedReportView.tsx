@@ -2,12 +2,30 @@
 
 import { Printer, ArrowLeft } from 'lucide-react'
 import GroupedBarChart from './GroupedBarChart'
-import type { GeneratedReportSnapshot, ReportPoSummary } from '@/lib/generated-report'
+import { formatHoursAmount } from '@/lib/utils'
+import type {
+  GeneratedReportSnapshot,
+  ReportBillableActivitiesMonth,
+  ReportBillableCostMonth,
+  ReportPoSummary,
+} from '@/lib/generated-report'
 
 const money = (n: number) =>
   `$${(n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+const moneyExact = (n: number) =>
+  n === 0
+    ? '—'
+    : `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+/** Hours to hundredths (site-wide consistency). */
 const hours = (n: number | null | undefined) =>
-  n == null ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
+  n == null ? '—' : formatHoursAmount(n)
+
+function formatWeekHeader(we: string): string {
+  // YYYY-MM-DD → M/D
+  const parts = we.split('-')
+  if (parts.length < 3) return we
+  return `${Number(parts[1])}/${Number(parts[2])}`
+}
 
 function SummaryTable({ po, includeHours }: { po: ReportPoSummary; includeHours: boolean }) {
   const rows: { metric: string; value: string; note: string }[] = []
@@ -90,6 +108,150 @@ function OveragesTable({ po }: { po: ReportPoSummary }) {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+function ActivitiesMonthTable({ table }: { table: ReportBillableActivitiesMonth }) {
+  if (table.rows.length === 0) return null
+  return (
+    <div className="mt-3 break-inside-avoid">
+      <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 print:text-black mb-1">
+        Billable Activities — {table.monthLabel}
+      </h5>
+      <div className="overflow-x-auto print:overflow-visible">
+        <table className="w-full text-xs sm:text-sm border border-gray-300 dark:border-gray-600">
+          <thead>
+            <tr className="bg-gray-100 dark:bg-gray-700">
+              <th className="text-left px-2 py-1.5 font-semibold text-gray-900 dark:text-gray-100 print:text-black sticky left-0 bg-gray-100 dark:bg-gray-700">
+                Employee
+              </th>
+              {table.weekEndings.map((we) => (
+                <th key={we} className="text-right px-2 py-1.5 font-semibold text-gray-900 dark:text-gray-100 print:text-black whitespace-nowrap">
+                  {formatWeekHeader(we)}
+                </th>
+              ))}
+              <th className="text-right px-2 py-1.5 font-semibold text-gray-900 dark:text-gray-100 print:text-black">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((r) => (
+              <tr key={r.userId} className="border-t border-gray-200 dark:border-gray-700">
+                <td className="px-2 py-1 text-gray-900 dark:text-gray-100 print:text-black sticky left-0 bg-white dark:bg-gray-800">
+                  {r.userName}
+                </td>
+                {table.weekEndings.map((we) => (
+                  <td key={we} className="px-2 py-1 text-right tabular-nums text-gray-900 dark:text-gray-100 print:text-black">
+                    {(r.weekHours[we] || 0) === 0 ? '—' : hours(r.weekHours[we])}
+                  </td>
+                ))}
+                <td className="px-2 py-1 text-right tabular-nums font-medium text-gray-900 dark:text-gray-100 print:text-black">
+                  {hours(r.rowTotal)}
+                </td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50">
+              <td className="px-2 py-1.5 font-semibold text-gray-900 dark:text-gray-100 print:text-black sticky left-0 bg-gray-50 dark:bg-gray-700/50">
+                Total
+              </td>
+              {table.weekEndings.map((we) => (
+                <td key={we} className="px-2 py-1.5 text-right tabular-nums font-semibold text-gray-900 dark:text-gray-100 print:text-black">
+                  {(table.columnTotals[we] || 0) === 0 ? '—' : hours(table.columnTotals[we])}
+                </td>
+              ))}
+              <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-gray-900 dark:text-gray-100 print:text-black">
+                {hours(table.grandTotal)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function CostMonthTable({ table }: { table: ReportBillableCostMonth }) {
+  if (table.rows.length === 0) return null
+  return (
+    <div className="mt-3 break-inside-avoid">
+      <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 print:text-black mb-1">
+        Billable Cost — {table.monthLabel}
+      </h5>
+      <div className="overflow-x-auto print:overflow-visible">
+        <table className="w-full text-xs sm:text-sm border border-gray-300 dark:border-gray-600">
+          <thead>
+            <tr className="bg-gray-100 dark:bg-gray-700">
+              <th className="text-left px-2 py-1.5 font-semibold text-gray-900 dark:text-gray-100 print:text-black sticky left-0 bg-gray-100 dark:bg-gray-700">
+                Employee
+              </th>
+              {table.weekEndings.map((we) => (
+                <th key={we} className="text-right px-2 py-1.5 font-semibold text-gray-900 dark:text-gray-100 print:text-black whitespace-nowrap">
+                  {formatWeekHeader(we)}
+                </th>
+              ))}
+              <th className="text-right px-2 py-1.5 font-semibold text-gray-900 dark:text-gray-100 print:text-black">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((r) => (
+              <tr key={r.userId} className="border-t border-gray-200 dark:border-gray-700">
+                <td className="px-2 py-1 text-gray-900 dark:text-gray-100 print:text-black sticky left-0 bg-white dark:bg-gray-800">
+                  {r.userName}
+                </td>
+                {table.weekEndings.map((we) => (
+                  <td key={we} className="px-2 py-1 text-right tabular-nums text-gray-900 dark:text-gray-100 print:text-black">
+                    {moneyExact(r.weekCosts[we] || 0)}
+                  </td>
+                ))}
+                <td className="px-2 py-1 text-right tabular-nums font-medium text-gray-900 dark:text-gray-100 print:text-black">
+                  {moneyExact(r.rowTotal)}
+                </td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50">
+              <td className="px-2 py-1.5 font-semibold text-gray-900 dark:text-gray-100 print:text-black sticky left-0 bg-gray-50 dark:bg-gray-700/50">
+                Total
+              </td>
+              {table.weekEndings.map((we) => (
+                <td key={we} className="px-2 py-1.5 text-right tabular-nums font-semibold text-gray-900 dark:text-gray-100 print:text-black">
+                  {moneyExact(table.columnTotals[we] || 0)}
+                </td>
+              ))}
+              <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-gray-900 dark:text-gray-100 print:text-black">
+                {moneyExact(table.grandTotal)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function BillableTablesForPo({ po }: { po: ReportPoSummary }) {
+  const activities = po.billableActivitiesByMonth || []
+  const costs = po.billableCostByMonth || []
+  if (activities.length === 0 && costs.length === 0) return null
+
+  const monthKeys = [
+    ...new Set([...activities.map((a) => a.monthKey), ...costs.map((c) => c.monthKey)]),
+  ].sort()
+
+  return (
+    <div className="mt-4 space-y-4">
+      <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100 print:text-black border-b border-gray-200 dark:border-gray-700 pb-1">
+        Billable timesheet tables
+      </h4>
+      {monthKeys.map((monthKey) => {
+        const act = activities.find((a) => a.monthKey === monthKey)
+        const cost = costs.find((c) => c.monthKey === monthKey)
+        return (
+          <div key={monthKey} className="space-y-2">
+            {act && <ActivitiesMonthTable table={act} />}
+            {cost && <CostMonthTable table={cost} />}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -215,6 +377,7 @@ export default function GeneratedReportView({ title, snapshot, onBack }: Generat
 
               <SummaryTable po={po} includeHours={snapshot.includeHours} />
               <OveragesTable po={po} />
+              <BillableTablesForPo po={po} />
 
               {/* Both charts for this PO stay together on one page. */}
               <div className="gr-charts grid grid-cols-1 lg:grid-cols-2 print:grid-cols-2 gap-6 pt-2">
@@ -234,7 +397,7 @@ export default function GeneratedReportView({ title, snapshot, onBack }: Generat
                       data={hoursData}
                       seriesLabels={['Original Hours', 'Remaining Hours']}
                       seriesColors={['#f5b800', '#22a06b']}
-                      formatValue={(n) => n.toLocaleString('en-US')}
+                      formatValue={(n) => formatHoursAmount(n)}
                     />
                   </div>
                 )}

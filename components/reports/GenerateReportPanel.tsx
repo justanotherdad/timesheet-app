@@ -171,6 +171,12 @@ export default function GenerateReportPanel() {
   )
 }
 
+function formatMonthCheckboxLabel(monthKey: string): string {
+  const [y, m] = monthKey.split('-').map(Number)
+  if (!y || !m) return monthKey
+  return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' })
+}
+
 function GenerateWizard({
   onClose,
   onGenerated,
@@ -185,6 +191,12 @@ function GenerateWizard({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [includeHours, setIncludeHours] = useState<boolean | null>(null)
   const [rates, setRates] = useState<Record<string, string>>({})
+  const [includeBillableActivities, setIncludeBillableActivities] = useState(false)
+  const [includeBillableCost, setIncludeBillableCost] = useState(false)
+  const [billableMonthsAll, setBillableMonthsAll] = useState(false)
+  const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set())
+  const [activityMonths, setActivityMonths] = useState<string[]>([])
+  const [loadingMonths, setLoadingMonths] = useState(false)
   const [title, setTitle] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -207,6 +219,46 @@ function GenerateWizard({
       cancelled = true
     }
   }, [])
+
+  const wantBillableTables = includeBillableActivities || includeBillableCost
+
+  useEffect(() => {
+    if (!wantBillableTables || selected.size === 0) {
+      setActivityMonths([])
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      setLoadingMonths(true)
+      try {
+        const res = await fetch(
+          `/api/reports/generate/activity-months?poIds=${encodeURIComponent([...selected].join(','))}`,
+          { cache: 'no-store' }
+        )
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'Failed to load months')
+        if (!cancelled) {
+          const months = (data.months || []) as string[]
+          setActivityMonths(months)
+          setSelectedMonths((prev) => {
+            const next = new Set<string>()
+            for (const m of prev) if (months.includes(m)) next.add(m)
+            return next
+          })
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setActivityMonths([])
+          setError(e instanceof Error ? e.message : 'Failed to load months')
+        }
+      } finally {
+        if (!cancelled) setLoadingMonths(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [wantBillableTables, selected])
 
   const filteredOptions = useMemo(() => {
     const q = poSearch.trim().toLowerCase()
@@ -245,9 +297,22 @@ function GenerateWizard({
 
   const clearSelection = () => setSelected(new Set())
 
+  const toggleMonth = (monthKey: string) =>
+    setSelectedMonths((prev) => {
+      const next = new Set(prev)
+      if (next.has(monthKey)) next.delete(monthKey)
+      else next.add(monthKey)
+      return next
+    })
+
   const ratesNeeded = includeHours === true && selectedBasic.length > 0
   const ratesValid = !ratesNeeded || selectedBasic.every((o) => Number(rates[o.id]) > 0)
-  const canGenerate = selected.size > 0 && includeHours !== null && ratesValid && !submitting
+  const monthsValid =
+    !wantBillableTables ||
+    billableMonthsAll ||
+    selectedMonths.size > 0
+  const canGenerate =
+    selected.size > 0 && includeHours !== null && ratesValid && monthsValid && !submitting
 
   const generate = async () => {
     setSubmitting(true)
@@ -266,6 +331,10 @@ function GenerateWizard({
           includeHours,
           blendedRates,
           title: title.trim() || undefined,
+          includeBillableActivities,
+          includeBillableCost,
+          billableMonthsAll: wantBillableTables && billableMonthsAll,
+          billableMonths: wantBillableTables && !billableMonthsAll ? [...selectedMonths].sort() : [],
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -435,10 +504,90 @@ function GenerateWizard({
             </section>
           )}
 
-          {/* Step 4: title */}
+          {/* Step 4: billable tables + months */}
+          {selected.size > 0 && includeHours !== null && (
+            <section>
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                4. Billable Activities / Cost tables (optional)
+              </h4>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                Same employee × week tables as on the budget screen, grouped by month, per PO. Cost uses each employee’s bill rate.
+              </p>
+              <div className="space-y-2 mb-3">
+                <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-800 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={includeBillableActivities}
+                    onChange={(e) => setIncludeBillableActivities(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-400 text-orange-600 focus:ring-orange-500"
+                  />
+                  Include Billable Activities (hours)
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-800 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={includeBillableCost}
+                    onChange={(e) => setIncludeBillableCost(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-400 text-orange-600 focus:ring-orange-500"
+                  />
+                  Include Billable Cost ($)
+                </label>
+              </div>
+
+              {wantBillableTables && (
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Months to include</p>
+                  <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-800 dark:text-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={billableMonthsAll}
+                      onChange={(e) => {
+                        setBillableMonthsAll(e.target.checked)
+                        if (e.target.checked) setSelectedMonths(new Set())
+                      }}
+                      className="h-4 w-4 rounded border-gray-400 text-orange-600 focus:ring-orange-500"
+                    />
+                    All months with timesheet activity on the selected PO(s)
+                  </label>
+                  {loadingMonths ? (
+                    <div className="flex items-center gap-2 text-xs text-gray-500 py-2">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading months…
+                    </div>
+                  ) : activityMonths.length === 0 ? (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 py-1">
+                      No months with approved billable hours found for the selected PO(s).
+                    </p>
+                  ) : (
+                    <div className={`grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-40 overflow-y-auto ${billableMonthsAll ? 'opacity-40 pointer-events-none' : ''}`}>
+                      {activityMonths.map((m) => (
+                        <label
+                          key={m}
+                          className="flex items-center gap-2 cursor-pointer text-sm text-gray-800 dark:text-gray-200 px-1 py-0.5"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedMonths.has(m)}
+                            disabled={billableMonthsAll}
+                            onChange={() => toggleMonth(m)}
+                            className="h-3.5 w-3.5 rounded border-gray-400 text-orange-600 focus:ring-orange-500"
+                          />
+                          {formatMonthCheckboxLabel(m)}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {!billableMonthsAll && wantBillableTables && selectedMonths.size === 0 && activityMonths.length > 0 && (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">Select at least one month, or choose All months.</p>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Step 5: title */}
           {selected.size > 0 && includeHours !== null && ratesValid && (
             <section>
-              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">4. Report name (optional)</h4>
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">5. Report name (optional)</h4>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
