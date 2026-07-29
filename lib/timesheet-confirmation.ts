@@ -79,6 +79,67 @@ export interface PendingConfirmation {
   employee_name: string
 }
 
+/** PostgREST URL/filter length limit — keep `.in()` lists under this size. */
+const IN_CHUNK_SIZE = 150
+/** Default PostgREST max rows; page until a short page to avoid silent truncation. */
+const ENTRY_PAGE_SIZE = 1000
+
+type ConfirmationEntryRow = {
+  timesheet_id: string
+  po_id: string | null
+  client_project_id: string | null
+}
+
+/**
+ * Run an `.in()` query in chunks so a large id list doesn't blow past
+ * PostgREST's URL/filter length limit (surfaces as "Bad Request").
+ */
+async function fetchByIdsInChunks<T>(
+  ids: string[],
+  runChunk: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>
+): Promise<T[]> {
+  if (ids.length === 0) return []
+  const out: T[] = []
+  for (let i = 0; i < ids.length; i += IN_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + IN_CHUNK_SIZE)
+    const { data, error } = await runChunk(chunk)
+    if (error) throw new Error(error.message)
+    if (data) out.push(...data)
+  }
+  return out
+}
+
+/**
+ * Load timesheet_entries for many timesheet ids, chunking `.in()` and paging
+ * each chunk so we don't hit the ~1000-row PostgREST cap.
+ */
+async function fetchConfirmationEntries(
+  admin: SupabaseClient,
+  timesheetIds: string[]
+): Promise<ConfirmationEntryRow[]> {
+  if (timesheetIds.length === 0) return []
+  const out: ConfirmationEntryRow[] = []
+
+  for (let i = 0; i < timesheetIds.length; i += IN_CHUNK_SIZE) {
+    const idChunk = timesheetIds.slice(i, i + IN_CHUNK_SIZE)
+    let from = 0
+    for (;;) {
+      const { data, error } = await admin
+        .from('timesheet_entries')
+        .select('timesheet_id, po_id, client_project_id')
+        .in('timesheet_id', idChunk)
+        .range(from, from + ENTRY_PAGE_SIZE - 1)
+      if (error) throw new Error(error.message)
+      const rows = (data || []) as ConfirmationEntryRow[]
+      out.push(...rows)
+      if (rows.length < ENTRY_PAGE_SIZE) break
+      from += ENTRY_PAGE_SIZE
+    }
+  }
+
+  return out
+}
+
 /**
  * Returns the approved timesheets still awaiting confirmation by `userId`,
  * honoring that user's per-user client (site) filter. A user with no filter
@@ -123,33 +184,52 @@ export async function getPendingConfirmationsForUser(
 
   const allowedSiteIds = parseConfirmationSiteFilters(settings)[userId] || []
   if (allowedSiteIds.length > 0 && pending.length > 0) {
-    const pendingIds = pending.map((ts) => (ts as { id: string }).id)
-    const { data: entries } = await admin
-      .from('timesheet_entries')
-      .select('timesheet_id, po_id')
-      .in('timesheet_id', pendingIds)
-      .not('po_id', 'is', null)
-    const poIds = [...new Set((entries || []).map((e) => (e as { po_id: string }).po_id).filter(Boolean))]
-    const poSiteById = new Map<string, string>()
-    if (poIds.length > 0) {
-      const { data: pos } = await admin.from('purchase_orders').select('id, site_id').in('id', poIds)
-      for (const po of pos || []) poSiteById.set((po as { id: string }).id, (po as { site_id: string }).site_id)
+    try {
+      const pendingIds = pending.map((ts) => (ts as { id: string }).id)
+      const entries = await fetchConfirmationEntries(admin, pendingIds)
+
+      const poIds = [
+        ...new Set(
+          entries
+            .map((e) => e.po_id)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0)
+        ),
+      ]
+      const poSiteById = new Map<string, string>()
+      if (poIds.length > 0) {
+        const pos = await fetchByIdsInChunks<{ id: string; site_id: string | null }>(poIds, (chunk) =>
+          admin.from('purchase_orders').select('id, site_id').in('id', chunk)
+        )
+        for (const po of pos) {
+          if (po.site_id) poSiteById.set(po.id, po.site_id)
+        }
+      }
+
+      const allowed = new Set(allowedSiteIds)
+      const timesheetSites = new Map<string, Set<string>>()
+      for (const e of entries) {
+        // Prefer the entry's client; fall back to the PO's site (same as data-view).
+        const siteId =
+          (typeof e.client_project_id === 'string' && e.client_project_id) ||
+          (e.po_id ? poSiteById.get(e.po_id) : undefined) ||
+          null
+        if (!siteId) continue
+        if (!timesheetSites.has(e.timesheet_id)) timesheetSites.set(e.timesheet_id, new Set())
+        timesheetSites.get(e.timesheet_id)!.add(siteId)
+      }
+
+      pending = pending.filter((ts) => {
+        const sites = timesheetSites.get((ts as { id: string }).id)
+        if (!sites) return false
+        for (const s of sites) if (allowed.has(s)) return true
+        return false
+      })
+    } catch (err) {
+      // Fail open: never wipe the whole list because a filter query failed
+      // (e.g. oversized unchunked .in()). All-clients users never hit this
+      // branch; filtered users must still see pending work.
+      console.error('[timesheet-confirmation] site filter query failed; showing unfiltered pending', err)
     }
-    const allowed = new Set(allowedSiteIds)
-    const timesheetSites = new Map<string, Set<string>>()
-    for (const e of entries || []) {
-      const siteId = poSiteById.get((e as { po_id: string }).po_id)
-      if (!siteId) continue
-      const key = (e as { timesheet_id: string }).timesheet_id
-      if (!timesheetSites.has(key)) timesheetSites.set(key, new Set())
-      timesheetSites.get(key)!.add(siteId)
-    }
-    pending = pending.filter((ts) => {
-      const sites = timesheetSites.get((ts as { id: string }).id)
-      if (!sites) return false
-      for (const s of sites) if (allowed.has(s)) return true
-      return false
-    })
   }
 
   return pending.map((ts) => ({
