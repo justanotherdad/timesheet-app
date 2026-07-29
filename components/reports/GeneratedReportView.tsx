@@ -371,7 +371,9 @@ export default function GeneratedReportView({ title, snapshot, onBack }: Generat
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 print:text-black">
                   {po.clientName} · {po.budgetType === 'project' ? 'Project budget' : 'Basic budget'}
-                  {po.budgetType === 'basic' && po.blendedRate ? ` · blended rate ${money(po.blendedRate)}/hr` : ''}
+                  {po.budgetType === 'basic' && po.blendedRate != null
+                    ? ` · blended rate $${Number(po.blendedRate).toFixed(2)}/hr`
+                    : ''}
                 </p>
               </div>
 

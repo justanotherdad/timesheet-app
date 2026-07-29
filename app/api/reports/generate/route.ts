@@ -129,7 +129,8 @@ export async function POST(req: Request) {
   let billableMonths: string[] = []
   if (includeBillableActivities || includeBillableCost) {
     if (billableMonthsAll) {
-      billableMonths = await listActivityMonthsForPos(admin, poIds)
+      // Resolved per PO below so one empty PO cannot wipe months for others.
+      billableMonths = []
     } else {
       billableMonths = requestedMonths
     }
@@ -229,14 +230,15 @@ export async function POST(req: Request) {
       const totalBudgetDollars = Number(bal?.totalAvailable) || 0
       const remainingDollars = Number(bal?.budgetBalance) || 0
       const totalActualDollars = totalBudgetDollars - remainingDollars
-      const rate = Number(blendedRates[poId]) || 0
+      const rate = Number(blendedRates[poId])
+      const rateSafe = Number.isFinite(rate) && rate > 0 ? rate : 0
 
       let totalBudgetHours: number | null = null
       let remainingHours: number | null = null
       let totalActualHours: number | null = null
-      if (includeHours && rate > 0) {
-        totalBudgetHours = totalBudgetDollars / rate
-        remainingHours = remainingDollars / rate
+      if (includeHours && rateSafe > 0) {
+        totalBudgetHours = totalBudgetDollars / rateSafe
+        remainingHours = remainingDollars / rateSafe
         totalActualHours = totalBudgetHours - remainingHours
       }
 
@@ -246,7 +248,7 @@ export async function POST(req: Request) {
         projectName,
         clientName,
         budgetType,
-        blendedRate: rate > 0 ? rate : null,
+        blendedRate: rateSafe > 0 ? rateSafe : null,
         totalBudgetHours,
         totalActualHours,
         remainingHours,
@@ -264,19 +266,32 @@ export async function POST(req: Request) {
       }
     }
 
-    if ((includeBillableActivities || includeBillableCost) && billableMonths.length > 0) {
-      const activitiesByMonth: ReportBillableActivitiesMonth[] = []
-      const costByMonth: ReportBillableCostMonth[] = []
-      for (const monthKey of billableMonths) {
-        const built = await buildBillableTablesForPoMonth(admin, poId, monthKey, {
-          includeActivities: includeBillableActivities,
-          includeCost: includeBillableCost,
-        })
-        if (built.activities) activitiesByMonth.push(built.activities)
-        if (built.cost) costByMonth.push(built.cost)
+    if (includeBillableActivities || includeBillableCost) {
+      const monthsForPo = billableMonthsAll
+        ? await listActivityMonthsForPos(admin, [poId])
+        : billableMonths
+      for (const m of monthsForPo) {
+        if (!billableMonths.includes(m)) billableMonths.push(m)
       }
-      if (includeBillableActivities) summary.billableActivitiesByMonth = activitiesByMonth
-      if (includeBillableCost) summary.billableCostByMonth = costByMonth
+      billableMonths.sort()
+
+      if (monthsForPo.length > 0) {
+        const activitiesByMonth: ReportBillableActivitiesMonth[] = []
+        const costByMonth: ReportBillableCostMonth[] = []
+        for (const monthKey of monthsForPo) {
+          const built = await buildBillableTablesForPoMonth(admin, poId, monthKey, {
+            includeActivities: includeBillableActivities,
+            includeCost: includeBillableCost,
+          })
+          if (built.activities) activitiesByMonth.push(built.activities)
+          if (built.cost) costByMonth.push(built.cost)
+        }
+        if (includeBillableActivities) summary.billableActivitiesByMonth = activitiesByMonth
+        if (includeBillableCost) summary.billableCostByMonth = costByMonth
+      } else {
+        if (includeBillableActivities) summary.billableActivitiesByMonth = []
+        if (includeBillableCost) summary.billableCostByMonth = []
+      }
     }
 
     pos.push(summary)

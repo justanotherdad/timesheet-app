@@ -177,6 +177,19 @@ function formatMonthCheckboxLabel(monthKey: string): string {
   return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' })
 }
 
+/** Fallback calendar months (newest first) when activity lookup finds none. */
+function recentCalendarMonths(count = 36): string[] {
+  const out: string[] = []
+  const now = new Date()
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    out.push(`${y}-${m}`)
+  }
+  return out
+}
+
 function GenerateWizard({
   onClose,
   onGenerated,
@@ -193,7 +206,8 @@ function GenerateWizard({
   const [rates, setRates] = useState<Record<string, string>>({})
   const [includeBillableActivities, setIncludeBillableActivities] = useState(false)
   const [includeBillableCost, setIncludeBillableCost] = useState(false)
-  const [billableMonthsAll, setBillableMonthsAll] = useState(false)
+  /** null = not chosen yet; true = all activity months; false = pick specific */
+  const [monthMode, setMonthMode] = useState<'all' | 'specific' | null>(null)
   const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set())
   const [activityMonths, setActivityMonths] = useState<string[]>([])
   const [loadingMonths, setLoadingMonths] = useState(false)
@@ -225,6 +239,8 @@ function GenerateWizard({
   useEffect(() => {
     if (!wantBillableTables || selected.size === 0) {
       setActivityMonths([])
+      setMonthMode(null)
+      setSelectedMonths(new Set())
       return
     }
     let cancelled = false
@@ -242,7 +258,7 @@ function GenerateWizard({
           setActivityMonths(months)
           setSelectedMonths((prev) => {
             const next = new Set<string>()
-            for (const m of prev) if (months.includes(m)) next.add(m)
+            for (const m of prev) if (months.includes(m) || recentCalendarMonths().includes(m)) next.add(m)
             return next
           })
         }
@@ -259,6 +275,12 @@ function GenerateWizard({
       cancelled = true
     }
   }, [wantBillableTables, selected])
+
+  /** Months shown for Specific mode: activity months when available, else recent calendar months. */
+  const selectableMonths = useMemo(() => {
+    if (activityMonths.length > 0) return [...activityMonths].sort().reverse()
+    return recentCalendarMonths(36)
+  }, [activityMonths])
 
   const filteredOptions = useMemo(() => {
     const q = poSearch.trim().toLowerCase()
@@ -309,8 +331,8 @@ function GenerateWizard({
   const ratesValid = !ratesNeeded || selectedBasic.every((o) => Number(rates[o.id]) > 0)
   const monthsValid =
     !wantBillableTables ||
-    billableMonthsAll ||
-    selectedMonths.size > 0
+    monthMode === 'all' ||
+    (monthMode === 'specific' && selectedMonths.size > 0)
   const canGenerate =
     selected.size > 0 && includeHours !== null && ratesValid && monthsValid && !submitting
 
@@ -320,8 +342,10 @@ function GenerateWizard({
     try {
       const blendedRates: Record<string, number> = {}
       for (const o of selectedBasic) {
-        const v = Number(rates[o.id])
-        if (v > 0) blendedRates[o.id] = v
+        // Preserve cents — do not round to whole dollars.
+        const raw = String(rates[o.id] ?? '').trim()
+        const v = Number(raw)
+        if (Number.isFinite(v) && v > 0) blendedRates[o.id] = v
       }
       const res = await fetch('/api/reports/generate', {
         method: 'POST',
@@ -333,8 +357,9 @@ function GenerateWizard({
           title: title.trim() || undefined,
           includeBillableActivities,
           includeBillableCost,
-          billableMonthsAll: wantBillableTables && billableMonthsAll,
-          billableMonths: wantBillableTables && !billableMonthsAll ? [...selectedMonths].sort() : [],
+          billableMonthsAll: wantBillableTables && monthMode === 'all',
+          billableMonths:
+            wantBillableTables && monthMode === 'specific' ? [...selectedMonths].sort() : [],
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -535,49 +560,84 @@ function GenerateWizard({
               </div>
 
               {wantBillableTables && (
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-3">
                   <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Months to include</p>
-                  <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-800 dark:text-gray-200">
-                    <input
-                      type="checkbox"
-                      checked={billableMonthsAll}
-                      onChange={(e) => {
-                        setBillableMonthsAll(e.target.checked)
-                        if (e.target.checked) setSelectedMonths(new Set())
-                      }}
-                      className="h-4 w-4 rounded border-gray-400 text-orange-600 focus:ring-orange-500"
-                    />
-                    All months with timesheet activity on the selected PO(s)
-                  </label>
-                  {loadingMonths ? (
-                    <div className="flex items-center gap-2 text-xs text-gray-500 py-2">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Loading months…
-                    </div>
-                  ) : activityMonths.length === 0 ? (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 py-1">
-                      No months with approved billable hours found for the selected PO(s).
-                    </p>
-                  ) : (
-                    <div className={`grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-40 overflow-y-auto ${billableMonthsAll ? 'opacity-40 pointer-events-none' : ''}`}>
-                      {activityMonths.map((m) => (
-                        <label
-                          key={m}
-                          className="flex items-center gap-2 cursor-pointer text-sm text-gray-800 dark:text-gray-200 px-1 py-0.5"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedMonths.has(m)}
-                            disabled={billableMonthsAll}
-                            onChange={() => toggleMonth(m)}
-                            className="h-3.5 w-3.5 rounded border-gray-400 text-orange-600 focus:ring-orange-500"
-                          />
-                          {formatMonthCheckboxLabel(m)}
-                        </label>
-                      ))}
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-2 cursor-pointer text-sm text-gray-800 dark:text-gray-200">
+                      <input
+                        type="radio"
+                        name="monthMode"
+                        checked={monthMode === 'all'}
+                        onChange={() => {
+                          setMonthMode('all')
+                          setSelectedMonths(new Set())
+                        }}
+                        className="mt-0.5 h-4 w-4 border-gray-400 text-orange-600 focus:ring-orange-500"
+                      />
+                      <span>
+                        All months with timesheet activity on the selected PO(s)
+                        {activityMonths.length > 0 ? (
+                          <span className="block text-xs text-gray-500 dark:text-gray-400">
+                            {activityMonths.length} month{activityMonths.length === 1 ? '' : 's'} with activity
+                          </span>
+                        ) : null}
+                      </span>
+                    </label>
+                    <label className="flex items-start gap-2 cursor-pointer text-sm text-gray-800 dark:text-gray-200">
+                      <input
+                        type="radio"
+                        name="monthMode"
+                        checked={monthMode === 'specific'}
+                        onChange={() => setMonthMode('specific')}
+                        className="mt-0.5 h-4 w-4 border-gray-400 text-orange-600 focus:ring-orange-500"
+                      />
+                      <span>Specific months</span>
+                    </label>
+                  </div>
+
+                  {monthMode === 'specific' && (
+                    <div className="pl-6 space-y-2">
+                      {loadingMonths ? (
+                        <div className="flex items-center gap-2 text-xs text-gray-500 py-2">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Loading months…
+                        </div>
+                      ) : (
+                        <>
+                          {activityMonths.length === 0 && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              No activity months detected for these POs — showing recent calendar months to choose from.
+                            </p>
+                          )}
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto">
+                            {selectableMonths.map((m) => (
+                              <label
+                                key={m}
+                                className="flex items-center gap-2 cursor-pointer text-sm text-gray-800 dark:text-gray-200 px-1 py-0.5"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedMonths.has(m)}
+                                  onChange={() => toggleMonth(m)}
+                                  className="h-3.5 w-3.5 rounded border-gray-400 text-orange-600 focus:ring-orange-500"
+                                />
+                                {formatMonthCheckboxLabel(m)}
+                              </label>
+                            ))}
+                          </div>
+                          {selectedMonths.size === 0 && (
+                            <p className="text-xs text-amber-700 dark:text-amber-300">
+                              Select at least one month.
+                            </p>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
-                  {!billableMonthsAll && wantBillableTables && selectedMonths.size === 0 && activityMonths.length > 0 && (
-                    <p className="text-xs text-amber-700 dark:text-amber-300">Select at least one month, or choose All months.</p>
+
+                  {monthMode === null && (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      Choose All months or Specific months.
+                    </p>
                   )}
                 </div>
               )}

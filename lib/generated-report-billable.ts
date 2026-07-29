@@ -34,6 +34,8 @@ function parseMonthKey(key: string): { year: number; month: number } | null {
 
 /**
  * Distinct YYYY-MM months that have approved billable hours on any of the given POs.
+ * Uses the same paged entry walk as the budget balance route so high-volume POs
+ * are not truncated by PostgREST's ~1000-row cap.
  */
 export async function listActivityMonthsForPos(
   admin: SupabaseClient,
@@ -41,44 +43,69 @@ export async function listActivityMonthsForPos(
 ): Promise<string[]> {
   if (poIds.length === 0) return []
 
-  // Pull approved timesheet weeks that have entries on these POs.
-  // Strategy: load entry timesheet_ids for the POs (chunked + paged), then filter to approved.
-  const entryTsIds = new Set<string>()
-  const PO_CHUNK = 50
-  const PAGE = 1000
-  for (let i = 0; i < poIds.length; i += PO_CHUNK) {
-    const poChunk = poIds.slice(i, i + PO_CHUNK)
-    let from = 0
-    for (;;) {
-      const { data: entries } = await admin
-        .from('timesheet_entries')
-        .select('timesheet_id')
-        .in('po_id', poChunk)
-        .range(from, from + PAGE - 1)
-      const rows = entries || []
-      for (const e of rows) {
-        const id = (e as { timesheet_id: string }).timesheet_id
-        if (id) entryTsIds.add(id)
-      }
-      if (rows.length < PAGE) break
-      from += PAGE
-    }
-  }
-
-  const tsIds = [...entryTsIds]
-  if (tsIds.length === 0) return []
-
   const months = new Set<string>()
-  const CHUNK = 150
-  for (let i = 0; i < tsIds.length; i += CHUNK) {
-    const chunk = tsIds.slice(i, i + CHUNK)
-    const { data: sheets } = await admin
-      .from('weekly_timesheets')
-      .select('id, week_ending, status')
-      .in('id', chunk)
-      .eq('status', 'approved')
-    for (const ts of sheets || []) {
-      const we = normWeekEnding((ts as { week_ending: string }).week_ending)
+  const PAGE = 1000
+
+  for (const poId of poIds) {
+    const entries: Array<{
+      timesheet_id: string
+      mon_hours?: number
+      tue_hours?: number
+      wed_hours?: number
+      thu_hours?: number
+      fri_hours?: number
+      sat_hours?: number
+      sun_hours?: number
+    }> = []
+
+    for (let from = 0; ; from += PAGE) {
+      const { data: page, error } = await admin
+        .from('timesheet_entries')
+        .select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
+        .eq('po_id', poId)
+        .order('timesheet_id', { ascending: true })
+        .range(from, from + PAGE - 1)
+      if (error) throw new Error(error.message)
+      if (!page || page.length === 0) break
+      entries.push(...(page as typeof entries))
+      if (page.length < PAGE) break
+    }
+
+    const tsIds = [...new Set(entries.map((e) => e.timesheet_id).filter(Boolean))]
+    if (tsIds.length === 0) continue
+
+    const approvedWeById = new Map<string, string>()
+    for (let i = 0; i < tsIds.length; i += 150) {
+      const chunk = tsIds.slice(i, i + 150)
+      const { data: sheets, error } = await admin
+        .from('weekly_timesheets')
+        .select('id, week_ending')
+        .in('id', chunk)
+        .eq('status', 'approved')
+      if (error) throw new Error(error.message)
+      for (const ts of sheets || []) {
+        const row = ts as { id: string; week_ending: string }
+        approvedWeById.set(row.id, normWeekEnding(row.week_ending))
+      }
+    }
+
+    const hoursByTs = new Map<string, number>()
+    for (const e of entries) {
+      const h =
+        (Number(e.mon_hours) || 0) +
+        (Number(e.tue_hours) || 0) +
+        (Number(e.wed_hours) || 0) +
+        (Number(e.thu_hours) || 0) +
+        (Number(e.fri_hours) || 0) +
+        (Number(e.sat_hours) || 0) +
+        (Number(e.sun_hours) || 0)
+      if (h <= 0) continue
+      hoursByTs.set(e.timesheet_id, (hoursByTs.get(e.timesheet_id) || 0) + h)
+    }
+
+    for (const [tsId, h] of hoursByTs) {
+      if (h <= 0) continue
+      const we = approvedWeById.get(tsId)
       if (!we || we.length < 7) continue
       months.add(we.slice(0, 7))
     }
