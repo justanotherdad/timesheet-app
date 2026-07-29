@@ -129,3 +129,16 @@ export interface TimesheetSignature {
   signed_at: string
   signature_data?: string // For storing signature image/data
 }
+
+/** Dashboard Bulletin Board post (rich HTML body). */
+export interface BulletinPost {
+  id: string
+  title: string
+  body_html: string
+  author_id?: string | null
+  author_name?: string | null
+  is_pinned: boolean
+  deleted_at?: string | null
+  created_at: string
+  updated_at: string
+}

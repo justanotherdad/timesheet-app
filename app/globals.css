@@ -30,6 +30,157 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Bulletin Board rich content (editor + rendered posts) */
+.bulletin-content,
+.bulletin-editor.ProseMirror {
+  line-height: 1.55;
+  overflow: hidden;
+}
+.bulletin-content::after,
+.bulletin-editor.ProseMirror::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+.bulletin-content p,
+.bulletin-editor.ProseMirror p {
+  margin: 0.5em 0;
+}
+.bulletin-content h1,
+.bulletin-editor.ProseMirror h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0.75em 0 0.35em;
+}
+.bulletin-content h2,
+.bulletin-editor.ProseMirror h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0.7em 0 0.3em;
+}
+.bulletin-content h3,
+.bulletin-editor.ProseMirror h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.65em 0 0.25em;
+}
+.bulletin-content ul,
+.bulletin-editor.ProseMirror ul {
+  list-style: disc;
+  padding-left: 1.4rem;
+  margin: 0.5em 0;
+}
+.bulletin-content ol,
+.bulletin-editor.ProseMirror ol {
+  list-style: decimal;
+  padding-left: 1.4rem;
+  margin: 0.5em 0;
+}
+.bulletin-content a,
+.bulletin-editor.ProseMirror a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+.dark .bulletin-content a,
+.dark .bulletin-editor.ProseMirror a {
+  color: #60a5fa;
+}
+.bulletin-content img,
+.bulletin-editor.ProseMirror img,
+.bulletin-content .bulletin-float-none,
+.bulletin-editor.ProseMirror .bulletin-float-none {
+  max-width: 100%;
+  height: auto;
+}
+.bulletin-content img.bulletin-float-left,
+.bulletin-content .bulletin-float-left,
+.bulletin-content img[data-float="left"],
+.bulletin-editor.ProseMirror img.bulletin-float-left,
+.bulletin-editor.ProseMirror img[data-float="left"] {
+  float: left;
+  margin: 0.35rem 1rem 0.75rem 0;
+  max-width: min(100%, 480px);
+  height: auto;
+}
+.bulletin-content img.bulletin-float-right,
+.bulletin-content .bulletin-float-right,
+.bulletin-content img[data-float="right"],
+.bulletin-editor.ProseMirror img.bulletin-float-right,
+.bulletin-editor.ProseMirror img[data-float="right"] {
+  float: right;
+  margin: 0.35rem 0 0.75rem 1rem;
+  max-width: min(100%, 480px);
+  height: auto;
+}
+.bulletin-content table,
+.bulletin-editor.ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  font-size: 0.9em;
+}
+.bulletin-content th,
+.bulletin-content td,
+.bulletin-editor.ProseMirror th,
+.bulletin-editor.ProseMirror td {
+  border: 1px solid #d1d5db;
+  padding: 0.4rem 0.55rem;
+  vertical-align: top;
+}
+.dark .bulletin-content th,
+.dark .bulletin-content td,
+.dark .bulletin-editor.ProseMirror th,
+.dark .bulletin-editor.ProseMirror td {
+  border-color: #4b5563;
+}
+.bulletin-content .bulletin-video-embed,
+.bulletin-content .bulletin-video-file,
+.bulletin-editor.ProseMirror .bulletin-video-embed,
+.bulletin-editor.ProseMirror .bulletin-video-file {
+  margin: 0.75rem 0;
+  clear: both;
+}
+.bulletin-content .bulletin-video-embed,
+.bulletin-editor.ProseMirror .bulletin-video-embed {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: #000;
+}
+.bulletin-content .bulletin-video-embed iframe,
+.bulletin-editor.ProseMirror .bulletin-video-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.bulletin-content video,
+.bulletin-editor.ProseMirror video {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 0.5rem;
+  background: #000;
+}
+.bulletin-editor.ProseMirror {
+  min-height: 180px;
+}
+.bulletin-editor.ProseMirror p.is-editor-empty:first-child::before {
+  color: #9ca3af;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.bulletin-img-node.is-selected .bulletin-img-shell {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
 /* Light mode: ensure all gray text classes use near-black so text is readable on white/light backgrounds */
 html:not(.dark) .text-gray-400,
 html:not(.dark) .text-gray-500,

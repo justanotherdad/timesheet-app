@@ -9,7 +9,10 @@ import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Cl
 import { formatWeekEnding, formatDate, getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
+import BulletinBoard from '@/components/bulletin/BulletinBoard'
 import { loadCompanySettingsMap, parseConfirmationAssigneeIds, getPendingConfirmationsForUser } from '@/lib/timesheet-confirmation'
+import { isBulletinAdmin } from '@/lib/bulletin'
+import type { BulletinPost } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10 // Maximum duration for this route in seconds
@@ -179,6 +182,22 @@ export default async function DashboardPage() {
         return bVal.localeCompare(aVal)
       })
       approvedTimesheets = merged.slice(0, 5)
+    }
+  }
+
+  // Bulletin Board posts (below tiles, above list panels)
+  let bulletinPosts: BulletinPost[] = []
+  const canEditBulletin = isBulletinAdmin(user.profile.role)
+  {
+    const { data: bulletinData, error: bulletinError } = await supabase
+      .from('bulletin_posts')
+      .select('id, title, body_html, author_id, author_name, is_pinned, created_at, updated_at')
+      .is('deleted_at', null)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (!bulletinError && bulletinData) {
+      bulletinPosts = bulletinData as BulletinPost[]
     }
   }
 
@@ -412,6 +431,11 @@ export default async function DashboardPage() {
             </>
           )}
         </div>
+
+        <BulletinBoard
+          initialPosts={bulletinPosts}
+          canEdit={canEditBulletin}
+        />
 
         <div className={`grid grid-cols-1 gap-4 sm:gap-6 ${['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
