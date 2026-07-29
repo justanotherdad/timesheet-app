@@ -185,10 +185,11 @@ export default async function DashboardPage() {
     }
   }
 
-  // Bulletin Board posts (below tiles, above list panels)
+  // Bulletin Board posts (below tiles, above list panels).
+  // Fail soft if the migration has not been applied yet.
   let bulletinPosts: BulletinPost[] = []
   const canEditBulletin = isBulletinAdmin(user.profile.role)
-  {
+  try {
     const { data: bulletinData, error: bulletinError } = await supabase
       .from('bulletin_posts')
       .select('id, title, body_html, author_id, author_name, is_pinned, created_at, updated_at')
@@ -199,6 +200,8 @@ export default async function DashboardPage() {
     if (!bulletinError && bulletinData) {
       bulletinPosts = bulletinData as BulletinPost[]
     }
+  } catch {
+    bulletinPosts = []
   }
 
   return (

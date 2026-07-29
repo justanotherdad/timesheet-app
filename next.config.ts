@@ -34,7 +34,8 @@ const nextConfig: NextConfig = {
             value: [
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com https://challenges.cloudflare.com",
-              "frame-src 'self' blob: https://www.google.com https://recaptcha.google.com https://challenges.cloudflare.com",
+              "frame-src 'self' blob: https://www.google.com https://recaptcha.google.com https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com",
+              "media-src 'self' blob:",
               "object-src 'self' blob:",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob:",

@@ -1,4 +1,4 @@
-import DOMPurify from 'isomorphic-dompurify'
+import sanitizeHtml from 'sanitize-html'
 
 /** Max image upload size (~5MB). */
 export const BULLETIN_MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -7,62 +7,57 @@ export const BULLETIN_MAX_VIDEO_BYTES = 50 * 1024 * 1024
 /** Soft max duration hint for short clips (seconds). */
 export const BULLETIN_MAX_VIDEO_SECONDS = 60
 
-const ALLOWED_TAGS = [
-  'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'span', 'a',
-  'h1', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'blockquote', 'hr',
-  'img', 'video', 'source', 'iframe', 'div',
-  'table', 'thead', 'tbody', 'tr', 'th', 'td',
-]
-
-const ALLOWED_ATTR = [
-  'href', 'target', 'rel', 'src', 'alt', 'title', 'width', 'height',
-  'style', 'class', 'controls', 'playsinline', 'preload', 'frameborder',
-  'allow', 'allowfullscreen', 'data-float', 'data-youtube', 'data-vimeo',
-]
-
 /**
  * Sanitize TipTap HTML before save / before render.
- * Keeps formatting, floated images, uploaded media URLs, and YouTube/Vimeo iframes.
+ * Uses sanitize-html (no jsdom) so it is safe on Cloudflare/Node runtimes.
  */
 export function sanitizeBulletinHtml(dirty: string): string {
-  return DOMPurify.sanitize(dirty || '', {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
-    ALLOW_DATA_ATTR: true,
-    ADD_ATTR: ['target', 'allowfullscreen', 'playsinline'],
+  return sanitizeHtml(dirty || '', {
+    allowedTags: [
+      'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'span', 'a',
+      'h1', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'blockquote', 'hr',
+      'img', 'video', 'source', 'iframe', 'div',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    ],
+    allowedAttributes: {
+      a: ['href', 'target', 'rel', 'title'],
+      img: ['src', 'alt', 'title', 'width', 'height', 'style', 'class', 'data-float'],
+      video: ['src', 'controls', 'playsinline', 'preload', 'class', 'width', 'height'],
+      source: ['src', 'type'],
+      iframe: ['src', 'title', 'allow', 'allowfullscreen', 'frameborder', 'class', 'width', 'height'],
+      div: ['class', 'data-bulletin-video', 'data-provider', 'style'],
+      span: ['style', 'class'],
+      p: ['style', 'class'],
+      h1: ['style', 'class'],
+      h2: ['style', 'class'],
+      h3: ['style', 'class'],
+      h4: ['style', 'class'],
+      table: ['class', 'style', 'width'],
+      td: ['colspan', 'rowspan', 'style', 'class'],
+      th: ['colspan', 'rowspan', 'style', 'class'],
+      '*': ['class', 'style'],
+    },
+    allowedSchemes: ['http', 'https', 'mailto'],
+    allowProtocolRelative: false,
+    // Keep our media proxy paths and common embed hosts.
+    allowedIframeHostnames: [
+      'www.youtube.com',
+      'youtube.com',
+      'www.youtube-nocookie.com',
+      'youtube-nocookie.com',
+      'player.vimeo.com',
+    ],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform('a', {
+        rel: 'noopener noreferrer',
+        target: '_blank',
+      }),
+    },
   })
 }
 
 export function isBulletinAdmin(role: string | undefined | null): boolean {
   return role === 'admin' || role === 'super_admin'
-}
-
-/** Accept only media URLs that point at our bulletin media proxy. */
-export function isAllowedBulletinMediaUrl(url: string): boolean {
-  if (!url) return false
-  try {
-    if (url.startsWith('/api/bulletin/media')) return true
-    const u = new URL(url, 'http://localhost')
-    return u.pathname.startsWith('/api/bulletin/media')
-  } catch {
-    return false
-  }
-}
-
-export function isAllowedEmbedUrl(url: string): boolean {
-  try {
-    const u = new URL(url)
-    const host = u.hostname.replace(/^www\./, '')
-    return (
-      host === 'youtube.com' ||
-      host === 'youtube-nocookie.com' ||
-      host === 'youtu.be' ||
-      host === 'vimeo.com' ||
-      host === 'player.vimeo.com'
-    )
-  } catch {
-    return false
-  }
 }
 
 /** Convert a YouTube/Vimeo watch URL into an embeddable iframe src. */

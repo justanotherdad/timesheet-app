@@ -1,12 +1,24 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Megaphone, Pin, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { BulletinPost } from '@/types/database'
 import { sanitizeBulletinHtml } from '@/lib/bulletin'
 import { formatDate } from '@/lib/utils'
-import BulletinEditorModal from './BulletinEditorModal'
+
+// TipTap editor is heavy — load only when an admin opens the modal (client-only).
+const BulletinEditorModal = dynamic(() => import('./BulletinEditorModal'), {
+  ssr: false,
+  loading: () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="rounded-lg bg-white dark:bg-gray-800 px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
+        Loading editor…
+      </div>
+    </div>
+  ),
+})
 
 type Props = {
   initialPosts: BulletinPost[]
