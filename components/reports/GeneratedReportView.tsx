@@ -366,7 +366,14 @@ export default function GeneratedReportView({ title, snapshot, onBack }: Generat
             <section key={po.poId} className="gr-po-section space-y-3">
               <div className="border-b border-gray-200 dark:border-gray-700 pb-1">
                 <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 print:text-black">
-                  {po.poNumber}
+                  <a
+                    href={`/dashboard/budget?poId=${encodeURIComponent(po.poId)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 dark:text-blue-400 hover:underline print:text-black print:no-underline"
+                  >
+                    {po.poNumber}
+                  </a>
                   {po.projectName ? ` — ${po.projectName}` : ''}
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 print:text-black">

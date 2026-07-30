@@ -112,7 +112,6 @@ function BudgetPageClientInner({
   }, [purchaseOrders])
 
   const allSitePOsForNav = selectedSiteId ? sortedPurchaseOrders.filter((p) => p.site_id === selectedSiteId) : []
-  const sitePOs = allSitePOsForNav
 
   // Apply active/archived filter, then the user's search query (matches
   // PO number, project name / description, proposal number, or client
@@ -178,6 +177,35 @@ function BudgetPageClientInner({
     })
   }, [selectedSiteId, sortedPurchaseOrders, showArchivedPOs, awaitingPaymentOnly, awaitingPaymentSet, activeBillRatesOnly, activeBillRateSet, poSearch, poSortMode])
 
+  /**
+   * POs for detail-view arrows + PO dropdown: same active/archived (and
+   * awaiting-payment) filter as the list, but ignore the list search so
+   * leftover search text does not shrink arrow navigation.
+   */
+  const sitePOsForDetailNav = useMemo(() => {
+    if (!selectedSiteId) return []
+    return sortedPurchaseOrders.filter((p) => {
+      if (p.site_id !== selectedSiteId) return false
+      if (awaitingPaymentOnly) {
+        return p.active !== false && awaitingPaymentSet.has(p.id)
+      }
+      if (activeBillRatesOnly) {
+        return p.active !== false && activeBillRateSet.has(p.id)
+      }
+      return showArchivedPOs ? p.active === false : p.active !== false
+    })
+  }, [
+    selectedSiteId,
+    sortedPurchaseOrders,
+    showArchivedPOs,
+    awaitingPaymentOnly,
+    awaitingPaymentSet,
+    activeBillRatesOnly,
+    activeBillRateSet,
+  ])
+
+  const hasArchived = allSitePOsForNav.some((p) => p.active === false)
+
   const selectedPO = selectedPoId
     ? purchaseOrders.find((p) => p.id === selectedPoId)
     : null
@@ -215,9 +243,17 @@ function BudgetPageClientInner({
   }, [showArchivedPOs, poSortMode])
 
   if (selectedPO) {
-    const currentIndex = sitePOs.findIndex((p) => p.id === selectedPoId)
+    const navPOs = sitePOsForDetailNav
+    const currentIndex = navPOs.findIndex((p) => p.id === selectedPoId)
     const hasPrev = currentIndex > 0
-    const hasNext = currentIndex >= 0 && currentIndex < sitePOs.length - 1
+    // If current PO is outside the filtered set (e.g. archived while viewing active),
+    // Next jumps into the filtered list without Prev returning to the out-of-filter PO.
+    const hasNext =
+      currentIndex === -1 ? navPOs.length > 0 : currentIndex < navPOs.length - 1
+    const dropdownPOs =
+      currentIndex === -1 && selectedPO
+        ? [selectedPO, ...navPOs.filter((p) => p.id !== selectedPO.id)]
+        : navPOs
 
     if (matrixMode && selectedPO.budget_type === 'project') {
       return (
@@ -256,12 +292,21 @@ function BudgetPageClientInner({
           }}
           user={user}
           allSites={sites}
-          sitePOs={sitePOs}
+          sitePOs={dropdownPOs}
           selectedSiteId={selectedSiteId}
           selectedPoId={selectedPoId ?? undefined}
           onSelectSite={(siteId) => {
             setSelectedSiteId(siteId)
-            const firstPo = purchaseOrders.find((p) => p.site_id === siteId)
+            const firstPo = sortedPurchaseOrders.find((p) => {
+              if (p.site_id !== siteId) return false
+              if (awaitingPaymentOnly) {
+                return p.active !== false && awaitingPaymentSet.has(p.id)
+              }
+              if (activeBillRatesOnly) {
+                return p.active !== false && activeBillRateSet.has(p.id)
+              }
+              return showArchivedPOs ? p.active === false : p.active !== false
+            })
             if (firstPo) {
               handleSelectPO(firstPo.id)
             } else {
@@ -270,14 +315,19 @@ function BudgetPageClientInner({
             }
           }}
           onSelectPo={handleSelectPO}
-          onPrev={hasPrev ? () => handleSelectPO(sitePOs[currentIndex - 1].id) : undefined}
-          onNext={hasNext ? () => handleSelectPO(sitePOs[currentIndex + 1].id) : undefined}
+          onPrev={hasPrev ? () => handleSelectPO(navPOs[currentIndex - 1].id) : undefined}
+          onNext={
+            hasNext
+              ? () =>
+                  handleSelectPO(
+                    currentIndex === -1 ? navPOs[0].id : navPOs[currentIndex + 1].id
+                  )
+              : undefined
+          }
         />
       </div>
     )
   }
-
-  const hasArchived = allSitePOsForNav.some((p) => p.active === false)
 
   return (
     <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 rounded-lg shadow p-6">
