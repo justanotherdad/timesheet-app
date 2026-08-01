@@ -58,6 +58,8 @@ interface BudgetPageClientProps {
   awaitingPaymentPoIds?: string[]
   /** Active PO ids with at least one still-current bill rate. */
   activeBillRatePoIds?: string[]
+  /** Clients: hide archived / awaiting-payment filters; list is already active-only. */
+  simplifiedPicker?: boolean
 }
 
 function BudgetPageClientInner({
@@ -68,6 +70,7 @@ function BudgetPageClientInner({
   hasLimitedAccess = false,
   awaitingPaymentPoIds = [],
   activeBillRatePoIds = [],
+  simplifiedPicker = false,
 }: BudgetPageClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -335,6 +338,7 @@ function BudgetPageClientInner({
         Select a Budget to View
       </h2>
       <div className="space-y-4">
+        {!simplifiedPicker && (
         <div className="flex flex-wrap items-center gap-4">
           {hasArchived && (
             <label className="flex items-center gap-2 cursor-pointer">
@@ -381,6 +385,7 @@ function BudgetPageClientInner({
             <span className="text-sm text-gray-600 dark:text-gray-400">Remove Awaiting Payment</span>
           </label>
         </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Client / Site
@@ -415,6 +420,7 @@ function BudgetPageClientInner({
                 placeholder="Search PO #, project, proposal #, or contact"
                 className="flex-1 min-h-[2.5rem] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
               />
+              {!simplifiedPicker && (
               <select
                 value={poSortMode}
                 onChange={(e) => setPoSortMode(e.target.value as PoSortMode)}
@@ -429,13 +435,16 @@ function BudgetPageClientInner({
                   Sort: Archived date (oldest first)
                 </option>
               </select>
+              )}
             </div>
             <div className="space-y-2">
               {sitePOsForSelector.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {poSearch.trim()
                     ? 'No purchase orders match your search.'
-                    : awaitingPaymentOnly
+                    : simplifiedPicker
+                      ? 'No active purchase orders you have access to for this client.'
+                      : awaitingPaymentOnly
                       ? 'No purchase orders awaiting payment for this client (all active POs still have someone with a current bill rate).'
                       : activeBillRatesOnly
                         ? 'No active purchase orders with a current bill rate for this client.'
