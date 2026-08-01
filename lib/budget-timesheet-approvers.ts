@@ -7,6 +7,7 @@
  * - Only POs with hours > 0 on the timesheet (listed with 0 hours → skip)
  * - Exclude the submitter
  * - Exclude anyone already on the profile chain (they approve later, once)
+ * - Skip entirely when the timesheet owner is admin / super_admin
  * - Live list: revoke / uncheck drops them from the required set mid-flight
  * - All remaining must sign before profile chain starts
  *
@@ -61,6 +62,21 @@ export function poIdsWithHours(entries: EntryHoursRow[]): string[] {
   return Object.keys(hoursByPo).filter((poId) => hoursByPo[poId] > 0)
 }
 
+/** True when the timesheet owner skips the budget timesheet-approver stage. */
+async function ownerSkipsBudgetApproverStage(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  adminSupabase: any,
+  employeeUserId: string
+): Promise<boolean> {
+  const { data } = await adminSupabase
+    .from('user_profiles')
+    .select('role')
+    .eq('id', employeeUserId)
+    .maybeSingle()
+  const role = (data as { role?: string } | null)?.role
+  return role === 'admin' || role === 'super_admin'
+}
+
 /**
  * Live required budget-approver user ids for a timesheet (unordered uniqueness,
  * returned sorted for stable UI).
@@ -72,6 +88,11 @@ export async function getRequiredBudgetApproverIds(
   employeeUserId: string,
   profile: ApprovalProfileFields | null
 ): Promise<string[]> {
+  // Admin / super_admin owned timesheets do not wait on budget approvers.
+  if (await ownerSkipsBudgetApproverStage(adminSupabase, employeeUserId)) {
+    return []
+  }
+
   const { data: entries } = await adminSupabase
     .from('timesheet_entries')
     .select('po_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
@@ -162,7 +183,24 @@ export async function getRequiredBudgetApproverIdsByTimesheet(
   if (timesheets.length === 0) return result
   for (const ts of timesheets) result[ts.id] = []
 
-  const timesheetIds = timesheets.map((t) => t.id)
+  const ownerIds = [...new Set(timesheets.map((t) => t.user_id).filter(Boolean))]
+  const adminOwnerIds = new Set<string>()
+  if (ownerIds.length > 0) {
+    const { data: ownerProfiles } = await adminSupabase
+      .from('user_profiles')
+      .select('id, role')
+      .in('id', ownerIds)
+    for (const p of ownerProfiles || []) {
+      if (p?.role === 'admin' || p?.role === 'super_admin') {
+        adminOwnerIds.add(p.id as string)
+      }
+    }
+  }
+
+  const nonAdminTimesheets = timesheets.filter((t) => !adminOwnerIds.has(t.user_id))
+  if (nonAdminTimesheets.length === 0) return result
+
+  const timesheetIds = nonAdminTimesheets.map((t) => t.id)
   const { data: entries } = await adminSupabase
     .from('timesheet_entries')
     .select('timesheet_id, po_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
@@ -176,7 +214,7 @@ export async function getRequiredBudgetApproverIdsByTimesheet(
     if (!entriesByTs[tid]) entriesByTs[tid] = []
     entriesByTs[tid].push(row as EntryHoursRow)
   }
-  for (const ts of timesheets) {
+  for (const ts of nonAdminTimesheets) {
     const charged = poIdsWithHours(entriesByTs[ts.id] || [])
     chargedPoIdsByTimesheet[ts.id] = charged
     charged.forEach((id) => allChargedPoIds.add(id))
@@ -199,7 +237,7 @@ export async function getRequiredBudgetApproverIdsByTimesheet(
     if (!approversByPo[poId].includes(uid)) approversByPo[poId].push(uid)
   }
 
-  for (const ts of timesheets) {
+  for (const ts of nonAdminTimesheets) {
     const profile = (ts.user_profiles || null) as ApprovalProfileFields | null
     const profileChain = new Set(buildApprovalChain(profile))
     const ids = new Set<string>()
@@ -247,7 +285,24 @@ export async function getBudgetApproverPoNumbersByTimesheet(
   if (timesheets.length === 0) return result
   for (const ts of timesheets) result[ts.id] = {}
 
-  const timesheetIds = timesheets.map((t) => t.id)
+  const ownerIds = [...new Set(timesheets.map((t) => t.user_id).filter(Boolean))]
+  const adminOwnerIds = new Set<string>()
+  if (ownerIds.length > 0) {
+    const { data: ownerProfiles } = await adminSupabase
+      .from('user_profiles')
+      .select('id, role')
+      .in('id', ownerIds)
+    for (const p of ownerProfiles || []) {
+      if (p?.role === 'admin' || p?.role === 'super_admin') {
+        adminOwnerIds.add(p.id as string)
+      }
+    }
+  }
+
+  const nonAdminTimesheets = timesheets.filter((t) => !adminOwnerIds.has(t.user_id))
+  if (nonAdminTimesheets.length === 0) return result
+
+  const timesheetIds = nonAdminTimesheets.map((t) => t.id)
   const { data: entries } = await adminSupabase
     .from('timesheet_entries')
     .select('timesheet_id, po_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
@@ -261,7 +316,7 @@ export async function getBudgetApproverPoNumbersByTimesheet(
     if (!entriesByTs[tid]) entriesByTs[tid] = []
     entriesByTs[tid].push(row as EntryHoursRow)
   }
-  for (const ts of timesheets) {
+  for (const ts of nonAdminTimesheets) {
     const charged = poIdsWithHours(entriesByTs[ts.id] || [])
     chargedPoIdsByTimesheet[ts.id] = charged
     charged.forEach((id) => allChargedPoIds.add(id))
@@ -292,7 +347,7 @@ export async function getBudgetApproverPoNumbersByTimesheet(
     if (!poIdsByUser[uid].includes(poId)) poIdsByUser[uid].push(poId)
   }
 
-  for (const ts of timesheets) {
+  for (const ts of nonAdminTimesheets) {
     const profile = (ts.user_profiles || null) as ApprovalProfileFields | null
     const profileChain = new Set(buildApprovalChain(profile))
     const charged = new Set(chargedPoIdsByTimesheet[ts.id] || [])
