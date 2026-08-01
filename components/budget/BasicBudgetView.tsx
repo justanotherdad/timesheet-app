@@ -118,9 +118,10 @@ export default function BasicBudgetView({
   >(null)
   const [billRatePersonLoading, setBillRatePersonLoading] = useState(false)
   const canViewUserProfiles = ['supervisor', 'manager', 'admin', 'super_admin'].includes(user?.profile?.role || '')
-  /** Clients with Can view budget: full read-only budget; no edits or audit trails. */
+  /** Clients with Can view budget: full read-only budget; no edits, audit trails, or employee drill-down popups. */
   const isClientViewer = user?.profile?.role === 'client'
   const showAuditTrails = !hasLimitedAccess && !isClientViewer
+  const canOpenEmployeePopups = !isClientViewer
 
   useEffect(() => {
     if (!billRatePersonPopup?.userId) {
@@ -2056,7 +2057,11 @@ export default function BasicBudgetView({
               ) : sortedRows.map((r: any) => (
                 <tr key={r.userId} className="border-b border-gray-100 dark:border-gray-700">
                   <td className="py-2 px-2 break-words"><span className="font-medium">{r.userName}</span></td>
-                  <td className="py-2 px-1"><button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'hours' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="View hours by week"><Eye className="h-4 w-4" /></button></td>
+                  <td className="py-2 px-1">
+                    {canOpenEmployeePopups ? (
+                      <button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'hours' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="View hours by week"><Eye className="h-4 w-4" /></button>
+                    ) : null}
+                  </td>
                   <td className="text-right py-2 px-2 font-medium">{formatHours(r.rowTotal)}</td>
                 </tr>
               ))}
@@ -2118,23 +2123,31 @@ export default function BasicBudgetView({
                     className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30"
                   >
                     <td className="py-2 sticky left-0 bg-white dark:bg-gray-800">
-                      <button
-                        type="button"
-                        onClick={() => setEmployeePopup({ ...r, mode: 'hours' })}
-                        className="text-left font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                      >
-                        {r.userName}
-                      </button>
-                    </td>
-                    {weekEndings.map((we: string) => (
-                      <td key={we} className="text-right py-2">
+                      {canOpenEmployeePopups ? (
                         <button
                           type="button"
                           onClick={() => setEmployeePopup({ ...r, mode: 'hours' })}
-                          className="text-blue-600 dark:text-blue-400 hover:underline"
+                          className="text-left font-medium text-blue-600 dark:text-blue-400 hover:underline"
                         >
-                          {formatHours(r.weekData[we]?.hours)}
+                          {r.userName}
                         </button>
+                      ) : (
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{r.userName}</span>
+                      )}
+                    </td>
+                    {weekEndings.map((we: string) => (
+                      <td key={we} className="text-right py-2">
+                        {canOpenEmployeePopups ? (
+                          <button
+                            type="button"
+                            onClick={() => setEmployeePopup({ ...r, mode: 'hours' })}
+                            className="text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            {formatHours(r.weekData[we]?.hours)}
+                          </button>
+                        ) : (
+                          <span>{formatHours(r.weekData[we]?.hours)}</span>
+                        )}
                       </td>
                     ))}
                     <td className="text-right py-2 font-medium">{formatHours(r.rowTotal)}</td>
@@ -2213,7 +2226,11 @@ export default function BasicBudgetView({
                 return (
                   <tr key={r.userId} className="border-b border-gray-100 dark:border-gray-700">
                     <td className="py-2 px-2 break-words"><span className="font-medium">{r.userName}</span></td>
-                    <td className="py-2 px-1"><button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'cost' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="View cost by week"><Eye className="h-4 w-4" /></button></td>
+                    <td className="py-2 px-1">
+                      {canOpenEmployeePopups ? (
+                        <button type="button" onClick={() => setEmployeePopup({ ...r, mode: 'cost' as const })} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="View cost by week"><Eye className="h-4 w-4" /></button>
+                      ) : null}
+                    </td>
                     <td className="text-right py-2 px-2 font-medium">{rowCostTotal === 0 ? '—' : `$${rowCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</td>
                   </tr>
                 )
@@ -2283,13 +2300,17 @@ export default function BasicBudgetView({
                   return (
                     <tr key={r.userId} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30">
                       <td className="py-2 sticky left-0 bg-white dark:bg-gray-800">
-                        <button
-                          type="button"
-                          onClick={() => setEmployeePopup({ ...r, mode: 'cost' })}
-                          className="text-left font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                        >
-                          {r.userName}
-                        </button>
+                        {canOpenEmployeePopups ? (
+                          <button
+                            type="button"
+                            onClick={() => setEmployeePopup({ ...r, mode: 'cost' })}
+                            className="text-left font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            {r.userName}
+                          </button>
+                        ) : (
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{r.userName}</span>
+                        )}
                       </td>
                       {costCells.map((cost: number, i: number) => (
                         <td key={weekEndings[i]} className="text-right py-2">
@@ -2412,7 +2433,7 @@ export default function BasicBudgetView({
               billRates.map((br: any) => (
                 <tr key={br.id} className="border-b border-gray-100 dark:border-gray-700">
                   <td className="py-2">
-                    {br.user_id ? (
+                    {br.user_id && canOpenEmployeePopups ? (
                       <button
                         type="button"
                         onClick={() => setBillRatePersonPopup({ userId: br.user_id, userName: br.user_profiles?.name || 'Unknown' })}
@@ -2422,7 +2443,7 @@ export default function BasicBudgetView({
                         {br.user_profiles?.name || 'Unknown'}
                       </button>
                     ) : (
-                      br.user_profiles?.name || 'Unknown'
+                      <span className="text-gray-900 dark:text-gray-100">{br.user_profiles?.name || 'Unknown'}</span>
                     )}
                   </td>
                   <td className="py-2">{br.effective_from_date ? formatDate(br.effective_from_date) : '—'}</td>
