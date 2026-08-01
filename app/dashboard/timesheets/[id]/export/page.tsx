@@ -215,6 +215,7 @@ export default async function ExportTimesheetPage({
               entries={entries || []}
               unbillable={unbillable || []}
               user={timesheet.user_profiles}
+              skipExportFilter={user.profile.role === 'client'}
             />
           </div>
         </div>

@@ -26,6 +26,8 @@ interface WeeklyTimesheetExportProps {
   entries: any[]
   unbillable: any[]
   user: any
+  /** When true, Download PDF skips the Filter Export Data popup (full sheet). */
+  skipExportFilter?: boolean
 }
 
 /** Explicit column widths for the billable table that sum to ≤10.5in (landscape minus margins).
@@ -46,6 +48,7 @@ export default function WeeklyTimesheetExport({
   entries, 
   unbillable, 
   user,
+  skipExportFilter = false,
 }: WeeklyTimesheetExportProps) {
   const [isPortrait, setIsPortrait] = useState(false)
   const [showExportFilter, setShowExportFilter] = useState(false)
@@ -341,6 +344,10 @@ export default function WeeklyTimesheetExport({
   }
 
   const handleDownloadClick = () => {
+    if (skipExportFilter) {
+      handleDownload(entries, unbillable)
+      return
+    }
     setShowExportFilter(true)
   }
 
