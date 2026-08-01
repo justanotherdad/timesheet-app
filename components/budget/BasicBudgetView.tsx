@@ -118,6 +118,9 @@ export default function BasicBudgetView({
   >(null)
   const [billRatePersonLoading, setBillRatePersonLoading] = useState(false)
   const canViewUserProfiles = ['supervisor', 'manager', 'admin', 'super_admin'].includes(user?.profile?.role || '')
+  /** Clients with Can view budget: full read-only budget; no edits or audit trails. */
+  const isClientViewer = user?.profile?.role === 'client'
+  const showAuditTrails = !hasLimitedAccess && !isClientViewer
 
   useEffect(() => {
     if (!billRatePersonPopup?.userId) {
@@ -313,7 +316,7 @@ export default function BasicBudgetView({
   }, [po.id, user])
 
   const loadContainerAudit = useCallback(async () => {
-    if (hasLimitedAccess) return
+    if (!showAuditTrails) return
     try {
       const t = `t=${Date.now()}`
       const res = await fetch(`/api/budget/${po.id}/container-audit?${t}`, fetchOpts)
@@ -328,7 +331,7 @@ export default function BasicBudgetView({
         })
       }
     } catch { /* ignore */ }
-  }, [po.id, fetchOpts, hasLimitedAccess])
+  }, [po.id, fetchOpts, showAuditTrails])
 
   const loadExpenses = useCallback(async () => {
     try {
@@ -467,7 +470,7 @@ export default function BasicBudgetView({
             personnelLineItems: balJson.personnelLineItems ?? [],
           })
         }
-        if (!hasLimitedAccess) {
+        if (showAuditTrails) {
           await loadContainerAudit()
         }
       } catch (e) {
@@ -477,7 +480,7 @@ export default function BasicBudgetView({
       }
     }
     load()
-  }, [po.id, selectedMonth, user, fetchOpts, hasLimitedAccess, loadContainerAudit])
+  }, [po.id, selectedMonth, user, fetchOpts, showAuditTrails, loadContainerAudit])
 
   useEffect(() => {
     const p = data?.po ?? po
@@ -544,7 +547,11 @@ export default function BasicBudgetView({
     ? [{ id: poData.department_id, name: poData.departments.name || 'Unknown' }, ...siteDepartmentsRaw]
     : siteDepartmentsRaw
   const isAdmin = user && ['admin', 'super_admin'].includes(user.profile.role)
-  const canEdit = user && ['manager', 'admin', 'super_admin'].includes(user.profile.role) && !hasLimitedAccess
+  const canEdit =
+    !!user &&
+    ['manager', 'admin', 'super_admin'].includes(user.profile.role) &&
+    !hasLimitedAccess &&
+    !isClientViewer
 
   const originalBudget = poData.original_po_amount ?? 0
   const coTotal = changeOrders.filter((c: any) => (c.type || 'co') === 'co').reduce((s: number, c: any) => s + (c.amount || 0), 0)
@@ -1750,7 +1757,9 @@ export default function BasicBudgetView({
             </tbody>
           </table>
         )}
-        {!editingBudget && <BudgetContainerAuditTrail entries={containerAudit.budget_summary} />}
+        {!editingBudget && showAuditTrails && (
+          <BudgetContainerAuditTrail entries={containerAudit.budget_summary} />
+        )}
       </div>
       )}
 
@@ -1855,7 +1864,7 @@ export default function BasicBudgetView({
             </tbody>
           </table>
         </div>
-        <BudgetContainerAuditTrail entries={containerAudit.invoices} />
+        {showAuditTrails && <BudgetContainerAuditTrail entries={containerAudit.invoices} />}
       </div>
       )}
 
@@ -1986,7 +1995,7 @@ export default function BasicBudgetView({
                 <p className="text-sm text-gray-500 dark:text-gray-400">No notes.</p>
               )
             )}
-            <BudgetContainerAuditTrail entries={containerAudit.notes} />
+            {showAuditTrails && <BudgetContainerAuditTrail entries={containerAudit.notes} />}
           </>
         ) : (
           <NoteImages poId={po.id} canEdit={!!canEdit} />
@@ -2325,9 +2334,11 @@ export default function BasicBudgetView({
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Additional Expenses</h2>
             <p className="budget-print-hide text-xs text-gray-500 dark:text-gray-400 mt-1">Travel, equipment, mileage, etc.</p>
           </div>
+          {canEdit && (
           <button type="button" onClick={() => setExpenseModal({})} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">
             <Plus className="h-4 w-4" /> Add Expense
           </button>
+          )}
         </div>
         <table className="w-full text-sm">
           <thead>
@@ -2336,12 +2347,12 @@ export default function BasicBudgetView({
               <th className="text-left py-2 font-medium">Type</th>
               <th className="text-left py-2 font-medium">Notes</th>
               <th className="text-right py-2 font-medium">Amount</th>
-              <th className="w-20 py-2"></th>
+              {canEdit && <th className="w-20 py-2"></th>}
             </tr>
           </thead>
           <tbody>
             {expenses.length === 0 ? (
-              <tr><td colSpan={5} className="py-4 text-center text-gray-500">No additional expenses</td></tr>
+              <tr><td colSpan={canEdit ? 5 : 4} className="py-4 text-center text-gray-500">No additional expenses</td></tr>
             ) : (
               expenses.map((ex: any) => (
                 <tr key={ex.id} className="border-b border-gray-100 dark:border-gray-700">
@@ -2349,18 +2360,20 @@ export default function BasicBudgetView({
                   <td className="py-2">{(ex.expense_type_id && expenseTypes.find((t: any) => t.id === ex.expense_type_id)?.name) || ex.custom_type_name || 'Custom'}</td>
                   <td className="py-2">{ex.notes || '—'}</td>
                   <td className="text-right py-2">${(ex.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  {canEdit && (
                   <td className="py-2">
                     <div className="flex gap-1">
                       <button type="button" onClick={() => setExpenseModal(ex)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Edit"><Pencil className="h-4 w-4" /></button>
                       <button type="button" onClick={async () => { if (confirm('Delete this expense?')) { await fetch(`/api/budget/${po.id}/expenses/${ex.id}`, { method: 'DELETE' }); loadExpenses() } }} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Delete"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </td>
+                  )}
                 </tr>
               ))
             )}
           </tbody>
         </table>
-        <BudgetContainerAuditTrail entries={containerAudit.expenses} />
+        {showAuditTrails && <BudgetContainerAuditTrail entries={containerAudit.expenses} />}
       </div>
       )}
 
@@ -2370,13 +2383,17 @@ export default function BasicBudgetView({
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Bill Rates by Person</h2>
+            {canEdit && (
             <p className="budget-print-hide text-xs text-gray-500 dark:text-gray-400 mt-1">
               Rates can change over time. Use <span className="font-medium">Remove from PO</span> when offboarding—an end date is required there; add/edit does not require one.
             </p>
+            )}
           </div>
+          {canEdit && (
           <button type="button" onClick={() => setBillRateModal({})} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">
             <Plus className="h-4 w-4" /> Add Bill Rate
           </button>
+          )}
         </div>
         <table className="w-full text-sm">
           <thead>
@@ -2385,12 +2402,12 @@ export default function BasicBudgetView({
               <th className="text-left py-2 font-medium">Effective From</th>
               <th className="text-left py-2 font-medium">Effective To</th>
               <th className="text-right py-2 font-medium">Rate ($/hr)</th>
-              <th className="w-28 py-2"></th>
+              {canEdit && <th className="w-28 py-2"></th>}
             </tr>
           </thead>
           <tbody>
             {billRates.length === 0 ? (
-              <tr><td colSpan={5} className="py-4 text-center text-gray-500">No bill rates defined</td></tr>
+              <tr><td colSpan={canEdit ? 5 : 4} className="py-4 text-center text-gray-500">No bill rates defined</td></tr>
             ) : (
               billRates.map((br: any) => (
                 <tr key={br.id} className="border-b border-gray-100 dark:border-gray-700">
@@ -2417,6 +2434,7 @@ export default function BasicBudgetView({
                     )}
                   </td>
                   <td className="text-right py-2">${(br.rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  {canEdit && (
                   <td className="py-2">
                     <div className="flex items-center gap-1 flex-wrap justify-end">
                       <button type="button" onClick={() => setBillRateModal(br)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Edit"><Pencil className="h-4 w-4" /></button>
@@ -2434,12 +2452,13 @@ export default function BasicBudgetView({
                       )}
                     </div>
                   </td>
+                  )}
                 </tr>
               ))
             )}
           </tbody>
         </table>
-        <BudgetContainerAuditTrail entries={containerAudit.bill_rates} />
+        {showAuditTrails && <BudgetContainerAuditTrail entries={containerAudit.bill_rates} />}
       </div>
       )}
 

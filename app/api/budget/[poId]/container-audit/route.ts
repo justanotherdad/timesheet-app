@@ -18,6 +18,11 @@ export async function GET(
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // Clients may view budgets but not container audit trails.
+  if (user.profile.role === 'client') {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
+
   const supabase = await createClient()
   const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
   if (!allowed) return NextResponse.json({ error: 'Access denied' }, { status: 403 })
