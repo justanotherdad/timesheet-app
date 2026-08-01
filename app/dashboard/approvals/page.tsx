@@ -9,7 +9,7 @@ import {
   resolveApprovalStage,
   type ApprovalProfileFields,
 } from '@/lib/budget-timesheet-approvers'
-import { getTimesheetHourTotals } from '@/lib/timesheet-hour-totals'
+import { getTimesheetHourTotalsForApproverViewer } from '@/lib/timesheet-hour-totals'
 import Header from '@/components/Header'
 import PendingApprovalsClient from './PendingApprovalsClient'
 
@@ -98,9 +98,14 @@ export default async function ApprovalsPage(props: { searchParams: Promise<Searc
     }
   }
 
-  const hourTotals = await getTimesheetHourTotals(
+  const hourTotals = await getTimesheetHourTotalsForApproverViewer(
     adminSupabase,
-    timesheets.map((t: { id: string }) => t.id)
+    timesheets.map((t: any) => ({
+      id: t.id,
+      user_id: t.user_id,
+      user_profiles: t.user_profiles,
+    })),
+    { id: user.id, role: user.profile.role }
   )
 
   return (

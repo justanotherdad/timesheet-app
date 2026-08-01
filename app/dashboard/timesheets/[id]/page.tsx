@@ -24,6 +24,8 @@ import {
   getBudgetApproverPoNumbersByTimesheet,
   formatBudgetApproverDisplayName,
   resolveApprovalStage,
+  resolveTimesheetApproverViewScope,
+  filterBillableEntriesForApproverScope,
   userIsCurrentApprover,
   type ApprovalProfileFields,
 } from '@/lib/budget-timesheet-approvers'
@@ -335,6 +337,21 @@ export default async function TimesheetDetailPage({
     unbillable = []
   }
 
+  // Client / budget timesheet approvers: only their granted charged PO rows.
+  // Hide other POs, null-PO rows, zero-hour rows, non-billable, and notes.
+  const viewScope = await resolveTimesheetApproverViewScope(adminSupabase, {
+    viewerId: user.id,
+    viewerRole: user.profile.role,
+    timesheetUserId: timesheet.user_id,
+    profile: owner,
+    entries,
+  })
+  const isApproverScopedView = viewScope.mode === 'scoped'
+  if (isApproverScopedView) {
+    entries = filterBillableEntriesForApproverScope(entries, viewScope)
+    unbillable = []
+  }
+
   const weekDates = getWeekDates(timesheet.week_ending)
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
 
@@ -516,7 +533,7 @@ export default async function TimesheetDetailPage({
                 </div>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                   Billable Total: {formatHoursAmount(billableTotal)} hours
-                  {entries.length > 6 && (
+                  {!isApproverScopedView && entries.length > 6 && (
                     <a href="#unbillable-section" className="ml-3 text-blue-600 dark:text-blue-400 hover:underline text-sm">
                       ↓ Jump to Non-Billable Time
                     </a>
@@ -525,8 +542,8 @@ export default async function TimesheetDetailPage({
               </div>
             )}
 
-            {/* Unbillable Entries - always show so layout is consistent; use defaults when no rows in DB */}
-            {(() => {
+            {/* Unbillable — hidden for Client / budget timesheet approvers (scoped view) */}
+            {!isApproverScopedView && (() => {
               const unbillableRows = unbillable && unbillable.length > 0
                 ? unbillable
                 : [
@@ -596,11 +613,13 @@ export default async function TimesheetDetailPage({
               )
             })()}
 
-            {/* Grand Total */}
+            {/* Grand Total — scoped viewers: visible billable rows only */}
             <div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-lg mb-6">
               <div className="flex justify-between items-center">
                 <span className="text-lg font-bold text-gray-900 dark:text-gray-100">GRAND TOTAL</span>
-                <span className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatHoursAmount(billableTotal + unbillableTotal)} hours</span>
+                <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                  {formatHoursAmount(billableTotal + (isApproverScopedView ? 0 : unbillableTotal))} hours
+                </span>
               </div>
             </div>
 

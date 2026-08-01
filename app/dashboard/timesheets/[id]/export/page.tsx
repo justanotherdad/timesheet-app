@@ -8,7 +8,12 @@ import WeeklyTimesheetExport from '@/components/WeeklyTimesheetExport'
 import { formatWeekEnding } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import { loadCompanySettingsMap, parseConfirmationAssigneeIds } from '@/lib/timesheet-confirmation'
-import { getRequiredBudgetApproverIds } from '@/lib/budget-timesheet-approvers'
+import {
+  getRequiredBudgetApproverIds,
+  resolveTimesheetApproverViewScope,
+  filterBillableEntriesForApproverScope,
+  type ApprovalProfileFields,
+} from '@/lib/budget-timesheet-approvers'
 import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
@@ -78,20 +83,16 @@ export default async function ExportTimesheetPage({
 
   // Verify user can view this timesheet (profile chain, budget/client approver,
   // already signed, or confirmation assignee).
+  const ownerResult = await withQueryTimeout(() =>
+    adminSupabase
+      .from('user_profiles')
+      .select('reports_to_id, supervisor_id, manager_id, final_approver_id')
+      .eq('id', timesheet.user_id)
+      .single()
+  )
+  const owner = ownerResult.data as ApprovalProfileFields | null
+
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
-    const ownerResult = await withQueryTimeout(() =>
-      adminSupabase
-        .from('user_profiles')
-        .select('reports_to_id, supervisor_id, manager_id, final_approver_id')
-        .eq('id', timesheet.user_id)
-        .single()
-    )
-    const owner = ownerResult.data as {
-      reports_to_id?: string
-      supervisor_id?: string
-      manager_id?: string
-      final_approver_id?: string
-    } | null
     let canView =
       owner?.reports_to_id === user.id ||
       owner?.supervisor_id === user.id ||
@@ -139,7 +140,7 @@ export default async function ExportTimesheetPage({
       .order('sort_order', { ascending: true, nullsFirst: true })
       .order('created_at')
   )
-  const entries = (entriesResult.data || []) as any[]
+  let entries = (entriesResult.data || []) as any[]
 
   // Get unbillable entries
   const unbillableResult = await withQueryTimeout(() =>
@@ -149,7 +150,22 @@ export default async function ExportTimesheetPage({
       .eq('timesheet_id', id)
       .order('description')
   )
-  const unbillable = (unbillableResult.data || []) as any[]
+  let unbillable = (unbillableResult.data || []) as any[]
+
+  const viewScope = await resolveTimesheetApproverViewScope(adminSupabase, {
+    viewerId: user.id,
+    viewerRole: user.profile.role,
+    timesheetUserId: timesheet.user_id,
+    profile: owner,
+    entries,
+  })
+  const isApproverScopedView = viewScope.mode === 'scoped'
+  if (isApproverScopedView) {
+    entries = filterBillableEntriesForApproverScope(entries, viewScope)
+    unbillable = []
+    // Strip notes so export HTML cannot leak other-work commentary.
+    timesheet.notes = null
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -215,7 +231,8 @@ export default async function ExportTimesheetPage({
               entries={entries || []}
               unbillable={unbillable || []}
               user={timesheet.user_profiles}
-              skipExportFilter={user.profile.role === 'client'}
+              skipExportFilter={user.profile.role === 'client' || isApproverScopedView}
+              hideNonBillable={isApproverScopedView}
             />
           </div>
         </div>

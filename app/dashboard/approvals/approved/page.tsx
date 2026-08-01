@@ -4,7 +4,7 @@ import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import { buildApproverDisplayNamesByNextId } from '@/lib/approval-delegation-display'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
-import { getTimesheetHourTotals } from '@/lib/timesheet-hour-totals'
+import { getTimesheetHourTotalsForApproverViewer } from '@/lib/timesheet-hour-totals'
 import Header from '@/components/Header'
 import ApprovedTimesheetsClient from './ApprovedTimesheetsClient'
 
@@ -233,9 +233,14 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
     ).sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  const hourTotals = await getTimesheetHourTotals(
+  const hourTotals = await getTimesheetHourTotalsForApproverViewer(
     adminSupabase,
-    timesheets.map((t: any) => t.id)
+    timesheets.map((t: any) => ({
+      id: t.id,
+      user_id: t.user_id,
+      user_profiles: t.user_profiles,
+    })),
+    { id: user.id, role: user.profile.role }
   )
 
   return (

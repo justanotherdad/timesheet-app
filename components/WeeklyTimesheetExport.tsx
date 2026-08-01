@@ -28,6 +28,8 @@ interface WeeklyTimesheetExportProps {
   user: any
   /** When true, Download PDF skips the Filter Export Data popup (full sheet). */
   skipExportFilter?: boolean
+  /** Client / budget approver scoped view — omit non-billable section entirely. */
+  hideNonBillable?: boolean
 }
 
 /** Explicit column widths for the billable table that sum to ≤10.5in (landscape minus margins).
@@ -48,6 +50,7 @@ export default function WeeklyTimesheetExport({
   entries, 
   unbillable, 
   user,
+  hideNonBillable = false,
   skipExportFilter = false,
 }: WeeklyTimesheetExportProps) {
   const [isPortrait, setIsPortrait] = useState(false)
@@ -288,6 +291,7 @@ export default function WeeklyTimesheetExport({
           ${showFinal ? `<div style="text-align:right;"><strong>Final Approver by / Date:</strong> ${sig('final_approver') || '<span style="border-bottom:1px solid #000;display:inline-block;min-width:150px;"></span>'}</div>` : ''}
         </div>
 
+        ${hideNonBillable ? '' : `
         <!-- Unbillable table (same day-column widths as billable for visual alignment) -->
         <div style="margin-top:5px;">
           <h3 style="font-size:8.5pt;font-weight:bold;margin-bottom:3px;">NON-BILLABLE TIME</h3>
@@ -319,8 +323,9 @@ export default function WeeklyTimesheetExport({
             </tbody>
           </table>
         </div>
+        `}
 
-        ${notesSection}
+        ${hideNonBillable ? '' : notesSection}
         <div style="background-color:#90EE90;font-weight:bold;padding:5px;margin-top:5px;text-align:right;font-size:8.5pt;">GRAND TOTAL &nbsp; ${formatHoursAmount(getGrandTotal(entriesToUse, unbillableToUse))}</div>
       </div>
     `
