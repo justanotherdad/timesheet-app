@@ -338,6 +338,19 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
           const name = sig.signer_name || (Array.isArray(up) ? up[0]?.name : up?.name) || ''
           return `<span style="margin-left:8px;">${escapeHtml(name)} ${formatDateInEastern(sig.signed_at)}</span>`
         }
+        const clientSigs = (timesheet.timesheet_signatures || []).filter(
+          (s: any) => s.signer_role === 'client'
+        )
+        const clientSigLines =
+          clientSigs.length > 0
+            ? clientSigs
+                .map((s: any) => {
+                  const up = s.user_profiles
+                  const name = s.signer_name || (Array.isArray(up) ? up[0]?.name : up?.name) || ''
+                  return `<div style="margin-bottom:3px;"><strong>Client Approval by / Date:</strong><span style="margin-left:8px;">${escapeHtml(name)} ${formatDateInEastern(s.signed_at)}</span></div>`
+                })
+                .join('')
+            : ''
         const showSup   = (user.supervisor_id != null && user.supervisor_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'supervisor')
         const showMgr   = (user.manager_id != null && user.manager_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'manager')
         const showFinal = (user.final_approver_id != null && user.final_approver_id !== '') || timesheet.timesheet_signatures?.some((s: any) => s.signer_role === 'final_approver')
@@ -405,7 +418,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
               </tbody>
             </table>
 
-            <!-- Signatures -->
+            <!-- Signatures: Employee + Clients (left); Supervisor/Manager/Final (right) -->
             <div style="margin-top:4px;">
               <div style="margin-bottom:3px;">
                 <strong>Employee Signature / Date:</strong>
@@ -413,6 +426,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                   ? `<span style="margin-left:8px;">${escapeHtml(user.name)} ${formatDateInEastern(timesheet.employee_signed_at)}</span>`
                   : `<span style="border-bottom:1px solid #000;display:inline-block;min-width:150px;"></span>`}
               </div>
+              ${clientSigLines}
               ${showSup   ? `<div style="margin-bottom:3px;text-align:right;"><strong>Supervisor Approval by / Date:</strong> ${sigLine('supervisor')}</div>` : ''}
               ${showMgr   ? `<div style="margin-bottom:3px;text-align:right;"><strong>Manager Approval by / Date:</strong> ${sigLine('manager')}</div>` : ''}
               ${showFinal ? `<div style="text-align:right;"><strong>Final Approver by / Date:</strong> ${sigLine('final_approver')}</div>` : ''}

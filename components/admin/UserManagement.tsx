@@ -103,10 +103,15 @@ export default function UserManagement({
     if (currentUserRole === 'manager' && ['manager', 'supervisor', 'employee'].includes(target.role)) return true
     return false
   }
-  // Roles the current user can assign when editing (for dropdown)
+  // Roles the current user can assign when editing (for dropdown).
+  // Client is admin/super_admin only.
   const assignableRoles = (): UserRole[] => {
-    if (currentUserRole === 'super_admin') return ['employee', 'supervisor', 'manager', 'admin', 'super_admin']
-    if (currentUserRole === 'admin') return ['employee', 'supervisor', 'manager', 'admin']
+    if (currentUserRole === 'super_admin') {
+      return ['employee', 'client', 'supervisor', 'manager', 'admin', 'super_admin']
+    }
+    if (currentUserRole === 'admin') {
+      return ['employee', 'client', 'supervisor', 'manager', 'admin']
+    }
     if (currentUserRole === 'manager') return ['employee', 'supervisor', 'manager']
     return ['employee']
   }
@@ -591,6 +596,7 @@ export default function UserManagement({
                 >
                   <option value="">All roles</option>
                   <option value="employee">Employee</option>
+                  <option value="client">Client</option>
                   <option value="supervisor">Supervisor</option>
                   <option value="manager">Manager</option>
                   <option value="admin">Admin</option>

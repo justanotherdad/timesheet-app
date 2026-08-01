@@ -26,7 +26,10 @@ export default async function BudgetPage({
     withQueryTimeout(() => supabase.from('sites').select('id, name, address_street, address_city, address_state, address_zip, contact').order('name')),
     withQueryTimeout(() => supabase.from('purchase_orders').select('*, departments(id, name)').order('po_number')),
     isAdminOrAbove ? Promise.resolve({ data: null }) : withQueryTimeout(() =>
-      supabase.from('po_budget_access').select('purchase_order_id').eq('user_id', user.id)
+      supabase
+        .from('po_budget_access')
+        .select('purchase_order_id, can_view_budget')
+        .eq('user_id', user.id)
     ),
   ])
 
@@ -36,14 +39,22 @@ export default async function BudgetPage({
   if (isAdminOrAbove) {
     // Admin/Super Admin: see all POs
   } else {
-    // Manager, Supervisor, Employee: only POs where admin has granted them access
+    // Only POs with an explicit grant that allows viewing the budget
     const accessRows = Array.isArray(accessResult?.data) ? accessResult.data : []
-    const budgetAccessPoIds = accessRows.map((r: { purchase_order_id?: string }) => r.purchase_order_id).filter(Boolean) as string[]
+    const budgetAccessPoIds = accessRows
+      .filter((r: { can_view_budget?: boolean | null }) => r.can_view_budget !== false)
+      .map((r: { purchase_order_id?: string }) => r.purchase_order_id)
+      .filter(Boolean) as string[]
     const allPOs = (purchaseOrdersResult.data || []) as any[]
     purchaseOrders = allPOs.filter((p: any) => budgetAccessPoIds.includes(p.id))
     const accessSiteIds = [...new Set(purchaseOrders.map((p: any) => p.site_id).filter(Boolean))]
     const allSites = (sitesResult.data || []) as any[]
     sites = allSites.filter((s: any) => accessSiteIds.includes(s.id))
+  }
+
+  // Clients (and anyone) with only approve grants and no view grants: leave budget page
+  if (!isAdminOrAbove && purchaseOrders.length === 0 && role === 'client') {
+    redirect('/dashboard')
   }
 
   if (poId && !purchaseOrders.some((p: any) => p.id === poId)) {

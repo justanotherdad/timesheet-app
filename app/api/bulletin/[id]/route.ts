@@ -27,6 +27,7 @@ export async function PATCH(
     title?: string
     body_html?: string
     is_pinned?: boolean
+    audience?: string
   }
   try {
     body = await req.json()
@@ -50,6 +51,9 @@ export async function PATCH(
   if (typeof body.is_pinned === 'boolean') {
     updates.is_pinned = body.is_pinned
   }
+  if (body.audience === 'employee' || body.audience === 'client') {
+    updates.audience = body.audience
+  }
 
   let admin
   try {
@@ -63,7 +67,7 @@ export async function PATCH(
     .update(updates)
     .eq('id', id)
     .is('deleted_at', null)
-    .select('id, title, body_html, author_id, author_name, is_pinned, created_at, updated_at')
+    .select('id, title, body_html, author_id, author_name, audience, is_pinned, created_at, updated_at')
     .single()
 
   if (error) {

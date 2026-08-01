@@ -303,6 +303,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       user_id: accessUserId,
       purchase_order_id: po.id,
       timesheet_approver: false,
+      can_view_budget: true,
     })
     if (accessErr && accessErr.code !== '23505') {
       console.error('convert: po_budget_access insert failed', { accessUserId, error: accessErr })

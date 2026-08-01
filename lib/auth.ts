@@ -76,7 +76,7 @@ export function canEditTimesheet(userRole: UserRole): boolean {
 }
 
 export function canApproveTimesheet(userRole: UserRole): boolean {
-  return ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
+  return ['supervisor', 'manager', 'admin', 'super_admin', 'client'].includes(userRole)
 }
 
 export function canManageUsers(userRole: UserRole): boolean {

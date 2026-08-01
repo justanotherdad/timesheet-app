@@ -48,9 +48,17 @@ export async function createUser(formData: FormData) {
       if (role === 'super_admin') {
         return { error: 'You cannot create a Super Admin user.' }
       }
+      if (!['employee', 'client', 'supervisor', 'manager', 'admin'].includes(role)) {
+        return { error: 'Invalid role.' }
+      }
+      effectiveRole = role
+    } else if (currentUserProfile.role === 'super_admin') {
+      if (!['employee', 'client', 'supervisor', 'manager', 'admin', 'super_admin'].includes(role)) {
+        return { error: 'Invalid role.' }
+      }
       effectiveRole = role
     } else {
-      effectiveRole = role
+      return { error: 'Unauthorized' }
     }
 
     // Use admin client to create user

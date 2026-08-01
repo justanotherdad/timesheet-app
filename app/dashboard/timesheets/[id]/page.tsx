@@ -219,7 +219,7 @@ export default async function TimesheetDetailPage({
 
   const canShowApproverActions =
     canApprove &&
-    (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) ||
+    (['supervisor', 'manager', 'admin', 'super_admin', 'client'].includes(user.profile.role) ||
       (user.profile.role === 'employee' && timesheet.user_id !== user.id))
 
   // ----- Pending Approvals Next/Previous navigation (#6) -----
@@ -265,7 +265,7 @@ export default async function TimesheetDetailPage({
     }
   }
 
-  // Budget access: Admin/Super Admin see all POs; others need po_budget_access grant
+  // Budget view (PO hover/link): Admin/Super Admin see all; others need can_view_budget
   const isAdminOrAbove = ['admin', 'super_admin'].includes(user.profile.role)
   let budgetAccessPoIds: string[] = []
   if (isAdminOrAbove) {
@@ -274,10 +274,16 @@ export default async function TimesheetDetailPage({
     budgetAccessPoIds = poList.map((p: { id: string }) => p.id)
   } else {
     const accessRows = await withQueryTimeout(() =>
-      adminSupabase.from('po_budget_access').select('purchase_order_id').eq('user_id', user.id)
+      adminSupabase
+        .from('po_budget_access')
+        .select('purchase_order_id, can_view_budget')
+        .eq('user_id', user.id)
     )
     const accessList = Array.isArray(accessRows.data) ? accessRows.data : []
-    budgetAccessPoIds = accessList.map((r: { purchase_order_id?: string }) => r.purchase_order_id).filter(Boolean) as string[]
+    budgetAccessPoIds = accessList
+      .filter((r: { can_view_budget?: boolean | null }) => r.can_view_budget !== false)
+      .map((r: { purchase_order_id?: string }) => r.purchase_order_id)
+      .filter(Boolean) as string[]
   }
 
   // Get entries (with error handling)
@@ -605,20 +611,26 @@ export default async function TimesheetDetailPage({
                 <div className="space-y-3">
                   {timesheet.timesheet_signatures.map((sig: any, index: number) => {
                     const rawName = sig.signer_name || sig.user_profiles?.name || 'Unknown'
+                    const isBudgetOrClient =
+                      sig.signer_role === 'budget_approver' || sig.signer_role === 'client'
                     const displayName =
-                      sig.signer_role === 'budget_approver' && !/approving for PO/i.test(String(rawName))
+                      isBudgetOrClient && !/approving for PO/i.test(String(rawName))
                         ? formatBudgetApproverDisplayName(
                             rawName,
                             budgetPoNumsByUser[sig.signer_id] || []
                           )
                         : rawName
+                    const roleLabel =
+                      sig.signer_role === 'client'
+                        ? 'Client Approval'
+                        : sig.signer_role === 'budget_approver'
+                          ? 'Budget Approver'
+                          : String(sig.signer_role || '').replace(/_/g, ' ')
                     return (
                     <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded">
                       <div>
                         <p className="font-medium text-gray-900 dark:text-gray-100 capitalize">
-                          {sig.signer_role === 'budget_approver'
-                            ? 'Budget Approver'
-                            : String(sig.signer_role || '').replace(/_/g, ' ')}
+                          {roleLabel}
                         </p>
                         <p className="text-sm text-gray-600 dark:text-gray-300">{displayName}</p>
                       </div>

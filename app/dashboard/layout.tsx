@@ -1,6 +1,7 @@
 import { getCurrentUser } from '@/lib/auth'
 import AutoLogout from '@/components/AutoLogout'
 import PasswordChangeGuard from '@/components/PasswordChangeGuard'
+import ClientRouteGuard from '@/components/ClientRouteGuard'
 
 export default async function DashboardLayout({
   children,
@@ -14,7 +15,9 @@ export default async function DashboardLayout({
     <>
       <AutoLogout timeoutMinutes={60} />
       <PasswordChangeGuard mustChangePassword={mustChangePassword}>
-        {children}
+        <ClientRouteGuard role={user?.profile.role}>
+          {children}
+        </ClientRouteGuard>
       </PasswordChangeGuard>
     </>
   )

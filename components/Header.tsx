@@ -27,6 +27,8 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
     show: false,
     pending: 0,
   })
+  /** Clients only: show Budget Detail when they have can_view_budget on any PO. */
+  const [clientBudgetNav, setClientBudgetNav] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -48,6 +50,25 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
       .catch((err) => {
         console.warn('Failed to load timesheet confirmation nav count:', err)
         if (!cancelled) setTimesheetConfirmNav({ show: false, pending: 0 })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (!user || user.profile.role !== 'client') {
+      setClientBudgetNav(false)
+      return
+    }
+    let cancelled = false
+    fetch('/api/budget/client-nav', { credentials: 'include', cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : { showBudget: false }))
+      .then((j) => {
+        if (!cancelled) setClientBudgetNav(!!j.showBudget)
+      })
+      .catch(() => {
+        if (!cancelled) setClientBudgetNav(false)
       })
     return () => {
       cancelled = true
@@ -79,12 +100,20 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
   }, [menuOpen])
 
   const userRole = user?.profile.role || ''
-  /** Supervisors+ see approval menus; employees may only need Pending when acting as a delegate. */
-  const canApprove = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
-  const canAccessPendingApprovals = ['employee', 'supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
-  const canManageOrg = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
-  const canManageBudget = ['manager', 'admin', 'super_admin'].includes(userRole)
-  const canBidSheets = ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
+  const isClient = userRole === 'client'
+  /** Supervisors+ see approval menus; employees may only need Pending when acting as a delegate. Clients always do. */
+  const canApprove = ['supervisor', 'manager', 'admin', 'super_admin', 'client'].includes(userRole)
+  const canAccessPendingApprovals = [
+    'employee',
+    'supervisor',
+    'manager',
+    'admin',
+    'super_admin',
+    'client',
+  ].includes(userRole)
+  const canManageOrg = !isClient && ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
+  const canManageBudget = !isClient && ['manager', 'admin', 'super_admin'].includes(userRole)
+  const canBidSheets = !isClient && ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
 
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm print:hidden">
@@ -166,15 +195,17 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
               >
                 {darkMode ? <Sun className="h-5 w-5 sm:h-6 sm:w-6" /> : <Moon className="h-5 w-5 sm:h-6 sm:w-6" />}
               </button>
-              <button
-                type="button"
-                onClick={() => setGuideOpen(true)}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
-                aria-label="Open site guide"
-                title="Site Guide"
-              >
-                <BookOpen className="h-5 w-5 sm:h-6 sm:w-6" />
-              </button>
+              {!isClient && (
+                <button
+                  type="button"
+                  onClick={() => setGuideOpen(true)}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+                  aria-label="Open site guide"
+                  title="Site Guide"
+                >
+                  <BookOpen className="h-5 w-5 sm:h-6 sm:w-6" />
+                </button>
+              )}
               <div ref={menuRef} className="relative">
                 <button
                   onClick={() => setMenuOpen(!menuOpen)}
@@ -192,7 +223,7 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                           Approved Timesheets
                         </Link>
                       )}
-                      {canManageBudget && (
+                      {(canManageBudget || clientBudgetNav) && (
                         <Link href="/dashboard/budget" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Budget Detail
                         </Link>
@@ -205,35 +236,37 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                       <Link href="/dashboard" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                         Dashboard
                       </Link>
-                      {canManageBudget && (
+                      {!isClient && canManageBudget && (
                         <Link href="/dashboard/reports" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Reports
                         </Link>
                       )}
-                      {canManageBudget && (
+                      {!isClient && canManageBudget && (
                         <Link href="/dashboard/admin/export" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Export Timesheets
                         </Link>
                       )}
-                      {canManageOrg && (
+                      {!isClient && canManageOrg && (
                         <Link href="/dashboard/admin/organization" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Manage Organization
                         </Link>
                       )}
-                      {canManageOrg && (
+                      {!isClient && canManageOrg && (
                         <Link href="/dashboard/admin/timesheet-options" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Manage Timesheet Options
                         </Link>
                       )}
-                      {canManageOrg && (
+                      {!isClient && canManageOrg && (
                         <Link href="/dashboard/admin/users" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Manage Users
                         </Link>
                       )}
-                      <Link href="/dashboard/timesheets" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
-                        My Timesheets
-                      </Link>
-                      {timesheetConfirmNav.show && (
+                      {!isClient && (
+                        <Link href="/dashboard/timesheets" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                          My Timesheets
+                        </Link>
+                      )}
+                      {!isClient && timesheetConfirmNav.show && (
                         <Link
                           href="/dashboard/timesheet-confirmations"
                           className="flex items-center justify-between gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -255,10 +288,12 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                           Pending Approvals
                         </Link>
                       )}
-                      <button type="button" onClick={() => { setGuideOpen(true); setMenuOpen(false) }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                        Site Guide
-                      </button>
-                      {canManageBudget && (
+                      {!isClient && (
+                        <button type="button" onClick={() => { setGuideOpen(true); setMenuOpen(false) }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                          Site Guide
+                        </button>
+                      )}
+                      {!isClient && canManageBudget && (
                         <Link href="/dashboard/admin/data-view" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           View Timesheet Data
                         </Link>

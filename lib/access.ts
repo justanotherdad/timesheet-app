@@ -131,8 +131,9 @@ export async function getAccessibleSiteIds(
 }
 
 /**
- * Check if user can access a PO budget. Only Admin/Super Admin get automatic access.
- * Managers, Supervisors, and Employees must have explicit po_budget_access grant.
+ * Check if user can access a PO budget (Budget Detail / balance popups).
+ * Only Admin/Super Admin get automatic access. Everyone else needs an explicit
+ * po_budget_access grant with can_view_budget = true.
  */
 export async function canAccessPoBudget(
   supabase: SupabaseClient,
@@ -143,11 +144,13 @@ export async function canAccessPoBudget(
   if (role === 'admin' || role === 'super_admin') return true
   const { data } = await supabase
     .from('po_budget_access')
-    .select('user_id')
+    .select('user_id, can_view_budget')
     .eq('purchase_order_id', poId)
     .eq('user_id', userId)
     .maybeSingle()
-  return !!data
+  if (!data) return false
+  // Missing column (pre-migration) treated as viewable for back-compat.
+  return (data as { can_view_budget?: boolean }).can_view_budget !== false
 }
 
 /**

@@ -2,18 +2,28 @@
 
 import { useState } from 'react'
 import RichTextEditor from './RichTextEditor'
-import type { BulletinPost } from '@/types/database'
+import type { BulletinAudience, BulletinPost } from '@/types/database'
 
 type Props = {
   post?: BulletinPost | null
+  /** Audience for new posts (from the active admin tab). */
+  defaultAudience?: BulletinAudience
   onClose: () => void
   onSaved: (post: BulletinPost) => void
 }
 
-export default function BulletinEditorModal({ post, onClose, onSaved }: Props) {
+export default function BulletinEditorModal({
+  post,
+  defaultAudience = 'employee',
+  onClose,
+  onSaved,
+}: Props) {
   const [title, setTitle] = useState(post?.title || '')
   const [bodyHtml, setBodyHtml] = useState(post?.body_html || '')
   const [isPinned, setIsPinned] = useState(Boolean(post?.is_pinned))
+  const [audience, setAudience] = useState<BulletinAudience>(
+    post?.audience || defaultAudience
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -35,6 +45,7 @@ export default function BulletinEditorModal({ post, onClose, onSaved }: Props) {
           title: trimmed,
           body_html: bodyHtml,
           is_pinned: isPinned,
+          audience,
         }),
       })
       const data = await res.json()
@@ -93,6 +104,23 @@ export default function BulletinEditorModal({ post, onClose, onSaved }: Props) {
             <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
               Images auto-fit the width — select one and drag the corner to resize. Use float left/right
               for text wrap. Videos: upload short clips (≤60s / 50MB) or embed YouTube/Vimeo.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Audience
+            </label>
+            <select
+              value={audience}
+              onChange={(e) => setAudience(e.target.value as BulletinAudience)}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-gray-900 dark:text-gray-100"
+            >
+              <option value="employee">Employee View</option>
+              <option value="client">Client View</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Employee and Client feeds are separate — posts are never shared.
             </p>
           </div>
 

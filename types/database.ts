@@ -1,4 +1,6 @@
-export type UserRole = 'employee' | 'supervisor' | 'manager' | 'admin' | 'super_admin'
+export type UserRole = 'employee' | 'supervisor' | 'manager' | 'admin' | 'super_admin' | 'client'
+
+export type BulletinAudience = 'employee' | 'client'
 
 export type EmployeeType = 'internal' | 'external'
 
@@ -124,7 +126,7 @@ export interface TimesheetSignature {
   id: string
   timesheet_id: string
   signer_id: string
-  signer_role: 'budget_approver' | 'supervisor' | 'manager' | 'final_approver'
+  signer_role: 'client' | 'budget_approver' | 'supervisor' | 'manager' | 'final_approver'
   signer_name?: string // Snapshot of signer name at approval time (doesn't change if profile is updated)
   signed_at: string
   signature_data?: string // For storing signature image/data
@@ -137,6 +139,8 @@ export interface BulletinPost {
   body_html: string
   author_id?: string | null
   author_name?: string | null
+  /** Separate feeds: employee vs client (never shared). */
+  audience: BulletinAudience
   is_pinned: boolean
   deleted_at?: string | null
   created_at: string

@@ -15,81 +15,108 @@ type SearchParams = { user?: string; start?: string; end?: string; sort?: string
 
 export default async function ApprovedTimesheetsPage(props: { searchParams: Promise<SearchParams> }) {
   const { searchParams } = props
-  const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
+  const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin', 'client'])
   const params = await searchParams
   const filterUser = params.user || ''
   const filterStart = params.start || ''
   const filterEnd = params.end || ''
   const sortBy = params.sort || 'week_ending'
   const sortDir = (params.dir || 'desc') as 'asc' | 'desc'
+  const isClient = user.profile.role === 'client'
 
   const adminSupabase = createAdminClient()
 
-  // People in THIS user's approval chain only. Admin/super_admin use the same
-  // scope here — company-wide viewing stays on My Timesheets. The previous
-  // admin bypass (all user ids) let unrelated approved sheets (e.g. Taylor /
-  // Luis) appear for David.
-  const reportsResult = await withQueryTimeout(() =>
-    adminSupabase
-      .from('user_profiles')
-      .select('id')
-      .or(
-        `reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`
-      )
-  )
-  const reports = (reportsResult.data || []) as { id: string }[]
-  const userIds = [user.id, ...reports.map((r) => r.id)]
+  let timesheets: any[] = []
 
-  // 1. Fully approved timesheets for people in the chain
-  let approvedQuery = adminSupabase
-    .from('weekly_timesheets')
-    .select('*, user_profiles!user_id(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)')
-    .eq('status', 'approved')
-    .in('user_id', userIds)
+  if (isClient) {
+    // Clients only see timesheets they personally signed
+    const signedResult = await withQueryTimeout(() =>
+      adminSupabase.from('timesheet_signatures').select('timesheet_id').eq('signer_id', user.id)
+    )
+    const signedTimesheetIds = [
+      ...new Set(
+        ((signedResult.data || []) as { timesheet_id: string }[]).map((r) => r.timesheet_id)
+      ),
+    ]
+    if (signedTimesheetIds.length > 0) {
+      let clientQuery = adminSupabase
+        .from('weekly_timesheets')
+        .select(
+          '*, user_profiles!user_id(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)'
+        )
+        .in('id', signedTimesheetIds)
+        .in('status', ['approved', 'submitted'])
+      if (filterUser) clientQuery = clientQuery.eq('user_id', filterUser)
+      if (filterStart) clientQuery = clientQuery.gte('week_ending', filterStart)
+      if (filterEnd) clientQuery = clientQuery.lte('week_ending', filterEnd)
+      const clientResult = await withQueryTimeout(() => clientQuery)
+      timesheets = (clientResult.data || []) as any[]
+    }
+  } else {
+    // People in THIS user's approval chain only. Admin/super_admin use the same
+    // scope here — company-wide viewing stays on My Timesheets.
+    const reportsResult = await withQueryTimeout(() =>
+      adminSupabase
+        .from('user_profiles')
+        .select('id')
+        .or(
+          `reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`
+        )
+    )
+    const reports = (reportsResult.data || []) as { id: string }[]
+    const userIds = [user.id, ...reports.map((r) => r.id)]
 
-  if (filterUser) approvedQuery = approvedQuery.eq('user_id', filterUser)
-  if (filterStart) approvedQuery = approvedQuery.gte('week_ending', filterStart)
-  if (filterEnd) approvedQuery = approvedQuery.lte('week_ending', filterEnd)
-
-  const approvedResult = await withQueryTimeout(() => approvedQuery)
-  const fullyApproved = (approvedResult.data || []) as any[]
-
-  // 2. Partially approved: submitted timesheets where current user has signed
-  let partiallyApproved: any[] = []
-  const signedResult = await withQueryTimeout(() =>
-    adminSupabase
-      .from('timesheet_signatures')
-      .select('timesheet_id')
-      .eq('signer_id', user.id)
-  )
-  const signedTimesheetIds = ((signedResult.data || []) as { timesheet_id: string }[]).map(
-    (r) => r.timesheet_id
-  )
-
-  if (signedTimesheetIds.length > 0) {
-    let partialQuery = adminSupabase
+    // 1. Fully approved timesheets for people in the chain
+    let approvedQuery = adminSupabase
       .from('weekly_timesheets')
-      .select('*, user_profiles!user_id(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)')
-      .eq('status', 'submitted')
-      .in('id', signedTimesheetIds)
+      .select(
+        '*, user_profiles!user_id(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)'
+      )
+      .eq('status', 'approved')
       .in('user_id', userIds)
 
-    if (filterUser) partialQuery = partialQuery.eq('user_id', filterUser)
-    if (filterStart) partialQuery = partialQuery.gte('week_ending', filterStart)
-    if (filterEnd) partialQuery = partialQuery.lte('week_ending', filterEnd)
+    if (filterUser) approvedQuery = approvedQuery.eq('user_id', filterUser)
+    if (filterStart) approvedQuery = approvedQuery.gte('week_ending', filterStart)
+    if (filterEnd) approvedQuery = approvedQuery.lte('week_ending', filterEnd)
 
-    const partialResult = await withQueryTimeout(() => partialQuery)
-    partiallyApproved = (partialResult.data || []) as any[]
-  }
+    const approvedResult = await withQueryTimeout(() => approvedQuery)
+    const fullyApproved = (approvedResult.data || []) as any[]
 
-  const seenIds = new Set<string>()
-  let timesheets: any[] = []
-  ;[...fullyApproved, ...partiallyApproved].forEach((ts) => {
-    if (!seenIds.has(ts.id)) {
-      seenIds.add(ts.id)
-      timesheets.push(ts)
+    // 2. Partially approved: submitted timesheets where current user has signed
+    let partiallyApproved: any[] = []
+    const signedResult = await withQueryTimeout(() =>
+      adminSupabase.from('timesheet_signatures').select('timesheet_id').eq('signer_id', user.id)
+    )
+    const signedTimesheetIds = ((signedResult.data || []) as { timesheet_id: string }[]).map(
+      (r) => r.timesheet_id
+    )
+
+    if (signedTimesheetIds.length > 0) {
+      let partialQuery = adminSupabase
+        .from('weekly_timesheets')
+        .select(
+          '*, user_profiles!user_id(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)'
+        )
+        .eq('status', 'submitted')
+        .in('id', signedTimesheetIds)
+        .in('user_id', userIds)
+
+      if (filterUser) partialQuery = partialQuery.eq('user_id', filterUser)
+      if (filterStart) partialQuery = partialQuery.gte('week_ending', filterStart)
+      if (filterEnd) partialQuery = partialQuery.lte('week_ending', filterEnd)
+
+      const partialResult = await withQueryTimeout(() => partialQuery)
+      partiallyApproved = (partialResult.data || []) as any[]
     }
-  })
+
+    const seenIds = new Set<string>()
+    ;[...fullyApproved, ...partiallyApproved].forEach((ts) => {
+      if (!seenIds.has(ts.id)) {
+        seenIds.add(ts.id)
+        timesheets.push(ts)
+      }
+    })
+  }
 
   // Auto-approve submitted timesheets where employee has no approvers (final approver with no one above)
   const submittedInList = timesheets.filter((ts: any) => ts.status === 'submitted')
@@ -175,23 +202,36 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
   }
   timesheets = [...timesheets].sort(sortFn)
 
-  // Filter dropdown: people in this user's approval chain (+ self), same for admins
-  const reportsForFilterRes = await withQueryTimeout(() =>
-    adminSupabase
-      .from('user_profiles')
-      .select('id, name')
-      .or(
-        `reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`
-      )
-  )
-  const reportsForFilter = (reportsForFilterRes.data || []) as { id: string; name: string }[]
-  const selfRes = await withQueryTimeout(() =>
-    adminSupabase.from('user_profiles').select('id, name').eq('id', user.id).single()
-  )
-  const self = selfRes.data as { id: string; name: string } | null
-  const filterUsers = (
-    self ? [self, ...reportsForFilter.filter((r) => r.id !== user.id)] : reportsForFilter
-  ).sort((a, b) => a.name.localeCompare(b.name))
+  // Filter dropdown: employees on listed timesheets (clients) or approval chain (+ self)
+  let filterUsers: { id: string; name: string }[] = []
+  if (isClient) {
+    const byId = new Map<string, string>()
+    for (const ts of timesheets) {
+      const uid = ts.user_id as string
+      const name = (ts.user_profiles?.name || 'Unknown') as string
+      if (uid && !byId.has(uid)) byId.set(uid, name)
+    }
+    filterUsers = [...byId.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  } else {
+    const reportsForFilterRes = await withQueryTimeout(() =>
+      adminSupabase
+        .from('user_profiles')
+        .select('id, name')
+        .or(
+          `reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`
+        )
+    )
+    const reportsForFilter = (reportsForFilterRes.data || []) as { id: string; name: string }[]
+    const selfRes = await withQueryTimeout(() =>
+      adminSupabase.from('user_profiles').select('id, name').eq('id', user.id).single()
+    )
+    const self = selfRes.data as { id: string; name: string } | null
+    filterUsers = (
+      self ? [self, ...reportsForFilter.filter((r) => r.id !== user.id)] : reportsForFilter
+    ).sort((a, b) => a.name.localeCompare(b.name))
+  }
 
   const hourTotals = await getTimesheetHourTotals(
     adminSupabase,

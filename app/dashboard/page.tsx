@@ -33,13 +33,17 @@ export default async function DashboardPage() {
   const isManagerOrAbove = ['manager', 'admin', 'super_admin'].includes(user.profile.role)
   const isSupervisorOrAbove = ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)
 
+  const isClient = user.profile.role === 'client'
+
   let hasAnyBudgetAccess = false
   let hasAnyBidSheetAccess = false
   if (!isManagerOrAbove) {
+    // Only count grants that allow viewing Budget Detail (Clients default off).
     const { count: budgetAccessCount } = await supabase
       .from('po_budget_access')
       .select('purchase_order_id', { count: 'exact', head: true })
       .eq('user_id', user.id)
+      .eq('can_view_budget', true)
     hasAnyBudgetAccess = (budgetAccessCount ?? 0) > 0
   }
   if (!isSupervisorOrAbove) {
@@ -122,33 +126,14 @@ export default async function DashboardPage() {
   // they must not see company-wide approved sheets here (use My Timesheets for
   // that). Also includes submitted sheets this user already signed that are
   // still awaiting a later approver.
+  // Clients: timesheets they personally signed (no profile chain).
   let approvedTimesheets: any[] = []
-  if (['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)) {
-    const adminSupabase = createAdminClient()
-    const reportsResult = await withQueryTimeout(() =>
-      adminSupabase
-        .from('user_profiles')
-        .select('id')
-        .or(
-          `reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`
-        )
-    )
-    const reportIds = ((reportsResult.data || []) as Array<{ id: string }>).map((r) => r.id)
+  if (['supervisor', 'manager', 'admin', 'super_admin', 'client'].includes(user.profile.role)) {
+    const adminSupabaseForApproved = createAdminClient()
 
-    if (reportIds.length > 0) {
-      const approvedResult = await withQueryTimeout(() =>
-        adminSupabase
-          .from('weekly_timesheets')
-          .select('*, user_profiles!user_id(name)')
-          .in('user_id', reportIds)
-          .eq('status', 'approved')
-          .order('approved_at', { ascending: false })
-      )
-      const fullyApproved = (Array.isArray(approvedResult.data) ? approvedResult.data : []) as any[]
-
-      let partiallyApproved: any[] = []
+    if (isClient) {
       const signedResult = await withQueryTimeout(() =>
-        adminSupabase.from('timesheet_signatures').select('timesheet_id').eq('signer_id', user.id)
+        adminSupabaseForApproved.from('timesheet_signatures').select('timesheet_id').eq('signer_id', user.id)
       )
       const signedIds = [
         ...new Set(
@@ -156,52 +141,240 @@ export default async function DashboardPage() {
         ),
       ]
       if (signedIds.length > 0) {
-        const partialResult = await withQueryTimeout(() =>
-          adminSupabase
+        const approvedResult = await withQueryTimeout(() =>
+          adminSupabaseForApproved
             .from('weekly_timesheets')
             .select('*, user_profiles!user_id(name)')
-            .eq('status', 'submitted')
             .in('id', signedIds)
-            .in('user_id', reportIds)
-            .order('submitted_at', { ascending: false })
+            .in('status', ['approved', 'submitted'])
+            .order('approved_at', { ascending: false })
         )
-        partiallyApproved = (Array.isArray(partialResult.data) ? partialResult.data : []) as any[]
+        const rows = (Array.isArray(approvedResult.data) ? approvedResult.data : []) as any[]
+        rows.sort((a, b) => {
+          const aVal = a.approved_at || a.submitted_at || a.created_at || ''
+          const bVal = b.approved_at || b.submitted_at || b.created_at || ''
+          return bVal.localeCompare(aVal)
+        })
+        approvedTimesheets = rows.slice(0, 5)
       }
+    } else {
+      const reportsResult = await withQueryTimeout(() =>
+        adminSupabaseForApproved
+          .from('user_profiles')
+          .select('id')
+          .or(
+            `reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`
+          )
+      )
+      const reportIds = ((reportsResult.data || []) as Array<{ id: string }>).map((r) => r.id)
 
-      const seen = new Set<string>()
-      const merged: any[] = []
-      ;[...fullyApproved, ...partiallyApproved].forEach((ts) => {
-        if (!seen.has(ts.id)) {
-          seen.add(ts.id)
-          merged.push(ts)
+      if (reportIds.length > 0) {
+        const approvedResult = await withQueryTimeout(() =>
+          adminSupabaseForApproved
+            .from('weekly_timesheets')
+            .select('*, user_profiles!user_id(name)')
+            .in('user_id', reportIds)
+            .eq('status', 'approved')
+            .order('approved_at', { ascending: false })
+        )
+        const fullyApproved = (Array.isArray(approvedResult.data) ? approvedResult.data : []) as any[]
+
+        let partiallyApproved: any[] = []
+        const signedResult = await withQueryTimeout(() =>
+          adminSupabaseForApproved.from('timesheet_signatures').select('timesheet_id').eq('signer_id', user.id)
+        )
+        const signedIds = [
+          ...new Set(
+            ((signedResult.data || []) as { timesheet_id: string }[]).map((r) => r.timesheet_id)
+          ),
+        ]
+        if (signedIds.length > 0) {
+          const partialResult = await withQueryTimeout(() =>
+            adminSupabaseForApproved
+              .from('weekly_timesheets')
+              .select('*, user_profiles!user_id(name)')
+              .eq('status', 'submitted')
+              .in('id', signedIds)
+              .in('user_id', reportIds)
+              .order('submitted_at', { ascending: false })
+          )
+          partiallyApproved = (Array.isArray(partialResult.data) ? partialResult.data : []) as any[]
         }
-      })
-      merged.sort((a, b) => {
-        const aVal = a.approved_at || a.submitted_at || a.created_at || ''
-        const bVal = b.approved_at || b.submitted_at || b.created_at || ''
-        return bVal.localeCompare(aVal)
-      })
-      approvedTimesheets = merged.slice(0, 5)
+
+        const seen = new Set<string>()
+        const merged: any[] = []
+        ;[...fullyApproved, ...partiallyApproved].forEach((ts) => {
+          if (!seen.has(ts.id)) {
+            seen.add(ts.id)
+            merged.push(ts)
+          }
+        })
+        merged.sort((a, b) => {
+          const aVal = a.approved_at || a.submitted_at || a.created_at || ''
+          const bVal = b.approved_at || b.submitted_at || b.created_at || ''
+          return bVal.localeCompare(aVal)
+        })
+        approvedTimesheets = merged.slice(0, 5)
+      }
     }
   }
 
   // Bulletin Board posts (below tiles, above list panels).
   // Fail soft if the migration has not been applied yet.
+  // Clients see client feed; admins get both (tabs filter in the component);
+  // everyone else sees employee feed.
   let bulletinPosts: BulletinPost[] = []
   const canEditBulletin = isBulletinAdmin(user.profile.role)
   try {
-    const { data: bulletinData, error: bulletinError } = await supabase
+    let bulletinQuery = supabase
       .from('bulletin_posts')
-      .select('id, title, body_html, author_id, author_name, is_pinned, created_at, updated_at')
+      .select('id, title, body_html, author_id, author_name, audience, is_pinned, created_at, updated_at')
       .is('deleted_at', null)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(canEditBulletin ? 100 : 50)
+
+    if (!canEditBulletin) {
+      bulletinQuery = bulletinQuery.eq('audience', isClient ? 'client' : 'employee')
+    }
+
+    const { data: bulletinData, error: bulletinError } = await bulletinQuery
     if (!bulletinError && bulletinData) {
-      bulletinPosts = bulletinData as BulletinPost[]
+      bulletinPosts = (bulletinData as BulletinPost[]).map((p) => ({
+        ...p,
+        audience: p.audience || 'employee',
+      }))
     }
   } catch {
     bulletinPosts = []
+  }
+
+  // ---- Client dashboard: welcome + pending + approved only ----
+  if (isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Header title="Client Dashboard" user={user} />
+        <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
+          {hasAnyBudgetAccess && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+              <Link
+                href="/dashboard/budget"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
+              >
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="bg-teal-100 dark:bg-teal-900/30 p-3 rounded-lg">
+                    <BarChart3 className="h-6 w-6 text-teal-600 dark:text-teal-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Budget Detail</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      View PO budgets you have been granted access to
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            </div>
+          )}
+          <BulletinBoard
+            initialPosts={bulletinPosts}
+            canEdit={false}
+            audienceMode="client"
+          />
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+              <Link href="/dashboard/approvals" className="block mb-4 group">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  Pending Approvals
+                  {pendingApprovalsCount > 0 ? (
+                    <span className="ml-2 text-sm font-normal text-orange-600 dark:text-orange-400">
+                      ({pendingApprovalsCount})
+                    </span>
+                  ) : null}
+                </h2>
+              </Link>
+              {pendingApprovals.length > 0 ? (
+                <div className="space-y-2">
+                  {pendingApprovals.map((ts: any) => (
+                    <div
+                      key={ts.id}
+                      className="border border-orange-200 dark:border-orange-800 rounded p-3 bg-orange-50 dark:bg-orange-900/20"
+                    >
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-gray-100">
+                            {ts.user_profiles.name}
+                          </p>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">
+                            Week Ending: {formatWeekEnding(ts.week_ending)}
+                          </p>
+                        </div>
+                        <Link
+                          href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard/approvals')}`}
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                        >
+                          Review →
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400">No pending approvals.</p>
+              )}
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+              <Link href="/dashboard/approvals/approved" className="block mb-4 group">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  Approved Timesheets
+                </h2>
+              </Link>
+              {approvedTimesheets.length > 0 ? (
+                <div className="space-y-2">
+                  {approvedTimesheets.map((ts: any) => {
+                    const isPendingFinal = ts.status === 'submitted'
+                    return (
+                      <div
+                        key={ts.id}
+                        className={`border rounded p-3 ${
+                          isPendingFinal
+                            ? 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20'
+                            : 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-gray-100">
+                              {ts.user_profiles?.name || 'Unknown'}
+                            </p>
+                            <p className="text-sm text-gray-600 dark:text-gray-300">
+                              Week Ending: {formatWeekEnding(ts.week_ending)}
+                            </p>
+                            {isPendingFinal && (
+                              <p className="text-xs font-medium text-orange-700 dark:text-orange-300 mt-0.5">
+                                Approved by you · awaiting further approval
+                              </p>
+                            )}
+                          </div>
+                          <Link
+                            href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard/approvals/approved')}`}
+                            className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                          >
+                            View →
+                          </Link>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400">No approved timesheets.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -438,6 +611,7 @@ export default async function DashboardPage() {
         <BulletinBoard
           initialPosts={bulletinPosts}
           canEdit={canEditBulletin}
+          audienceMode={canEditBulletin ? 'admin' : 'employee'}
         />
 
         <div className={`grid grid-cols-1 gap-4 sm:gap-6 ${['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>

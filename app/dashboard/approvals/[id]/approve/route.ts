@@ -186,11 +186,17 @@ export async function POST(
       !isAdmin && !!actingForId && actingForId !== user.id && canApprove
     const signerId = isAdmin ? user.id : actingAsDelegate ? actingForId! : user.id
 
-    let signerRole: 'budget_approver' | 'manager' | 'supervisor' | 'final_approver'
+    let signerRole: 'client' | 'budget_approver' | 'manager' | 'supervisor' | 'final_approver'
     if (isAdmin) {
       signerRole = 'final_approver'
     } else if (stage.kind === 'budget') {
-      signerRole = 'budget_approver'
+      // Prefer the acting signer's profile role so Clients get signer_role=client
+      const { data: actingProfile } = await adminSupabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', signerId)
+        .maybeSingle()
+      signerRole = actingProfile?.role === 'client' ? 'client' : 'budget_approver'
     } else if (signerId === profile?.final_approver_id) {
       signerRole = 'final_approver'
     } else if (signerId === profile?.manager_id) {
@@ -209,7 +215,7 @@ export async function POST(
         signerName = delegatorName
       }
     }
-    if (signerRole === 'budget_approver') {
+    if (signerRole === 'budget_approver' || signerRole === 'client') {
       const poNumbers = await getBudgetApproverPoNumbersForUser(
         adminSupabase,
         id,

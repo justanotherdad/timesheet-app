@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Megaphone, Pin, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import type { BulletinPost } from '@/types/database'
+import type { BulletinAudience, BulletinPost } from '@/types/database'
 import { sanitizeBulletinHtml } from '@/lib/bulletin'
 import { formatDate } from '@/lib/utils'
 
@@ -20,30 +20,52 @@ const BulletinEditorModal = dynamic(() => import('./BulletinEditorModal'), {
   ),
 })
 
+type AudienceMode = 'admin' | 'employee' | 'client'
+
 type Props = {
   initialPosts: BulletinPost[]
   canEdit: boolean
+  /** admin = Employee/Client tabs; employee/client = single feed */
+  audienceMode?: AudienceMode
 }
 
-export default function BulletinBoard({ initialPosts, canEdit }: Props) {
+export default function BulletinBoard({
+  initialPosts,
+  canEdit,
+  audienceMode = 'employee',
+}: Props) {
   const router = useRouter()
   const [posts, setPosts] = useState(initialPosts)
   const [editing, setEditing] = useState<BulletinPost | null | undefined>(undefined)
   // undefined = closed; null = new; object = edit
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<BulletinAudience>(
+    audienceMode === 'client' ? 'client' : 'employee'
+  )
 
   useEffect(() => {
     setPosts(initialPosts)
   }, [initialPosts])
 
+  const showTabs = audienceMode === 'admin' && canEdit
+
+  const visiblePosts = useMemo(() => {
+    const audience = showTabs
+      ? activeTab
+      : audienceMode === 'client'
+        ? 'client'
+        : 'employee'
+    return posts.filter((p) => (p.audience || 'employee') === audience)
+  }, [posts, showTabs, activeTab, audienceMode])
+
   const sorted = useMemo(
     () =>
-      [...posts].sort((a, b) => {
+      [...visiblePosts].sort((a, b) => {
         if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       }),
-    [posts]
+    [visiblePosts]
   )
 
   const onSaved = (post: BulletinPost) => {
@@ -56,6 +78,7 @@ export default function BulletinBoard({ initialPosts, canEdit }: Props) {
       }
       return [post, ...prev]
     })
+    if (post.audience) setActiveTab(post.audience)
     router.refresh()
   }
 
@@ -108,10 +131,12 @@ export default function BulletinBoard({ initialPosts, canEdit }: Props) {
           </div>
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              Bulletin Board
+              {audienceMode === 'client' ? 'Welcome' : 'Bulletin Board'}
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              Company news and information
+              {audienceMode === 'client'
+                ? 'Messages from CTG'
+                : 'Company news and information'}
             </p>
           </div>
         </div>
@@ -127,6 +152,30 @@ export default function BulletinBoard({ initialPosts, canEdit }: Props) {
         )}
       </div>
 
+      {showTabs && (
+        <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700">
+          {(
+            [
+              { id: 'employee' as const, label: 'Employee View' },
+              { id: 'client' as const, label: 'Client View' },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === tab.id
+                  ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {error && (
         <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
@@ -134,7 +183,7 @@ export default function BulletinBoard({ initialPosts, canEdit }: Props) {
       {sorted.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400 py-2">
           {canEdit
-            ? 'No posts yet. Click “New post” to publish the first bulletin.'
+            ? `No posts yet in ${activeTab === 'client' ? 'Client' : 'Employee'} View. Click “New post” to publish the first bulletin.`
             : 'No bulletin posts right now.'}
         </p>
       ) : (
@@ -205,6 +254,7 @@ export default function BulletinBoard({ initialPosts, canEdit }: Props) {
       {editing !== undefined && (
         <BulletinEditorModal
           post={editing}
+          defaultAudience={activeTab}
           onClose={() => setEditing(undefined)}
           onSaved={onSaved}
         />
