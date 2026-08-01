@@ -8,6 +8,7 @@ import WeeklyTimesheetExport from '@/components/WeeklyTimesheetExport'
 import { formatWeekEnding } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import { loadCompanySettingsMap, parseConfirmationAssigneeIds } from '@/lib/timesheet-confirmation'
+import { getRequiredBudgetApproverIds } from '@/lib/budget-timesheet-approvers'
 import Header from '@/components/Header'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
@@ -75,7 +76,8 @@ export default async function ExportTimesheetPage({
     timesheet.timesheet_signatures = signatures
   }
 
-  // Verify user can view this timesheet (owner's reports_to, supervisor, or manager)
+  // Verify user can view this timesheet (profile chain, budget/client approver,
+  // already signed, or confirmation assignee).
   if (timesheet.user_id !== user.id && !['admin', 'super_admin'].includes(user.profile.role)) {
     const ownerResult = await withQueryTimeout(() =>
       adminSupabase
@@ -84,12 +86,34 @@ export default async function ExportTimesheetPage({
         .eq('id', timesheet.user_id)
         .single()
     )
-    const owner = ownerResult.data as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string } | null
-    const canView =
+    const owner = ownerResult.data as {
+      reports_to_id?: string
+      supervisor_id?: string
+      manager_id?: string
+      final_approver_id?: string
+    } | null
+    let canView =
       owner?.reports_to_id === user.id ||
       owner?.supervisor_id === user.id ||
       owner?.manager_id === user.id ||
       owner?.final_approver_id === user.id
+
+    if (!canView) {
+      // Already signed (typical for Clients after approving)
+      canView = signatures.some((s: { signer_id?: string }) => s.signer_id === user.id)
+    }
+
+    if (!canView) {
+      // Live budget / Client timesheet-approver grant on a charged PO
+      const requiredBudget = await getRequiredBudgetApproverIds(
+        adminSupabase,
+        id,
+        timesheet.user_id,
+        owner
+      )
+      canView = requiredBudget.includes(user.id)
+    }
+
     if (!canView) {
       const settings = await loadCompanySettingsMap(adminSupabase)
       const assignees = parseConfirmationAssigneeIds(settings)

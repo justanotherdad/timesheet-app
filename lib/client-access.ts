@@ -18,9 +18,9 @@ export function clientMayAccessPath(pathname: string): boolean {
   if (path === '/dashboard' || path === '/dashboard/') return true
   if (path === '/dashboard/budget' || path.startsWith('/dashboard/budget/')) return true
   if (CLIENT_PATH_PREFIXES.some((p) => path === p || path.startsWith(p + '/'))) return true
-  // Timesheet detail + clear-rejection-note (not list/new/edit/export)
+  // Timesheet detail, export, clear-rejection-note (not list/new/edit)
   const tsMatch = path.match(
-    /^\/dashboard\/timesheets\/([^/]+)(?:\/(clear-rejection-note))?\/?$/
+    /^\/dashboard\/timesheets\/([^/]+)(?:\/(export|clear-rejection-note))?\/?$/
   )
   if (tsMatch) {
     const id = tsMatch[1]
