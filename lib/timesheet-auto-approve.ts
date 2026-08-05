@@ -1,6 +1,8 @@
 /**
- * Auto-approve timesheets when the employee has no one in their approval chain
- * (e.g. final approver who doesn't report to anyone).
+ * Auto-approve / finalize timesheets when approval is complete:
+ * - empty profile chain (employee effectively self-approves), or
+ * - every assigned profile-chain member has already signed (heals short chains
+ *   that previously stayed "submitted" after the last assigned approver).
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -26,9 +28,29 @@ export function buildApprovalChain(profile: {
   return chain
 }
 
+async function markTimesheetApproved(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  adminSupabase: any,
+  timesheetId: string,
+  approvedById: string,
+  prevSeq: number | undefined
+): Promise<boolean> {
+  const { error } = await adminSupabase
+    .from('weekly_timesheets')
+    .update({
+      status: 'approved',
+      approved_by_id: approvedById,
+      approved_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      approval_confirmation_sequence: nextApprovalConfirmationSequence(prevSeq),
+    })
+    .eq('id', timesheetId)
+  return !error
+}
+
 /**
- * If the timesheet's employee has an empty approval chain, auto-approve it.
- * Returns true if auto-approved, false otherwise.
+ * Finalize a submitted timesheet when no further approvers remain.
+ * Returns true if the timesheet was (or already is effectively) approved.
  */
 export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<boolean> {
   const adminSupabase = createAdminClient()
@@ -51,7 +73,6 @@ export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<b
   } | null
 
   const chain = buildApprovalChain(profile)
-  if (chain.length > 0) return false
 
   // Budget "Timesheet approver" stage must be finished (or empty) first.
   const budgetRequired = await getRequiredBudgetApproverIds(
@@ -66,6 +87,15 @@ export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<b
     .eq('timesheet_id', timesheetId)
   const signedIds = new Set((existingSigs || []).map((s: { signer_id: string }) => s.signer_id))
   if (!isBudgetStageComplete(budgetRequired, signedIds)) return false
+
+  const prevSeq = (timesheet as { approval_confirmation_sequence?: number }).approval_confirmation_sequence
+
+  // Short / completed chain: all assigned profile approvers have signed.
+  if (chain.length > 0) {
+    if (!chain.every((id) => signedIds.has(id))) return false
+    const approvedById = chain[chain.length - 1]
+    return markTimesheetApproved(adminSupabase, timesheetId, approvedById, prevSeq)
+  }
 
   // Empty chain: no one to approve. Auto-approve as the employee approving themselves.
   const userId = timesheet.user_id
@@ -96,35 +126,13 @@ export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<b
         .eq('id', timesheetId)
         .single()
       if (current?.status === 'submitted') {
-        const prevSeq = (current as { approval_confirmation_sequence?: number }).approval_confirmation_sequence
-        const { error: updateError } = await adminSupabase
-          .from('weekly_timesheets')
-          .update({
-            status: 'approved',
-            approved_by_id: userId,
-            approved_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            approval_confirmation_sequence: nextApprovalConfirmationSequence(prevSeq),
-          })
-          .eq('id', timesheetId)
-        return !updateError
+        const currentSeq = (current as { approval_confirmation_sequence?: number }).approval_confirmation_sequence
+        return markTimesheetApproved(adminSupabase, timesheetId, userId, currentSeq)
       }
       return true
     }
     return false
   }
 
-  const prevSeq = (timesheet as { approval_confirmation_sequence?: number }).approval_confirmation_sequence
-  const { error: updateError } = await adminSupabase
-    .from('weekly_timesheets')
-    .update({
-      status: 'approved',
-      approved_by_id: userId,
-      approved_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      approval_confirmation_sequence: nextApprovalConfirmationSequence(prevSeq),
-    })
-    .eq('id', timesheetId)
-
-  return !updateError
+  return markTimesheetApproved(adminSupabase, timesheetId, userId, prevSeq)
 }

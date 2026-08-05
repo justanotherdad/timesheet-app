@@ -242,7 +242,14 @@ export async function POST(
       return NextResponse.json({ error: signatureError.message }, { status: 500 })
     }
 
-    const isFinalApproval = signerRole === 'final_approver'
+    // Finalize when this signature completes the chain (no subsequent profile
+    // approver assigned), or when the signer is an admin / final_approver.
+    const signedAfter = new Set([...signedIds, signerId])
+    const stageAfter = resolveApprovalStage(requiredBudget, profile, signedAfter)
+    const isFinalApproval =
+      signerRole === 'final_approver' ||
+      (stage.kind === 'profile' && stageAfter.kind === 'done')
+
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     }
@@ -264,12 +271,8 @@ export async function POST(
     }
 
     // After the last budget approver signs, empty profile chain should auto-approve.
-    if (!isFinalApproval && stage.kind === 'budget') {
-      const signedAfter = new Set([...signedIds, signerId])
-      const stageAfter = resolveApprovalStage(requiredBudget, profile, signedAfter)
-      if (stageAfter.kind === 'done') {
-        await checkAndAutoApproveIfFinal(id)
-      }
+    if (!isFinalApproval && stage.kind === 'budget' && stageAfter.kind === 'done') {
+      await checkAndAutoApproveIfFinal(id)
     }
 
     return approvalSuccess(request, formData, wantsJson, user, id)
