@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { Download, FileText, FileSpreadsheet, File, ArrowUpDown, ArrowUp, ArrowDown, X, Filter } from 'lucide-react'
-import { formatWeekEnding, formatDate, formatDateShort, formatDateInEastern, formatHoursAmount, getWeekDates } from '@/lib/utils'
+import { formatWeekEnding, formatDate, formatDateShort, formatDateInEastern, formatHoursAmount, formatHoursDayCell, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 
 interface Site { id: string; name: string }
@@ -376,19 +376,19 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
             <table style="width:100%;border-collapse:collapse;margin-bottom:4px;font-size:7.5pt;table-layout:fixed;">
               ${billableColgroup}
               <thead>
-                <tr style="background-color:#f0f0f0;">
-                  <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">Client / Project #</th>
-                  <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">PO#</th>
-                  <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">Task Description</th>
-                  <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">System</th>
-                  <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">Deliverable</th>
-                  <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">Activity</th>
+                <tr>
+                  <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">Client / Project #</th>
+                  <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">PO#</th>
+                  <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">Task Description</th>
+                  <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">System</th>
+                  <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">Deliverable</th>
+                  <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">Activity</th>
                   ${weekDates.days.map((day, idx) => `
-                    <th style="border:1px solid #000;padding:2px 1px;text-align:center;">
+                    <th class="col-header" style="border:1px solid #000;padding:2px 1px;text-align:center;background-color:#f0f0f0;">
                       <div>${format(day, 'EEE')}</div>
                       <div style="font-size:6.5pt;font-weight:normal;">${formatDateShort(weekDates.days[idx])}</div>
                     </th>`).join('')}
-                  <th style="border:1px solid #000;padding:2px 3px;text-align:center;">Total</th>
+                  <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:center;background-color:#f0f0f0;">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -401,13 +401,13 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                     <td style="border:1px solid #000;padding:2px 3px;overflow:hidden;">${escapeHtml(entry.deliverables?.name || '—')}</td>
                     <td style="border:1px solid #000;padding:2px 3px;overflow:hidden;">${escapeHtml(entry.activities?.name || '—')}</td>
                     ${days.map(day => `
-                      <td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}</td>`).join('')}
+                      <td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursDayCell(Number(entry[`${day}_hours`]) || 0)}</td>`).join('')}
                     <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${formatHoursAmount(calculateTotal(entry))}</td>
                   </tr>`).join('')}
                 ${Array.from({ length: Math.max(0, 3 - entries.length) }).map(() => `
                   <tr>
                     ${[1,2,3,4,5,6].map(() => '<td style="border:1px solid #000;padding:2px 3px;"></td>').join('')}
-                    ${days.map(() => '<td style="border:1px solid #000;padding:2px 1px;text-align:right;">0.00</td>').join('')}
+                    ${days.map(() => '<td style="border:1px solid #000;padding:2px 1px;text-align:right;">-</td>').join('')}
                     <td style="border:1px solid #000;padding:2px 3px;text-align:right;">0.00</td>
                   </tr>`).join('')}
                 <tr style="background-color:#FFFF99;font-weight:bold;">
@@ -443,15 +443,15 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                   <col style="width:${totW}"/>
                 </colgroup>
                 <thead>
-                  <tr style="background-color:#f0f0f0;">
-                    <th style="border:1px solid #000;padding:2px 3px;white-space:nowrap;">Description</th>
-                    <th style="border:1px solid #000;padding:2px 3px;text-align:left;">Notes</th>
+                  <tr>
+                    <th class="col-header" style="border:1px solid #000;padding:2px 3px;white-space:nowrap;background-color:#f0f0f0;">Description</th>
+                    <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;background-color:#f0f0f0;">Notes</th>
                     ${weekDates.days.map((day, idx) => `
-                      <th style="border:1px solid #000;padding:2px 1px;text-align:center;">
+                      <th class="col-header" style="border:1px solid #000;padding:2px 1px;text-align:center;background-color:#f0f0f0;">
                         <div>${format(day, 'EEE')}</div>
                         <div style="font-size:6.5pt;font-weight:normal;">${formatDateShort(weekDates.days[idx])}</div>
                       </th>`).join('')}
-                    <th style="border:1px solid #000;padding:2px 3px;text-align:center;white-space:nowrap;">Total</th>
+                    <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:center;white-space:nowrap;background-color:#f0f0f0;">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -459,7 +459,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                     <tr>
                       <td style="border:1px solid #000;padding:2px 3px;font-weight:bold;">${entry.description}</td>
                       <td style="border:1px solid #000;padding:2px 3px;">${escapeHtml(entry.notes || '')}</td>
-                      ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}</td>`).join('')}
+                      ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursDayCell(Number(entry[`${day}_hours`]) || 0)}</td>`).join('')}
                       <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${formatHoursAmount(calculateTotal(entry))}</td>
                     </tr>`).join('')}
                   <tr style="background-color:#FFFF99;font-weight:bold;">
@@ -490,16 +490,29 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
             <title>Timesheets Export - ${formatDateInEastern(new Date())}</title>
             <style>
               @page { size: landscape; margin: 0.25in; }
+              html, body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
               @media print {
                 @page { size: landscape; margin: 0.25in; }
                 html, body { margin: 0; padding: 0; }
                 .print-hide { display: none !important; }
                 .timesheet-page { overflow: hidden; }
+                html, body, th, td, tr, div {
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
               }
               body { font-family: Arial, sans-serif; font-size: 7.5pt; margin: 0.1in; padding: 0; color: #000; }
               .print-hide {
                 background: #fef3c7; padding: 8px 12px; margin-bottom: 12px;
                 font-size: 11px; border: 1px solid #f59e0b; border-radius: 6px;
+              }
+              th.col-header {
+                background-color: #f0f0f0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
               }
             </style>
             <script>

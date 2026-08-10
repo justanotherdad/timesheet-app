@@ -68,6 +68,15 @@ export function formatHoursAmount(val: number | null | undefined): string {
   return formatHoursDigits(n)
 }
 
+/**
+ * Day-cell hours on read-only / PDF views: "-" when zero so reviewers can
+ * scan for real hours. Row totals / subtotals still use formatHoursAmount.
+ */
+export function formatHoursDayCell(val: number | null | undefined): string {
+  if (val == null || !Number.isFinite(Number(val)) || Number(val) === 0) return '-'
+  return formatHoursDigits(Number(val))
+}
+
 /** Clamp to [0, 24] and round to thousandths for timesheet day-hour inputs and saves. */
 export function normalizeTimesheetHours(val: number): number {
   if (!Number.isFinite(val)) return 0

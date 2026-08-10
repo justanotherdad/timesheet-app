@@ -12,6 +12,7 @@ import {
   getCalendarDateStringInAppTimezone,
   formatDateShort,
   formatHoursAmount,
+  formatHoursDayCell,
 } from '@/lib/utils'
 import { format } from 'date-fns'
 import { CheckCircle, XCircle, Clock, FileText, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -509,7 +510,7 @@ export default async function TimesheetDetailPage({
                           </td>
                           {days.map((day) => (
                             <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
-                              {formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}
+                              {formatHoursDayCell(Number(entry[`${day}_hours`]) || 0)}
                             </td>
                           ))}
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-right font-medium text-gray-900 dark:text-gray-100">
@@ -597,7 +598,7 @@ export default async function TimesheetDetailPage({
                             </td>
                             {days.map((day) => (
                               <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-sm text-right tabular-nums text-gray-900 dark:text-gray-100">
-                                {formatHoursAmount(Number(entry[`${day}_hours`]) || 0)}
+                                {formatHoursDayCell(Number(entry[`${day}_hours`]) || 0)}
                               </td>
                             ))}
                             <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-sm text-right tabular-nums font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">

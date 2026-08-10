@@ -193,7 +193,10 @@ export default function WeeklyTimesheetForm({
   const [showCopyModal, setShowCopyModal] = useState(false)
   const [showUnbillableTypeMenu, setShowUnbillableTypeMenu] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
-  const isNewTimesheet = !timesheetId
+  // Week ending is editable on create, and again when the sheet is still a draft
+  // or rejected. Submitted/approved (incl. admin in-place edit) stay locked.
+  const canChangeWeekEnding =
+    !timesheetId || currentStatus === 'draft' || currentStatus === 'rejected'
 
   const weekEndingOptions = useMemo(() => {
     const opts = getWeekEndingSundayOptions()
@@ -769,7 +772,7 @@ export default function WeeklyTimesheetForm({
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Week Ending Date
               </label>
-              {isNewTimesheet ? (
+              {canChangeWeekEnding ? (
                 <select
                   value={weekEnding}
                   onChange={(e) => setWeekEnding(e.target.value)}

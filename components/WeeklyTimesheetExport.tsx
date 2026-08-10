@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { Download, Printer, Filter } from 'lucide-react'
-import { formatDate, formatDateShort, formatDateInEastern, formatHoursAmount, getWeekDates } from '@/lib/utils'
+import { formatDate, formatDateShort, formatDateInEastern, formatHoursAmount, formatHoursDayCell, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
 
 // SVG: Rotate phone to landscape (instructional icon - no external assets)
@@ -139,17 +139,31 @@ export default function WeeklyTimesheetExport({
     <title>Weekly Time Sheet - ${formatDate(weekDates.end)}</title>
     <style>
       @page { size: landscape; margin: 0.25in; }
+      html, body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
       @media print {
         @page { size: landscape; margin: 0.25in; }
         html, body { margin: 0; padding: 0; }
         .print-hide { display: none !important; }
         /* Safety net: never let content bleed past the page boundary */
         .timesheet-page { overflow: hidden; }
+        /* Keep gray headers / yellow subtotals / green grand total in saved PDFs */
+        html, body, th, td, tr, div {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
       }
       body { font-family: Arial, sans-serif; font-size: 8pt; margin: 0.1in; padding: 0; color: #000; }
       .print-hide {
         background: #fef3c7; padding: 8px 12px; margin-bottom: 12px;
         font-size: 11px; border: 1px solid #f59e0b; border-radius: 6px;
+      }
+      th.col-header {
+        background-color: #f0f0f0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
     </style>
     <script>
@@ -248,15 +262,15 @@ export default function WeeklyTimesheetExport({
         <!-- Billable table with fixed layout so all columns fit on landscape page -->
         <table style="width:100%; border-collapse:collapse; margin-bottom:4px; font-size:7.5pt; table-layout:fixed;">
           ${billableColgroup}
-          <thead><tr style="background-color:#f0f0f0;">
-            <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">Client / Project #</th>
-            <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">PO#</th>
-            <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">Task Description</th>
-            <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">System</th>
-            <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">Deliverable</th>
-            <th style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;">Activity</th>
-            ${weekDates.days.map((d, i) => `<th style="border:1px solid #000;padding:2px 1px;text-align:center;"><div>${format(d, 'EEE')}</div><div style="font-size:6.5pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}
-            <th style="border:1px solid #000;padding:2px 3px;text-align:center;">Total</th>
+          <thead><tr>
+            <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">Client / Project #</th>
+            <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">PO#</th>
+            <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">Task Description</th>
+            <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">System</th>
+            <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">Deliverable</th>
+            <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;overflow:hidden;background-color:#f0f0f0;">Activity</th>
+            ${weekDates.days.map((d, i) => `<th class="col-header" style="border:1px solid #000;padding:2px 1px;text-align:center;background-color:#f0f0f0;"><div>${format(d, 'EEE')}</div><div style="font-size:6.5pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}
+            <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:center;background-color:#f0f0f0;">Total</th>
           </tr></thead>
           <tbody>
             ${entriesToUse.map((e: any) => `<tr>
@@ -266,12 +280,12 @@ export default function WeeklyTimesheetExport({
               <td style="border:1px solid #000;padding:2px 3px;overflow:hidden;">${escapeHtml(e.system_name || e.systems?.name || '—')}</td>
               <td style="border:1px solid #000;padding:2px 3px;overflow:hidden;">${escapeHtml(e.deliverables?.name || '—')}</td>
               <td style="border:1px solid #000;padding:2px 3px;overflow:hidden;">${escapeHtml(e.activities?.name || '—')}</td>
-              ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(Number(e[`${day}_hours`]) || 0)}</td>`).join('')}
+              ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursDayCell(Number(e[`${day}_hours`]) || 0)}</td>`).join('')}
               <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${formatHoursAmount(calculateTotal(e))}</td>
             </tr>`).join('')}
             ${Array.from({ length: Math.max(0, 3 - entriesToUse.length) }).map(() => `<tr>
               ${[1,2,3,4,5,6].map(() => '<td style="border:1px solid #000;padding:2px 3px;"></td>').join('')}
-              ${days.map(() => '<td style="border:1px solid #000;padding:2px 1px;text-align:right;">0.00</td>').join('')}
+              ${days.map(() => '<td style="border:1px solid #000;padding:2px 1px;text-align:right;">-</td>').join('')}
               <td style="border:1px solid #000;padding:2px 3px;text-align:right;">0.00</td>
             </tr>`).join('')}
             <tr style="background-color:#FFFF99;font-weight:bold;">
@@ -302,17 +316,17 @@ export default function WeeklyTimesheetExport({
               ${days.map(() => `<col style="width:${BILLABLE_COL_WIDTHS.day}"/>`).join('')}
               <col style="width:${BILLABLE_COL_WIDTHS.total}"/>
             </colgroup>
-            <thead><tr style="background-color:#f0f0f0;">
-              <th style="border:1px solid #000;padding:2px 3px;white-space:nowrap;">Description</th>
-              <th style="border:1px solid #000;padding:2px 3px;text-align:left;">Notes</th>
-              ${weekDates.days.map((d, i) => `<th style="border:1px solid #000;padding:2px 1px;text-align:center;"><div>${format(d, 'EEE')}</div><div style="font-size:6.5pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}
-              <th style="border:1px solid #000;padding:2px 3px;text-align:center;white-space:nowrap;">Total</th>
+            <thead><tr>
+              <th class="col-header" style="border:1px solid #000;padding:2px 3px;white-space:nowrap;background-color:#f0f0f0;">Description</th>
+              <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:left;background-color:#f0f0f0;">Notes</th>
+              ${weekDates.days.map((d, i) => `<th class="col-header" style="border:1px solid #000;padding:2px 1px;text-align:center;background-color:#f0f0f0;"><div>${format(d, 'EEE')}</div><div style="font-size:6.5pt;">${formatDateShort(weekDates.days[i])}</div></th>`).join('')}
+              <th class="col-header" style="border:1px solid #000;padding:2px 3px;text-align:center;white-space:nowrap;background-color:#f0f0f0;">Total</th>
             </tr></thead>
             <tbody>
               ${unbillableToUse.map((u: any) => `<tr>
                 <td style="border:1px solid #000;padding:2px 3px;font-weight:bold;">${escapeHtml(u.description)}</td>
                 <td style="border:1px solid #000;padding:2px 3px;">${escapeHtml(u.notes || '')}</td>
-                ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursAmount(Number(u[`${day}_hours`]) || 0)}</td>`).join('')}
+                ${days.map(day => `<td style="border:1px solid #000;padding:2px 1px;text-align:right;">${formatHoursDayCell(Number(u[`${day}_hours`]) || 0)}</td>`).join('')}
                 <td style="border:1px solid #000;padding:2px 3px;text-align:right;font-weight:bold;">${formatHoursAmount(calculateTotal(u))}</td>
               </tr>`).join('')}
               <tr style="background-color:#FFFF99;font-weight:bold;">
