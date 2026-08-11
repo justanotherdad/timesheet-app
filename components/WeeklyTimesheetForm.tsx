@@ -193,10 +193,12 @@ export default function WeeklyTimesheetForm({
   const [showCopyModal, setShowCopyModal] = useState(false)
   const [showUnbillableTypeMenu, setShowUnbillableTypeMenu] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
-  // Week ending is editable on create, and again when the sheet is still a draft
-  // or rejected. Submitted/approved (incl. admin in-place edit) stay locked.
+  // Week ending: create, draft, rejected — or any status when an admin is editing.
   const canChangeWeekEnding =
-    !timesheetId || currentStatus === 'draft' || currentStatus === 'rejected'
+    isAdminEditor ||
+    !timesheetId ||
+    currentStatus === 'draft' ||
+    currentStatus === 'rejected'
 
   const weekEndingOptions = useMemo(() => {
     const opts = getWeekEndingSundayOptions()
@@ -352,6 +354,41 @@ export default function WeeklyTimesheetForm({
       // ref is authoritative because it is set synchronously on create.
       let currentTimesheetId = timesheetId || createdTimesheetIdRef.current || createdTimesheetId
       const newStatus = shouldSubmit ? 'submitted' : 'draft'
+
+      // Admin editing an existing sheet (any owner): service-role API so RLS does
+      // not block timesheet_entries / unbillable writes on other users' sheets.
+      if (isAdminEditor && currentTimesheetId) {
+        const res = await fetch(`/api/timesheets/${currentTimesheetId}/admin-save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            week_ending: weekEnding,
+            week_starting: formatDateForInput(weekDates.start),
+            notes: timesheetNotes.trim() || null,
+            billable_entries: billableEntries,
+            unbillable_entries: unbillableEntries,
+            submit: shouldSubmit,
+          }),
+        })
+        const payload = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(payload.error || 'Failed to save timesheet')
+        }
+        if (shouldSubmit) {
+          router.refresh()
+          router.push('/dashboard/timesheets')
+        } else {
+          router.refresh()
+          const preservedAdminEdit =
+            currentStatus === 'approved' || currentStatus === 'submitted'
+          router.push(
+            preservedAdminEdit
+              ? `/dashboard/timesheets/${currentTimesheetId}`
+              : `/dashboard/timesheets/${currentTimesheetId}/edit`
+          )
+        }
+        return
+      }
 
       if (currentTimesheetId) {
         // Update existing timesheet

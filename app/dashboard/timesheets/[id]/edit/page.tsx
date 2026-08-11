@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import WeeklyTimesheetForm from '@/components/WeeklyTimesheetForm'
-import { formatDateForInput } from '@/lib/utils'
+import { formatDateForInput, formatWeekEnding } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import { loadTimesheetDropdownData } from '@/lib/timesheet-bill-rate-access'
 import { loadUnbillableDescriptionOptions } from '@/lib/payroll'
@@ -87,12 +87,24 @@ export default async function EditTimesheetPage({
   } = await loadTimesheetDropdownData({
     supabase,
     admin: adminSupabase,
-    userId: user.id,
+    userId: timesheet.user_id,
     userRole: user.profile.role,
     entryPoIds,
   })
 
   const unbillableDescriptionOptions = await loadUnbillableDescriptionOptions()
+
+  // Owner profile for admin edit clarity (and correct userId on the form)
+  const timesheetUserId = timesheet.user_id as string
+  let employeeName = 'Employee'
+  {
+    const { data: ownerProfile } = await adminSupabase
+      .from('user_profiles')
+      .select('name')
+      .eq('id', timesheetUserId)
+      .maybeSingle()
+    if (ownerProfile?.name) employeeName = ownerProfile.name
+  }
 
   // Get existing unbillable entries
   const unbillableResult = await withQueryTimeout<Array<any>>(() =>
@@ -105,7 +117,6 @@ export default async function EditTimesheetPage({
   const unbillable = Array.isArray(unbillableResult.data) ? unbillableResult.data : []
 
   // Previous week data for "Copy Previous Week" (week before this timesheet's week_ending)
-  const timesheetUserId = timesheet.user_id
   let previousWeekData: {
     entries?: Array<{
       client_project_id?: string
@@ -215,6 +226,17 @@ export default async function EditTimesheetPage({
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="Edit Weekly Timesheet" showBack backUrl={`/dashboard/timesheets/${id}`} user={user} />
       <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
+        <div className="mb-4">
+          <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Editing: {employeeName}
+          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Week ending {formatWeekEnding(timesheet.week_ending)}
+            {['admin', 'super_admin'].includes(user.profile.role) && timesheet.user_id !== user.id
+              ? ' · Admin edit'
+              : ''}
+          </p>
+        </div>
         {timesheet.status === 'rejected' && (
           <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
             <a
@@ -241,7 +263,7 @@ export default async function EditTimesheetPage({
               projectBudgetCombosByPo={projectBudgetCombosByPo}
               unbillableDescriptionOptions={unbillableDescriptionOptions}
               defaultWeekEnding={formatDateForInput(new Date(timesheet.week_ending))}
-              userId={user.id}
+              userId={timesheetUserId}
               timesheetId={timesheet.id}
               timesheetStatus={timesheet.status}
               rejectionReason={timesheet.rejection_reason ?? undefined}

@@ -239,6 +239,17 @@ export default function MyTimesheetsTable({
                         Edit
                       </Link>
                     )}
+                    {['admin', 'super_admin'].includes(user.profile.role) &&
+                      (ts.status === 'submitted' ||
+                        ts.status === 'approved' ||
+                        (ts.status === 'rejected' && ts.user_id !== user.id)) && (
+                      <Link
+                        href={`/dashboard/timesheets/${ts.id}/edit`}
+                        className="text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
+                      >
+                        Edit (Admin)
+                      </Link>
+                    )}
                     {ts.status === 'approved' && ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role) && (
                       <Link
                         href={`/dashboard/approvals/${ts.id}/reject-form`}
