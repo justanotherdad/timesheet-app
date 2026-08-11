@@ -3,7 +3,8 @@ import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
-import { getPendingApprovalTimesheets, sortPendingApprovals } from '@/lib/approval-queue'
+import { getWorkflowApprovalTimesheets, sortWorkflowApprovals } from '@/lib/approval-queue'
+import { getApprovedTimesheetsForViewer } from '@/lib/approved-timesheets-query'
 import Link from 'next/link'
 import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList, FileBarChart, ClipboardCheck, DollarSign } from 'lucide-react'
 import { formatWeekEnding, formatDate, getCalendarDateStringInAppTimezone } from '@/lib/utils'
@@ -84,9 +85,11 @@ export default async function DashboardPage() {
     }
   }
 
-  // Pending approvals: same scope as /dashboard/approvals (profile chain + budget approvers + delegation)
+  // Pending / in-workflow: full list for the panel; badge count = awaiting only
   let pendingApprovals: any[] = []
   let pendingApprovalsCount = 0
+  let awaitingYourApprovalCount = 0
+  let inWorkflowCount = 0
   let hasActiveDelegationAsDelegate = false
   const adminSupabase = createAdminClient()
   const today = getCalendarDateStringInAppTimezone()
@@ -98,13 +101,15 @@ export default async function DashboardPage() {
     .gte('end_date', today)
   hasActiveDelegationAsDelegate = (delegationRows || []).length > 0
 
-  const allPendingForUser = sortPendingApprovals(
-    await getPendingApprovalTimesheets(user),
+  const allWorkflow = sortWorkflowApprovals(
+    await getWorkflowApprovalTimesheets(user),
     'submitted_at',
     'asc'
   )
-  pendingApprovals = allPendingForUser.slice(0, 5)
-  pendingApprovalsCount = allPendingForUser.length
+  awaitingYourApprovalCount = allWorkflow.filter((t) => t.awaitingMyApproval).length
+  inWorkflowCount = allWorkflow.length
+  pendingApprovalsCount = awaitingYourApprovalCount
+  pendingApprovals = allWorkflow.slice(0, 5)
 
   let showTimesheetConfirmationsCard = false
   let timesheetConfirmationsPending = 0
@@ -121,102 +126,10 @@ export default async function DashboardPage() {
     timesheetConfirmationsPending = pendingConfirmations.length
   }
 
-  // Approved timesheets for people in THIS user's approval chain (reports_to /
-  // supervisor / manager / final_approver). Same rule for admin/super_admin —
-  // they must not see company-wide approved sheets here (use My Timesheets for
-  // that). Also includes submitted sheets this user already signed that are
-  // still awaiting a later approver.
-  // Clients: timesheets they personally signed (no profile chain).
+  // Approved timesheets (incl. signed-but-not-fully-approved); chain + signed
   let approvedTimesheets: any[] = []
   if (['supervisor', 'manager', 'admin', 'super_admin', 'client'].includes(user.profile.role)) {
-    const adminSupabaseForApproved = createAdminClient()
-
-    if (isClient) {
-      const signedResult = await withQueryTimeout(() =>
-        adminSupabaseForApproved.from('timesheet_signatures').select('timesheet_id').eq('signer_id', user.id)
-      )
-      const signedIds = [
-        ...new Set(
-          ((signedResult.data || []) as { timesheet_id: string }[]).map((r) => r.timesheet_id)
-        ),
-      ]
-      if (signedIds.length > 0) {
-        const approvedResult = await withQueryTimeout(() =>
-          adminSupabaseForApproved
-            .from('weekly_timesheets')
-            .select('*, user_profiles!user_id(name)')
-            .in('id', signedIds)
-            .in('status', ['approved', 'submitted'])
-            .order('approved_at', { ascending: false })
-        )
-        const rows = (Array.isArray(approvedResult.data) ? approvedResult.data : []) as any[]
-        rows.sort((a, b) => {
-          const aVal = a.approved_at || a.submitted_at || a.created_at || ''
-          const bVal = b.approved_at || b.submitted_at || b.created_at || ''
-          return bVal.localeCompare(aVal)
-        })
-        approvedTimesheets = rows.slice(0, 5)
-      }
-    } else {
-      const reportsResult = await withQueryTimeout(() =>
-        adminSupabaseForApproved
-          .from('user_profiles')
-          .select('id')
-          .or(
-            `reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`
-          )
-      )
-      const reportIds = ((reportsResult.data || []) as Array<{ id: string }>).map((r) => r.id)
-
-      if (reportIds.length > 0) {
-        const approvedResult = await withQueryTimeout(() =>
-          adminSupabaseForApproved
-            .from('weekly_timesheets')
-            .select('*, user_profiles!user_id(name)')
-            .in('user_id', reportIds)
-            .eq('status', 'approved')
-            .order('approved_at', { ascending: false })
-        )
-        const fullyApproved = (Array.isArray(approvedResult.data) ? approvedResult.data : []) as any[]
-
-        let partiallyApproved: any[] = []
-        const signedResult = await withQueryTimeout(() =>
-          adminSupabaseForApproved.from('timesheet_signatures').select('timesheet_id').eq('signer_id', user.id)
-        )
-        const signedIds = [
-          ...new Set(
-            ((signedResult.data || []) as { timesheet_id: string }[]).map((r) => r.timesheet_id)
-          ),
-        ]
-        if (signedIds.length > 0) {
-          const partialResult = await withQueryTimeout(() =>
-            adminSupabaseForApproved
-              .from('weekly_timesheets')
-              .select('*, user_profiles!user_id(name)')
-              .eq('status', 'submitted')
-              .in('id', signedIds)
-              .in('user_id', reportIds)
-              .order('submitted_at', { ascending: false })
-          )
-          partiallyApproved = (Array.isArray(partialResult.data) ? partialResult.data : []) as any[]
-        }
-
-        const seen = new Set<string>()
-        const merged: any[] = []
-        ;[...fullyApproved, ...partiallyApproved].forEach((ts) => {
-          if (!seen.has(ts.id)) {
-            seen.add(ts.id)
-            merged.push(ts)
-          }
-        })
-        merged.sort((a, b) => {
-          const aVal = a.approved_at || a.submitted_at || a.created_at || ''
-          const bVal = b.approved_at || b.submitted_at || b.created_at || ''
-          return bVal.localeCompare(aVal)
-        })
-        approvedTimesheets = merged.slice(0, 5)
-      }
-    }
+    approvedTimesheets = await getApprovedTimesheetsForViewer(user, { limit: 5 })
   }
 
   // Bulletin Board posts (below tiles, above list panels).
@@ -292,12 +205,26 @@ export default async function DashboardPage() {
                   ) : null}
                 </h2>
               </Link>
+              <div className="flex flex-wrap gap-3 text-xs text-gray-600 dark:text-gray-400 mb-3">
+                <span>
+                  <span className="font-semibold text-orange-700 dark:text-orange-300">Awaiting your approval:</span>{' '}
+                  {awaitingYourApprovalCount}
+                </span>
+                <span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-200">In workflow:</span>{' '}
+                  {inWorkflowCount}
+                </span>
+              </div>
               {pendingApprovals.length > 0 ? (
                 <div className="space-y-2">
                   {pendingApprovals.map((ts: any) => (
                     <div
                       key={ts.id}
-                      className="border border-orange-200 dark:border-orange-800 rounded p-3 bg-orange-50 dark:bg-orange-900/20"
+                      className={`border rounded p-3 ${
+                        ts.awaitingMyApproval
+                          ? 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20'
+                          : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30'
+                      }`}
                     >
                       <div className="flex justify-between items-center">
                         <div>
@@ -307,19 +234,22 @@ export default async function DashboardPage() {
                           <p className="text-sm text-gray-600 dark:text-gray-300">
                             Week Ending: {formatWeekEnding(ts.week_ending)}
                           </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {ts.awaitingMyApproval ? 'Your turn' : 'In workflow'}
+                          </p>
                         </div>
                         <Link
                           href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard/approvals')}`}
                           className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                         >
-                          Review →
+                          {ts.awaitingMyApproval ? 'Review →' : 'View →'}
                         </Link>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-500 dark:text-gray-400">No pending approvals.</p>
+                <p className="text-gray-500 dark:text-gray-400">No timesheets in your approval workflow.</p>
               )}
             </div>
 
@@ -682,31 +612,56 @@ export default async function DashboardPage() {
               >
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                   Pending Approvals
+                  {pendingApprovalsCount > 0 ? (
+                    <span className="ml-2 text-sm font-normal text-orange-600 dark:text-orange-400">
+                      ({pendingApprovalsCount})
+                    </span>
+                  ) : null}
                 </h2>
               </Link>
+              <div className="flex flex-wrap gap-3 text-xs text-gray-600 dark:text-gray-400 mb-3">
+                <span>
+                  <span className="font-semibold text-orange-700 dark:text-orange-300">Awaiting your approval:</span>{' '}
+                  {awaitingYourApprovalCount}
+                </span>
+                <span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-200">In workflow:</span>{' '}
+                  {inWorkflowCount}
+                </span>
+              </div>
               {pendingApprovals.length > 0 ? (
                 <div className="space-y-2">
                   {pendingApprovals.map((ts: any) => (
-                    <div key={ts.id} className="border border-orange-200 dark:border-orange-800 rounded p-3 bg-orange-50 dark:bg-orange-900/20">
+                    <div
+                      key={ts.id}
+                      className={`border rounded p-3 ${
+                        ts.awaitingMyApproval
+                          ? 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20'
+                          : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30'
+                      }`}
+                    >
                       <div className="flex justify-between items-center">
                         <div>
                           <p className="font-medium text-gray-900 dark:text-gray-100">{ts.user_profiles.name}</p>
                           <p className="text-sm text-gray-600 dark:text-gray-300">
                             Week Ending: {formatWeekEnding(ts.week_ending)}
                           </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {ts.awaitingMyApproval ? 'Your turn' : 'In workflow'}
+                          </p>
                         </div>
                         <Link
                           href={`/dashboard/timesheets/${ts.id}?returnTo=${encodeURIComponent('/dashboard/approvals')}`}
                           className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                         >
-                          Review →
+                          {ts.awaitingMyApproval ? 'Review →' : 'View →'}
                         </Link>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-500 dark:text-gray-400">No pending approvals.</p>
+                <p className="text-gray-500 dark:text-gray-400">No timesheets in your approval workflow.</p>
               )}
             </div>
           )}

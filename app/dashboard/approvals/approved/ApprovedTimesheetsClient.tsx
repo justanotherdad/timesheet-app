@@ -22,6 +22,8 @@ interface ApprovedTimesheetsClientProps {
   sortDir: string
   signaturesByTimesheetId: Record<string, string[]>
   approverNamesById: Record<string, string>
+  withLabelByTimesheetId?: Record<string, string>
+  withPersonByTimesheetId?: Record<string, string>
   userRole?: string
   hourTotals?: Record<string, HourTotals>
 }
@@ -39,6 +41,8 @@ export default function ApprovedTimesheetsClient({
   sortDir,
   signaturesByTimesheetId,
   approverNamesById,
+  withLabelByTimesheetId = {},
+  withPersonByTimesheetId = {},
   userRole,
   hourTotals = {},
 }: ApprovedTimesheetsClientProps) {
@@ -107,6 +111,7 @@ export default function ApprovedTimesheetsClient({
   const getWithLabel = (ts: any) => {
     if (ts.status === 'rejected') return 'Rejected'
     if (ts.status === 'approved') return 'Approved'
+    if (withLabelByTimesheetId[ts.id]) return withLabelByTimesheetId[ts.id]
     if (ts.status === 'submitted') {
       const nextId = getNextApproverId(ts)
       if (!nextId) return 'Approved'
@@ -122,6 +127,7 @@ export default function ApprovedTimesheetsClient({
   const getWithPersonName = (ts: any) => {
     if (ts.status === 'rejected') return 'Rejected'
     if (ts.status === 'approved') return 'Approved'
+    if (withPersonByTimesheetId[ts.id]) return withPersonByTimesheetId[ts.id]
     if (ts.status === 'submitted') {
       const nextId = getNextApproverId(ts)
       if (!nextId) return 'Approved'

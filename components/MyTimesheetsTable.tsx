@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { formatWeekEnding } from '@/lib/utils'
+import { describeApprovalWith } from '@/lib/approval-with-display'
 import { FileText, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import DeleteTimesheetButton from '@/components/DeleteTimesheetButton'
@@ -14,8 +15,8 @@ interface MyTimesheetsTableProps {
   user: { id: string; profile: { role: string } }
   signaturesByTimesheetId?: Record<string, { signer_id: string }[]>
   approverNamesById?: Record<string, string>
-  /** When submitted and in budget stage, pending budget approver ids (parallel). */
-  pendingBudgetApproverIdsByTimesheetId?: Record<string, string[]>
+  /** Full required budget approver ids per timesheet (not just pending). */
+  requiredBudgetApproverIdsByTimesheetId?: Record<string, string[]>
   /** timesheetId → userId → "Name - approving for PO …" for budget approvers. */
   budgetApproverDisplayByTimesheetId?: Record<string, Record<string, string>>
 }
@@ -27,7 +28,7 @@ export default function MyTimesheetsTable({
   user,
   signaturesByTimesheetId = {},
   approverNamesById = {},
-  pendingBudgetApproverIdsByTimesheetId = {},
+  requiredBudgetApproverIdsByTimesheetId = {},
   budgetApproverDisplayByTimesheetId = {},
 }: MyTimesheetsTableProps) {
   const router = useRouter()
@@ -52,60 +53,31 @@ export default function MyTimesheetsTable({
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1 inline" /> : <ArrowDown className="h-3 w-3 ml-1 inline" />
   }
 
-  const getNextApproverId = (ts: any): string | undefined => {
-    if (ts.status !== 'submitted') return undefined
-    const pendingBudget = pendingBudgetApproverIdsByTimesheetId[ts.id]
-    if (pendingBudget && pendingBudget.length > 0) return pendingBudget[0]
-    const profile = ts.user_profiles as { reports_to_id?: string; manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
-    if (!profile) return undefined
-    const chain: string[] = []
-    const first = profile.supervisor_id || profile.reports_to_id
-    if (first) chain.push(first)
-    if (profile.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
-    if (profile.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
+  const getWithInfo = (ts: any) => {
+    if (ts.status === 'draft') return { label: '—', person: '—' }
+    if (ts.status === 'rejected') return { label: 'Rejected', person: 'Rejected' }
+    if (ts.status === 'approved') return { label: 'Approved', person: 'Approved' }
+    if (ts.status !== 'submitted') return { label: '—', person: '—' }
+    const profile = ts.user_profiles as {
+      reports_to_id?: string
+      manager_id?: string
+      supervisor_id?: string
+      final_approver_id?: string
+    } | undefined
     const signedIds = (signaturesByTimesheetId[ts.id] || []).map((s: { signer_id: string }) => s.signer_id)
-    return chain.find((uid) => !signedIds.includes(uid))
+    return describeApprovalWith(
+      requiredBudgetApproverIdsByTimesheetId[ts.id] || [],
+      profile || null,
+      signedIds,
+      {
+        approverNamesById,
+        budgetDisplayByUserId: budgetApproverDisplayByTimesheetId[ts.id] || {},
+      }
+    )
   }
 
-  const getWithLabel = (ts: any) => {
-    if (ts.status === 'draft') return '—'
-    if (ts.status === 'rejected') return 'Rejected'
-    if (ts.status === 'approved') return 'Approved'
-    if (ts.status === 'submitted') {
-      const pendingBudget = pendingBudgetApproverIdsByTimesheetId[ts.id]
-      if (pendingBudget && pendingBudget.length > 0) {
-        return pendingBudget.length === 1 ? 'With Budget Approver' : 'With Budget Approvers'
-      }
-      const nextId = getNextApproverId(ts)
-      if (!nextId) return 'Approved'
-      const profile = ts.user_profiles as { manager_id?: string; supervisor_id?: string; final_approver_id?: string } | undefined
-      if (nextId === profile?.manager_id) return 'With Manager'
-      if (nextId === profile?.supervisor_id) return 'With Supervisor'
-      if (nextId === profile?.final_approver_id) return 'With Final Approver'
-      return '—'
-    }
-    return '—'
-  }
-
-  const getWithPersonName = (ts: any) => {
-    if (ts.status === 'draft') return '—'
-    if (ts.status === 'rejected') return 'Rejected'
-    if (ts.status === 'approved') return 'Approved'
-    if (ts.status === 'submitted') {
-      const pendingBudget = pendingBudgetApproverIdsByTimesheetId[ts.id]
-      if (pendingBudget && pendingBudget.length > 0) {
-        const labels = pendingBudget.map((id) => {
-          return budgetApproverDisplayByTimesheetId[ts.id]?.[id] || approverNamesById[id]
-        }).filter(Boolean)
-        if (labels.length > 0) return labels.join('; ')
-        return getWithLabel(ts)
-      }
-      const nextId = getNextApproverId(ts)
-      if (!nextId) return 'Approved'
-      return approverNamesById[nextId] || getWithLabel(ts)
-    }
-    return '—'
-  }
+  const getWithLabel = (ts: any) => getWithInfo(ts).label
+  const getWithPersonName = (ts: any) => getWithInfo(ts).person
 
   const getStatusIcon = (status: string) => {
     switch (status) {

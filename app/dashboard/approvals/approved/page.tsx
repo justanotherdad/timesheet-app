@@ -2,6 +2,14 @@ import { requireRole } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import { buildApproverDisplayNamesByNextId } from '@/lib/approval-delegation-display'
+import { getApprovedTimesheetsForViewer } from '@/lib/approved-timesheets-query'
+import { describeApprovalWith } from '@/lib/approval-with-display'
+import {
+  getRequiredBudgetApproverIdsByTimesheet,
+  getBudgetApproverPoNumbersByTimesheet,
+  formatBudgetApproverDisplayName,
+  type ApprovalProfileFields,
+} from '@/lib/budget-timesheet-approvers'
 import { getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import { getTimesheetHourTotalsForApproverViewer } from '@/lib/timesheet-hour-totals'
@@ -26,99 +34,13 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
 
   const adminSupabase = createAdminClient()
 
-  let timesheets: any[] = []
+  let timesheets = await getApprovedTimesheetsForViewer(user, {
+    filterUser,
+    filterStart,
+    filterEnd,
+  })
 
-  if (isClient) {
-    // Clients only see timesheets they personally signed
-    const signedResult = await withQueryTimeout(() =>
-      adminSupabase.from('timesheet_signatures').select('timesheet_id').eq('signer_id', user.id)
-    )
-    const signedTimesheetIds = [
-      ...new Set(
-        ((signedResult.data || []) as { timesheet_id: string }[]).map((r) => r.timesheet_id)
-      ),
-    ]
-    if (signedTimesheetIds.length > 0) {
-      let clientQuery = adminSupabase
-        .from('weekly_timesheets')
-        .select(
-          '*, user_profiles!user_id(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)'
-        )
-        .in('id', signedTimesheetIds)
-        .in('status', ['approved', 'submitted'])
-      if (filterUser) clientQuery = clientQuery.eq('user_id', filterUser)
-      if (filterStart) clientQuery = clientQuery.gte('week_ending', filterStart)
-      if (filterEnd) clientQuery = clientQuery.lte('week_ending', filterEnd)
-      const clientResult = await withQueryTimeout(() => clientQuery)
-      timesheets = (clientResult.data || []) as any[]
-    }
-  } else {
-    // People in THIS user's approval chain only. Admin/super_admin use the same
-    // scope here — company-wide viewing stays on My Timesheets.
-    const reportsResult = await withQueryTimeout(() =>
-      adminSupabase
-        .from('user_profiles')
-        .select('id')
-        .or(
-          `reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`
-        )
-    )
-    const reports = (reportsResult.data || []) as { id: string }[]
-    const userIds = [user.id, ...reports.map((r) => r.id)]
-
-    // 1. Fully approved timesheets for people in the chain
-    let approvedQuery = adminSupabase
-      .from('weekly_timesheets')
-      .select(
-        '*, user_profiles!user_id(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)'
-      )
-      .eq('status', 'approved')
-      .in('user_id', userIds)
-
-    if (filterUser) approvedQuery = approvedQuery.eq('user_id', filterUser)
-    if (filterStart) approvedQuery = approvedQuery.gte('week_ending', filterStart)
-    if (filterEnd) approvedQuery = approvedQuery.lte('week_ending', filterEnd)
-
-    const approvedResult = await withQueryTimeout(() => approvedQuery)
-    const fullyApproved = (approvedResult.data || []) as any[]
-
-    // 2. Partially approved: submitted timesheets where current user has signed
-    let partiallyApproved: any[] = []
-    const signedResult = await withQueryTimeout(() =>
-      adminSupabase.from('timesheet_signatures').select('timesheet_id').eq('signer_id', user.id)
-    )
-    const signedTimesheetIds = ((signedResult.data || []) as { timesheet_id: string }[]).map(
-      (r) => r.timesheet_id
-    )
-
-    if (signedTimesheetIds.length > 0) {
-      let partialQuery = adminSupabase
-        .from('weekly_timesheets')
-        .select(
-          '*, user_profiles!user_id(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)'
-        )
-        .eq('status', 'submitted')
-        .in('id', signedTimesheetIds)
-        .in('user_id', userIds)
-
-      if (filterUser) partialQuery = partialQuery.eq('user_id', filterUser)
-      if (filterStart) partialQuery = partialQuery.gte('week_ending', filterStart)
-      if (filterEnd) partialQuery = partialQuery.lte('week_ending', filterEnd)
-
-      const partialResult = await withQueryTimeout(() => partialQuery)
-      partiallyApproved = (partialResult.data || []) as any[]
-    }
-
-    const seenIds = new Set<string>()
-    ;[...fullyApproved, ...partiallyApproved].forEach((ts) => {
-      if (!seenIds.has(ts.id)) {
-        seenIds.add(ts.id)
-        timesheets.push(ts)
-      }
-    })
-  }
-
-  // Auto-approve submitted timesheets where employee has no approvers (final approver with no one above)
+  // Auto-approve submitted timesheets where employee has no approvers left
   const submittedInList = timesheets.filter((ts: any) => ts.status === 'submitted')
   if (submittedInList.length > 0) {
     const autoApproved = await Promise.all(
@@ -128,22 +50,29 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
       const ids = timesheets.map((t: any) => t.id)
       const { data: refetched } = await adminSupabase
         .from('weekly_timesheets')
-        .select('*, user_profiles!user_id(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)')
+        .select(
+          '*, user_profiles!user_id(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)'
+        )
         .in('id', ids)
       const refetchedMap = new Map((refetched || []).map((ts: any) => [ts.id, ts]))
       timesheets = timesheets.map((ts: any) => refetchedMap.get(ts.id) || ts)
     }
   }
 
-  // Fetch signatures for With/With (person) columns
   const signaturesByTimesheetId: Record<string, string[]> = {}
+  const withLabelByTimesheetId: Record<string, string> = {}
+  const withPersonByTimesheetId: Record<string, string> = {}
   let approverNamesById: Record<string, string> = {}
+
   if (timesheets.length > 0) {
     const sigResult = await withQueryTimeout(() =>
       adminSupabase
         .from('timesheet_signatures')
         .select('timesheet_id, signer_id')
-        .in('timesheet_id', timesheets.map((t) => t.id))
+        .in(
+          'timesheet_id',
+          timesheets.map((t) => t.id)
+        )
     )
     const sigs = (sigResult.data || []) as { timesheet_id: string; signer_id: string }[]
     sigs.forEach((s) => {
@@ -151,26 +80,53 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
       signaturesByTimesheetId[s.timesheet_id].push(s.signer_id)
     })
 
+    const submitted = timesheets.filter((ts: any) => ts.status === 'submitted')
+    const submittedMeta = submitted.map((ts: any) => ({
+      id: ts.id,
+      user_id: ts.user_id,
+      user_profiles: ts.user_profiles as ApprovalProfileFields,
+    }))
+    const requiredByTs = await getRequiredBudgetApproverIdsByTimesheet(adminSupabase, submittedMeta)
+    const poNumsByTs = await getBudgetApproverPoNumbersByTimesheet(adminSupabase, submittedMeta)
+
     const nextApproverIds = new Set<string>()
-    timesheets.forEach((ts: any) => {
-      if (ts.status !== 'submitted') return
-      const profile = ts.user_profiles as { reports_to_id?: string; supervisor_id?: string; manager_id?: string; final_approver_id?: string } | undefined
-      if (!profile) return
-      const chain: string[] = []
-      const first = profile.supervisor_id || profile.reports_to_id
-      if (first) chain.push(first)
-      if (profile.manager_id && !chain.includes(profile.manager_id)) chain.push(profile.manager_id)
-      if (profile.final_approver_id && !chain.includes(profile.final_approver_id)) chain.push(profile.final_approver_id)
+    for (const ts of submitted) {
       const signedIds = signaturesByTimesheetId[ts.id] || []
-      const nextId = chain.find((uid) => !signedIds.includes(uid))
-      if (nextId) nextApproverIds.add(nextId)
-    })
+      const profile = ts.user_profiles as ApprovalProfileFields | undefined
+      const withInfo = describeApprovalWith(requiredByTs[ts.id] || [], profile, signedIds, {})
+      if (withInfo.stage.kind === 'budget') {
+        withInfo.stage.pendingIds.forEach((id) => nextApproverIds.add(id))
+      } else if (withInfo.stage.kind === 'profile') {
+        nextApproverIds.add(withInfo.stage.nextId)
+      }
+      for (const uid of Object.keys(poNumsByTs[ts.id] || {})) nextApproverIds.add(uid)
+    }
+
     if (nextApproverIds.size > 0) {
       approverNamesById = await buildApproverDisplayNamesByNextId(
         adminSupabase,
         [...nextApproverIds],
         getCalendarDateStringInAppTimezone()
       )
+    }
+
+    for (const ts of submitted) {
+      const profile = ts.user_profiles as ApprovalProfileFields | undefined
+      const signedIds = signaturesByTimesheetId[ts.id] || []
+      const poByUser = poNumsByTs[ts.id] || {}
+      const budgetDisplay: Record<string, string> = {}
+      for (const [uid, nums] of Object.entries(poByUser)) {
+        budgetDisplay[uid] = formatBudgetApproverDisplayName(
+          approverNamesById[uid] || 'Unknown',
+          nums
+        )
+      }
+      const withInfo = describeApprovalWith(requiredByTs[ts.id] || [], profile, signedIds, {
+        approverNamesById,
+        budgetDisplayByUserId: budgetDisplay,
+      })
+      withLabelByTimesheetId[ts.id] = withInfo.label
+      withPersonByTimesheetId[ts.id] = withInfo.person
     }
   }
 
@@ -181,7 +137,9 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
     if (sortBy === 'week_ending') {
       cmp = (a.week_ending || '').localeCompare(b.week_ending || '')
       if (cmp === 0) {
-        cmp = (a.user_profiles?.name || '').toLowerCase().localeCompare((b.user_profiles?.name || '').toLowerCase())
+        cmp = (a.user_profiles?.name || '')
+          .toLowerCase()
+          .localeCompare((b.user_profiles?.name || '').toLowerCase())
         return cmp
       }
     } else if (sortBy === 'week_starting') {
@@ -191,9 +149,10 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
     } else if (sortBy === 'status') {
       cmp = (a.status || '').localeCompare(b.status || '')
     } else if (sortBy === 'user') {
-      cmp = (a.user_profiles?.name || '').toLowerCase().localeCompare((b.user_profiles?.name || '').toLowerCase())
+      cmp = (a.user_profiles?.name || '')
+        .toLowerCase()
+        .localeCompare((b.user_profiles?.name || '').toLowerCase())
     } else {
-      // approved_at - for submitted use submitted_at as fallback
       const aVal = a.approved_at || a.submitted_at || a.created_at || ''
       const bVal = b.approved_at || b.submitted_at || b.created_at || ''
       cmp = aVal.localeCompare(bVal)
@@ -202,7 +161,7 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
   }
   timesheets = [...timesheets].sort(sortFn)
 
-  // Filter dropdown: employees on listed timesheets (clients) or approval chain (+ self)
+  // Filter dropdown
   let filterUsers: { id: string; name: string }[] = []
   if (isClient) {
     const byId = new Map<string, string>()
@@ -228,9 +187,20 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
       adminSupabase.from('user_profiles').select('id, name').eq('id', user.id).single()
     )
     const self = selfRes.data as { id: string; name: string } | null
-    filterUsers = (
-      self ? [self, ...reportsForFilter.filter((r) => r.id !== user.id)] : reportsForFilter
-    ).sort((a, b) => a.name.localeCompare(b.name))
+    // Include employees from signed sheets so budget-only approvers can filter
+    const fromSheets = new Map<string, string>()
+    for (const ts of timesheets) {
+      if (ts.user_id && ts.user_profiles?.name) {
+        fromSheets.set(ts.user_id, ts.user_profiles.name)
+      }
+    }
+    const merged = new Map<string, string>()
+    if (self) merged.set(self.id, self.name)
+    for (const r of reportsForFilter) merged.set(r.id, r.name)
+    for (const [id, name] of fromSheets) merged.set(id, name)
+    filterUsers = [...merged.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
   }
 
   const hourTotals = await getTimesheetHourTotalsForApproverViewer(
@@ -258,6 +228,8 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
             sortDir={sortDir}
             signaturesByTimesheetId={signaturesByTimesheetId}
             approverNamesById={approverNamesById}
+            withLabelByTimesheetId={withLabelByTimesheetId}
+            withPersonByTimesheetId={withPersonByTimesheetId}
             userRole={user.profile.role}
             hourTotals={hourTotals}
           />

@@ -112,7 +112,7 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
   // Use admin client so RLS does not block reading signatures
   const signaturesByTimesheetId: Record<string, { signer_id: string }[]> = {}
   let approverNamesById: Record<string, string> = {}
-  const pendingBudgetApproverIdsByTimesheetId: Record<string, string[]> = {}
+  const requiredBudgetApproverIdsByTimesheetId: Record<string, string[]> = {}
   const budgetApproverDisplayByTimesheetId: Record<string, Record<string, string>> = {}
   if (['admin', 'super_admin'].includes(user.profile.role) && timesheetsForDisplay.length > 0) {
     const ids = timesheetsForDisplay.map((ts: any) => ts.id)
@@ -142,9 +142,9 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
     submitted.forEach((ts: any) => {
       const profile = ts.user_profiles as ApprovalProfileFields | undefined
       const signedIds = (signaturesByTimesheetId[ts.id] || []).map((s: { signer_id: string }) => s.signer_id)
+      requiredBudgetApproverIdsByTimesheetId[ts.id] = requiredByTs[ts.id] || []
       const stage = resolveApprovalStage(requiredByTs[ts.id] || [], profile || null, signedIds)
       if (stage.kind === 'budget') {
-        pendingBudgetApproverIdsByTimesheetId[ts.id] = stage.pendingIds
         stage.pendingIds.forEach((uid) => nextApproverIds.add(uid))
       } else if (stage.kind === 'profile') {
         nextApproverIds.add(stage.nextId)
@@ -296,7 +296,7 @@ export default async function TimesheetsPage(props: { searchParams?: Promise<Sea
                 user={user}
                 signaturesByTimesheetId={signaturesByTimesheetId}
                 approverNamesById={approverNamesById}
-                pendingBudgetApproverIdsByTimesheetId={pendingBudgetApproverIdsByTimesheetId}
+                requiredBudgetApproverIdsByTimesheetId={requiredBudgetApproverIdsByTimesheetId}
                 budgetApproverDisplayByTimesheetId={budgetApproverDisplayByTimesheetId}
               />
             </>

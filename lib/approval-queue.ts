@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hasActiveOutgoingDelegation } from '@/lib/approval-delegation'
+import { buildApprovalChain } from '@/lib/timesheet-auto-approve'
 import {
   getRequiredBudgetApproverIdsByTimesheet,
   resolveApprovalStage,
@@ -13,14 +14,20 @@ import { withQueryTimeout } from '@/lib/timeout'
 
 export type PendingTimesheet = any
 
+export type WorkflowApprovalTimesheet = PendingTimesheet & {
+  /** True when this user (or their active delegate cover) must act now. */
+  awaitingMyApproval: boolean
+}
+
 /**
- * Returns the *filtered, unsorted* list of timesheets currently awaiting this
- * user's approval (mirrors the logic on the Pending Approvals page, including
- * delegation handling and the parallel budget-approver stage).
+ * Submitted timesheets still in workflow where this user is on the chain
+ * (profile and/or budget), or covers someone on the chain via delegation,
+ * and has not yet acted (own signature or signature recorded for a delegator
+ * they cover). After signing, sheets leave this list (Approved Timesheets).
  */
-export async function getPendingApprovalTimesheets(user: {
+export async function getWorkflowApprovalTimesheets(user: {
   id: string
-}): Promise<PendingTimesheet[]> {
+}): Promise<WorkflowApprovalTimesheet[]> {
   const adminSupabase = createAdminClient()
   const today = getCalendarDateStringInAppTimezone()
 
@@ -157,26 +164,54 @@ export async function getPendingApprovalTimesheets(user: {
     }))
   )
 
-  return allSubmitted.filter((ts: any) => {
+  const results: WorkflowApprovalTimesheet[] = []
+
+  for (const ts of allSubmitted) {
     const profile = ts.user_profiles as ApprovalProfileFields
     const signedIds = signedByTimesheet[ts.id] || new Set<string>()
     const requiredBudget = requiredByTimesheet[ts.id] || []
     const stage = resolveApprovalStage(requiredBudget, profile, signedIds)
 
-    if (stage.kind === 'done') return false
+    if (stage.kind === 'done') continue
 
-    // Self as current actor
+    const profileChain = buildApprovalChain(profile)
+    const inChain =
+      profileChain.includes(user.id) ||
+      requiredBudget.includes(user.id) ||
+      profileChain.some((id) => delegatedByIds.has(id)) ||
+      requiredBudget.some((id) => delegatedByIds.has(id))
+
+    if (!inChain) continue
+
+    // Already acted: own signature, or a delegator we cover already signed.
+    const alreadyActed =
+      signedIds.has(user.id) || [...delegatedByIds].some((id) => signedIds.has(id))
+    if (alreadyActed) continue
+
+    let awaitingMyApproval = false
     if (userIsCurrentApprover(stage, user.id)) {
-      if (hasOutgoingDelegation) return false
-      return true
+      awaitingMyApproval = !hasOutgoingDelegation
+    } else if (stage.kind === 'budget') {
+      awaitingMyApproval = stage.pendingIds.some((id) => delegatedByIds.has(id))
+    } else if (stage.kind === 'profile') {
+      awaitingMyApproval = !!stage.nextId && delegatedByIds.has(stage.nextId)
     }
 
-    // Acting via delegation for a current actor
-    if (stage.kind === 'budget') {
-      return stage.pendingIds.some((id) => delegatedByIds.has(id))
-    }
-    return !!stage.nextId && delegatedByIds.has(stage.nextId)
-  })
+    results.push({ ...ts, awaitingMyApproval })
+  }
+
+  return results
+}
+
+/**
+ * Timesheets currently awaiting this user's approval (actionable only).
+ * Used for badges and approve-and-advance queues.
+ */
+export async function getPendingApprovalTimesheets(user: {
+  id: string
+}): Promise<PendingTimesheet[]> {
+  const workflow = await getWorkflowApprovalTimesheets(user)
+  return workflow.filter((ts) => ts.awaitingMyApproval)
 }
 
 /** Sort a pending-approval list the same way the Pending Approvals page does. */
@@ -198,4 +233,21 @@ export function sortPendingApprovals(
     return orderAsc ? cmp : -cmp
   }
   return [...list].sort(sortFn)
+}
+
+/**
+ * Prefer actionable sheets first, then the shared column sort.
+ */
+export function sortWorkflowApprovals(
+  list: WorkflowApprovalTimesheet[],
+  sortBy: string,
+  sortDir: 'asc' | 'desc'
+): WorkflowApprovalTimesheet[] {
+  const sorted = sortPendingApprovals(list, sortBy, sortDir) as WorkflowApprovalTimesheet[]
+  return [...sorted].sort((a, b) => {
+    if (a.awaitingMyApproval !== b.awaitingMyApproval) {
+      return a.awaitingMyApproval ? -1 : 1
+    }
+    return 0
+  })
 }

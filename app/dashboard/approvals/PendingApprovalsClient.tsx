@@ -20,6 +20,8 @@ interface PendingApprovalsClientProps {
   withLabelByTimesheetId?: Record<string, string>
   withPersonByTimesheetId?: Record<string, string>
   hourTotals?: Record<string, HourTotals>
+  awaitingCount?: number
+  inWorkflowCount?: number
 }
 
 const formatHours = (n: number) =>
@@ -32,12 +34,18 @@ export default function PendingApprovalsClient({
   withLabelByTimesheetId = {},
   withPersonByTimesheetId = {},
   hourTotals = {},
+  awaitingCount,
+  inWorkflowCount,
 }: PendingApprovalsClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [selectedTimesheet, setSelectedTimesheet] = useState<any>(null)
 
   const approvalsReturnTo = `/dashboard/approvals${searchParams.toString() ? '?' + searchParams.toString() : ''}`
+  const awaiting = awaitingCount ?? timesheets.filter((t) => t.awaitingMyApproval).length
+  const inWorkflow = inWorkflowCount ?? timesheets.length
+
+  const canAct = (ts: any) => !!ts.awaitingMyApproval
 
   const buildUrl = (updates: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -60,6 +68,16 @@ export default function PendingApprovalsClient({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap gap-4 text-sm text-gray-700 dark:text-gray-300 px-1">
+        <span>
+          <span className="font-semibold text-orange-700 dark:text-orange-300">Awaiting your approval:</span>{' '}
+          {awaiting}
+        </span>
+        <span>
+          <span className="font-semibold text-gray-800 dark:text-gray-200">In workflow:</span> {inWorkflow}
+        </span>
+      </div>
+
       {/* Mobile: compact cards with View button */}
       <div className="md:hidden">
         {timesheets.length > 0 ? (
@@ -77,6 +95,10 @@ export default function PendingApprovalsClient({
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       Week ending {formatWeekEnding(ts.week_ending)}
                     </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {withLabelByTimesheetId[ts.id] || 'With Approver'}
+                      {canAct(ts) ? ' · Your turn' : ''}
+                    </p>
                   </div>
                   <button
                     onClick={() => setSelectedTimesheet(ts)}
@@ -88,13 +110,13 @@ export default function PendingApprovalsClient({
               </div>
             ))}
             <p className="text-sm text-gray-600 dark:text-gray-400 px-1">
-              Showing {timesheets.length} pending approval{timesheets.length !== 1 ? 's' : ''}
+              Showing {timesheets.length} timesheet{timesheets.length !== 1 ? 's' : ''} in workflow
             </p>
           </div>
         ) : (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
             <CheckCircle className="h-12 w-12 text-green-400 dark:text-green-500 mx-auto mb-4" />
-            <p className="text-gray-600 dark:text-gray-300">No pending approvals.</p>
+            <p className="text-gray-600 dark:text-gray-300">No timesheets in your approval workflow.</p>
           </div>
         )}
       </div>
@@ -192,17 +214,21 @@ export default function PendingApprovalsClient({
                     </td>
                     <td className="px-3 lg:px-6 py-3 text-sm font-medium">
                       <div className="flex flex-wrap gap-2">
-                        <ApproveTimesheetButton
-                          timesheetId={ts.id}
-                          returnTo={approvalsReturnTo}
-                          className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
-                        />
-                        <Link
-                          href={`/dashboard/approvals/${ts.id}/reject-form`}
-                          className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
-                        >
-                          Reject
-                        </Link>
+                        {canAct(ts) ? (
+                          <>
+                            <ApproveTimesheetButton
+                              timesheetId={ts.id}
+                              returnTo={approvalsReturnTo}
+                              className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
+                            />
+                            <Link
+                              href={`/dashboard/approvals/${ts.id}/reject-form`}
+                              className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                            >
+                              Reject
+                            </Link>
+                          </>
+                        ) : null}
                         <Link
                           href={`/dashboard/timesheets/${ts.id}/export`}
                           className="text-purple-600 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300"
@@ -223,13 +249,14 @@ export default function PendingApprovalsClient({
             </table>
           </div>
           <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-300">
-            Showing {timesheets.length} pending approval{timesheets.length !== 1 ? 's' : ''}
+            Showing {timesheets.length} timesheet{timesheets.length !== 1 ? 's' : ''} in workflow
+            {awaiting > 0 ? ` · ${awaiting} awaiting your approval` : ''}
           </div>
         </>
       ) : (
         <div className="p-6 sm:p-12 text-center">
           <CheckCircle className="h-12 w-12 text-green-400 dark:text-green-500 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-300">No pending approvals.</p>
+          <p className="text-gray-600 dark:text-gray-300">No timesheets in your approval workflow.</p>
         </div>
       )}
       </div>
@@ -303,18 +330,22 @@ export default function PendingApprovalsClient({
                 </div>
               </div>
               <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2">
-                <ApproveTimesheetButton
-                  timesheetId={selectedTimesheet.id}
-                  returnTo={approvalsReturnTo}
-                  onAfterSuccess={() => setSelectedTimesheet(null)}
-                  className="px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700"
-                />
-                <Link
-                  href={`/dashboard/approvals/${selectedTimesheet.id}/reject-form`}
-                  className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700"
-                >
-                  Reject
-                </Link>
+                {canAct(selectedTimesheet) ? (
+                  <>
+                    <ApproveTimesheetButton
+                      timesheetId={selectedTimesheet.id}
+                      returnTo={approvalsReturnTo}
+                      onAfterSuccess={() => setSelectedTimesheet(null)}
+                      className="px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700"
+                    />
+                    <Link
+                      href={`/dashboard/approvals/${selectedTimesheet.id}/reject-form`}
+                      className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700"
+                    >
+                      Reject
+                    </Link>
+                  </>
+                ) : null}
                 <Link
                   href={`/dashboard/timesheets/${selectedTimesheet.id}/export`}
                   className="px-4 py-2 rounded-lg bg-purple-600 text-white font-medium hover:bg-purple-700"
