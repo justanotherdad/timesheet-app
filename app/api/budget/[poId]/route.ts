@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { canAccessPoBudget } from '@/lib/access'
-import { normalizePoIssueDateForDb } from '@/lib/utils'
+import { normalizePoIssueDateForDb, parseMoney } from '@/lib/utils'
 import {
   logPoBudgetContainerAudit,
   buildBudgetSummaryUpdatedDescription,
@@ -322,7 +322,7 @@ export async function PATCH(
         active !== undefined) {
       const updateData: Record<string, unknown> = {}
       if (po_number !== undefined) updateData.po_number = po_number
-      if (original_po_amount !== undefined) updateData.original_po_amount = original_po_amount === '' || original_po_amount == null ? null : parseFloat(String(original_po_amount))
+      if (original_po_amount !== undefined) updateData.original_po_amount = original_po_amount === '' || original_po_amount == null ? null : parseMoney(original_po_amount)
       if (po_issue_date !== undefined) updateData.po_issue_date = normalizePoIssueDateForDb(po_issue_date)
       if (proposal_number !== undefined) updateData.proposal_number = proposal_number || null
       if (project_name !== undefined) {

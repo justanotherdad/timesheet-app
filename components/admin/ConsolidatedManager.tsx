@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, FileText, X } from 'lucide-react'
+import { parseMoney } from '@/lib/utils'
 import SiteDetailView from './SiteDetailView'
 import OptionsManager from './OptionsManager'
 import PayrollEarningTypesManager from './PayrollEarningTypesManager'
@@ -381,7 +382,7 @@ export default function ConsolidatedManager({
           budget_type: budgetType,
           net_terms: netTerms || null,
           how_to_bill: howToBill || null,
-          original_po_amount: originalAmount ? parseFloat(originalAmount) : null,
+          original_po_amount: originalAmount ? parseMoney(originalAmount) : null,
           po_issue_date: poIssueDate || null,
           proposal_number: proposalNumber || null,
         })
@@ -874,6 +875,7 @@ export default function ConsolidatedManager({
                         min="0"
                         placeholder="0.00"
                         required
+                        onWheel={(e) => e.currentTarget.blur()}
                         className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                       />
                     </div>

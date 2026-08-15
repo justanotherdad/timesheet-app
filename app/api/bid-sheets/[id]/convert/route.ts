@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { effectiveIndirectTreatAs, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
+import { roundToCents } from '@/lib/utils'
 import { upsertIndirectActivityForProject } from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
@@ -98,7 +99,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     indirectTotal += indirectLineDollarTotal(Number(row.hours) || 0, Number(row.rate) || 0, row.category, row.notes)
   }
 
-  const grandTotal = matrixLaborCost + indirectTotal
+  const grandTotal = roundToCents(matrixLaborCost + indirectTotal)
 
   const { data: po, error: poErr } = await adminSupabase
     .from('purchase_orders')

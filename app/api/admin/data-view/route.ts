@@ -2,9 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
 import { getAccessibleSiteIds } from '@/lib/access'
-import { parseISO, format } from 'date-fns'
+import { parseISO } from 'date-fns'
 
-const formatInput = (d: Date) => format(d, 'yyyy-MM-dd')
+const csvList = (searchParams: URLSearchParams, key: string): string[] => {
+  const values = searchParams.getAll(key)
+  if (values.length === 0) {
+    const single = searchParams.get(key)
+    if (!single) return []
+    return single.split(',').map((s) => s.trim()).filter(Boolean)
+  }
+  return values.flatMap((v) => v.split(',')).map((s) => s.trim()).filter(Boolean)
+}
 
 const getUserName = (userProfiles: unknown) => {
   const p = Array.isArray(userProfiles)
@@ -65,13 +73,13 @@ export async function GET(request: NextRequest) {
     const adminSupabase = createAdminClient()
 
     const { searchParams } = new URL(request.url)
-    const selectedUser = searchParams.get('user') || ''
-    const selectedSite = searchParams.get('site') || ''
-    const selectedDepartment = searchParams.get('department') || ''
-    const selectedPO = searchParams.get('po') || ''
-    const startDate = searchParams.get('startDate') || ''
-    const endDate = searchParams.get('endDate') || ''
-    const status = searchParams.get('status') || ''
+    const selectedUsers = csvList(searchParams, 'user')
+    const selectedSites = csvList(searchParams, 'site')
+    const selectedDepartments = csvList(searchParams, 'department')
+    const selectedPOs = csvList(searchParams, 'po')
+    const selectedStatuses = csvList(searchParams, 'status')
+    const fromWeekEnding = searchParams.get('fromWeekEnding') || searchParams.get('startDate') || ''
+    const toWeekEnding = searchParams.get('toWeekEnding') || searchParams.get('endDate') || ''
 
     const { data: allProfiles } = await adminSupabase
       .from('user_profiles')
@@ -120,8 +128,8 @@ export async function GET(request: NextRequest) {
       accessibleSiteIds === null ? null : new Set(accessibleSiteIds)
 
     const userIdsToFetch =
-      selectedUser && accessibleUserIds.includes(selectedUser)
-        ? [selectedUser]
+      selectedUsers.length > 0
+        ? selectedUsers.filter((id) => accessibleUserIds.includes(id))
         : accessibleUserIds
 
     if (userIdsToFetch.length === 0) {
@@ -131,18 +139,8 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    let weekStartBound: string | null = null
-    let weekEndBound: string | null = null
-    if (startDate) {
-      const weekStart = new Date(parseISO(startDate))
-      weekStart.setDate(weekStart.getDate() - 6)
-      weekStartBound = formatInput(weekStart)
-    }
-    if (endDate) {
-      const weekEnd = new Date(parseISO(endDate))
-      weekEnd.setDate(weekEnd.getDate() + 6)
-      weekEndBound = formatInput(weekEnd)
-    }
+    const weekStartBound = fromWeekEnding || null
+    const weekEndBound = toWeekEnding || null
 
     type TimesheetRow = {
       id: string
@@ -157,7 +155,7 @@ export async function GET(request: NextRequest) {
         .from('weekly_timesheets')
         .select(`id, user_id, week_ending, status, user_profiles!user_id (name, email)`)
         .in('user_id', chunk)
-      if (status) q = q.eq('status', status)
+      if (selectedStatuses.length > 0) q = q.in('status', selectedStatuses)
       if (weekStartBound) q = q.gte('week_ending', weekStartBound)
       if (weekEndBound) q = q.lte('week_ending', weekEndBound)
       return q
@@ -281,29 +279,25 @@ export async function GET(request: NextRequest) {
     }
 
     let filtered = expanded
-    if (startDate) filtered = filtered.filter((e) => e.week_ending >= startDate)
-    if (endDate) {
-      const endPlus6 = new Date(parseISO(endDate))
-      endPlus6.setDate(endPlus6.getDate() + 6)
-      filtered = filtered.filter((e) => e.week_ending <= formatInput(endPlus6))
-    }
+    if (fromWeekEnding) filtered = filtered.filter((e) => e.week_ending >= fromWeekEnding)
+    if (toWeekEnding) filtered = filtered.filter((e) => e.week_ending <= toWeekEnding)
 
     const matchesExcept = (
       row: ExpandedRow,
       skip: 'user' | 'site' | 'department' | 'po'
     ) => {
-      if (skip !== 'user' && selectedUser && row.user_id !== selectedUser) return false
-      if (skip !== 'site' && selectedSite) {
-        if (row.entry_id && row.site_id !== selectedSite) return false
-        if (!row.entry_id && selectedSite) return false
+      if (skip !== 'user' && selectedUsers.length > 0 && !selectedUsers.includes(row.user_id)) return false
+      if (skip !== 'site' && selectedSites.length > 0) {
+        if (row.entry_id && !selectedSites.includes(row.site_id || '')) return false
+        if (!row.entry_id) return false
       }
-      if (skip !== 'department' && selectedDepartment) {
-        if (row.entry_id && row.department_id !== selectedDepartment) return false
-        if (!row.entry_id && selectedDepartment) return false
+      if (skip !== 'department' && selectedDepartments.length > 0) {
+        if (row.entry_id && !selectedDepartments.includes(row.department_id || '')) return false
+        if (!row.entry_id) return false
       }
-      if (skip !== 'po' && selectedPO) {
-        if (row.entry_id && row.po_id !== selectedPO) return false
-        if (!row.entry_id && selectedPO) return false
+      if (skip !== 'po' && selectedPOs.length > 0) {
+        if (row.entry_id && !selectedPOs.includes(row.po_id || '')) return false
+        if (!row.entry_id) return false
       }
       return true
     }
@@ -359,19 +353,19 @@ export async function GET(request: NextRequest) {
       purchaseOrders: scopedPos.filter((p) => poIdsInPool.size === 0 || poIdsInPool.has(p.id)),
     }
 
-    if (selectedUser) filtered = filtered.filter((e) => e.user_id === selectedUser)
+    if (selectedUsers.length > 0) filtered = filtered.filter((e) => selectedUsers.includes(e.user_id))
     // Site / Department / PO filters target billable entries. Unbillable rows
     // (HOLIDAY/PTO, entry_id === '') have no site/PO, so they must be excluded
     // whenever one of these filters is active — otherwise they leak through as
     // "N/A" rows even though they don't belong to the selected site/PO.
-    if (selectedSite) {
-      filtered = filtered.filter((e) => e.entry_id !== '' && e.site_id === selectedSite)
+    if (selectedSites.length > 0) {
+      filtered = filtered.filter((e) => e.entry_id !== '' && e.site_id && selectedSites.includes(e.site_id))
     }
-    if (selectedDepartment) {
-      filtered = filtered.filter((e) => e.entry_id !== '' && e.department_id === selectedDepartment)
+    if (selectedDepartments.length > 0) {
+      filtered = filtered.filter((e) => e.entry_id !== '' && e.department_id && selectedDepartments.includes(e.department_id))
     }
-    if (selectedPO) {
-      filtered = filtered.filter((e) => e.entry_id !== '' && e.po_id === selectedPO)
+    if (selectedPOs.length > 0) {
+      filtered = filtered.filter((e) => e.entry_id !== '' && e.po_id && selectedPOs.includes(e.po_id))
     }
 
     filtered.sort((a, b) => {

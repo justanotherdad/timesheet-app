@@ -66,7 +66,7 @@ export default function ReportsPageClient() {
           </div>
           <div>
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">Generate Report</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Budget status report for selected PO(s), saved for 1 year</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Budget status or timesheet reports, saved for 1 year</p>
           </div>
         </button>
         </div>

@@ -52,6 +52,8 @@ interface WeeklyTimesheetFormProps {
    * preserved in place so it stays in the budget/payroll views.
    */
   isAdminEditor?: boolean
+  /** Shown when an admin is creating/editing on behalf of another employee. */
+  employeeName?: string
   previousWeekData?: {
     entries?: Array<{
       client_project_id?: string
@@ -166,6 +168,7 @@ export default function WeeklyTimesheetForm({
   rejectionReason,
   timesheetNotes: initialTimesheetNotes = '',
   isAdminEditor = false,
+  employeeName,
   initialData,
   previousWeekData,
 }: WeeklyTimesheetFormProps) {
@@ -355,24 +358,37 @@ export default function WeeklyTimesheetForm({
       let currentTimesheetId = timesheetId || createdTimesheetIdRef.current || createdTimesheetId
       const newStatus = shouldSubmit ? 'submitted' : 'draft'
 
-      // Admin editing an existing sheet (any owner): service-role API so RLS does
-      // not block timesheet_entries / unbillable writes on other users' sheets.
-      if (isAdminEditor && currentTimesheetId) {
-        const res = await fetch(`/api/timesheets/${currentTimesheetId}/admin-save`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            week_ending: weekEnding,
-            week_starting: formatDateForInput(weekDates.start),
-            notes: timesheetNotes.trim() || null,
-            billable_entries: billableEntries,
-            unbillable_entries: unbillableEntries,
-            submit: shouldSubmit,
-          }),
-        })
-        const payload = await res.json().catch(() => ({}))
+      // Admin creating or editing any owner's sheet: service-role API so RLS
+      // does not block weekly_timesheets / entries writes on other users.
+      if (isAdminEditor) {
+        const payload = {
+          week_ending: weekEnding,
+          week_starting: formatDateForInput(weekDates.start),
+          notes: timesheetNotes.trim() || null,
+          billable_entries: billableEntries,
+          unbillable_entries: unbillableEntries,
+          submit: shouldSubmit,
+        }
+        const res = currentTimesheetId
+          ? await fetch(`/api/timesheets/${currentTimesheetId}/admin-save`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            })
+          : await fetch('/api/timesheets/admin-create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...payload, user_id: userId }),
+            })
+        const apiPayload = await res.json().catch(() => ({}))
         if (!res.ok) {
-          throw new Error(payload.error || 'Failed to save timesheet')
+          throw new Error(apiPayload.error || 'Failed to save timesheet')
+        }
+        const savedId = (apiPayload.id as string) || currentTimesheetId
+        if (!currentTimesheetId && savedId) {
+          createdTimesheetIdRef.current = savedId
+          setCreatedTimesheetId(savedId)
+          setCurrentStatus(newStatus)
         }
         if (shouldSubmit) {
           router.refresh()
@@ -383,8 +399,8 @@ export default function WeeklyTimesheetForm({
             currentStatus === 'approved' || currentStatus === 'submitted'
           router.push(
             preservedAdminEdit
-              ? `/dashboard/timesheets/${currentTimesheetId}`
-              : `/dashboard/timesheets/${currentTimesheetId}/edit`
+              ? `/dashboard/timesheets/${savedId}`
+              : `/dashboard/timesheets/${savedId}/edit`
           )
         }
         return
@@ -786,6 +802,12 @@ export default function WeeklyTimesheetForm({
         {error && (
           <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded">
             {error}
+          </div>
+        )}
+
+        {employeeName && isAdminEditor && (
+          <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-200">
+            Creating this timesheet for <span className="font-semibold">{employeeName}</span>. Submit uses their approval chain.
           </div>
         )}
 

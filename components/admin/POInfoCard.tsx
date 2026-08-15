@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Trash2, Upload, FileText, X, BarChart3 } from 'lucide-react'
+import { parseMoney } from '@/lib/utils'
 
 const ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 
@@ -81,7 +82,7 @@ export default function POInfoCard({
         .from('purchase_orders')
         .update({
           po_number: form.po_number,
-          original_po_amount: form.original_po_amount != null && form.original_po_amount !== '' ? parseFloat(String(form.original_po_amount)) : null,
+          original_po_amount: form.original_po_amount != null && form.original_po_amount !== '' ? parseMoney(form.original_po_amount) : null,
           po_issue_date: form.po_issue_date || null,
           proposal_number: form.proposal_number || null,
           project_name: form.project_name || null,
@@ -241,6 +242,7 @@ export default function POInfoCard({
                 step="0.01"
                 value={form.original_po_amount}
                 onChange={(e) => setForm({ ...form, original_po_amount: e.target.value })}
+                onWheel={(e) => e.currentTarget.blur()}
                 disabled={readOnly}
                 className={inputClass}
               />

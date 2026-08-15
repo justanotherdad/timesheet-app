@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, Plus, Search, Trash2, FileText, X } from 'lucide-react'
 import GeneratedReportView from './GeneratedReportView'
-import type { GeneratedReportListItem, GeneratedReportSnapshot } from '@/lib/generated-report'
+import TimesheetReportView from './TimesheetReportView'
+import { formatWeekEnding, getWeekEndingSundayOptions } from '@/lib/utils'
+import type {
+  GeneratedReportKind,
+  GeneratedReportListItem,
+  GeneratedReportSnapshot,
+  TimesheetReportSnapshot,
+} from '@/lib/generated-report'
+import { isTimesheetSnapshot } from '@/lib/generated-report'
 
 interface PoOption {
   id: string
@@ -19,16 +27,25 @@ export default function GenerateReportPanel() {
   const [search, setSearch] = useState('')
   const [listError, setListError] = useState<string | null>(null)
 
-  const [viewing, setViewing] = useState<{ title: string; snapshot: GeneratedReportSnapshot } | null>(null)
+  const [viewing, setViewing] = useState<{
+    title: string
+    snapshot: GeneratedReportSnapshot | TimesheetReportSnapshot
+    saved: boolean
+  } | null>(null)
+  const [savingLive, setSavingLive] = useState(false)
   const [loadingReportId, setLoadingReportId] = useState<string | null>(null)
+  const [listType, setListType] = useState<'all' | GeneratedReportKind>('all')
 
   const [wizardOpen, setWizardOpen] = useState(false)
 
-  const loadList = useCallback(async (q: string) => {
+  const loadList = useCallback(async (q: string, type: 'all' | GeneratedReportKind) => {
     setLoadingList(true)
     setListError(null)
     try {
-      const res = await fetch(`/api/reports/generated?q=${encodeURIComponent(q)}`, { cache: 'no-store' })
+      const params = new URLSearchParams()
+      if (q) params.set('q', q)
+      if (type !== 'all') params.set('type', type)
+      const res = await fetch(`/api/reports/generated?${params.toString()}`, { cache: 'no-store' })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to load reports')
       const data = await res.json()
       setReports(data.reports || [])
@@ -40,9 +57,9 @@ export default function GenerateReportPanel() {
   }, [])
 
   useEffect(() => {
-    const t = setTimeout(() => loadList(search), 250)
+    const t = setTimeout(() => loadList(search, listType), 250)
     return () => clearTimeout(t)
-  }, [search, loadList])
+  }, [search, listType, loadList])
 
   const openReport = async (id: string) => {
     setLoadingReportId(id)
@@ -50,7 +67,7 @@ export default function GenerateReportPanel() {
       const res = await fetch(`/api/reports/generated/${id}`, { cache: 'no-store' })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to open report')
       const data = await res.json()
-      setViewing({ title: data.title, snapshot: data.snapshot })
+      setViewing({ title: data.title, snapshot: data.snapshot, saved: true })
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to open report')
     } finally {
@@ -70,14 +87,50 @@ export default function GenerateReportPanel() {
   }
 
   if (viewing) {
+    const back = () => {
+      setViewing(null)
+      loadList(search, listType)
+    }
+    if (isTimesheetSnapshot(viewing.snapshot)) {
+      return (
+        <TimesheetReportView
+          title={viewing.title}
+          snapshot={viewing.snapshot}
+          onBack={back}
+          saving={savingLive}
+          onSave={
+            viewing.saved
+              ? undefined
+              : async () => {
+                  setSavingLive(true)
+                  try {
+                    const res = await fetch('/api/reports/generate-timesheet', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        save: true,
+                        title: viewing.title,
+                        snapshot: viewing.snapshot,
+                      }),
+                    })
+                    const data = await res.json().catch(() => ({}))
+                    if (!res.ok) throw new Error(data.error || 'Failed to save report')
+                    setViewing((prev) => (prev ? { ...prev, saved: true } : prev))
+                  } catch (e) {
+                    alert(e instanceof Error ? e.message : 'Failed to save report')
+                  } finally {
+                    setSavingLive(false)
+                  }
+                }
+          }
+        />
+      )
+    }
     return (
       <GeneratedReportView
         title={viewing.title}
-        snapshot={viewing.snapshot}
-        onBack={() => {
-          setViewing(null)
-          loadList(search)
-        }}
+        snapshot={viewing.snapshot as GeneratedReportSnapshot}
+        onBack={back}
       />
     )
   }
@@ -87,7 +140,7 @@ export default function GenerateReportPanel() {
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Generated Reports</h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Saved budget status reports (kept for 1 year). Search by PO, project, or client.</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Saved reports (kept for 1 year). Search by title, PO, project, or client.</p>
         </div>
         <button
           type="button"
@@ -99,14 +152,25 @@ export default function GenerateReportPanel() {
       </div>
 
       <div className="p-4 space-y-4">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search PO number, project, client…"
-            className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
-          />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative max-w-md flex-1 min-w-[16rem]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search title, PO number, project, client…"
+              className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+            />
+          </div>
+          <select
+            value={listType}
+            onChange={(e) => setListType(e.target.value as 'all' | GeneratedReportKind)}
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+          >
+            <option value="all">All types</option>
+            <option value="budget_status">Budget Status</option>
+            <option value="timesheet">Timesheet</option>
+          </select>
         </div>
 
         {loadingList ? (
@@ -129,7 +193,10 @@ export default function GenerateReportPanel() {
                 <div className="min-w-0">
                   <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{r.title}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {r.clientNames.join(', ') || '—'} · PO {r.poNumbers.join(', ')} · {new Date(r.createdAt).toLocaleDateString('en-US')}
+                    {r.reportType === 'timesheet' ? 'Timesheet Report' : 'Budget Status'}
+                    {r.clientNames.length > 0 ? ` · ${r.clientNames.join(', ')}` : ''}
+                    {r.poNumbers.length > 0 ? ` · PO ${r.poNumbers.join(', ')}` : ''}
+                    {` · ${new Date(r.createdAt).toLocaleDateString('en-US')}`}
                     {r.createdByName ? ` · ${r.createdByName}` : ''}
                   </p>
                 </div>
@@ -161,9 +228,9 @@ export default function GenerateReportPanel() {
       {wizardOpen && (
         <GenerateWizard
           onClose={() => setWizardOpen(false)}
-          onGenerated={(title, snapshot) => {
+          onGenerated={(title, snapshot, saved) => {
             setWizardOpen(false)
-            setViewing({ title, snapshot })
+            setViewing({ title, snapshot, saved })
           }}
         />
       )}
@@ -195,8 +262,16 @@ function GenerateWizard({
   onGenerated,
 }: {
   onClose: () => void
-  onGenerated: (title: string, snapshot: GeneratedReportSnapshot) => void
+  onGenerated: (
+    title: string,
+    snapshot: GeneratedReportSnapshot | TimesheetReportSnapshot,
+    saved: boolean
+  ) => void
 }) {
+  const [reportKind, setReportKind] = useState<GeneratedReportKind | null>(null)
+  const weekOptions = useMemo(() => getWeekEndingSundayOptions().slice().reverse(), [])
+  const [selectedWeeks, setSelectedWeeks] = useState<Set<string>>(new Set())
+  const [weekSearch, setWeekSearch] = useState('')
   const [options, setOptions] = useState<PoOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -215,6 +290,7 @@ function GenerateWizard({
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
+    if (reportKind !== 'budget_status') return
     let cancelled = false
     ;(async () => {
       setLoading(true)
@@ -232,7 +308,7 @@ function GenerateWizard({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reportKind])
 
   const wantBillableTables = includeBillableActivities || includeBillableCost
 
@@ -364,7 +440,42 @@ function GenerateWizard({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Failed to generate report')
-      onGenerated(data.title, data.snapshot)
+      onGenerated(data.title, data.snapshot, true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to generate report')
+      setSubmitting(false)
+    }
+  }
+
+  const filteredWeeks = useMemo(() => {
+    const q = weekSearch.trim().toLowerCase()
+    if (!q) return weekOptions
+    return weekOptions.filter((we) => formatWeekEnding(we).toLowerCase().includes(q) || we.includes(q))
+  }, [weekOptions, weekSearch])
+
+  const toggleWeek = (we: string) =>
+    setSelectedWeeks((prev) => {
+      const next = new Set(prev)
+      if (next.has(we)) next.delete(we)
+      else next.add(we)
+      return next
+    })
+
+  const generateTimesheet = async () => {
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/reports/generate-timesheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          weekEndings: [...selectedWeeks],
+          title: title.trim() || undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to generate report')
+      onGenerated(data.title, data.snapshot, false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to generate report')
       setSubmitting(false)
@@ -375,13 +486,132 @@ function GenerateWizard({
     <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl my-8">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 rounded-t-xl">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Generate Report</h3>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Generate Report</h3>
+            {reportKind && (
+              <button
+                type="button"
+                onClick={() => {
+                  setReportKind(null)
+                  setError(null)
+                }}
+                className="text-xs text-orange-600 dark:text-orange-400 hover:underline mt-0.5"
+              >
+                Change type
+              </button>
+            )}
+          </div>
           <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <div className="p-5 space-y-6">
+          {reportKind === null && (
+            <section className="space-y-3">
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Choose report type</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setReportKind('budget_status')}
+                  className="text-left p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-orange-400 dark:hover:border-orange-600"
+                >
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">Budget Status Report</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    PO budget vs actual, optional hours and billable tables. Saved for 1 year.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReportKind('timesheet')}
+                  className="text-left p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-orange-400 dark:hover:border-orange-600"
+                >
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">Timesheet Report</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Employee timesheet status by week ending, including people who have not created a sheet.
+                  </p>
+                </button>
+              </div>
+            </section>
+          )}
+
+          {reportKind === 'timesheet' && (
+            <>
+              <section>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">1. Choose week ending(s)</h4>
+                  <div className="flex items-center gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedWeeks(new Set(filteredWeeks))}
+                      className="text-orange-600 dark:text-orange-400 hover:underline font-medium"
+                    >
+                      Select all{weekSearch.trim() ? ' filtered' : ''}
+                    </button>
+                    <span className="text-gray-300 dark:text-gray-600">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedWeeks(new Set())}
+                      disabled={selectedWeeks.size === 0}
+                      className="text-gray-600 dark:text-gray-400 hover:underline font-medium disabled:opacity-40"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  Select one or more week endings. Employees without a timesheet still appear as Not Created.
+                </p>
+                <div className="relative mb-2">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    value={weekSearch}
+                    onChange={(e) => setWeekSearch(e.target.value)}
+                    placeholder="Filter week endings…"
+                    className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                  />
+                </div>
+                <div className="max-h-72 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+                  {filteredWeeks.map((we) => {
+                    const checked = selectedWeeks.has(we)
+                    return (
+                      <label
+                        key={we}
+                        className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${
+                          checked ? 'bg-orange-50 dark:bg-orange-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleWeek(we)}
+                          className="h-4 w-4 rounded border-gray-400 text-orange-600 focus:ring-orange-500"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-gray-100">{formatWeekEnding(we)}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                  {selectedWeeks.size === 0 ? 'No weeks selected yet.' : `${selectedWeeks.size} week(s) selected`}
+                </p>
+              </section>
+              {selectedWeeks.size > 0 && (
+                <section>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">2. Report name (optional)</h4>
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Auto-generated from week endings if left blank"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                  />
+                </section>
+              )}
+            </>
+          )}
+
+          {reportKind === 'budget_status' && (
+            <>
           {/* Step 1: choose POs */}
           <section>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
@@ -656,6 +886,8 @@ function GenerateWizard({
               />
             </section>
           )}
+            </>
+          )}
 
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-red-700 dark:text-red-300 text-sm">
@@ -670,8 +902,12 @@ function GenerateWizard({
           </button>
           <button
             type="button"
-            onClick={generate}
-            disabled={!canGenerate}
+            onClick={reportKind === 'timesheet' ? generateTimesheet : generate}
+            disabled={
+              reportKind === 'timesheet'
+                ? selectedWeeks.size === 0 || submitting
+                : reportKind !== 'budget_status' || !canGenerate
+            }
             className="px-4 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 disabled:opacity-50 inline-flex items-center gap-2"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

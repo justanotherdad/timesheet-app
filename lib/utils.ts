@@ -84,6 +84,20 @@ export function normalizeTimesheetHours(val: number): number {
   return Math.round(clamped * 1000) / 1000
 }
 
+/** Round a dollar amount to cents to avoid binary float drift (e.g. 10.01 → 10.009999). */
+export function roundToCents(value: number): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.round(value * 100) / 100
+}
+
+/** Parse a form/API money value to cents-rounded dollars, or null if blank/invalid. */
+export function parseMoney(raw: unknown): number | null {
+  if (raw === '' || raw == null) return null
+  const n = typeof raw === 'number' ? raw : parseFloat(String(raw).trim())
+  if (!Number.isFinite(n)) return null
+  return roundToCents(n)
+}
+
 export function getWeekEnding(date?: Date, weekStartsOn: number = 1): Date {
   const ref = date ?? getNowInAppTz()
   return endOfWeek(ref, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })

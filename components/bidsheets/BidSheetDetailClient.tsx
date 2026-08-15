@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
 import { Upload, Plus, Trash2, X, FileSpreadsheet, Search, Info, Download, Layers, Eye, Users, Pencil, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import { decodeIndirectNotes, effectiveIndirectTreatAs, encodeIndirectNotes, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
+import { parseMoney } from '@/lib/utils'
 
 interface Item {
   id: string
@@ -1331,8 +1332,8 @@ export default function BidSheetDetailClient({
     if (!sheet.converted_po_id) return
     setError(null)
     const raw = poAmountInput.trim()
-    const parsed = raw === '' ? null : parseFloat(raw)
-    if (parsed != null && (Number.isNaN(parsed) || parsed < 0)) {
+    const parsed = raw === '' ? null : parseMoney(raw)
+    if (raw !== '' && (parsed == null || parsed < 0)) {
       setError('Enter a valid dollar amount, or leave blank.')
       return
     }
@@ -1452,6 +1453,7 @@ export default function BidSheetDetailClient({
                 min={0}
                 value={poAmountInput}
                 onChange={(e) => setPoAmountInput(e.target.value)}
+                onWheel={(e) => e.currentTarget.blur()}
                 className="h-10 w-48 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
               />
             </div>

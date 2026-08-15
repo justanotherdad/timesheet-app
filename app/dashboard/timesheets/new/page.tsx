@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import WeeklyTimesheetForm from '@/components/WeeklyTimesheetForm'
+import AdminEmployeePicker from '@/components/AdminEmployeePicker'
 import { getWeekEnding, formatDateForInput } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import { loadTimesheetDropdownData } from '@/lib/timesheet-bill-rate-access'
@@ -12,7 +14,7 @@ import Header from '@/components/Header'
 export const maxDuration = 10 // Maximum duration for this route in seconds
 export const dynamic = 'force-dynamic'
 
-type SearchParams = { week?: string }
+type SearchParams = { week?: string; forUser?: string }
 
 export default async function NewTimesheetPage(props: { searchParams?: Promise<SearchParams> }) {
   const user = await getCurrentUser()
@@ -22,8 +24,29 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
   }
 
   const supabase = await createClient()
+  const adminSupabase = createAdminClient()
   const params = props.searchParams ? await props.searchParams : {}
   const weekParam = params.week
+  const forUserParam = params.forUser
+  const isAdmin = ['admin', 'super_admin'].includes(user.profile.role)
+
+  let employees: Array<{ id: string; name: string }> = []
+  if (isAdmin) {
+    const { data: empRows } = await adminSupabase
+      .from('user_profiles')
+      .select('id, name, role, active')
+      .neq('role', 'client')
+      .order('name')
+    employees = ((empRows || []) as Array<{ id: string; name: string; role: string; active?: boolean }>)
+      .filter((p) => p.active !== false)
+      .map((p) => ({ id: p.id, name: p.name || 'Unknown' }))
+  }
+
+  const targetUserId =
+    isAdmin && forUserParam && employees.some((e) => e.id === forUserParam) ? forUserParam : user.id
+  const creatingForOther = isAdmin && targetUserId !== user.id
+  const targetEmployeeName = employees.find((e) => e.id === targetUserId)?.name
+  const timesheetClient = creatingForOther ? adminSupabase : supabase
 
   const weekEnding = getWeekEnding()
   const weekEndingStr = formatDateForInput(weekEnding)
@@ -33,10 +56,10 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
 
   // Check for timesheets this week (may have multiple - use most recent for redirect logic)
   const existingTimesheetResult = await withQueryTimeout<{ id: string; status: string }[]>(() =>
-    supabase
+    timesheetClient
       .from('weekly_timesheets')
       .select('id, status')
-      .eq('user_id', user.id)
+      .eq('user_id', targetUserId)
       .eq('week_ending', weekEndingStr)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -72,10 +95,10 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
       const nextWeekEndingStr = formatDateForInput(nextWeekEnding)
 
       const nextExistingResult = await withQueryTimeout<{ id: string; status: string }[]>(() =>
-        supabase
+        timesheetClient
           .from('weekly_timesheets')
           .select('id, status')
-          .eq('user_id', user.id)
+          .eq('user_id', targetUserId)
           .eq('week_ending', nextWeekEndingStr)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -83,7 +106,7 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
       const nextExisting = Array.isArray(nextExistingResult.data) && nextExistingResult.data.length > 0
         ? nextExistingResult.data[0]
         : null
-      if (nextExisting?.id && nextExisting.status !== 'draft') {
+      if (!creatingForOther && nextExisting?.id && nextExisting.status !== 'draft') {
         redirect(`/dashboard/timesheets/${nextExisting.id}`)
       }
       effectiveWeekEnding = nextWeekEnding
@@ -91,8 +114,6 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
     }
   }
 
-  // POs/sites/systems from Bill Rates by Person (non-admins); admins see full active catalog
-  const adminSupabase = createAdminClient()
   const {
     sites,
     purchaseOrders,
@@ -108,7 +129,7 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
   } = await loadTimesheetDropdownData({
     supabase,
     admin: adminSupabase,
-    userId: user.id,
+    userId: targetUserId,
     userRole: user.profile.role,
     entryPoIds: [],
   })
@@ -151,10 +172,10 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
   } | undefined = undefined
   try {
     const previousTimesheetResult = await withQueryTimeout<Array<{ id: string }>>(() =>
-      supabase
+      timesheetClient
         .from('weekly_timesheets')
         .select('id, week_ending')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .eq('status', 'approved')
         .lt('week_ending', effectiveWeekEndingStr)
         .order('week_ending', { ascending: false })
@@ -167,7 +188,7 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
       // Fetch previous week's entries and unbillable
       const [prevEntriesResult, prevUnbillableResult] = await Promise.all([
         withQueryTimeout<Array<any>>(() =>
-          supabase
+          timesheetClient
             .from('timesheet_entries')
             .select('*')
             .eq('timesheet_id', previousTimesheetId)
@@ -175,7 +196,7 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
             .order('created_at')
         ),
         withQueryTimeout<Array<any>>(() =>
-          supabase
+          timesheetClient
             .from('timesheet_unbillable')
             .select('*')
             .eq('timesheet_id', previousTimesheetId)
@@ -229,6 +250,11 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
       <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
         <div className="max-w-7xl mx-auto overflow-hidden">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+            {isAdmin && employees.length > 0 && (
+              <Suspense fallback={null}>
+                <AdminEmployeePicker employees={employees} selectedId={targetUserId} />
+              </Suspense>
+            )}
             <WeeklyTimesheetForm
               sites={sites}
               purchaseOrders={purchaseOrders}
@@ -243,7 +269,9 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
               projectBudgetCombosByPo={projectBudgetCombosByPo}
               unbillableDescriptionOptions={unbillableDescriptionOptions}
               defaultWeekEnding={effectiveWeekEndingStr}
-              userId={user.id}
+              userId={targetUserId}
+              isAdminEditor={isAdmin}
+              employeeName={creatingForOther ? targetEmployeeName : undefined}
               previousWeekData={previousWeekData}
             />
           </div>

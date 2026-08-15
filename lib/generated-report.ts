@@ -88,7 +88,31 @@ export interface HoursChartDatum {
   remainingHours: number
 }
 
+export type GeneratedReportKind = 'budget_status' | 'timesheet'
+
+export type TimesheetReportStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'not_created'
+
+export interface TimesheetReportRow {
+  timesheetId: string | null
+  userId: string
+  employeeName: string
+  employeeType: 'internal' | 'external' | null
+  weekEnding: string
+  status: TimesheetReportStatus
+  createdAt: string | null
+  approvedAt: string | null
+}
+
+export interface TimesheetReportSnapshot {
+  kind: 'timesheet'
+  generatedAt: string
+  generatedByName: string
+  weekEndings: string[]
+  rows: TimesheetReportRow[]
+}
+
 export interface GeneratedReportSnapshot {
+  kind?: 'budget_status'
   generatedAt: string
   generatedByName: string
   includeHours: boolean
@@ -113,4 +137,14 @@ export interface GeneratedReportListItem {
   projectNames: string[]
   clientNames: string[]
   includeHours: boolean
+  reportType: GeneratedReportKind
+}
+
+export function isTimesheetSnapshot(snapshot: unknown): snapshot is TimesheetReportSnapshot {
+  return (
+    !!snapshot &&
+    typeof snapshot === 'object' &&
+    (snapshot as TimesheetReportSnapshot).kind === 'timesheet' &&
+    Array.isArray((snapshot as TimesheetReportSnapshot).rows)
+  )
 }

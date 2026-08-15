@@ -16,6 +16,7 @@ type Row = {
   po_numbers: string[] | null
   project_names: string[] | null
   client_names: string[] | null
+  report_type?: string | null
 }
 
 /**
@@ -52,13 +53,22 @@ export async function GET(req: Request) {
 
   const { data } = await admin
     .from('generated_reports')
-    .select('id, title, created_at, created_by_name, expires_at, include_hours, po_ids, po_numbers, project_names, client_names')
+    .select('id, title, created_at, created_by_name, expires_at, include_hours, po_ids, po_numbers, project_names, client_names, report_type')
     .order('created_at', { ascending: false })
   let rows = (data || []) as Row[]
 
   if (grantedSet) {
     const g = grantedSet
-    rows = rows.filter((r) => (r.po_ids || []).length > 0 && (r.po_ids || []).every((id) => g.has(id)))
+    rows = rows.filter((r) => {
+      const type = r.report_type === 'timesheet' ? 'timesheet' : 'budget_status'
+      if (type === 'timesheet') return true
+      return (r.po_ids || []).length > 0 && (r.po_ids || []).every((id) => g.has(id))
+    })
+  }
+
+  const typeFilter = new URL(req.url).searchParams.get('type')?.trim() || ''
+  if (typeFilter === 'timesheet' || typeFilter === 'budget_status') {
+    rows = rows.filter((r) => (r.report_type === 'timesheet' ? 'timesheet' : 'budget_status') === typeFilter)
   }
 
   const q = new URL(req.url).searchParams.get('q')?.trim().toLowerCase() || ''
@@ -86,6 +96,7 @@ export async function GET(req: Request) {
     projectNames: r.project_names || [],
     clientNames: r.client_names || [],
     includeHours: r.include_hours,
+    reportType: r.report_type === 'timesheet' ? 'timesheet' : 'budget_status',
   }))
 
   return NextResponse.json({ reports })

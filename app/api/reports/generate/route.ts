@@ -302,6 +302,7 @@ export async function POST(req: Request) {
   }
 
   const snapshot: GeneratedReportSnapshot = {
+    kind: 'budget_status',
     generatedAt: new Date().toISOString(),
     generatedByName: user.profile.name || user.profile.email || 'Unknown',
     includeHours,
@@ -331,6 +332,7 @@ export async function POST(req: Request) {
       project_names: pos.map((p) => p.projectName).filter(Boolean),
       client_names: [...new Set(pos.map((p) => p.clientName).filter(Boolean))],
       snapshot,
+      report_type: 'budget_status',
     })
     .select('id')
     .single()

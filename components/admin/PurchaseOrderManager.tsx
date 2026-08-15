@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, FileText, X } from 'lucide-react'
+import { parseMoney } from '@/lib/utils'
 
 interface Site {
   id: string
@@ -147,7 +148,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
           budget_type: budgetType,
           net_terms: netTerms || null,
           how_to_bill: howToBill || null,
-          original_po_amount: originalAmount ? parseFloat(originalAmount) : null,
+          original_po_amount: originalAmount ? parseMoney(originalAmount) : null,
           po_issue_date: poIssueDate || null,
           proposal_number: proposalNumber || null,
         })
@@ -333,7 +334,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Original Amount ($) *</label>
-                  <input type="number" name="original_po_amount" step="0.01" min="0" placeholder="0.00" required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
+                  <input type="number" name="original_po_amount" step="0.01" min="0" placeholder="0.00" required onWheel={(e) => e.currentTarget.blur()} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date Issued *</label>

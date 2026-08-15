@@ -888,8 +888,15 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
                     }}
                   />
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                  {formatWeekEnding(ts.week_ending)}
+                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                  <a
+                    href={`/dashboard/timesheets/${ts.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    {formatWeekEnding(ts.week_ending)}
+                  </a>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {ts.user_profiles?.name || 'N/A'}

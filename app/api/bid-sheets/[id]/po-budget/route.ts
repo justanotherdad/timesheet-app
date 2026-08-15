@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
+import { parseMoney } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,8 +49,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const poId = sheet.converted_po_id
   const amt =
-    original_po_amount === '' || original_po_amount == null ? null : parseFloat(String(original_po_amount))
-  if (amt != null && Number.isNaN(amt)) {
+    original_po_amount === '' || original_po_amount == null ? null : parseMoney(original_po_amount)
+  if (amt != null && amt < 0) {
     return NextResponse.json({ error: 'Invalid original_po_amount' }, { status: 400 })
   }
 

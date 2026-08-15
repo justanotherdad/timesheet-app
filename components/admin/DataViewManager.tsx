@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Download, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
 import { parseISO, format } from 'date-fns'
+import { formatWeekEnding, getWeekEndingSundayOptions } from '@/lib/utils'
+import MultiSelectDropdown from './MultiSelectDropdown'
 
 interface User {
   id: string
@@ -96,13 +98,13 @@ interface DataViewManagerProps {
 }
 
 export default function DataViewManager({ users, sites, departments, purchaseOrders }: DataViewManagerProps) {
-  const [selectedUser, setSelectedUser] = useState<string>('')
-  const [selectedSite, setSelectedSite] = useState<string>('')
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('')
-  const [selectedPO, setSelectedPO] = useState<string>('')
-  const [startDate, setStartDate] = useState<string>('')
-  const [endDate, setEndDate] = useState<string>('')
-  const [status, setStatus] = useState<string>('')
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([])
+  const [selectedSites, setSelectedSites] = useState<string[]>([])
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([])
+  const [selectedPOs, setSelectedPOs] = useState<string[]>([])
+  const [fromWeekEnding, setFromWeekEnding] = useState<string>('')
+  const [toWeekEnding, setToWeekEnding] = useState<string>('')
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([])
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
   const [sortColumn, setSortColumn] = useState<string>('week_ending')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
@@ -131,52 +133,90 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
       })
     )
 
+  const weekEndingOptions = useMemo(() => getWeekEndingSundayOptions().slice().reverse(), [])
+
   // Progressive filters: API narrows options from loaded data; client cascades site/dept/po
   const filteredSites = useMemo(() => {
-    if (selectedDepartment) {
-      const dept = catalogDepartments.find((d) => d.id === selectedDepartment)
-      return dept ? catalogSites.filter((s) => s.id === dept.site_id) : catalogSites
+    if (selectedDepartments.length > 0) {
+      const siteIds = new Set(
+        catalogDepartments.filter((d) => selectedDepartments.includes(d.id)).map((d) => d.site_id)
+      )
+      return catalogSites.filter((s) => siteIds.has(s.id))
     }
-    if (selectedPO) {
-      const po = catalogPOs.find((p) => p.id === selectedPO)
-      return po?.site_id ? catalogSites.filter((s) => s.id === po.site_id) : catalogSites
+    if (selectedPOs.length > 0) {
+      const siteIds = new Set(
+        catalogPOs.filter((p) => selectedPOs.includes(p.id) && p.site_id).map((p) => p.site_id as string)
+      )
+      return siteIds.size > 0 ? catalogSites.filter((s) => siteIds.has(s.id)) : catalogSites
     }
     return catalogSites
-  }, [catalogSites, catalogDepartments, catalogPOs, selectedDepartment, selectedPO])
+  }, [catalogSites, catalogDepartments, catalogPOs, selectedDepartments, selectedPOs])
 
   const filteredDepartments = useMemo(() => {
-    if (selectedSite) {
-      return catalogDepartments.filter((d) => d.site_id === selectedSite)
+    if (selectedSites.length > 0) {
+      return catalogDepartments.filter((d) => selectedSites.includes(d.site_id))
     }
-    if (selectedPO) {
-      const po = catalogPOs.find((p) => p.id === selectedPO)
-      return po?.department_id
-        ? catalogDepartments.filter((d) => d.id === po.department_id)
-        : catalogDepartments
+    if (selectedPOs.length > 0) {
+      const deptIds = new Set(
+        catalogPOs
+          .filter((p) => selectedPOs.includes(p.id) && p.department_id)
+          .map((p) => p.department_id as string)
+      )
+      return deptIds.size > 0 ? catalogDepartments.filter((d) => deptIds.has(d.id)) : catalogDepartments
     }
     return catalogDepartments
-  }, [catalogDepartments, catalogPOs, selectedSite, selectedPO])
+  }, [catalogDepartments, catalogPOs, selectedSites, selectedPOs])
 
   const filteredPOs = useMemo(() => {
     let list = catalogPOs
-    if (selectedSite) list = list.filter((po) => po.site_id === selectedSite)
-    if (selectedDepartment) list = list.filter((po) => po.department_id === selectedDepartment)
+    if (selectedSites.length > 0) list = list.filter((po) => po.site_id && selectedSites.includes(po.site_id))
+    if (selectedDepartments.length > 0) {
+      list = list.filter((po) => po.department_id && selectedDepartments.includes(po.department_id))
+    }
     return sortPOs(list)
-  }, [catalogPOs, selectedSite, selectedDepartment])
+  }, [catalogPOs, selectedSites, selectedDepartments])
 
   const filteredUsers = useMemo(() => catalogUsers, [catalogUsers])
 
-  const clearAllFilters = () => {
-    setSelectedUser('')
-    setSelectedSite('')
-    setSelectedDepartment('')
-    setSelectedPO('')
-    setStartDate('')
-    setEndDate('')
-    setStatus('')
+  const pruneTo = (ids: string[], allowed: Set<string>) => ids.filter((id) => allowed.has(id))
+
+  const onSitesChange = (ids: string[]) => {
+    setSelectedSites(ids)
+    if (ids.length === 0) return
+    const deptsAtSites = catalogDepartments.filter((d) => ids.includes(d.site_id))
+    const posAtSites = catalogPOs.filter((p) => p.site_id && ids.includes(p.site_id))
+    setSelectedDepartments((prev) => pruneTo(prev, new Set(deptsAtSites.map((d) => d.id))))
+    setSelectedPOs((prev) => pruneTo(prev, new Set(posAtSites.map((p) => p.id))))
   }
 
-  const hasActiveFilters = selectedUser || selectedSite || selectedDepartment || selectedPO || startDate || endDate || status
+  const onDepartmentsChange = (ids: string[]) => {
+    setSelectedDepartments(ids)
+    if (ids.length === 0) return
+    let posForDept = catalogPOs.filter((p) => p.department_id && ids.includes(p.department_id))
+    if (selectedSites.length > 0) {
+      posForDept = posForDept.filter((p) => p.site_id && selectedSites.includes(p.site_id))
+    }
+    setSelectedPOs((prev) => pruneTo(prev, new Set(posForDept.map((p) => p.id))))
+  }
+
+  const clearAllFilters = () => {
+    setSelectedUsers([])
+    setSelectedSites([])
+    setSelectedDepartments([])
+    setSelectedPOs([])
+    setFromWeekEnding('')
+    setToWeekEnding('')
+    setSelectedStatuses([])
+  }
+
+  const hasActiveFilters =
+    selectedUsers.length > 0 ||
+    selectedSites.length > 0 ||
+    selectedDepartments.length > 0 ||
+    selectedPOs.length > 0 ||
+    fromWeekEnding ||
+    toWeekEnding ||
+    selectedStatuses.length > 0
 
   const loadData = async () => {
     setLoading(true)
@@ -184,13 +224,13 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
 
     try {
       const params = new URLSearchParams()
-      if (selectedUser) params.set('user', selectedUser)
-      if (selectedSite) params.set('site', selectedSite)
-      if (selectedDepartment) params.set('department', selectedDepartment)
-      if (selectedPO) params.set('po', selectedPO)
-      if (startDate) params.set('startDate', startDate)
-      if (endDate) params.set('endDate', endDate)
-      if (status) params.set('status', status)
+      if (selectedUsers.length) params.set('user', selectedUsers.join(','))
+      if (selectedSites.length) params.set('site', selectedSites.join(','))
+      if (selectedDepartments.length) params.set('department', selectedDepartments.join(','))
+      if (selectedPOs.length) params.set('po', selectedPOs.join(','))
+      if (fromWeekEnding) params.set('fromWeekEnding', fromWeekEnding)
+      if (toWeekEnding) params.set('toWeekEnding', toWeekEnding)
+      if (selectedStatuses.length) params.set('status', selectedStatuses.join(','))
 
       const res = await fetch(`/api/admin/data-view?${params.toString()}`)
       if (!res.ok) {
@@ -217,7 +257,15 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
 
   useEffect(() => {
     loadData()
-  }, [selectedUser, startDate, endDate, status, selectedSite, selectedDepartment, selectedPO])
+  }, [
+    selectedUsers.join(','),
+    fromWeekEnding,
+    toWeekEnding,
+    selectedStatuses.join(','),
+    selectedSites.join(','),
+    selectedDepartments.join(','),
+    selectedPOs.join(','),
+  ])
 
   const sortedEntries = useMemo(() => {
     const sorted = [...expandedEntries]
@@ -334,129 +382,81 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
       {/* Filters - background matches Export Timesheets (blends with page) */}
       <div className="flex flex-col lg:flex-row gap-4 mb-6 p-4 rounded-lg">
         {/* Date range - stacked, fixed on left for desktop */}
-        <div className="flex flex-col gap-4 lg:w-48 lg:shrink-0 lg:border-r lg:border-gray-200 dark:lg:border-gray-600 lg:pr-4">
+        <div className="flex flex-col gap-4 lg:w-56 lg:shrink-0 lg:border-r lg:border-gray-200 dark:lg:border-gray-600 lg:pr-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">From Week Ending</label>
+            <select
+              value={fromWeekEnding}
+              onChange={(e) => setFromWeekEnding(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
-            />
+            >
+              <option value="">Any</option>
+              {weekEndingOptions.map((we) => (
+                <option key={we} value={we}>{formatWeekEnding(we)}</option>
+              ))}
+            </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">To Week Ending</label>
+            <select
+              value={toWeekEnding}
+              onChange={(e) => setToWeekEnding(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
-            />
+            >
+              <option value="">Any</option>
+              {weekEndingOptions.map((we) => (
+                <option key={we} value={we}>{formatWeekEnding(we)}</option>
+              ))}
+            </select>
           </div>
         </div>
 
         {/* Other filters - cascading: each selection filters the others */}
         <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">User</label>
-            <select
-              value={selectedUser}
-              onChange={(e) => setSelectedUser(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
-            >
-              <option value="">All Users</option>
-              {filteredUsers.map(user => (
-                <option key={user.id} value={user.id}>{user.name}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelectDropdown
+            label="User"
+            allLabel="All Users"
+            options={filteredUsers.map((u) => ({ id: u.id, label: u.name }))}
+            selected={selectedUsers}
+            onChange={setSelectedUsers}
+          />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Site</label>
-            <select
-              value={selectedSite}
-              onChange={(e) => {
-                const newSite = e.target.value
-                setSelectedSite(newSite)
-                if (!newSite) {
-                  setSelectedDepartment('')
-                  setSelectedPO('')
-                } else {
-                  const deptsAtSite = catalogDepartments.filter(d => d.site_id === newSite)
-                  const posAtSite = catalogPOs.filter(p => p.site_id === newSite)
-                  if (!deptsAtSite.some(d => d.id === selectedDepartment)) setSelectedDepartment('')
-                  if (!posAtSite.some(p => p.id === selectedPO)) setSelectedPO('')
-                }
-              }}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
-            >
-              <option value="">All Sites</option>
-              {filteredSites.map(site => (
-                <option key={site.id} value={site.id}>{site.name}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelectDropdown
+            label="Site"
+            allLabel="All Sites"
+            options={filteredSites.map((s) => ({ id: s.id, label: s.name }))}
+            selected={selectedSites}
+            onChange={onSitesChange}
+          />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
-            <select
-              value={selectedDepartment}
-              onChange={(e) => {
-                const newDept = e.target.value
-                setSelectedDepartment(newDept)
-                if (!newDept) setSelectedPO('')
-                else {
-                  let posForDept = catalogPOs.filter(p => p.department_id === newDept)
-                  if (selectedSite) posForDept = posForDept.filter(p => p.site_id === selectedSite)
-                  if (!posForDept.some(p => p.id === selectedPO)) setSelectedPO('')
-                }
-              }}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
-            >
-              <option value="">All Departments</option>
-              {filteredDepartments.map(dept => (
-                <option key={dept.id} value={dept.id}>{dept.name}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelectDropdown
+            label="Department"
+            allLabel="All Departments"
+            options={filteredDepartments.map((d) => ({ id: d.id, label: d.name }))}
+            selected={selectedDepartments}
+            onChange={onDepartmentsChange}
+          />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">PO</label>
-            <select
-              value={selectedPO}
-              onChange={(e) => {
-                // Only update the PO filter. Auto-applying Site / Department
-                // here used to silently exclude entries when the PO's
-                // department_id didn't match the joined entry's department_id
-                // (e.g. converted bid sheet POs). The cascading-options memos
-                // (filteredSites / filteredDepartments) still narrow what's
-                // visible in those dropdowns when a PO is picked, but the
-                // user controls whether to actually apply them as filters.
-                setSelectedPO(e.target.value)
-              }}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
-            >
-              <option value="">All POs</option>
-              {filteredPOs.map(po => (
-                <option key={po.id} value={po.id}>{po.po_number}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelectDropdown
+            label="PO"
+            allLabel="All POs"
+            options={filteredPOs.map((po) => ({ id: po.id, label: po.po_number }))}
+            selected={selectedPOs}
+            onChange={setSelectedPOs}
+          />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
-            >
-              <option value="">All Statuses</option>
-              <option value="draft">Draft</option>
-              <option value="submitted">Submitted</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </div>
+          <MultiSelectDropdown
+            label="Status"
+            allLabel="All Statuses"
+            options={[
+              { id: 'draft', label: 'Draft' },
+              { id: 'submitted', label: 'Submitted' },
+              { id: 'approved', label: 'Approved' },
+              { id: 'rejected', label: 'Rejected' },
+            ]}
+            selected={selectedStatuses}
+            onChange={setSelectedStatuses}
+          />
 
           <div className="flex items-end">
             <button

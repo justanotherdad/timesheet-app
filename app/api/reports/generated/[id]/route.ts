@@ -12,6 +12,7 @@ type ReportRow = {
   expires_at: string
   po_ids: string[] | null
   snapshot: unknown
+  report_type?: string | null
 }
 
 async function loadWithAccess(id: string) {
@@ -27,7 +28,7 @@ async function loadWithAccess(id: string) {
 
   const { data } = await admin
     .from('generated_reports')
-    .select('id, title, created_by, created_at, expires_at, po_ids, snapshot')
+    .select('id, title, created_by, created_at, expires_at, po_ids, snapshot, report_type')
     .eq('id', id)
     .maybeSingle()
   const report = data as ReportRow | null
@@ -35,15 +36,20 @@ async function loadWithAccess(id: string) {
 
   const role = user.profile.role
   const isAdmin = role === 'admin' || role === 'super_admin'
+  const isTimesheet = report.report_type === 'timesheet' || (report.snapshot as { kind?: string } | null)?.kind === 'timesheet'
   if (!isAdmin) {
-    const { data: grants } = await admin
-      .from('po_budget_access')
-      .select('purchase_order_id')
-      .eq('user_id', user.id)
-    const granted = new Set((grants || []).map((g) => (g as { purchase_order_id: string }).purchase_order_id))
-    const poIds = report.po_ids || []
-    const allowed = poIds.length > 0 && poIds.every((pid) => granted.has(pid))
-    if (!allowed) return { error: 'Access denied', status: 403 as const }
+    if (isTimesheet) {
+      if (role !== 'manager') return { error: 'Access denied', status: 403 as const }
+    } else {
+      const { data: grants } = await admin
+        .from('po_budget_access')
+        .select('purchase_order_id')
+        .eq('user_id', user.id)
+      const granted = new Set((grants || []).map((g) => (g as { purchase_order_id: string }).purchase_order_id))
+      const poIds = report.po_ids || []
+      const allowed = poIds.length > 0 && poIds.every((pid) => granted.has(pid))
+      if (!allowed) return { error: 'Access denied', status: 403 as const }
+    }
   }
 
   return { admin, user, report, isAdmin }
