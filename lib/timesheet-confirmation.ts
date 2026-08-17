@@ -242,3 +242,67 @@ export async function getPendingConfirmationsForUser(
   }))
 }
 
+/**
+ * True when this timesheet would appear on `userId`'s Timesheet Confirmations
+ * list (assignee, approved, current sequence not yet receipted, client filter).
+ */
+export async function isPendingConfirmationForUser(
+  admin: SupabaseClient,
+  userId: string,
+  timesheet: { id: string; status?: string | null; approval_confirmation_sequence?: number | null },
+  settings?: Record<string, string>
+): Promise<boolean> {
+  const map = settings ?? (await loadCompanySettingsMap(admin))
+  const assignees = parseConfirmationAssigneeIds(map)
+  if (assignees.length === 0 || !assignees.includes(userId)) return false
+  if (timesheet.status !== 'approved') return false
+
+  const seq = timesheet.approval_confirmation_sequence ?? 0
+  if (seq <= 0) return false
+
+  const { data: receipt } = await admin
+    .from('timesheet_confirmation_receipts')
+    .select('timesheet_id')
+    .eq('user_id', userId)
+    .eq('timesheet_id', timesheet.id)
+    .eq('approval_sequence', seq)
+    .maybeSingle()
+  if (receipt) return false
+
+  const allowedSiteIds = parseConfirmationSiteFilters(map)[userId] || []
+  if (allowedSiteIds.length === 0) return true
+
+  try {
+    const entries = await fetchConfirmationEntries(admin, [timesheet.id])
+    const poIds = [
+      ...new Set(
+        entries
+          .map((e) => e.po_id)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      ),
+    ]
+    const poSiteById = new Map<string, string>()
+    if (poIds.length > 0) {
+      const pos = await fetchByIdsInChunks<{ id: string; site_id: string | null }>(poIds, (chunk) =>
+        admin.from('purchase_orders').select('id, site_id').in('id', chunk)
+      )
+      for (const po of pos) {
+        if (po.site_id) poSiteById.set(po.id, po.site_id)
+      }
+    }
+
+    const allowed = new Set(allowedSiteIds)
+    for (const e of entries) {
+      const siteId =
+        (typeof e.client_project_id === 'string' && e.client_project_id) ||
+        (e.po_id ? poSiteById.get(e.po_id) : undefined) ||
+        null
+      if (siteId && allowed.has(siteId)) return true
+    }
+    return false
+  } catch (err) {
+    console.error('[timesheet-confirmation] single-sheet site filter failed; showing confirm button', err)
+    return true
+  }
+}
+

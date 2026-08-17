@@ -30,9 +30,10 @@ import {
   userIsCurrentApprover,
   type ApprovalProfileFields,
 } from '@/lib/budget-timesheet-approvers'
-import { parseConfirmationAssigneeIds, loadCompanySettingsMap } from '@/lib/timesheet-confirmation'
+import { parseConfirmationAssigneeIds, loadCompanySettingsMap, isPendingConfirmationForUser } from '@/lib/timesheet-confirmation'
 import Header from '@/components/Header'
 import ApproveTimesheetButton from '@/components/approvals/ApproveTimesheetButton'
+import ConfirmReceiptButton from '@/components/ConfirmReceiptButton'
 
 export const maxDuration = 10 // Maximum duration for this route in seconds
 
@@ -224,6 +225,12 @@ export default async function TimesheetDetailPage({
     canApprove &&
     (['supervisor', 'manager', 'admin', 'super_admin', 'client'].includes(user.profile.role) ||
       (user.profile.role === 'employee' && timesheet.user_id !== user.id))
+
+  const showConfirmReceipt = await isPendingConfirmationForUser(adminSupabase, user.id, {
+    id: timesheet.id,
+    status: timesheet.status,
+    approval_confirmation_sequence: timesheet.approval_confirmation_sequence,
+  })
 
   // ----- Pending Approvals Next/Previous navigation (#6) -----
   // When we arrived here from the Pending Approvals queue, build the same
@@ -758,6 +765,7 @@ export default async function TimesheetDetailPage({
                   Reject (reopen for edit)
                 </Link>
               )}
+              {showConfirmReceipt && <ConfirmReceiptButton timesheetId={timesheet.id} />}
             </div>
           </div>
         </div>

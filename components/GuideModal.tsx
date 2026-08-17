@@ -621,7 +621,7 @@ function GuideContent() {
         </p>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
           <li><strong>Where:</strong> the <strong>Timesheet Confirmations</strong> tile on the Dashboard, or the <strong>menu</strong> (☰). A badge shows how many are waiting.</li>
-          <li>Approved timesheets stay in your list until you <strong>confirm receipt</strong> of each one.</li>
+          <li>Approved timesheets stay in your list until you <strong>confirm receipt</strong> of each one. You can confirm from the list or from the purple <strong>Confirm receipt</strong> button at the bottom of the timesheet itself. After you confirm, the button disappears and the timesheet leaves your list.</li>
           <li>View or export a timesheet first, then confirm it.</li>
           <li>Each assignee has their own list, so your confirming does not clear anyone else’s.</li>
         </ul>
