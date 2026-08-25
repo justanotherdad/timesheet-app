@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
 import { getAccessibleSiteIds } from '@/lib/access'
+import { getDataViewAccess, mergeDataViewSiteScope } from '@/lib/data-view-access'
 import { parseISO } from 'date-fns'
 
 const csvList = (searchParams: URLSearchParams, key: string): string[] => {
@@ -96,40 +97,18 @@ export async function GET(request: NextRequest) {
     }>
     const role = user.profile.role
 
-    let accessibleUserIds: string[] = []
-    if (role === 'supervisor') {
-      accessibleUserIds = profiles
-        .filter(
-          (p) =>
-            (p.supervisor_id === user.id ||
-              p.manager_id === user.id ||
-              p.final_approver_id === user.id) &&
-            p.role === 'employee'
-        )
-        .map((p) => p.id)
-    } else if (role === 'manager') {
-      accessibleUserIds = profiles
-        .filter(
-          (p) =>
-            (p.supervisor_id === user.id ||
-              p.manager_id === user.id ||
-              p.final_approver_id === user.id) &&
-            ['employee', 'supervisor'].includes(p.role)
-        )
-        .map((p) => p.id)
-    } else if (role === 'admin') {
-      accessibleUserIds = profiles.filter((p) => p.role !== 'super_admin').map((p) => p.id)
-    } else {
-      accessibleUserIds = profiles.map((p) => p.id)
-    }
-
-    const accessibleSiteIds = await getAccessibleSiteIds(adminSupabase, user.id, role)
-    const siteScopeSet =
-      accessibleSiteIds === null ? null : new Set(accessibleSiteIds)
+    const [access, rawSiteIds] = await Promise.all([
+      getDataViewAccess(adminSupabase, user.id, role, profiles),
+      getAccessibleSiteIds(adminSupabase, user.id, role),
+    ])
+    const { accessibleUserIds, fullViewUserIds, grantedPoIds } = access
+    const accessibleSiteIds = mergeDataViewSiteScope(rawSiteIds, access.grantedSiteIds)
+    const siteScopeSet = accessibleSiteIds === null ? null : new Set(accessibleSiteIds)
+    const accessibleUserIdSet = new Set(accessibleUserIds)
 
     const userIdsToFetch =
       selectedUsers.length > 0
-        ? selectedUsers.filter((id) => accessibleUserIds.includes(id))
+        ? selectedUsers.filter((id) => accessibleUserIdSet.has(id))
         : accessibleUserIds
 
     if (userIdsToFetch.length === 0) {
@@ -220,8 +199,13 @@ export async function GET(request: NextRequest) {
       const timesheet = timesheets.find((t: { id: string }) => t.id === entry.timesheet_id)
       if (!timesheet) continue
 
+      const entryPoId = (entry.po_id as string) || null
+      if (!fullViewUserIds.has(timesheet.user_id)) {
+        if (!entryPoId || !grantedPoIds.has(entryPoId)) continue
+      }
+
       const hours = sumHours(entry)
-      const po = entry.po_id ? posMap[entry.po_id as string] : undefined
+      const po = entryPoId ? posMap[entryPoId] : undefined
       const siteId = (entry.client_project_id as string) || po?.site_id || null
 
       if (siteScopeSet !== null && siteId && !siteScopeSet.has(siteId)) continue
@@ -239,7 +223,7 @@ export async function GET(request: NextRequest) {
         site_name: siteName,
         site_id: siteId,
         po_number: po?.po_number || 'N/A',
-        po_id: (entry.po_id as string) || null,
+        po_id: entryPoId,
         department_id: po?.department_id || null,
         task_description: (entry.task_description as string) || 'N/A',
         system_name: (entry.system_name as string) || systemsMap[entry.system_id as string]?.name || 'N/A',
@@ -253,6 +237,7 @@ export async function GET(request: NextRequest) {
     for (const u of unbillable) {
       const timesheet = timesheets.find((t: { id: string }) => t.id === u.timesheet_id)
       if (!timesheet) continue
+      if (!fullViewUserIds.has(timesheet.user_id)) continue
       const nonBillableHours = sumHours(u)
       if (nonBillableHours <= 0) continue
 
@@ -309,24 +294,39 @@ export async function GET(request: NextRequest) {
     const scopedSiteIdSet = new Set(scopedSites.map((s) => s.id))
     const scopedDepts = allDepts.filter((d) => scopedSiteIdSet.has(d.site_id))
 
-    let scopedPos: Array<{ id: string; po_number: string; site_id?: string; department_id?: string }> = []
+    type ScopedPo = { id: string; po_number: string; site_id?: string; department_id?: string }
+    let scopedPos: ScopedPo[] = []
     if (siteScopeSet === null) {
       const { data: allPos } = await adminSupabase
         .from('purchase_orders')
         .select('id, po_number, site_id, department_id')
         .order('po_number')
-      scopedPos = (allPos || []) as typeof scopedPos
+      scopedPos = (allPos || []) as ScopedPo[]
     } else if (scopedSiteIdSet.size > 0) {
       const { data: sitePos } = await adminSupabase
         .from('purchase_orders')
         .select('id, po_number, site_id, department_id')
         .in('site_id', [...scopedSiteIdSet])
         .order('po_number')
-      scopedPos = (sitePos || []) as typeof scopedPos
+      scopedPos = (sitePos || []) as ScopedPo[]
+    }
+
+    if (grantedPoIds.size > 0) {
+      const have = new Set(scopedPos.map((p) => p.id))
+      const missing = [...grantedPoIds].filter((id) => !have.has(id))
+      if (missing.length > 0) {
+        const extra = await fetchByIdsInChunks<ScopedPo>(missing, (chunk) =>
+          adminSupabase
+            .from('purchase_orders')
+            .select('id, po_number, site_id, department_id')
+            .in('id', chunk)
+        )
+        scopedPos = [...scopedPos, ...extra]
+      }
     }
 
     const accessibleUsers = profiles
-      .filter((p) => accessibleUserIds.includes(p.id))
+      .filter((p) => accessibleUserIdSet.has(p.id))
       .map((p) => ({ id: p.id, name: p.name }))
 
     const userIdsInPool = new Set(

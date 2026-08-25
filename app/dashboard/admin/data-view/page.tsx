@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { requireRole } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAccessibleSiteIds } from '@/lib/access'
+import { getDataViewAccess, mergeDataViewSiteScope } from '@/lib/data-view-access'
 import Header from '@/components/Header'
 import { withQueryTimeout } from '@/lib/timeout'
 import DataViewManager from '@/components/admin/DataViewManager'
@@ -36,28 +37,14 @@ export default async function DataViewPage() {
   }>
   const role = user.profile.role
 
-  let users = allUsers
-  if (role === 'supervisor') {
-    users = allUsers.filter(
-      (u) =>
-        (u.supervisor_id === user.id ||
-          u.manager_id === user.id ||
-          u.final_approver_id === user.id) &&
-        u.role === 'employee'
-    )
-  } else if (role === 'manager') {
-    users = allUsers.filter(
-      (u) =>
-        (u.supervisor_id === user.id ||
-          u.manager_id === user.id ||
-          u.final_approver_id === user.id) &&
-        ['employee', 'supervisor'].includes(u.role)
-    )
-  } else if (role === 'admin') {
-    users = allUsers.filter((u) => u.role !== 'super_admin')
-  }
+  const [access, rawSiteIds] = await Promise.all([
+    getDataViewAccess(adminSupabase, user.id, role, allUsers),
+    getAccessibleSiteIds(adminSupabase, user.id, role),
+  ])
+  const accessibleIdSet = new Set(access.accessibleUserIds)
+  const users = allUsers.filter((u) => accessibleIdSet.has(u.id))
 
-  const accessibleSiteIds = await getAccessibleSiteIds(adminSupabase, user.id, role)
+  const accessibleSiteIds = mergeDataViewSiteScope(rawSiteIds, access.grantedSiteIds)
   let sites = (sitesResult.data || []) as Array<{ id: string; name: string }>
   let departments = (departmentsResult.data || []) as Array<{ id: string; name: string; site_id: string }>
   let purchaseOrders = (purchaseOrdersResult.data || []) as Array<{
@@ -71,7 +58,9 @@ export default async function DataViewPage() {
     const siteSet = new Set(accessibleSiteIds)
     sites = sites.filter((s) => siteSet.has(s.id))
     departments = departments.filter((d) => siteSet.has(d.site_id))
-    purchaseOrders = purchaseOrders.filter((p) => p.site_id && siteSet.has(p.site_id))
+    purchaseOrders = purchaseOrders.filter(
+      (p) => access.grantedPoIds.has(p.id) || (p.site_id && siteSet.has(p.site_id))
+    )
   }
 
   return (
