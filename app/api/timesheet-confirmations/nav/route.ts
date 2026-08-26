@@ -24,7 +24,11 @@ export async function GET() {
   }
 
   // Honor the per-user client filter so the badge count matches the list.
-  const pending = await getPendingConfirmationsForUser(admin, user.id, settings)
-
-  return NextResponse.json({ showLink: true, pendingCount: pending.length })
+  try {
+    const pending = await getPendingConfirmationsForUser(admin, user.id, settings)
+    return NextResponse.json({ showLink: true, pendingCount: pending.length })
+  } catch (err) {
+    console.error('[timesheet-confirmations] nav count failed', err)
+    return NextResponse.json({ showLink: true, pendingCount: 0 })
+  }
 }

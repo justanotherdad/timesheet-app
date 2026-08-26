@@ -82,7 +82,37 @@ export interface PendingConfirmation {
 /** PostgREST URL/filter length limit — keep `.in()` lists under this size. */
 const IN_CHUNK_SIZE = 150
 /** Default PostgREST max rows; page until a short page to avoid silent truncation. */
-const ENTRY_PAGE_SIZE = 1000
+const PAGE_SIZE = 1000
+
+type ReceiptRow = { timesheet_id: string; approval_sequence: number }
+
+/**
+ * Walk `.range()` pages until a short page. Unpaged selects silently stop at
+ * ~1000 rows, which made confirmed timesheets reappear on the list: the
+ * detail page looks up one receipt, but the list missed later receipts.
+ */
+async function fetchAllPages<T>(
+  runPage: (
+    from: number,
+    to: number
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>
+): Promise<T[]> {
+  const out: T[] = []
+  let from = 0
+  for (;;) {
+    const { data, error } = await runPage(from, from + PAGE_SIZE - 1)
+    if (error) throw new Error(error.message)
+    const rows = (data || []) as T[]
+    out.push(...rows)
+    if (rows.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return out
+}
+
+function receiptKey(timesheetId: string, sequence: number | string | null | undefined): string {
+  return `${timesheetId}:${Number(sequence ?? 0)}`
+}
 
 type ConfirmationEntryRow = {
   timesheet_id: string
@@ -126,14 +156,15 @@ async function fetchConfirmationEntries(
     for (;;) {
       const { data, error } = await admin
         .from('timesheet_entries')
-        .select('timesheet_id, po_id, client_project_id')
+        .select('id, timesheet_id, po_id, client_project_id')
         .in('timesheet_id', idChunk)
-        .range(from, from + ENTRY_PAGE_SIZE - 1)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
       if (error) throw new Error(error.message)
       const rows = (data || []) as ConfirmationEntryRow[]
       out.push(...rows)
-      if (rows.length < ENTRY_PAGE_SIZE) break
-      from += ENTRY_PAGE_SIZE
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
     }
   }
 
@@ -157,35 +188,48 @@ export async function getPendingConfirmationsForUser(
   const assignees = parseConfirmationAssigneeIds(settings)
   if (assignees.length === 0 || !assignees.includes(userId)) return []
 
-  const { data: receipts } = await admin
-    .from('timesheet_confirmation_receipts')
-    .select('timesheet_id, approval_sequence')
-    .eq('user_id', userId)
-  const receiptKey = new Set(
-    (receipts || []).map(
-      (r) =>
-        `${(r as { timesheet_id: string }).timesheet_id}:${(r as { approval_sequence: number }).approval_sequence}`
-    )
+  const receipts = await fetchAllPages<ReceiptRow>((from, to) =>
+    admin
+      .from('timesheet_confirmation_receipts')
+      .select('timesheet_id, approval_sequence')
+      .eq('user_id', userId)
+      .order('timesheet_id', { ascending: true })
+      .order('approval_sequence', { ascending: true })
+      .range(from, to)
+  )
+  const confirmed = new Set(receipts.map((r) => receiptKey(r.timesheet_id, r.approval_sequence)))
+
+  type ApprovedRow = {
+    id: string
+    user_id: string
+    week_ending: string
+    week_starting: string | null
+    approval_confirmation_sequence?: number | null
+    approved_at: string | null
+    user_profiles?: { name?: string } | { name?: string }[] | null
+  }
+  const approved = await fetchAllPages<ApprovedRow>((from, to) =>
+    admin
+      .from('weekly_timesheets')
+      .select(
+        'id, user_id, week_ending, week_starting, approval_confirmation_sequence, approved_at, user_profiles!user_id(name)'
+      )
+      .eq('status', 'approved')
+      .order('approved_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, to)
   )
 
-  const { data: approved } = await admin
-    .from('weekly_timesheets')
-    .select(
-      'id, user_id, week_ending, week_starting, approval_confirmation_sequence, approved_at, user_profiles!user_id(name)'
-    )
-    .eq('status', 'approved')
-    .order('approved_at', { ascending: false })
-
-  let pending = (approved || []).filter((row) => {
-    const seq = (row as { approval_confirmation_sequence?: number }).approval_confirmation_sequence ?? 0
+  let pending = approved.filter((row) => {
+    const seq = Number(row.approval_confirmation_sequence ?? 0)
     if (seq <= 0) return false
-    return !receiptKey.has(`${(row as { id: string }).id}:${seq}`)
+    return !confirmed.has(receiptKey(row.id, seq))
   })
 
   const allowedSiteIds = parseConfirmationSiteFilters(settings)[userId] || []
   if (allowedSiteIds.length > 0 && pending.length > 0) {
     try {
-      const pendingIds = pending.map((ts) => (ts as { id: string }).id)
+      const pendingIds = pending.map((ts) => ts.id)
       const entries = await fetchConfirmationEntries(admin, pendingIds)
 
       const poIds = [
@@ -219,7 +263,7 @@ export async function getPendingConfirmationsForUser(
       }
 
       pending = pending.filter((ts) => {
-        const sites = timesheetSites.get((ts as { id: string }).id)
+        const sites = timesheetSites.get(ts.id)
         if (!sites) return false
         for (const s of sites) if (allowed.has(s)) return true
         return false
@@ -233,12 +277,14 @@ export async function getPendingConfirmationsForUser(
   }
 
   return pending.map((ts) => ({
-    id: (ts as { id: string }).id,
-    user_id: (ts as { user_id: string }).user_id,
-    week_ending: (ts as { week_ending: string }).week_ending,
-    week_starting: (ts as { week_starting: string | null }).week_starting ?? null,
-    approved_at: (ts as { approved_at: string | null }).approved_at ?? null,
-    employee_name: ((ts as { user_profiles?: { name?: string } }).user_profiles)?.name || 'Unknown',
+    id: ts.id,
+    user_id: ts.user_id,
+    week_ending: ts.week_ending,
+    week_starting: ts.week_starting ?? null,
+    approved_at: ts.approved_at ?? null,
+    employee_name:
+      (Array.isArray(ts.user_profiles) ? ts.user_profiles[0]?.name : ts.user_profiles?.name) ||
+      'Unknown',
   }))
 }
 

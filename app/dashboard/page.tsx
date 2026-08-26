@@ -118,12 +118,16 @@ export default async function DashboardPage() {
   if (confirmationAssignees.length > 0 && confirmationAssignees.includes(user.id)) {
     showTimesheetConfirmationsCard = true
     // Honor the per-user client filter so this count matches the list + badge.
-    const pendingConfirmations = await getPendingConfirmationsForUser(
-      adminSupabase,
-      user.id,
-      settingsForConfirm
-    )
-    timesheetConfirmationsPending = pendingConfirmations.length
+    try {
+      const pendingConfirmations = await getPendingConfirmationsForUser(
+        adminSupabase,
+        user.id,
+        settingsForConfirm
+      )
+      timesheetConfirmationsPending = pendingConfirmations.length
+    } catch (err) {
+      console.error('[timesheet-confirmation] dashboard count failed', err)
+    }
   }
 
   // Approved timesheets (incl. signed-but-not-fully-approved); chain + signed
