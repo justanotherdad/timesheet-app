@@ -149,6 +149,134 @@ export async function getBillRatePoSummaryByUserIds(
 
 export type ProjectDetailCombo = { systemId: string; deliverableId: string; activityId: string }
 
+/** PostgREST URL/filter length limit — keep `.in()` lists under this size. */
+const IN_CHUNK_SIZE = 150
+/** Default PostgREST max rows; page until a short page to avoid silent truncation. */
+const PAGE_SIZE = 1000
+
+type ProjectDetailRow = {
+  po_id: string
+  system_id: string | null
+  deliverable_id: string | null
+  activity_id: string | null
+}
+
+/**
+ * Load every project_details triplet for the given project-budget POs.
+ * Unpaged selects silently stop at ~1000 rows, which would drop matrix cells
+ * (and therefore timesheet Activity options) on large project POs.
+ */
+async function loadProjectDetailCombosByPo(
+  admin: SupabaseClient,
+  poIds: string[]
+): Promise<Record<string, ProjectDetailCombo[]>> {
+  const byPo: Record<string, ProjectDetailCombo[]> = {}
+  if (poIds.length === 0) return byPo
+
+  for (let i = 0; i < poIds.length; i += IN_CHUNK_SIZE) {
+    const poChunk = poIds.slice(i, i + IN_CHUNK_SIZE)
+    let from = 0
+    for (;;) {
+      const { data, error } = await admin
+        .from('project_details')
+        .select('po_id, system_id, deliverable_id, activity_id')
+        .in('po_id', poChunk)
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) break
+      const rows = (data || []) as ProjectDetailRow[]
+      for (const row of rows) {
+        if (!row.system_id || !row.deliverable_id || !row.activity_id) continue
+        const list = byPo[row.po_id] || (byPo[row.po_id] = [])
+        list.push({
+          systemId: row.system_id,
+          deliverableId: row.deliverable_id,
+          activityId: row.activity_id,
+        })
+      }
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+  return byPo
+}
+
+async function fetchRowsByIds(
+  admin: SupabaseClient,
+  table: 'systems' | 'deliverables' | 'activities',
+  ids: string[]
+): Promise<any[]> {
+  if (ids.length === 0) return []
+  const out: any[] = []
+  for (let i = 0; i < ids.length; i += IN_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + IN_CHUNK_SIZE)
+    const { data } = await admin.from(table).select('*').in('id', chunk)
+    if (data) out.push(...data)
+  }
+  return out
+}
+
+async function fetchJunctionRows<T>(
+  supabase: SupabaseClient,
+  table: string,
+  idCol: string,
+  ids: string[],
+  select: string
+): Promise<T[]> {
+  if (ids.length === 0) return []
+  const out: T[] = []
+  for (let i = 0; i < ids.length; i += IN_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + IN_CHUNK_SIZE)
+    const res = await withQueryTimeout<T[]>(() => supabase.from(table).select(select).in(idCol, chunk))
+    if (res.data) out.push(...res.data)
+  }
+  return out
+}
+
+/**
+ * Project-budget timesheets must offer every matrix cell, even when the
+ * global catalog load was truncated (~1000 rows) or the Manage Timesheet
+ * Options department/PO filter dropped a PO-private row. Basic-budget
+ * dropdowns keep using the junction-filtered lists; this only *adds*
+ * systems/deliverables/activities referenced by project_details.
+ */
+async function mergeProjectMatrixCatalogRows(
+  admin: SupabaseClient,
+  combosByPo: Record<string, ProjectDetailCombo[]>,
+  systems: any[],
+  deliverables: any[],
+  activities: any[]
+): Promise<{ systems: any[]; deliverables: any[]; activities: any[] }> {
+  const neededSystems = new Set<string>()
+  const neededDeliverables = new Set<string>()
+  const neededActivities = new Set<string>()
+  for (const combos of Object.values(combosByPo)) {
+    for (const c of combos) {
+      neededSystems.add(c.systemId)
+      neededDeliverables.add(c.deliverableId)
+      neededActivities.add(c.activityId)
+    }
+  }
+
+  const haveSystems = new Set(systems.map((r: any) => r.id as string))
+  const haveDeliverables = new Set(deliverables.map((r: any) => r.id as string))
+  const haveActivities = new Set(activities.map((r: any) => r.id as string))
+
+  const [extraSystems, extraDeliverables, extraActivities] = await Promise.all([
+    fetchRowsByIds(admin, 'systems', [...neededSystems].filter((id) => !haveSystems.has(id))),
+    fetchRowsByIds(admin, 'deliverables', [...neededDeliverables].filter((id) => !haveDeliverables.has(id))),
+    fetchRowsByIds(admin, 'activities', [...neededActivities].filter((id) => !haveActivities.has(id))),
+  ])
+
+  const merge = (existing: any[], extra: any[]) =>
+    Array.from(new Map([...existing, ...extra].map((r: any) => [r.id, r])).values())
+
+  return {
+    systems: merge(systems, extraSystems),
+    deliverables: merge(deliverables, extraDeliverables),
+    activities: merge(activities, extraActivities),
+  }
+}
+
 export type TimesheetDropdownPayload = {
   sites: any[]
   purchaseOrders: any[]
@@ -162,10 +290,11 @@ export type TimesheetDropdownPayload = {
   activityPOIds: Record<string, string[]>
   /**
    * Map of project-budget PO id -> list of valid (system, deliverable, activity)
-   * triplets pulled from project_details. The timesheet form uses this to
-   * restrict its dropdown options when the selected PO is a Project Budget,
-   * preventing entries from referencing combos that don't exist as matrix cells.
-   * Basic Budget POs are absent from this map and keep the looser dept/PO filter.
+   * triplets pulled from project_details. The timesheet form uses this as the
+   * exclusive allowlist for that PO (Manage Timesheet Options junctions do not
+   * hide matrix cells). Catalog rows referenced here are always merged into
+   * systems/deliverables/activities. Basic Budget POs are absent from this map
+   * and keep the looser dept/PO filter.
    */
   projectBudgetCombosByPo: Record<string, ProjectDetailCombo[]>
 }
@@ -174,6 +303,11 @@ export type TimesheetDropdownPayload = {
  * Loads sites, POs, systems, deliverables, activities for New/Edit timesheet.
  * Non-admins: POs from Bill Rates by Person; sites derived from those POs.
  * Pass entryPoIds when editing to merge POs already on the sheet (historical / inactive PO rows).
+ *
+ * Project-budget POs: System/Deliverable/Activity options are that PO's
+ * project_details cells. Matrix catalog rows are always included, even if
+ * Manage Timesheet Options junctions or the ~1000-row catalog cap omitted them.
+ * Basic-budget POs still use the global catalog + department/PO junctions.
  */
 export async function loadTimesheetDropdownData(params: {
   supabase: SupabaseClient
@@ -321,6 +455,28 @@ export async function loadTimesheetDropdownData(params: {
     }
   }
 
+  // Project-budget allowlist: every matrix cell for this user's project POs.
+  // Built before junction maps so we can merge any catalog rows the global
+  // load / Manage Timesheet Options filter omitted (those cells must still
+  // appear on the timesheet). Basic-budget POs never enter this map.
+  const projectBudgetPoIds = (purchaseOrders as Array<{ id: string; budget_type?: string }>)
+    .filter((p) => p.budget_type === 'project')
+    .map((p) => p.id)
+  const projectBudgetCombosByPo = await loadProjectDetailCombosByPo(admin, projectBudgetPoIds)
+  if (projectBudgetPoIds.length > 0) {
+    const merged = await mergeProjectMatrixCatalogRows(
+      admin,
+      projectBudgetCombosByPo,
+      systems,
+      deliverables,
+      activities
+    )
+    systems = merged.systems
+    deliverables = merged.deliverables
+    activities = merged.activities
+  }
+
+  systems = Array.from(new Map(systems.map((s: any) => [s.id, s])).values())
   deliverables = Array.from(new Map(deliverables.map((d: any) => [d.id, d])).values())
   activities = Array.from(new Map(activities.map((a: any) => [a.id, a])).values())
 
@@ -330,98 +486,63 @@ export async function loadTimesheetDropdownData(params: {
   const deliverableDepartmentIds: Record<string, string[]> = {}
   const activityPOIds: Record<string, string[]> = {}
   if (systems.length > 0 || deliverables.length > 0 || activities.length > 0) {
-    const [sysPORes, sysDeptRes, delPORes, delDeptRes, actPORes] = await Promise.all([
-      systems.length > 0
-        ? withQueryTimeout<Array<{ system_id: string; purchase_order_id: string }>>(() =>
-            supabase
-              .from('system_purchase_orders')
-              .select('system_id,purchase_order_id')
-              .in('system_id', systems.map((s: any) => s.id))
-          )
-        : Promise.resolve({ data: [] }),
-      systems.length > 0
-        ? withQueryTimeout<Array<{ system_id: string; department_id: string }>>(() =>
-            supabase
-              .from('system_departments')
-              .select('system_id,department_id')
-              .in('system_id', systems.map((s: any) => s.id))
-          )
-        : Promise.resolve({ data: [] }),
-      deliverables.length > 0
-        ? withQueryTimeout<Array<{ deliverable_id: string; purchase_order_id: string }>>(() =>
-            supabase
-              .from('deliverable_purchase_orders')
-              .select('deliverable_id,purchase_order_id')
-              .in('deliverable_id', deliverables.map((d: any) => d.id))
-          )
-        : Promise.resolve({ data: [] }),
-      deliverables.length > 0
-        ? withQueryTimeout<Array<{ deliverable_id: string; department_id: string }>>(() =>
-            supabase
-              .from('deliverable_departments')
-              .select('deliverable_id,department_id')
-              .in('deliverable_id', deliverables.map((d: any) => d.id))
-          )
-        : Promise.resolve({ data: [] }),
-      activities.length > 0
-        ? withQueryTimeout<Array<{ activity_id: string; purchase_order_id: string }>>(() =>
-            supabase
-              .from('activity_purchase_orders')
-              .select('activity_id,purchase_order_id')
-              .in('activity_id', activities.map((a: any) => a.id))
-          )
-        : Promise.resolve({ data: [] }),
+    const [sysPORows, sysDeptRows, delPORows, delDeptRows, actPORows] = await Promise.all([
+      fetchJunctionRows<{ system_id: string; purchase_order_id: string }>(
+        supabase,
+        'system_purchase_orders',
+        'system_id',
+        systems.map((s: any) => s.id),
+        'system_id,purchase_order_id'
+      ),
+      fetchJunctionRows<{ system_id: string; department_id: string }>(
+        supabase,
+        'system_departments',
+        'system_id',
+        systems.map((s: any) => s.id),
+        'system_id,department_id'
+      ),
+      fetchJunctionRows<{ deliverable_id: string; purchase_order_id: string }>(
+        supabase,
+        'deliverable_purchase_orders',
+        'deliverable_id',
+        deliverables.map((d: any) => d.id),
+        'deliverable_id,purchase_order_id'
+      ),
+      fetchJunctionRows<{ deliverable_id: string; department_id: string }>(
+        supabase,
+        'deliverable_departments',
+        'deliverable_id',
+        deliverables.map((d: any) => d.id),
+        'deliverable_id,department_id'
+      ),
+      fetchJunctionRows<{ activity_id: string; purchase_order_id: string }>(
+        supabase,
+        'activity_purchase_orders',
+        'activity_id',
+        activities.map((a: any) => a.id),
+        'activity_id,purchase_order_id'
+      ),
     ])
-    ;(sysPORes.data || []).forEach((r: any) => {
+    sysPORows.forEach((r) => {
       if (!systemPOIds[r.system_id]) systemPOIds[r.system_id] = []
       systemPOIds[r.system_id].push(r.purchase_order_id)
     })
-    ;(sysDeptRes.data || []).forEach((r: any) => {
+    sysDeptRows.forEach((r) => {
       if (!systemDepartmentIds[r.system_id]) systemDepartmentIds[r.system_id] = []
       systemDepartmentIds[r.system_id].push(r.department_id)
     })
-    ;(delPORes.data || []).forEach((r: any) => {
+    delPORows.forEach((r) => {
       if (!deliverablePOIds[r.deliverable_id]) deliverablePOIds[r.deliverable_id] = []
       deliverablePOIds[r.deliverable_id].push(r.purchase_order_id)
     })
-    ;(delDeptRes.data || []).forEach((r: any) => {
+    delDeptRows.forEach((r) => {
       if (!deliverableDepartmentIds[r.deliverable_id]) deliverableDepartmentIds[r.deliverable_id] = []
       deliverableDepartmentIds[r.deliverable_id].push(r.department_id)
     })
-    ;(actPORes.data || []).forEach((r: any) => {
+    actPORows.forEach((r) => {
       if (!activityPOIds[r.activity_id]) activityPOIds[r.activity_id] = []
       activityPOIds[r.activity_id].push(r.purchase_order_id)
     })
-  }
-
-  // Build the strict (system, deliverable, activity) allowlist for project-
-  // budget POs. We pull project_details for any PO with budget_type='project'
-  // visible to this user; the timesheet form uses this to keep dropdowns in
-  // sync with the actual matrix cells so users can't pick combos that won't
-  // appear on the project matrix.
-  const projectBudgetCombosByPo: Record<string, ProjectDetailCombo[]> = {}
-  const projectBudgetPoIds = (purchaseOrders as Array<{ id: string; budget_type?: string }>)
-    .filter((p) => p.budget_type === 'project')
-    .map((p) => p.id)
-  if (projectBudgetPoIds.length > 0) {
-    const { data: detailRows } = await admin
-      .from('project_details')
-      .select('po_id, system_id, deliverable_id, activity_id')
-      .in('po_id', projectBudgetPoIds)
-    for (const row of (detailRows || []) as Array<{
-      po_id: string
-      system_id: string | null
-      deliverable_id: string | null
-      activity_id: string | null
-    }>) {
-      if (!row.system_id || !row.deliverable_id || !row.activity_id) continue
-      const list = projectBudgetCombosByPo[row.po_id] || (projectBudgetCombosByPo[row.po_id] = [])
-      list.push({
-        systemId: row.system_id,
-        deliverableId: row.deliverable_id,
-        activityId: row.activity_id,
-      })
-    }
   }
 
   return {
