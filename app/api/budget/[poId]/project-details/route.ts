@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { canAccessPoBudget } from '@/lib/access'
-import { upsertProjectDetailByNames } from '@/lib/syncBidSheetToProject'
+import { resolveProjectComboByNames, upsertProjectDetailByNames } from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,7 +75,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ poId: 
   }
 
   const body = await req.json().catch(() => ({}))
-  const { id, budgeted_hours, description, status_pct, system_id, deliverable_id, activity_id, bill_rate } = body as {
+  const {
+    id,
+    budgeted_hours,
+    description,
+    status_pct,
+    system_id,
+    deliverable_id,
+    activity_id,
+    bill_rate,
+    system_name,
+    deliverable_name,
+    activity_name,
+  } = body as {
     id?: string
     budgeted_hours?: number
     description?: string | null
@@ -97,6 +109,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ poId: 
     system_id?: string
     deliverable_id?: string
     activity_id?: string
+    /**
+     * Name-based re-point (edit dialog pick-or-type). Reuses existing
+     * PO-scoped catalog rows by name, or creates them, then updates THIS
+     * project_details row only. Do not send together with *_id combo fields.
+     */
+    system_name?: string
+    deliverable_name?: string
+    activity_name?: string
   }
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
 
@@ -145,10 +165,81 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ poId: 
       updates.status_pct = fraction
     }
   }
-  // Combo re-pointing: require all three IDs together so we never write a
-  // partial / inconsistent triplet to project_details.
-  const anyComboField = system_id !== undefined || deliverable_id !== undefined || activity_id !== undefined
-  if (anyComboField) {
+  // Combo re-pointing: names (pick-or-type) or IDs. Require a full triplet
+  // so we never write a partial / inconsistent combo to project_details.
+  const anyNameCombo =
+    system_name !== undefined || deliverable_name !== undefined || activity_name !== undefined
+  const anyIdCombo = system_id !== undefined || deliverable_id !== undefined || activity_id !== undefined
+  if (anyNameCombo && anyIdCombo) {
+    return NextResponse.json(
+      { error: 'Send system/deliverable/activity as names or as ids, not both' },
+      { status: 400 }
+    )
+  }
+  if (anyNameCombo) {
+    const sn = typeof system_name === 'string' ? system_name.trim() : ''
+    const dn = typeof deliverable_name === 'string' ? deliverable_name.trim() : ''
+    const an = typeof activity_name === 'string' ? activity_name.trim() : ''
+    if (!sn || !dn || !an) {
+      return NextResponse.json(
+        { error: 'system_name, deliverable_name, and activity_name must be sent together when changing the combo' },
+        { status: 400 }
+      )
+    }
+    const { data: po } = await supabase.from('purchase_orders').select('site_id, budget_type').eq('id', poId).single()
+    if (!po || po.budget_type !== 'project' || !po.site_id) {
+      return NextResponse.json({ error: 'Not a project PO' }, { status: 400 })
+    }
+    const { data: current, error: currentErr } = await admin
+      .from('project_details')
+      .select(
+        `
+        id,
+        system_id,
+        deliverable_id,
+        activity_id,
+        systems (name),
+        deliverables (name),
+        activities (name)
+      `
+      )
+      .eq('id', id)
+      .eq('po_id', poId)
+      .single()
+    if (currentErr || !current) {
+      return NextResponse.json({ error: 'Matrix row not found' }, { status: 404 })
+    }
+    const cur = current as {
+      system_id: string
+      deliverable_id: string
+      activity_id: string
+      systems?: { name?: string | null } | null
+      deliverables?: { name?: string | null } | null
+      activities?: { name?: string | null } | null
+    }
+    try {
+      const resolved = await resolveProjectComboByNames(
+        admin,
+        po.site_id,
+        poId,
+        { systemName: sn, deliverableName: dn, activityName: an },
+        {
+          systemId: cur.system_id,
+          deliverableId: cur.deliverable_id,
+          activityId: cur.activity_id,
+          systemName: cur.systems?.name ?? '',
+          deliverableName: cur.deliverables?.name ?? '',
+          activityName: cur.activities?.name ?? '',
+        }
+      )
+      updates.system_id = resolved.systemId
+      updates.deliverable_id = resolved.deliverableId
+      updates.activity_id = resolved.activityId
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to resolve combo'
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  } else if (anyIdCombo) {
     if (!system_id || !deliverable_id || !activity_id) {
       return NextResponse.json(
         { error: 'system_id, deliverable_id, and activity_id must be sent together when changing the combo' },

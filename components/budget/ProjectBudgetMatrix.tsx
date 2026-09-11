@@ -69,6 +69,64 @@ function matchesPctBucket(pct: number | null, bucket: PctBucket): boolean {
 const selectClass =
   'rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm'
 
+function ciName(s: string | null | undefined): string {
+  return (s ?? '').trim().toLowerCase()
+}
+
+/** Matrix API uses an em dash when a name is missing; don't treat that as a real name. */
+function displayName(s: string | null | undefined): string {
+  const t = (s ?? '').trim()
+  return !t || t === '—' ? '' : t
+}
+
+function uniqueSortedNames(values: Array<string | null | undefined>): string[] {
+  const seen = new Map<string, string>()
+  for (const v of values) {
+    const t = displayName(v)
+    if (!t) continue
+    const key = t.toLowerCase()
+    if (!seen.has(key)) seen.set(key, t)
+  }
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+}
+
+function NameCombo({
+  label,
+  value,
+  onChange,
+  options,
+  listId,
+  disabled,
+}: {
+  label: string
+  value: string
+  onChange: (next: string) => void
+  options: string[]
+  listId: string
+  disabled?: boolean
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{label}</span>
+      <input
+        list={listId}
+        value={value}
+        onChange={(ev) => onChange(ev.target.value)}
+        onFocus={(ev) => ev.currentTarget.select()}
+        disabled={disabled}
+        className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm disabled:opacity-50"
+        placeholder="Pick from this PO or type a new name"
+        autoComplete="off"
+      />
+      <datalist id={listId}>
+        {options.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+    </label>
+  )
+}
+
 type MatrixRow = {
   id: string
   /** Concrete FK ids for this row's combo (used to seed the Edit dialog and
@@ -238,16 +296,12 @@ export default function ProjectBudgetMatrix({
   // this PO that uses it (rename in place).
   const [editSystemName, setEditSystemName] = useState('')
   const [editSystemCode, setEditSystemCode] = useState('')
-  // Cascading picks for the Edit matrix row dialog. Same dedup model as the
-  // Reassign dialog: the user picks a system display label, then a
-  // deliverable (broadened across all underlying systems with that label),
-  // then an activity. On save we resolve the concrete system_id from the
-  // picked deliverable. Empty = leave the row's existing combo as-is.
-  const [editSystemLabel, setEditSystemLabel] = useState('')
-  const [editDeliverableId, setEditDeliverableId] = useState('')
-  const [editActivityId, setEditActivityId] = useState('')
-  const [editCombosLoading, setEditCombosLoading] = useState(false)
-  const [editCombosError, setEditCombosError] = useState<string | null>(null)
+  // Pick-or-type names for the Edit matrix row dialog. Lists every name
+  // already used on this PO; typing a new name re-points THIS row only
+  // (find-or-create). Prefill comes from the row being edited.
+  const [editComboSystem, setEditComboSystem] = useState('')
+  const [editComboDeliverable, setEditComboDeliverable] = useState('')
+  const [editComboActivity, setEditComboActivity] = useState('')
   // Editing state for indirect / PO-expense lines (the rows below the labor
   // matrix). Mirrors editingRow but for po_expenses, so an admin can fix the
   // label / amount / notes without leaving the matrix view.
@@ -424,6 +478,15 @@ export default function ProjectBudgetMatrix({
     }
   }, [data?.rows])
 
+  const poComboNames = useMemo(() => {
+    const rows = data?.rows || []
+    return {
+      systems: uniqueSortedNames(rows.map((r) => r.systemName || r.systemLabel)),
+      deliverables: uniqueSortedNames(rows.map((r) => r.deliverableName)),
+      activities: uniqueSortedNames(rows.map((r) => r.activityName)),
+    }
+  }, [data?.rows])
+
   const filteredRows = useMemo(() => {
     if (!data?.rows.length) return []
     return data.rows.filter((r) => {
@@ -545,7 +608,7 @@ export default function ProjectBudgetMatrix({
     }
   }
 
-  const openEdit = async (r: MatrixRow) => {
+  const openEdit = (r: MatrixRow) => {
     setMutateError(null)
     setEditingRow(r)
     setEditBudget(String(r.budgetedHours))
@@ -554,76 +617,10 @@ export default function ProjectBudgetMatrix({
     // Prefill the in-place rename fields with the row's current system.
     setEditSystemName(r.systemName ?? '')
     setEditSystemCode(r.systemCode ?? '')
-    // Reset cascading picks; we hydrate them once validCombos has loaded so
-    // the dropdowns can display the row's current combo as the initial value.
-    setEditSystemLabel('')
-    setEditDeliverableId('')
-    setEditActivityId('')
-    setEditCombosError(null)
-    // Fetch valid combos for this PO if we don't already have them (the
-    // Reassign dialog may have already populated them). This is what the
-    // cascading dropdowns use as their option source.
-    if (validCombos.length === 0) {
-      setEditCombosLoading(true)
-      try {
-        const res = await fetch(`/api/budget/${poId}/unmatched-entries`, {
-          credentials: 'include',
-        })
-        const body = await res.json().catch(() => ({}))
-        if (res.ok) {
-          const payload = body as { unmatched: UnmatchedEntry[]; validCombos: ValidCombo[] }
-          setValidCombos(payload.validCombos || [])
-        } else {
-          setEditCombosError((body as { error?: string }).error || 'Failed to load combos')
-        }
-      } catch (e) {
-        setEditCombosError(e instanceof Error ? e.message : 'Failed to load combos')
-      } finally {
-        setEditCombosLoading(false)
-      }
-    }
+    setEditComboSystem(displayName(r.systemName) || displayName(r.systemLabel))
+    setEditComboDeliverable(displayName(r.deliverableName))
+    setEditComboActivity(displayName(r.activityName))
   }
-
-  // Once validCombos is available, pre-fill the Edit matrix row dropdowns to
-  // match the row currently being edited. We only seed empty fields so the
-  // user's in-flight picks aren't overwritten if they edit, blur, and re-open.
-  useEffect(() => {
-    if (!editingRow) return
-    if (validCombos.length === 0) return
-    if (editSystemLabel || editDeliverableId || editActivityId) return
-    // Prefer matching on the row's concrete FK ids. Matching by *name* is
-    // ambiguous when a PO has duplicate-named deliverables/activities (e.g. two
-    // "Dynamic Final Report" deliverables with different ids): it would seed the
-    // dropdowns with the WRONG deliverable/activity id, so a later save that
-    // only touched hours/rate would silently re-point the row onto another
-    // row's combo and trip the unique constraint. Using ids avoids that.
-    const byId =
-      editingRow.systemId && editingRow.deliverableId && editingRow.activityId
-        ? validCombos.find(
-            (c) =>
-              c.systemId === editingRow.systemId &&
-              c.deliverableId === editingRow.deliverableId &&
-              c.activityId === editingRow.activityId
-          )
-        : undefined
-    // Fallback (older payloads without ids): match by name as before.
-    const stripCode = (s: string) => s.replace(/\s*\([^)]*\)\s*$/, '').trim()
-    const rowSysName = stripCode(editingRow.systemLabel)
-    const match =
-      byId ||
-      validCombos.find(
-        (c) =>
-          c.systemName.trim().toLowerCase() === rowSysName.toLowerCase() &&
-          c.deliverableName === editingRow.deliverableName &&
-          c.activityName === editingRow.activityName
-      )
-    if (match) {
-      setEditSystemLabel(match.systemName.trim())
-      setEditDeliverableId(match.deliverableId)
-      setEditActivityId(match.activityId)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingRow, validCombos])
 
   const handleSaveEdit = async () => {
     if (!editingRow) return
@@ -658,28 +655,31 @@ export default function ProjectBudgetMatrix({
         bill_rate: editBillRate.trim() === '' ? null : Number(editBillRate),
         description: editDesc.trim() || null,
       }
-      // Only send the (system, deliverable, activity) combo when the user
-      // actually re-pointed the row. Comparing against the row's original ids
-      // means a plain hours/rate/description edit never touches the combo — so
-      // it can't collide with another row's combo (the unique-constraint error
-      // users were hitting). The system_id is resolved from the picked
-      // deliverable (the same dedup model used in the Reassign dialog).
-      if (editSystemLabel && editDeliverableId && editActivityId) {
-        const resolvedSystemId = resolveSystemIdForPick(editSystemLabel, editDeliverableId, editActivityId)
-        if (!resolvedSystemId) {
-          setMutateError('Could not resolve the picked combo on this PO. Refresh and try again.')
+      // Pick-or-type combo: send names only when this row's system /
+      // deliverable / activity actually changed. The API find-or-creates
+      // PO-scoped catalog rows and updates THIS project_details row only.
+      // If Rename system also ran, the combo field may still show the old
+      // name — send the renamed name so we don't create a second system.
+      const origComboSys = displayName(editingRow.systemName) || displayName(editingRow.systemLabel)
+      let nextSys = editComboSystem.trim()
+      const nextDel = editComboDeliverable.trim()
+      const nextAct = editComboActivity.trim()
+      const delOrActChanged =
+        ciName(nextDel) !== ciName(displayName(editingRow.deliverableName)) ||
+        ciName(nextAct) !== ciName(displayName(editingRow.activityName))
+      if (systemRenamed && delOrActChanged && ciName(nextSys) === ciName(origComboSys)) {
+        nextSys = newSysName
+      }
+      const comboChanged = ciName(nextSys) !== ciName(origComboSys) || delOrActChanged
+      if (comboChanged) {
+        if (!nextSys || !nextDel || !nextAct) {
+          setMutateError('System, deliverable, and activity are required.')
           setMutating(false)
           return
         }
-        const comboChanged =
-          resolvedSystemId !== editingRow.systemId ||
-          editDeliverableId !== editingRow.deliverableId ||
-          editActivityId !== editingRow.activityId
-        if (comboChanged) {
-          payload.system_id = resolvedSystemId
-          payload.deliverable_id = editDeliverableId
-          payload.activity_id = editActivityId
-        }
+        payload.system_name = nextSys
+        payload.deliverable_name = nextDel
+        payload.activity_name = nextAct
       }
       const res = await fetch(`/api/budget/${poId}/project-details`, {
         method: 'PATCH',
@@ -2642,16 +2642,11 @@ export default function ProjectBudgetMatrix({
             </div>
             <div className="p-4 space-y-3 text-sm">
               <p className="text-gray-600 dark:text-gray-400">
-                Adjust the System / Deliverable / Activity this row points to (restricted to combos that already exist on this PO),
-                or update the budget hours and description. Existing approved timesheet entries on the prior combo are left as-is and may surface as
-                unmatched until reassigned.
+                Pick a System / Deliverable / Activity already used on this PO, or type a new name. Changes apply to{' '}
+                <strong>this row only</strong>. A name that already exists is reused (not duplicated). If the full
+                combination already exists as another row, you&apos;ll be asked to edit that row instead. Existing approved
+                timesheet entries on the prior combo are left as-is and may surface as unmatched until reassigned.
               </p>
-              {editCombosLoading && (
-                <p className="text-xs text-gray-500 dark:text-gray-400">Loading options…</p>
-              )}
-              {editCombosError && (
-                <p className="text-xs text-red-600 dark:text-red-400">{editCombosError}</p>
-              )}
               <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
                 <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Rename system</span>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -2677,61 +2672,33 @@ export default function ProjectBudgetMatrix({
                   </label>
                 </div>
                 <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                  Renaming updates this system for every row on this PO that uses it. To move only this row to a different system, use the dropdowns below instead.
+                  Renaming updates this system for every row on this PO that uses it. To move only this row to a different system, use the System field below instead.
                 </p>
               </div>
-              <label className="block">
-                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">System</span>
-                <select
-                  value={editSystemLabel}
-                  onChange={(ev) => {
-                    setEditSystemLabel(ev.target.value)
-                    // Clear downstream picks when the system changes.
-                    setEditDeliverableId('')
-                    setEditActivityId('')
-                  }}
-                  disabled={mutating || editCombosLoading}
-                  className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
-                >
-                  <option value="">Select…</option>
-                  {reassignSystemOptions.map((o) => (
-                    <option key={o.systemLabel} value={o.systemLabel}>{o.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Deliverable</span>
-                <select
-                  value={editDeliverableId}
-                  onChange={(ev) => {
-                    setEditDeliverableId(ev.target.value)
-                    setEditActivityId('')
-                  }}
-                  disabled={mutating || editCombosLoading || !editSystemLabel}
-                  className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm disabled:opacity-50"
-                >
-                  <option value="">Select…</option>
-                  {getDeliverableOptions(editSystemLabel).map((o) => (
-                    <option key={o.deliverableId} value={o.deliverableId}>
-                      {o.subtext ? `${o.label} (${o.subtext})` : o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Activity</span>
-                <select
-                  value={editActivityId}
-                  onChange={(ev) => setEditActivityId(ev.target.value)}
-                  disabled={mutating || editCombosLoading || !editDeliverableId}
-                  className="mt-1 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm disabled:opacity-50"
-                >
-                  <option value="">Select…</option>
-                  {getActivityOptions(editDeliverableId).map((o) => (
-                    <option key={o.activityId} value={o.activityId}>{o.label}</option>
-                  ))}
-                </select>
-              </label>
+              <NameCombo
+                label="System"
+                value={editComboSystem}
+                onChange={setEditComboSystem}
+                options={poComboNames.systems}
+                listId="matrix-edit-system-names"
+                disabled={mutating}
+              />
+              <NameCombo
+                label="Deliverable"
+                value={editComboDeliverable}
+                onChange={setEditComboDeliverable}
+                options={poComboNames.deliverables}
+                listId="matrix-edit-deliverable-names"
+                disabled={mutating}
+              />
+              <NameCombo
+                label="Activity"
+                value={editComboActivity}
+                onChange={setEditComboActivity}
+                options={poComboNames.activities}
+                listId="matrix-edit-activity-names"
+                disabled={mutating}
+              />
               <label className="block">
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Budget (h)</span>
                 <input

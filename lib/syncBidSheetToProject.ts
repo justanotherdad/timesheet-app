@@ -105,6 +105,91 @@ async function ensurePoLink(
   await admin.from(table).insert({ [fkCol]: entityId, purchase_order_id: poId } as Record<string, string>)
 }
 
+function namesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  return (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase()
+}
+
+/** Escape `\ % _` so an ilike lookup is exact (case-insensitive) rather than a wildcard match. */
+function escapeIlikeExact(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+}
+
+async function findProjectScopedByName(
+  admin: SupabaseClient,
+  table: 'systems' | 'deliverables' | 'activities',
+  siteId: string,
+  poId: string,
+  name: string
+): Promise<string | null> {
+  const trimmed = name.trim()
+  if (!trimmed) return null
+  const { data } = await admin
+    .from(table)
+    .select('id')
+    .eq('site_id', siteId)
+    .eq('project_po_id', poId)
+    .ilike('name', escapeIlikeExact(trimmed))
+    .limit(1)
+    .maybeSingle()
+  return (data as { id?: string } | null)?.id ?? null
+}
+
+export type CurrentProjectCombo = {
+  systemId: string
+  deliverableId: string
+  activityId: string
+  systemName: string
+  deliverableName: string
+  activityName: string
+}
+
+/**
+ * Resolve a (system, deliverable, activity) combo by name for a single
+ * project_details row. Reuses existing PO-scoped catalog rows (case-insensitive);
+ * creates only when the name is not already on this PO. Does not rename
+ * existing catalog rows and does not merge into another matrix cell.
+ *
+ * When `current` is provided and a name still matches that row's current
+ * entity, that ID is kept so changing only activity never swaps the system
+ * onto a different same-named duplicate.
+ */
+export async function resolveProjectComboByNames(
+  admin: SupabaseClient,
+  siteId: string,
+  poId: string,
+  names: { systemName: string; deliverableName: string; activityName: string },
+  current?: CurrentProjectCombo
+): Promise<{ systemId: string; deliverableId: string; activityId: string }> {
+  const sn = names.systemName.trim()
+  const dn = names.deliverableName.trim()
+  const an = names.activityName.trim()
+  if (!sn || !dn || !an) throw new Error('System, deliverable, and activity names are required')
+
+  const systemId =
+    current && namesMatch(sn, current.systemName)
+      ? current.systemId
+      : (await findProjectScopedByName(admin, 'systems', siteId, poId, sn)) ||
+        (await findOrCreateSystem(admin, siteId, poId, sn, null))
+
+  const deliverableId =
+    current && namesMatch(dn, current.deliverableName)
+      ? current.deliverableId
+      : (await findProjectScopedByName(admin, 'deliverables', siteId, poId, dn)) ||
+        (await findOrCreateDeliverable(admin, siteId, poId, dn))
+
+  const activityId =
+    current && namesMatch(an, current.activityName)
+      ? current.activityId
+      : (await findProjectScopedByName(admin, 'activities', siteId, poId, an)) ||
+        (await findOrCreateActivity(admin, siteId, poId, an))
+
+  await ensurePoLink(admin, 'system_purchase_orders', 'system_id', systemId, poId)
+  await ensurePoLink(admin, 'deliverable_purchase_orders', 'deliverable_id', deliverableId, poId)
+  await ensurePoLink(admin, 'activity_purchase_orders', 'activity_id', activityId, poId)
+
+  return { systemId, deliverableId, activityId }
+}
+
 /**
  * After a bid sheet is converted, keep site-level systems/deliverables/activities and project_details
  * in sync when bid_sheet_items change.
