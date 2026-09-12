@@ -2,7 +2,7 @@
 
 import { Printer, ArrowLeft } from 'lucide-react'
 import GroupedBarChart from './GroupedBarChart'
-import { formatHoursAmount } from '@/lib/utils'
+import { formatHoursAmount, isNoTimesheetCell } from '@/lib/utils'
 import type {
   GeneratedReportSnapshot,
   ReportBillableActivitiesMonth,
@@ -142,7 +142,17 @@ function ActivitiesMonthTable({ table }: { table: ReportBillableActivitiesMonth 
                 </td>
                 {table.weekEndings.map((we) => (
                   <td key={we} className="px-2 py-1 text-right tabular-nums text-gray-900 dark:text-gray-100 print:text-black">
-                    {(r.weekHours[we] || 0) === 0 ? '—' : hours(r.weekHours[we])}
+                    {isNoTimesheetCell({
+                      weekEnding: we,
+                      hours: r.weekHours[we] || 0,
+                      currentWeekEnding: table.currentWeekEnding,
+                      userId: r.userId,
+                      approvedTimesheetUserIds: table.approvedTimesheetUserIds,
+                    })
+                      ? 'NTS'
+                      : (r.weekHours[we] || 0) === 0
+                        ? '—'
+                        : hours(r.weekHours[we])}
                   </td>
                 ))}
                 <td className="px-2 py-1 text-right tabular-nums font-medium text-gray-900 dark:text-gray-100 print:text-black">
@@ -200,7 +210,15 @@ function CostMonthTable({ table }: { table: ReportBillableCostMonth }) {
                 </td>
                 {table.weekEndings.map((we) => (
                   <td key={we} className="px-2 py-1 text-right tabular-nums text-gray-900 dark:text-gray-100 print:text-black">
-                    {moneyExact(r.weekCosts[we] || 0)}
+                    {isNoTimesheetCell({
+                      weekEnding: we,
+                      hours: r.weekCosts[we] || 0,
+                      currentWeekEnding: table.currentWeekEnding,
+                      userId: r.userId,
+                      approvedTimesheetUserIds: table.approvedTimesheetUserIds,
+                    })
+                      ? 'NTS'
+                      : moneyExact(r.weekCosts[we] || 0)}
                   </td>
                 ))}
                 <td className="px-2 py-1 text-right tabular-nums font-medium text-gray-900 dark:text-gray-100 print:text-black">

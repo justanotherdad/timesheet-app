@@ -164,6 +164,30 @@ export function getWeekEndingsForMonth(year: number, month: number, weekStartsOn
   return endings
 }
 
+/** Week-ending YYYY-MM-DD that contains `asOf` (defaults to today in app timezone). */
+export function currentWeekEnding(weekStartsOn: number = 1, asOf: Date = new Date()): string {
+  const today = parseISO(getCalendarDateStringInAppTimezone(asOf))
+  return format(endOfWeek(today, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 }), 'yyyy-MM-dd')
+}
+
+/**
+ * True when this employee×week cell should show NTS (no approved timesheet yet)
+ * instead of an empty dash. Only the current week-ending uses this; hours > 0 never NTS.
+ */
+export function isNoTimesheetCell(opts: {
+  weekEnding: string
+  hours?: number | null
+  currentWeekEnding?: string | null
+  userId: string
+  approvedTimesheetUserIds?: string[] | null
+}): boolean {
+  if ((Number(opts.hours) || 0) > 0) return false
+  if (!opts.currentWeekEnding || opts.weekEnding !== opts.currentWeekEnding) return false
+  const approved = opts.approvedTimesheetUserIds
+  if (!approved) return false
+  return !approved.includes(opts.userId)
+}
+
 export function getWeekDates(weekEnding: Date | string, weekStartsOn: number = 1): { start: Date; end: Date; days: Date[] } {
   const end = typeof weekEnding === 'string' ? parseISO(weekEnding) : weekEnding
   const start = startOfWeek(end, { weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 })

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getWeekEndingsForMonth } from '@/lib/utils'
+import { getWeekEndingsForMonth, currentWeekEnding } from '@/lib/utils'
 import { pickEffectiveRateForWeek } from '@/lib/po-bill-rate-utils'
 import type {
   ReportBillableActivitiesMonth,
@@ -208,6 +208,17 @@ export async function buildBillableTablesForPoMonth(
   weekEndings = [...new Set([...weekEndings, ...Array.from(weekSet).map(normWeekEnding)])].sort()
   const userIds = Object.keys(hoursByUserWeek)
 
+  const thisWeekEnding = currentWeekEnding(weekStartsOn)
+  const currentWeInView = weekEndings.includes(thisWeekEnding) ? thisWeekEnding : null
+  const approvedTimesheetUserIds = currentWeInView
+    ? [...new Set(
+        (timesheets || [])
+          .filter((t) => normWeekEnding((t as { week_ending: string }).week_ending) === currentWeInView)
+          .map((t) => (t as { user_id: string }).user_id)
+          .filter(Boolean)
+      )]
+    : []
+
   // Skip empty months (no activity for this PO).
   if (userIds.length === 0) {
     return { activities: null, cost: null }
@@ -246,7 +257,16 @@ export async function buildBillableTablesForPoMonth(
       columnTotals[we] = rows.reduce((sum, r) => sum + (r.weekHours[we] || 0), 0)
     }
     const grandTotal = rows.reduce((sum, r) => sum + r.rowTotal, 0)
-    activities = { monthKey, monthLabel: label, weekEndings, rows, columnTotals, grandTotal }
+    activities = {
+      monthKey,
+      monthLabel: label,
+      weekEndings,
+      rows,
+      columnTotals,
+      grandTotal,
+      currentWeekEnding: currentWeInView,
+      approvedTimesheetUserIds,
+    }
   }
 
   let cost: ReportBillableCostMonth | null = null
@@ -284,7 +304,16 @@ export async function buildBillableTablesForPoMonth(
       columnTotals[we] = rows.reduce((sum, r) => sum + (r.weekCosts[we] || 0), 0)
     }
     const grandTotal = rows.reduce((sum, r) => sum + r.rowTotal, 0)
-    cost = { monthKey, monthLabel: label, weekEndings, rows, columnTotals, grandTotal }
+    cost = {
+      monthKey,
+      monthLabel: label,
+      weekEndings,
+      rows,
+      columnTotals,
+      grandTotal,
+      currentWeekEnding: currentWeInView,
+      approvedTimesheetUserIds,
+    }
   }
 
   return { activities, cost }

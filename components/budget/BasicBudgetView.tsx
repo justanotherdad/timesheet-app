@@ -10,6 +10,7 @@ import {
   formatPeriodsList,
   formatDateForInput,
   formatHours,
+  isNoTimesheetCell,
   normalizePoIssueDateToIso,
   formatPoIssueDateForDisplay,
 } from '@/lib/utils'
@@ -611,6 +612,17 @@ export default function BasicBudgetView({
   const displayGrandTotal = hasLimitedAccess && user
     ? (rows.find((r: any) => r.userId === user.id)?.rowTotal ?? 0)
     : grandTotal
+
+  const currentWeekEnding = (billableData?.currentWeekEnding as string | null | undefined) || null
+  const approvedTimesheetUserIds = (billableData?.approvedTimesheetUserIds as string[] | undefined) || []
+  const cellIsNts = (userId: string, we: string, hours: number) =>
+    isNoTimesheetCell({
+      weekEnding: we,
+      hours,
+      currentWeekEnding,
+      userId,
+      approvedTimesheetUserIds,
+    })
 
   const handleBillableSort = (col: string) => {
     if (billableSortColumn === col) {
@@ -2142,11 +2154,18 @@ export default function BasicBudgetView({
                             type="button"
                             onClick={() => setEmployeePopup({ ...r, mode: 'hours' })}
                             className="text-blue-600 dark:text-blue-400 hover:underline"
+                            title={cellIsNts(r.userId, we, r.weekData[we]?.hours ?? 0) ? 'No timesheet submitted' : undefined}
                           >
-                            {formatHours(r.weekData[we]?.hours)}
+                            {cellIsNts(r.userId, we, r.weekData[we]?.hours ?? 0)
+                              ? 'NTS'
+                              : formatHours(r.weekData[we]?.hours)}
                           </button>
                         ) : (
-                          <span>{formatHours(r.weekData[we]?.hours)}</span>
+                          <span title={cellIsNts(r.userId, we, r.weekData[we]?.hours ?? 0) ? 'No timesheet submitted' : undefined}>
+                            {cellIsNts(r.userId, we, r.weekData[we]?.hours ?? 0)
+                              ? 'NTS'
+                              : formatHours(r.weekData[we]?.hours)}
+                          </span>
                         )}
                       </td>
                     ))}
@@ -2295,7 +2314,7 @@ export default function BasicBudgetView({
                     const rate = getEffectiveRate(r.userId, we)
                     const cost = hours * rate
                     rowCostTotal += cost
-                    return cost
+                    return { we, hours, cost }
                   })
                   return (
                     <tr key={r.userId} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30">
@@ -2312,9 +2331,17 @@ export default function BasicBudgetView({
                           <span className="font-medium text-gray-900 dark:text-gray-100">{r.userName}</span>
                         )}
                       </td>
-                      {costCells.map((cost: number, i: number) => (
-                        <td key={weekEndings[i]} className="text-right py-2">
-                          {cost === 0 ? '—' : `$${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      {costCells.map(({ we, hours, cost }: { we: string; hours: number; cost: number }) => (
+                        <td
+                          key={we}
+                          className="text-right py-2"
+                          title={cellIsNts(r.userId, we, hours) ? 'No timesheet submitted' : undefined}
+                        >
+                          {cellIsNts(r.userId, we, hours)
+                            ? 'NTS'
+                            : cost === 0
+                              ? '—'
+                              : `$${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                         </td>
                       ))}
                       <td className="text-right py-2 font-medium">{rowCostTotal === 0 ? '—' : `$${rowCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</td>
@@ -2569,7 +2596,11 @@ export default function BasicBudgetView({
                   <div key={we} className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-gray-100 dark:border-gray-700">
                     <span>{formatDate(we)}</span>
                     <span className="font-medium">
-                      {(employeePopup.mode || 'hours') === 'cost' ? (cost === 0 ? '—' : `$${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`) : (hours === 0 ? '—' : `${formatHours(hours)} hrs`)}
+                      {cellIsNts(employeePopup.userId, we, hours)
+                        ? 'NTS'
+                        : (employeePopup.mode || 'hours') === 'cost'
+                          ? (cost === 0 ? '—' : `$${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+                          : (hours === 0 ? '—' : `${formatHours(hours)} hrs`)}
                     </span>
                     {timesheetId && (employeePopup.mode || 'hours') === 'hours' && (
                       <Link

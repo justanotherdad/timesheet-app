@@ -30,6 +30,14 @@ export interface ReportBillableActivitiesMonth {
   rows: ReportBillableActivitiesRow[]
   columnTotals: Record<string, number>
   grandTotal: number
+  /**
+   * Frozen at generation: current week-ending if it falls in this month.
+   * Combined with approvedTimesheetUserIds so the viewer can show NTS.
+   * Absent on reports saved before this field existed.
+   */
+  currentWeekEnding?: string | null
+  /** User ids with an approved weekly timesheet for currentWeekEnding. */
+  approvedTimesheetUserIds?: string[]
 }
 
 /** One employee row in a monthly Billable Cost ($) table. */
@@ -49,6 +57,8 @@ export interface ReportBillableCostMonth {
   rows: ReportBillableCostRow[]
   columnTotals: Record<string, number>
   grandTotal: number
+  currentWeekEnding?: string | null
+  approvedTimesheetUserIds?: string[]
 }
 
 export interface ReportPoSummary {
