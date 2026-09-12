@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Printer, Download } from 'lucide-react'
+import MultiSelectDropdown from '@/components/admin/MultiSelectDropdown'
 
 interface POStatusRow {
   client: string
@@ -35,8 +36,8 @@ export default function POStatusReport() {
   const [data, setData] = useState<POStatusData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filterIncludeDeactivated, setFilterIncludeDeactivated] = useState(false)
-  const [filterClient, setFilterClient] = useState('')
-  const [filterPO, setFilterPO] = useState('')
+  const [filterClient, setFilterClient] = useState<string[]>([])
+  const [filterPO, setFilterPO] = useState<string[]>([])
   const [sortColumn, setSortColumn] = useState<SortColumn>('client')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -46,8 +47,6 @@ export default function POStatusReport() {
     try {
       const params = new URLSearchParams()
       if (filterIncludeDeactivated) params.set('includeDeactivated', 'true')
-      if (filterClient) params.set('client', filterClient)
-      if (filterPO) params.set('po', filterPO)
       const res = await fetch(`/api/reports/po-status?${params.toString()}`)
       if (!res.ok) {
         const err = await res.json()
@@ -64,7 +63,23 @@ export default function POStatusReport() {
 
   useEffect(() => {
     fetchData()
-  }, [filterIncludeDeactivated, filterClient, filterPO])
+    // Client/PO filters are applied in the browser so multi-select does not refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterIncludeDeactivated])
+
+  const poOptions = useMemo(() => {
+    const clientSet = new Set(filterClient)
+    return (data?.purchaseOrders || []).filter((po) => clientSet.size === 0 || clientSet.has(po.site_id))
+  }, [data?.purchaseOrders, filterClient])
+
+  useEffect(() => {
+    if (filterPO.length === 0) return
+    const allowed = new Set(poOptions.map((p) => p.id))
+    setFilterPO((prev) => {
+      const next = prev.filter((id) => allowed.has(id))
+      return next.length === prev.length ? prev : next
+    })
+  }, [poOptions, filterPO.length])
 
   const handleSort = (col: SortColumn) => {
     if (sortColumn === col) {
@@ -76,7 +91,11 @@ export default function POStatusReport() {
   }
 
   const sortedRows = useMemo(() => {
-    const rows = data?.rows || []
+    const rows = (data?.rows || []).filter((r) => {
+      if (filterClient.length > 0 && !filterClient.includes(r.site_id)) return false
+      if (filterPO.length > 0 && !filterPO.includes(r.po_id)) return false
+      return true
+    })
     const mult = sortDir === 'asc' ? 1 : -1
     return [...rows].sort((a, b) => {
       let aVal: string | number = ''
@@ -125,7 +144,7 @@ export default function POStatusReport() {
       if (typeof aVal === 'string' && typeof bVal === 'string') return mult * aVal.localeCompare(bVal)
       return mult * ((aVal as number) - (bVal as number))
     })
-  }, [data?.rows, sortColumn, sortDir])
+  }, [data?.rows, sortColumn, sortDir, filterClient, filterPO])
 
   // Group by client for subtotals
   const rowsByClient = useMemo(() => {
@@ -265,7 +284,7 @@ export default function POStatusReport() {
             </button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-4 items-center print:hidden">
+        <div className="flex flex-wrap gap-4 items-end print:hidden">
           <fieldset className="flex items-center gap-4">
             <legend className="sr-only">PO status</legend>
             <label className="flex items-center gap-2 cursor-pointer">
@@ -289,34 +308,24 @@ export default function POStatusReport() {
               <span className="text-sm text-gray-600 dark:text-gray-400">Include deactivated POs</span>
             </label>
           </fieldset>
-          <label className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Client:</span>
-            <select
-              value={filterClient}
-              onChange={(e) => setFilterClient(e.target.value)}
-              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm min-w-[180px]"
-            >
-              <option value="">All</option>
-              {(data?.clients || []).map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">PO:</span>
-            <select
-              value={filterPO}
-              onChange={(e) => setFilterPO(e.target.value)}
-              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm min-w-[160px]"
-            >
-              <option value="">All</option>
-              {(data?.purchaseOrders || [])
-                .filter((po) => !filterClient || po.site_id === filterClient)
-                .map((po) => (
-                  <option key={po.id} value={po.id}>{po.po_number}</option>
-                ))}
-            </select>
-          </label>
+          <div className="min-w-[180px] w-56">
+            <MultiSelectDropdown
+              label="Client"
+              allLabel="All clients"
+              options={(data?.clients || []).map((c) => ({ id: c.id, label: c.name }))}
+              selected={filterClient}
+              onChange={setFilterClient}
+            />
+          </div>
+          <div className="min-w-[160px] w-52">
+            <MultiSelectDropdown
+              label="PO"
+              allLabel="All POs"
+              options={poOptions.map((po) => ({ id: po.id, label: po.po_number }))}
+              selected={filterPO}
+              onChange={setFilterPO}
+            />
+          </div>
         </div>
       </div>
       <div className="overflow-x-auto">

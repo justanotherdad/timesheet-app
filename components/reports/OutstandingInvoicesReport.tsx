@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { differenceInDays, parseISO, startOfDay } from 'date-fns'
 import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Printer, Download } from 'lucide-react'
 import { formatDateShort } from '@/lib/utils'
+import MultiSelectDropdown from '@/components/admin/MultiSelectDropdown'
 
 interface OutstandingRow {
   invoice_id: string
@@ -29,7 +30,15 @@ type SortColumn =
   | 'current_po_balance'
   | 'invoice_amount'
 
-type DurationBucket = '' | '0-30' | '31-60' | '61-90' | '91-120' | '>120'
+type DurationBucket = '0-30' | '31-60' | '61-90' | '91-120' | '>120'
+
+const DURATION_OPTIONS: { id: DurationBucket; label: string }[] = [
+  { id: '0-30', label: '0–30 days' },
+  { id: '31-60', label: '31–60 days' },
+  { id: '61-90', label: '61–90 days' },
+  { id: '91-120', label: '91–120 days' },
+  { id: '>120', label: '>120 days' },
+]
 
 function formatCurrency(val: number): string {
   return `$${(val ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -77,7 +86,6 @@ function invoiceYear(row: OutstandingRow): string | null {
 }
 
 function matchesDurationBucket(days: number | null, bucket: DurationBucket): boolean {
-  if (!bucket) return true
   if (days === null) return false
   const d = Math.max(0, days)
   switch (bucket) {
@@ -96,6 +104,11 @@ function matchesDurationBucket(days: number | null, bucket: DurationBucket): boo
   }
 }
 
+function matchesDurationBuckets(days: number | null, buckets: DurationBucket[]): boolean {
+  if (buckets.length === 0) return true
+  return buckets.some((bucket) => matchesDurationBucket(days, bucket))
+}
+
 export default function OutstandingInvoicesReport() {
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<OutstandingRow[]>([])
@@ -103,10 +116,10 @@ export default function OutstandingInvoicesReport() {
   const [years, setYears] = useState<string[]>([])
   const [purchaseOrders, setPurchaseOrders] = useState<{ id: string; po_number: string; site_id: string }[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [filterYear, setFilterYear] = useState('')
-  const [filterClient, setFilterClient] = useState('')
-  const [filterPO, setFilterPO] = useState('')
-  const [filterDuration, setFilterDuration] = useState<DurationBucket>('')
+  const [filterYear, setFilterYear] = useState<string[]>([])
+  const [filterClient, setFilterClient] = useState<string[]>([])
+  const [filterPO, setFilterPO] = useState<string[]>([])
+  const [filterDuration, setFilterDuration] = useState<DurationBucket[]>([])
   const [sortColumn, setSortColumn] = useState<SortColumn>('client')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -140,24 +153,30 @@ export default function OutstandingInvoicesReport() {
     }
   }, [])
 
+  const poOptions = useMemo(() => {
+    const clientSet = new Set(filterClient)
+    return purchaseOrders.filter((po) => clientSet.size === 0 || clientSet.has(po.site_id))
+  }, [purchaseOrders, filterClient])
+
   useEffect(() => {
-    if (!filterPO) return
-    const po = purchaseOrders.find((p) => p.id === filterPO)
-    if (filterClient && po && po.site_id !== filterClient) {
-      setFilterPO('')
-    }
-  }, [filterClient, filterPO, purchaseOrders])
+    if (filterPO.length === 0) return
+    const allowed = new Set(poOptions.map((p) => p.id))
+    setFilterPO((prev) => {
+      const next = prev.filter((id) => allowed.has(id))
+      return next.length === prev.length ? prev : next
+    })
+  }, [poOptions, filterPO.length])
 
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
-      if (filterYear) {
+      if (filterYear.length > 0) {
         const y = invoiceYear(r)
-        if (!y || y !== filterYear) return false
+        if (!y || !filterYear.includes(y)) return false
       }
-      if (filterClient && r.site_id !== filterClient) return false
-      if (filterPO && r.po_id !== filterPO) return false
+      if (filterClient.length > 0 && !filterClient.includes(r.site_id)) return false
+      if (filterPO.length > 0 && !filterPO.includes(r.po_id)) return false
       const days = daysOutstanding(r.invoice_date)
-      if (!matchesDurationBucket(days, filterDuration)) return false
+      if (!matchesDurationBuckets(days, filterDuration)) return false
       return true
     })
   }, [rows, filterYear, filterClient, filterPO, filterDuration])
@@ -240,7 +259,7 @@ export default function OutstandingInvoicesReport() {
     [sortedRows]
   )
 
-  const hasActiveFilters = Boolean(filterYear || filterClient || filterPO || filterDuration)
+  const hasActiveFilters = filterYear.length > 0 || filterClient.length > 0 || filterPO.length > 0 || filterDuration.length > 0
 
   const handleSort = (col: SortColumn) => {
     if (sortColumn === col) {
@@ -371,69 +390,43 @@ export default function OutstandingInvoicesReport() {
             </button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-4 items-center print:hidden">
-          <label className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Year:</span>
-            <select
-              value={filterYear}
-              onChange={(e) => setFilterYear(e.target.value)}
-              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm"
-            >
-              <option value="">All</option>
-              {years.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Client:</span>
-            <select
-              value={filterClient}
-              onChange={(e) => setFilterClient(e.target.value)}
-              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm min-w-[180px]"
-            >
-              <option value="">All</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">PO:</span>
-            <select
-              value={filterPO}
-              onChange={(e) => setFilterPO(e.target.value)}
-              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm min-w-[160px]"
-            >
-              <option value="">All</option>
-              {purchaseOrders
-                .filter((po) => !filterClient || po.site_id === filterClient)
-                .map((po) => (
-                  <option key={po.id} value={po.id}>
-                    {po.po_number}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Duration:</span>
-            <select
-              value={filterDuration}
-              onChange={(e) => setFilterDuration(e.target.value as DurationBucket)}
-              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm min-w-[140px]"
-            >
-              <option value="">All</option>
-              <option value="0-30">0–30 days</option>
-              <option value="31-60">31–60 days</option>
-              <option value="61-90">61–90 days</option>
-              <option value="91-120">91–120 days</option>
-              <option value=">120">&gt;120 days</option>
-            </select>
-          </label>
+        <div className="flex flex-wrap gap-4 items-end print:hidden">
+          <div className="min-w-[140px] w-44">
+            <MultiSelectDropdown
+              label="Year"
+              allLabel="All years"
+              options={years.map((y) => ({ id: y, label: y }))}
+              selected={filterYear}
+              onChange={setFilterYear}
+            />
+          </div>
+          <div className="min-w-[180px] w-56">
+            <MultiSelectDropdown
+              label="Client"
+              allLabel="All clients"
+              options={clients.map((c) => ({ id: c.id, label: c.name }))}
+              selected={filterClient}
+              onChange={setFilterClient}
+            />
+          </div>
+          <div className="min-w-[160px] w-52">
+            <MultiSelectDropdown
+              label="PO"
+              allLabel="All POs"
+              options={poOptions.map((po) => ({ id: po.id, label: po.po_number }))}
+              selected={filterPO}
+              onChange={setFilterPO}
+            />
+          </div>
+          <div className="min-w-[160px] w-52">
+            <MultiSelectDropdown
+              label="Duration"
+              allLabel="All durations"
+              options={DURATION_OPTIONS}
+              selected={filterDuration}
+              onChange={(ids) => setFilterDuration(ids as DurationBucket[])}
+            />
+          </div>
         </div>
         {hasActiveFilters && (
           <p className="text-xs text-gray-500 dark:text-gray-400 print:hidden">

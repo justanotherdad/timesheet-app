@@ -47,6 +47,11 @@ interface HierarchicalItemManagerProps {
   embedded?: boolean
 }
 
+/** Escape `\ % _` so an ilike lookup is exact (case-insensitive) rather than a wildcard match. */
+function escapeIlikeExact(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+}
+
 /** Map raw Supabase/Postgres errors to actionable messages for managers. */
 function formatWriteError(err: { message?: string; code?: string } | null | undefined, itemName: string): string {
   const msg = err?.message || ''
@@ -191,6 +196,54 @@ export default function HierarchicalItemManager({
       }
     }
     return { departments: '', purchaseOrders: '', itemIdColumn: '' }
+  }
+
+  /** Global catalog only (project_po_id IS NULL), same list Timesheet Options shows. */
+  const findDuplicateCatalogName = async (
+    siteId: string,
+    name: string,
+    excludeId?: string
+  ): Promise<string | null> => {
+    const trimmed = name.trim()
+    if (!trimmed) return `Enter a ${itemName.toLowerCase()} name.`
+    let query = supabase
+      .from(tableName)
+      .select('id, name')
+      .eq('site_id', siteId)
+      .is('project_po_id', null)
+      .ilike('name', escapeIlikeExact(trimmed))
+      .limit(1)
+    if (excludeId) query = query.neq('id', excludeId)
+    const { data, error: lookupError } = await query.maybeSingle()
+    if (lookupError) throw lookupError
+    if (data) {
+      const existingName = (data as { name: string }).name
+      return `A ${itemName.toLowerCase()} named "${existingName}" already exists for this client.`
+    }
+    return null
+  }
+
+  const loadExistingCatalogNameKeys = async (siteId: string): Promise<Set<string>> => {
+    const keys = new Set<string>()
+    const pageSize = 1000
+    let from = 0
+    for (;;) {
+      const { data, error: fetchError } = await supabase
+        .from(tableName)
+        .select('name')
+        .eq('site_id', siteId)
+        .is('project_po_id', null)
+        .range(from, from + pageSize - 1)
+      if (fetchError) throw fetchError
+      const rows = (data || []) as { name?: string | null }[]
+      for (const row of rows) {
+        const key = (row.name || '').trim().toLowerCase()
+        if (key) keys.add(key)
+      }
+      if (rows.length < pageSize) break
+      from += pageSize
+    }
+    return keys
   }
 
   const loadDepartments = async (siteId: string) => {
@@ -379,10 +432,16 @@ export default function HierarchicalItemManager({
     const name = formData.get('name') as string
 
     try {
+      const duplicateMessage = await findDuplicateCatalogName(selectedSite, name)
+      if (duplicateMessage) {
+        setError(duplicateMessage)
+        return
+      }
+
       // Insert the main item (without department_id/po_id - those go in junction tables)
       const insertData: any = {
         site_id: selectedSite,
-        name,
+        name: name.trim(),
       }
 
       const { data: newItem, error: insertError } = await supabase
@@ -447,8 +506,14 @@ export default function HierarchicalItemManager({
     const code = formData.get('code') as string || null
 
     try {
+      const duplicateMessage = await findDuplicateCatalogName(selectedSite || editingItem.site_id, name, editingItem.id)
+      if (duplicateMessage) {
+        setError(duplicateMessage)
+        return
+      }
+
       // Update the main item
-      const updateData: any = { name }
+      const updateData: any = { name: name.trim() }
       
       if (code) {
         updateData.code = code
@@ -880,10 +945,33 @@ export default function HierarchicalItemManager({
         return false
       }
 
+      const existingKeys = await loadExistingCatalogNameKeys(selectedSite)
+      const seen = new Set<string>()
+      const skipped: string[] = []
+      const uniqueItems = itemsToAdd.filter((item) => {
+        const key = String(item.name || '').trim().toLowerCase()
+        if (!key) return false
+        if (existingKeys.has(key) || seen.has(key)) {
+          skipped.push(String(item.name).trim())
+          return false
+        }
+        seen.add(key)
+        return true
+      })
+
+      if (uniqueItems.length === 0) {
+        const sample = skipped.slice(0, 8).join(', ')
+        const extra = skipped.length > 8 ? ` (+${skipped.length - 8} more)` : ''
+        setError(
+          `No new ${itemName.toLowerCase()}s to import. These names already exist for this client (not case-sensitive): ${sample}${extra}`
+        )
+        return false
+      }
+
       // Insert items first
       const { data: insertedItems, error: insertError } = await supabase
         .from(tableName)
-        .insert(itemsToAdd)
+        .insert(uniqueItems)
         .select()
 
       if (insertError) throw insertError
@@ -925,7 +1013,11 @@ export default function HierarchicalItemManager({
 
       await loadItems(selectedSite)
       router.refresh()
-      setSuccess(`Successfully imported ${itemsToAdd.length} ${itemName.toLowerCase()}s`)
+      const skippedNote =
+        skipped.length > 0
+          ? ` Skipped ${skipped.length} duplicate name${skipped.length === 1 ? '' : 's'}.`
+          : ''
+      setSuccess(`Successfully imported ${uniqueItems.length} ${itemName.toLowerCase()}${uniqueItems.length === 1 ? '' : 's'}.${skippedNote}`)
       setTimeout(() => setSuccess(null), 5000)
       return true
     } catch (err: any) {

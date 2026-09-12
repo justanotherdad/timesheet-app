@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, Plus, Search, Trash2, FileText, X } from 'lucide-react'
 import GeneratedReportView from './GeneratedReportView'
 import TimesheetReportView from './TimesheetReportView'
-import { formatWeekEnding, getWeekEndingSundayOptions } from '@/lib/utils'
+import { formatWeekEnding, getTimesheetReportWeekEndingOptions } from '@/lib/utils'
 import type {
   GeneratedReportKind,
   GeneratedReportListItem,
@@ -269,9 +269,16 @@ function GenerateWizard({
   ) => void
 }) {
   const [reportKind, setReportKind] = useState<GeneratedReportKind | null>(null)
-  const weekOptions = useMemo(() => getWeekEndingSundayOptions().slice().reverse(), [])
+  const weekOptions = useMemo(() => getTimesheetReportWeekEndingOptions(), [])
   const [selectedWeeks, setSelectedWeeks] = useState<Set<string>>(new Set())
   const [weekSearch, setWeekSearch] = useState('')
+  const [tsClients, setTsClients] = useState<{ id: string; name: string }[]>([])
+  const [tsEmployees, setTsEmployees] = useState<{ id: string; name: string; siteIds: string[] }[]>([])
+  const [loadingTsOptions, setLoadingTsOptions] = useState(false)
+  const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set())
+  const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set())
+  const [clientSearch, setClientSearch] = useState('')
+  const [employeeSearch, setEmployeeSearch] = useState('')
   const [options, setOptions] = useState<PoOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -288,6 +295,30 @@ function GenerateWizard({
   const [loadingMonths, setLoadingMonths] = useState(false)
   const [title, setTitle] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (reportKind !== 'timesheet') return
+    let cancelled = false
+    ;(async () => {
+      setLoadingTsOptions(true)
+      try {
+        const res = await fetch('/api/reports/generate-timesheet/options', { cache: 'no-store' })
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to load employees')
+        const data = await res.json()
+        if (!cancelled) {
+          setTsClients(data.clients || [])
+          setTsEmployees(data.employees || [])
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load employees')
+      } finally {
+        if (!cancelled) setLoadingTsOptions(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [reportKind])
 
   useEffect(() => {
     if (reportKind !== 'budget_status') return
@@ -461,6 +492,53 @@ function GenerateWizard({
       return next
     })
 
+  const filteredClients = useMemo(() => {
+    const q = clientSearch.trim().toLowerCase()
+    if (!q) return tsClients
+    return tsClients.filter((c) => c.name.toLowerCase().includes(q))
+  }, [tsClients, clientSearch])
+
+  const employeesForClients = useMemo(() => {
+    if (selectedClients.size === 0) return tsEmployees
+    return tsEmployees.filter((e) => e.siteIds.some((id) => selectedClients.has(id)))
+  }, [tsEmployees, selectedClients])
+
+  const filteredEmployees = useMemo(() => {
+    const q = employeeSearch.trim().toLowerCase()
+    if (!q) return employeesForClients
+    return employeesForClients.filter((e) => e.name.toLowerCase().includes(q))
+  }, [employeesForClients, employeeSearch])
+
+  useEffect(() => {
+    setSelectedEmployees((prev) => {
+      if (prev.size === 0) return prev
+      const allowed = new Set(employeesForClients.map((e) => e.id))
+      let changed = false
+      const next = new Set<string>()
+      for (const id of prev) {
+        if (allowed.has(id)) next.add(id)
+        else changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [employeesForClients])
+
+  const toggleClient = (id: string) =>
+    setSelectedClients((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const toggleEmployee = (id: string) =>
+    setSelectedEmployees((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
   const generateTimesheet = async () => {
     setSubmitting(true)
     setError(null)
@@ -470,6 +548,8 @@ function GenerateWizard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           weekEndings: [...selectedWeeks],
+          clientIds: [...selectedClients],
+          employeeIds: [...selectedEmployees],
           title: title.trim() || undefined,
         }),
       })
@@ -560,7 +640,8 @@ function GenerateWizard({
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                  Select one or more week endings. Employees without a timesheet still appear as Not Created.
+                  Newest first: two weeks after last week ending, then back a full year. Select one or more.
+                  Employees without a timesheet still appear as Not Created.
                 </p>
                 <div className="relative mb-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -598,7 +679,147 @@ function GenerateWizard({
               </section>
               {selectedWeeks.size > 0 && (
                 <section>
-                  <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">2. Report name (optional)</h4>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">2. Clients and employees</h4>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Leave a list empty for All. Choosing clients narrows the employee list to people assigned to those clients.
+                  </p>
+                  {loadingTsOptions ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-4">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading clients and employees…
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Clients</span>
+                          <div className="flex items-center gap-2 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedClients(new Set(filteredClients.map((c) => c.id)))}
+                              className="text-orange-600 dark:text-orange-400 hover:underline font-medium"
+                            >
+                              Select all{clientSearch.trim() ? ' filtered' : ''}
+                            </button>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedClients(new Set())}
+                              disabled={selectedClients.size === 0}
+                              className="text-gray-600 dark:text-gray-400 hover:underline font-medium disabled:opacity-40"
+                            >
+                              All
+                            </button>
+                          </div>
+                        </div>
+                        <div className="relative mb-2">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <input
+                            value={clientSearch}
+                            onChange={(e) => setClientSearch(e.target.value)}
+                            placeholder="Filter clients…"
+                            className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                          />
+                        </div>
+                        <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+                          {filteredClients.length === 0 ? (
+                            <p className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">No clients match.</p>
+                          ) : (
+                            filteredClients.map((c) => {
+                              const checked = selectedClients.has(c.id)
+                              return (
+                                <label
+                                  key={c.id}
+                                  className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${
+                                    checked ? 'bg-orange-50 dark:bg-orange-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleClient(c.id)}
+                                    className="h-4 w-4 rounded border-gray-400 text-orange-600 focus:ring-orange-500"
+                                  />
+                                  <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{c.name}</span>
+                                </label>
+                              )
+                            })
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                          {selectedClients.size === 0 ? 'All clients' : `${selectedClients.size} client(s) selected`}
+                        </p>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Employees</span>
+                          <div className="flex items-center gap-2 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedEmployees(new Set(filteredEmployees.map((e) => e.id)))}
+                              className="text-orange-600 dark:text-orange-400 hover:underline font-medium"
+                            >
+                              Select all{employeeSearch.trim() ? ' filtered' : ''}
+                            </button>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedEmployees(new Set())}
+                              disabled={selectedEmployees.size === 0}
+                              className="text-gray-600 dark:text-gray-400 hover:underline font-medium disabled:opacity-40"
+                            >
+                              All
+                            </button>
+                          </div>
+                        </div>
+                        <div className="relative mb-2">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <input
+                            value={employeeSearch}
+                            onChange={(e) => setEmployeeSearch(e.target.value)}
+                            placeholder="Filter employees…"
+                            className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                          />
+                        </div>
+                        <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+                          {filteredEmployees.length === 0 ? (
+                            <p className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">No employees match.</p>
+                          ) : (
+                            filteredEmployees.map((emp) => {
+                              const checked = selectedEmployees.has(emp.id)
+                              return (
+                                <label
+                                  key={emp.id}
+                                  className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${
+                                    checked ? 'bg-orange-50 dark:bg-orange-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleEmployee(emp.id)}
+                                    className="h-4 w-4 rounded border-gray-400 text-orange-600 focus:ring-orange-500"
+                                  />
+                                  <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{emp.name}</span>
+                                </label>
+                              )
+                            })
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                          {selectedEmployees.size === 0
+                            ? `All employees${selectedClients.size > 0 ? ' for selected clients' : ''}`
+                            : `${selectedEmployees.size} employee(s) selected`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
+              {selectedWeeks.size > 0 && (
+                <section>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">3. Report name (optional)</h4>
                   <input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}

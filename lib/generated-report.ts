@@ -100,6 +100,8 @@ export interface TimesheetReportRow {
   weekEnding: string
   status: TimesheetReportStatus
   createdAt: string | null
+  /** When the employee submitted the sheet for approval. Absent on older saved reports. */
+  submittedAt?: string | null
   approvedAt: string | null
 }
 

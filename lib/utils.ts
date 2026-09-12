@@ -133,6 +133,22 @@ export function getWeekEndingSundayOptions(
   return options
 }
 
+/**
+ * Timesheet Report week-ending list only (does not change timesheet entry / Data View).
+ * Newest first: 2 weeks after the previous week ending, then back a full year (52 weeks before previous).
+ */
+export function getTimesheetReportWeekEndingOptions(referenceDate?: Date): string[] {
+  const ref = referenceDate ?? getNowInAppTz()
+  const previous = getPreviousWeekEnding(ref, 1)
+  const newest = addWeeks(previous, 2)
+  const count = 2 + 1 + 52
+  const options: string[] = []
+  for (let i = 0; i < count; i++) {
+    options.push(formatDateForInput(subWeeks(newest, i)))
+  }
+  return options
+}
+
 /** Get all week-ending dates (YYYY-MM-DD) that fall within a month. weekStartsOn: 0=Sun, 1=Mon, etc. */
 export function getWeekEndingsForMonth(year: number, month: number, weekStartsOn: number = 1): string[] {
   const firstDay = new Date(year, month - 1, 1)

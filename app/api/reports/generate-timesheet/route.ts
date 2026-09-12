@@ -11,6 +11,11 @@ export const maxDuration = 60
 const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/
 const IN_CHUNK = 150
 
+function parseIdList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return [...new Set(raw.filter((x): x is string => typeof x === 'string' && x.length > 0))]
+}
+
 function parseWeekEndings(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   return [...new Set(raw.filter((x): x is string => typeof x === 'string' && WEEK_RE.test(x)))].sort()
@@ -37,6 +42,7 @@ async function fetchTimesheetsForUsers(
     week_ending: string
     status: string
     created_at: string | null
+    submitted_at: string | null
     approved_at: string | null
   }
   const out: TsRow[] = []
@@ -44,7 +50,7 @@ async function fetchTimesheetsForUsers(
     const chunk = userIds.slice(i, i + IN_CHUNK)
     const { data, error } = await admin
       .from('weekly_timesheets')
-      .select('id, user_id, week_ending, status, created_at, approved_at')
+      .select('id, user_id, week_ending, status, created_at, submitted_at, approved_at')
       .in('user_id', chunk)
       .in('week_ending', weekEndings)
     if (error) throw new Error(error.message)
@@ -111,7 +117,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Select at least one week ending.' }, { status: 400 })
   }
 
-  const employees = await getTimesheetReportEmployees(admin, user.profile)
+  const requestedClientIds = parseIdList(body.clientIds)
+  const requestedEmployeeIds = parseIdList(body.employeeIds)
+
+  let employees = await getTimesheetReportEmployees(admin, user.profile)
+  if (requestedClientIds.length > 0) {
+    const clientSet = new Set(requestedClientIds)
+    employees = employees.filter((e) => e.siteIds.some((id) => clientSet.has(id)))
+  }
+  if (requestedEmployeeIds.length > 0) {
+    const empSet = new Set(requestedEmployeeIds)
+    employees = employees.filter((e) => empSet.has(e.id))
+  }
   const timesheets =
     employees.length === 0 ? [] : await fetchTimesheetsForUsers(admin, employees.map((e) => e.id), weekEndings)
 
@@ -136,6 +153,7 @@ export async function POST(req: Request) {
           weekEnding,
           status: 'not_created',
           createdAt: null,
+          submittedAt: null,
           approvedAt: null,
         })
         continue
@@ -154,6 +172,7 @@ export async function POST(req: Request) {
               ? status
               : 'draft',
           createdAt: ts.created_at,
+          submittedAt: ts.submitted_at,
           approvedAt: ts.approved_at,
         })
       }
