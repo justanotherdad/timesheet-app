@@ -88,6 +88,8 @@ export default function ConsolidatedManager({
   const [confirmationUserIds, setConfirmationUserIds] = useState<string[]>([])
   const [confirmationUsersList, setConfirmationUsersList] = useState<Array<{ id: string; name: string }>>([])
   const [confirmationSaving, setConfirmationSaving] = useState(false)
+  const [ptoApproverIds, setPtoApproverIds] = useState<string[]>([])
+  const [ptoApproverSaving, setPtoApproverSaving] = useState(false)
   const [confirmationSiteFilters, setConfirmationSiteFilters] = useState<Record<string, string[]>>({})
   const [filterModalUser, setFilterModalUser] = useState<{ id: string; name: string } | null>(null)
   const [filterModalSiteIds, setFilterModalSiteIds] = useState<string[]>([])
@@ -102,6 +104,8 @@ export default function ConsolidatedManager({
           setCompanyEmail(data?.company_email ?? '')
           const ids = data?.timesheet_confirmation_user_ids
           setConfirmationUserIds(Array.isArray(ids) ? ids : [])
+          const ptoIds = data?.pto_request_approver_ids
+          setPtoApproverIds(Array.isArray(ptoIds) ? ptoIds : [])
           const filters = data?.timesheet_confirmation_site_filters
           setConfirmationSiteFilters(filters && typeof filters === 'object' && !Array.isArray(filters) ? filters : {})
           setCompanyEmailLoaded(true)
@@ -143,6 +147,32 @@ export default function ConsolidatedManager({
       : [...confirmationUserIds, id]
     setConfirmationUserIds(next)
     void saveConfirmationAssignees(next)
+  }
+
+  const savePtoApprovers = async (nextIds: string[]) => {
+    setPtoApproverSaving(true)
+    try {
+      const res = await fetch('/api/company-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pto_request_approver_ids: nextIds }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        const ids = json?.pto_request_approver_ids
+        setPtoApproverIds(Array.isArray(ids) ? ids : [])
+      }
+    } finally {
+      setPtoApproverSaving(false)
+    }
+  }
+
+  const togglePtoApprover = (id: string) => {
+    const next = ptoApproverIds.includes(id)
+      ? ptoApproverIds.filter((x) => x !== id)
+      : [...ptoApproverIds, id]
+    setPtoApproverIds(next)
+    void savePtoApprovers(next)
   }
 
   const openFilterModal = (u: { id: string; name: string }) => {
@@ -1103,6 +1133,46 @@ export default function ConsolidatedManager({
             ) : (
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 {confirmationUserIds.length === 0 ? '—' : `${confirmationUserIds.length} user(s) assigned`}
+              </p>
+            )}
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 max-w-xl">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              PTO Request Reviewers
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              People listed here see a <strong>PTO Requests</strong> area on the dashboard and a badge
+              for pending leave requests. The first person to Approve or Deny settles the request for
+              everyone. Editable by admins only.
+            </p>
+            {isAdminOrAbove ? (
+              <>
+                <div className="max-h-56 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-2 space-y-1">
+                  {confirmationUsersList.length === 0 ? (
+                    <p className="text-sm text-gray-500 py-2">Loading users…</p>
+                  ) : (
+                    confirmationUsersList.map((u) => (
+                      <label
+                        key={u.id}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={ptoApproverIds.includes(u.id)}
+                          onChange={() => togglePtoApprover(u.id)}
+                          className="rounded border-gray-300 dark:border-gray-600"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{u.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {ptoApproverSaving && <p className="text-xs text-gray-500 mt-2">Saving…</p>}
+              </>
+            ) : (
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {ptoApproverIds.length === 0 ? '—' : `${ptoApproverIds.length} user(s) assigned`}
               </p>
             )}
           </div>

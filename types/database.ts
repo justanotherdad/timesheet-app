@@ -132,6 +132,27 @@ export interface TimesheetSignature {
   signature_data?: string // For storing signature image/data
 }
 
+export type PtoRequestStatus = 'pending' | 'approved' | 'denied' | 'cancelled'
+
+/** Employee leave request (PTO, vacation, bereavement, etc.). */
+export interface PtoRequest {
+  id: string
+  user_id: string
+  leave_type: string
+  start_date: string
+  end_date: string
+  hours_per_day: number
+  notes?: string | null
+  status: PtoRequestStatus
+  submitted_at: string
+  reviewed_by_id?: string | null
+  reviewed_at?: string | null
+  denial_reason?: string | null
+  cancelled_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
 /** Dashboard Bulletin Board post (rich HTML body). */
 export interface BulletinPost {
   id: string

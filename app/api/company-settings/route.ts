@@ -9,6 +9,7 @@ import {
   parseConfirmationSiteFilters,
   stringifyConfirmationSiteFilters,
 } from '@/lib/timesheet-confirmation'
+import { PTO_APPROVER_IDS_KEY, parsePtoApproverIds, stringifyPtoApproverIds } from '@/lib/pto'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +36,7 @@ export async function GET() {
     ...settings,
     timesheet_confirmation_user_ids: parseConfirmationAssigneeIds(settings),
     timesheet_confirmation_site_filters: parseConfirmationSiteFilters(settings),
+    pto_request_approver_ids: parsePtoApproverIds(settings),
   })
 }
 
@@ -83,6 +85,22 @@ export async function PATCH(req: Request) {
     }
     updates.push({ key: TIMESHEET_CONFIRMATION_SITE_FILTERS_KEY, value: stringifyConfirmationSiteFilters(map) })
   }
+  if (body.pto_request_approver_ids !== undefined) {
+    const raw = body.pto_request_approver_ids
+    const ids = Array.isArray(raw)
+      ? raw
+      : typeof raw === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(raw) as unknown
+            } catch {
+              return []
+            }
+          })()
+        : []
+    const cleaned = [...new Set((ids as unknown[]).filter((x): x is string => typeof x === 'string' && x.length > 0))]
+    updates.push({ key: PTO_APPROVER_IDS_KEY, value: stringifyPtoApproverIds(cleaned) })
+  }
 
   for (const { key, value } of updates) {
     const { error } = await supabase
@@ -102,5 +120,6 @@ export async function PATCH(req: Request) {
     ...settings,
     timesheet_confirmation_user_ids: parseConfirmationAssigneeIds(settings),
     timesheet_confirmation_site_filters: parseConfirmationSiteFilters(settings),
+    pto_request_approver_ids: parsePtoApproverIds(settings),
   })
 }

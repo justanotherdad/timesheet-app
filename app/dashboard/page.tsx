@@ -6,12 +6,13 @@ import { checkAndAutoApproveIfFinal } from '@/lib/timesheet-auto-approve'
 import { getWorkflowApprovalTimesheets, sortWorkflowApprovals } from '@/lib/approval-queue'
 import { getApprovedTimesheetsForViewer } from '@/lib/approved-timesheets-query'
 import Link from 'next/link'
-import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList, FileBarChart, ClipboardCheck, DollarSign } from 'lucide-react'
+import { Calendar, FileText, Users, Building, Activity, CheckCircle, XCircle, Clock, BarChart3, ClipboardList, FileBarChart, ClipboardCheck, DollarSign, CalendarOff } from 'lucide-react'
 import { formatWeekEnding, formatDate, getCalendarDateStringInAppTimezone } from '@/lib/utils'
 import { withQueryTimeout } from '@/lib/timeout'
 import Header from '@/components/Header'
 import BulletinBoard from '@/components/bulletin/BulletinBoard'
 import { loadCompanySettingsMap, parseConfirmationAssigneeIds, getPendingConfirmationsForUser } from '@/lib/timesheet-confirmation'
+import { countPendingPtoRequests, isInternalEmployee, isPtoApprover, parsePtoApproverIds } from '@/lib/pto'
 import { isBulletinAdmin } from '@/lib/bulletin'
 import type { BulletinPost } from '@/types/database'
 
@@ -35,6 +36,7 @@ export default async function DashboardPage() {
   const isSupervisorOrAbove = ['supervisor', 'manager', 'admin', 'super_admin'].includes(user.profile.role)
 
   const isClient = user.profile.role === 'client'
+  const isInternal = isInternalEmployee(user.profile.employee_type)
 
   let hasAnyBudgetAccess = false
   let hasAnyBidSheetAccess = false
@@ -113,6 +115,8 @@ export default async function DashboardPage() {
 
   let showTimesheetConfirmationsCard = false
   let timesheetConfirmationsPending = 0
+  let showPtoReviewCard = false
+  let ptoReviewPending = 0
   const settingsForConfirm = await loadCompanySettingsMap(adminSupabase)
   const confirmationAssignees = parseConfirmationAssigneeIds(settingsForConfirm)
   if (confirmationAssignees.length > 0 && confirmationAssignees.includes(user.id)) {
@@ -127,6 +131,15 @@ export default async function DashboardPage() {
       timesheetConfirmationsPending = pendingConfirmations.length
     } catch (err) {
       console.error('[timesheet-confirmation] dashboard count failed', err)
+    }
+  }
+  const ptoApprovers = parsePtoApproverIds(settingsForConfirm)
+  if (isPtoApprover(user.id, ptoApprovers)) {
+    showPtoReviewCard = true
+    try {
+      ptoReviewPending = await countPendingPtoRequests(adminSupabase)
+    } catch (err) {
+      console.error('[pto] dashboard count failed', err)
     }
   }
 
@@ -364,6 +377,23 @@ export default async function DashboardPage() {
             </div>
           </a>
 
+          {isInternal && !isClient && (
+            <Link
+              href="/dashboard/pto"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
+            >
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="bg-teal-100 dark:bg-teal-900/30 p-3 rounded-lg">
+                  <CalendarOff className="h-6 w-6 text-teal-600 dark:text-teal-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Request PTO</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Submit and track time-off requests</p>
+                </div>
+              </div>
+            </Link>
+          )}
+
           {showTimesheetConfirmationsCard && (
             <Link
               href="/dashboard/timesheet-confirmations"
@@ -384,6 +414,32 @@ export default async function DashboardPage() {
                     {timesheetConfirmationsPending > 0
                       ? `${timesheetConfirmationsPending} awaiting confirmation`
                       : 'Confirm receipt of approved timesheets'}
+                  </p>
+                </div>
+              </div>
+            </Link>
+          )}
+
+          {showPtoReviewCard && (
+            <Link
+              href="/dashboard/pto/review"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 hover:shadow-md transition-shadow block min-h-[72px] sm:min-h-0"
+            >
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="bg-teal-100 dark:bg-teal-900/30 p-3 rounded-lg relative">
+                  <CalendarOff className="h-6 w-6 text-teal-600 dark:text-teal-400" />
+                  {ptoReviewPending > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold">
+                      {ptoReviewPending > 99 ? '99+' : ptoReviewPending}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">PTO Requests</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {ptoReviewPending > 0
+                      ? `${ptoReviewPending} awaiting review`
+                      : 'Review employee time-off requests'}
                   </p>
                 </div>
               </div>

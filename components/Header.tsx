@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Menu, BookOpen, Sun, Moon, ClipboardCheck } from 'lucide-react'
+import { Menu, BookOpen, Sun, Moon, ClipboardCheck, CalendarOff } from 'lucide-react'
 import GuideModal from './GuideModal'
 
 interface HeaderProps {
@@ -25,6 +25,11 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
   const [darkMode, setDarkMode] = useState(true)
   const [timesheetConfirmNav, setTimesheetConfirmNav] = useState<{ show: boolean; pending: number }>({
     show: false,
+    pending: 0,
+  })
+  const [ptoNav, setPtoNav] = useState<{ showRequest: boolean; showReview: boolean; pending: number }>({
+    showRequest: false,
+    showReview: false,
     pending: 0,
   })
   /** Clients only: show Budget Detail when they have can_view_budget on any PO. */
@@ -50,6 +55,24 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
       .catch((err) => {
         console.warn('Failed to load timesheet confirmation nav count:', err)
         if (!cancelled) setTimesheetConfirmNav({ show: false, pending: 0 })
+      })
+    fetch('/api/pto/nav', { credentials: 'include', cache: 'no-store' })
+      .then((res) =>
+        res.ok
+          ? res.json()
+          : { showRequestLink: false, showReviewLink: false, pendingCount: 0 }
+      )
+      .then((j) => {
+        if (cancelled) return
+        setPtoNav({
+          showRequest: !!j.showRequestLink,
+          showReview: !!j.showReviewLink,
+          pending: typeof j.pendingCount === 'number' ? j.pendingCount : 0,
+        })
+      })
+      .catch((err) => {
+        console.warn('Failed to load PTO nav:', err)
+        if (!cancelled) setPtoNav({ showRequest: false, showReview: false, pending: 0 })
       })
     return () => {
       cancelled = true
@@ -292,6 +315,28 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                       {canManagePayroll && (
                         <Link href="/dashboard/admin/payroll" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Payroll
+                        </Link>
+                      )}
+                      {ptoNav.showReview && (
+                        <Link
+                          href="/dashboard/pto/review"
+                          className="flex items-center justify-between gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          onClick={() => setMenuOpen(false)}
+                        >
+                          <span className="flex items-center gap-2">
+                            <CalendarOff className="h-4 w-4 shrink-0" />
+                            PTO Requests
+                          </span>
+                          {ptoNav.pending > 0 && (
+                            <span className="min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold">
+                              {ptoNav.pending > 99 ? '99+' : ptoNav.pending}
+                            </span>
+                          )}
+                        </Link>
+                      )}
+                      {ptoNav.showRequest && (
+                        <Link href="/dashboard/pto" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                          Request PTO
                         </Link>
                       )}
                       {!isClient && (

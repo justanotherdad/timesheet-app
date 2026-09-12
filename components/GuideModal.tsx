@@ -16,6 +16,7 @@ const SECTIONS: { id: string; title: string }[] = [
   { id: 'data-export', title: 'View Timesheet Data & Export' },
   { id: 'holiday-calendar', title: 'Holiday & Pay Calendar' },
   { id: 'confirmations', title: 'Timesheet Confirmations' },
+  { id: 'pto', title: 'PTO Requests' },
   { id: 'need-help', title: 'Need Help?' },
 ]
 
@@ -197,6 +198,7 @@ function GuideContent() {
           <li><strong>New Timesheet</strong> – Start a timesheet for the current week.</li>
           <li><strong>My Timesheets</strong> – Your own timesheets, with history and status. Admins see all timesheets here with filters. Supervisors and managers open other people’s timesheets from <strong>Pending Approvals</strong> or <strong>Approved Timesheets</strong> instead.</li>
           <li><strong>Holiday &amp; Pay Calendar</strong> – The company holiday and pay schedule. Opens in a new browser tab.</li>
+          <li><strong>Request PTO</strong> – Internal employees can submit and track time-off requests. External employees do not see this tile. See section 13.</li>
           <li><strong>Most Recent Timesheets</strong> – A panel listing your five most recent timesheets in any status (draft, submitted, approved, rejected), colour-coded, each with a <strong>View</strong> link.</li>
         </ul>
         <h4 className="text-sm font-semibold mt-3 mb-1">Supervisors, Managers, and Admins also see</h4>
@@ -221,6 +223,7 @@ function GuideContent() {
           <li><strong>Budget Detail</strong> also appears for a supervisor or employee who has been granted <strong>budget access</strong> on at least one PO — they see only those POs.</li>
           <li><strong>Bid Sheets</strong> also appears for an employee who has been granted access to at least one bid sheet — they see only those sheets.</li>
           <li><strong>Timesheet Confirmations</strong> appears only if you have been named as a confirmation assignee under Company Information. A badge shows how many timesheets are awaiting your confirmation. See section 12.</li>
+          <li><strong>PTO Requests</strong> appears only if you have been named as a PTO reviewer under Company Information. A badge shows how many leave requests are awaiting review. The first Approve or Deny settles the request for every reviewer. See section 13.</li>
           <li><strong>Pending Approvals</strong> also appears for an employee who is currently an active <strong>approval delegate</strong> for someone else. See section 6.3.</li>
         </ul>
         <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
@@ -428,7 +431,8 @@ function GuideContent() {
           <strong>Expense Types</strong>, and <strong>Company Information</strong>.{' '}
           <strong>Supervisors:</strong> view only, and only for their sites.{' '}
           <strong>Managers:</strong> add, edit, and delete sites, departments, and POs for their
-          sites. <strong>Admins:</strong> all sites, plus Expense Types and Company Information.
+          sites. <strong>Admins:</strong> all sites, plus Expense Types and Company Information
+          (company email, Timesheet Confirmation assignees, and PTO request reviewers).
         </p>
         <h4 className="text-sm font-semibold mt-3 mb-1">6.2 Manage Timesheet Options</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">
@@ -628,6 +632,22 @@ function GuideContent() {
         </ul>
       </section>
 
+      <section data-section="pto" className="scroll-mt-4">
+        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">
+          13. PTO Requests
+        </h3>
+        <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+          Internal employees can request paid time off (and related leave) before the week is worked.
+          This is separate from entering hours on the timesheet. After a request is approved, still
+          put those hours on the <strong>PTO</strong> row of that week’s timesheet so payroll can
+          export them.
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
+          <li><strong>Request:</strong> Dashboard → <strong>Request PTO</strong>, or the <strong>menu</strong> (☰). External employees do not see this. Choose a type (Paid Time Off, Vacation, Bereavement, Jury Duty, Comp Time Used, or type your own), start and end dates, and hours per day (up to 8). You can cancel a request while it is still pending.</li>
+          <li><strong>Review:</strong> people named under <strong>Manage Organization</strong> → <strong>Company Information</strong> → <strong>PTO Request Reviewers</strong> see a <strong>PTO Requests</strong> tile and menu item with a badge. The first Approve or Deny removes the request from every reviewer’s list. Deny requires a short reason, which the employee can see.</li>
+        </ul>
+      </section>
+
       <section data-section="need-help" className="scroll-mt-4">
         <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">
           Need Help?
@@ -641,11 +661,12 @@ function GuideContent() {
           <li><strong>Timesheet went to the wrong approver:</strong> The chain is Employee → Supervisor → Manager → Final Approver, taken from your profile in <strong>Manage Users</strong>. Where a field is “None,” the next person up is used. Check also whether a <strong>delegation</strong> is active (section 6.3).</li>
           <li><strong>Approvals piling up while someone is away:</strong> Set up a delegation for the dates they are out (section 6.3).</li>
           <li><strong>A tile is missing on your phone:</strong> <strong>View Timesheet Data</strong> and <strong>Export Timesheets</strong> are hidden on small screens. Use the <strong>menu</strong> (☰), or a desktop browser.</li>
+          <li><strong>Request PTO is missing:</strong> Only internal employees see it. Check <strong>Employee Type</strong> on your profile in <strong>Manage Users</strong>.</li>
         </ul>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-6 italic">
           Last updated to match the current CTG Timesheet Management site: bill-rate–driven timesheet
           POs and site access, grant-based budget access, approval delegation, Bid Sheets, Reports,
-          Holiday &amp; Pay Calendar, and Timesheet Confirmations.
+          Holiday &amp; Pay Calendar, Timesheet Confirmations, and PTO requests.
         </p>
       </section>
     </div>
