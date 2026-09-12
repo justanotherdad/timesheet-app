@@ -61,6 +61,42 @@ export const PAYROLL_COLUMNS: PayrollColumnDef[] = [
   { key: 'looks_at', label: 'Looks at', kind: 'dropdown', options: PAYROLL_LOOKS_AT_OPTIONS },
 ]
 
+/** Field guide shown on Manage Organization → Payroll. */
+export const PAYROLL_FIELD_HELP: { label: string; text: string }[] = [
+  {
+    label: 'Earning Type',
+    text: 'Name on the payroll CSV. When Dropdown is Y, this is also the Description choice on the timesheet.',
+  },
+  {
+    label: 'DET / DETCODE',
+    text: 'Values written to the payroll export for this earning type.',
+  },
+  {
+    label: 'Area',
+    text: 'Billable or Unbillable section of the timesheet this type comes from.',
+  },
+  {
+    label: 'Dropdown',
+    text: 'Y = offer this name in the unbillable Description list for the Type in Where.',
+  },
+  {
+    label: 'Where',
+    text: 'Which unbillable Type row (Internal, PTO, or Holiday) the Description lives on. Export maps that Type + Description to this earning type (e.g. Internal + Bereavement → BRVMT).',
+  },
+  {
+    label: 'Overtime',
+    text: 'Y = these hours may push the week past the Regular cap. N = they stay on this earning type and do not become Incentive Time.',
+  },
+  {
+    label: 'Rule / Value',
+    text: 'Regular uses “up to” (usually 40) on billable hours plus Internal hours that did not match an earning type. Incentive Time uses “over” that same threshold. Leave types keep their entered hours.',
+  },
+  {
+    label: 'Looks at',
+    text: 'Which hours feed Regular / Incentive: billable, unbillable, or both. Unmatched Internal hours still count as Regular.',
+  },
+]
+
 /** The unbillable timesheet row types, matching timesheet_unbillable.description. */
 export type UnbillableType = 'HOLIDAY' | 'INTERNAL' | 'PTO'
 
@@ -113,22 +149,41 @@ function findOver(config: PayrollEarningType[]): PayrollEarningType | undefined 
   )
 }
 
+function whereLabelForType(type: UnbillableType): string {
+  return type === 'HOLIDAY' ? 'holiday' : type === 'INTERNAL' ? 'internal' : 'pto'
+}
+
+/** Earning type whose name matches Description and whose Where matches the timesheet row type. */
+function findEarningByDescription(
+  config: PayrollEarningType[],
+  type: UnbillableType,
+  description: string | null | undefined
+): PayrollEarningType | undefined {
+  const desc = (description || '').trim().toLowerCase()
+  if (!desc) return undefined
+  const where = whereLabelForType(type)
+  return config.find(
+    (c) =>
+      (c.earning_type || '').trim().toLowerCase() === desc &&
+      (c.where_value || '').trim().toLowerCase() === where
+  )
+}
+
 /**
  * Allocate a single employee-week into payroll rows using the configured
  * earning types.
  *
  * Documented rules (driven by the Payroll config table):
- *  - Regular (rule "up to" N, area Billable, looks at billable): hours worked
- *    up to N (default 40). "Worked" = billable + INTERNAL unbillable hours,
- *    since internal time is worked-but-unbillable and is paid as regular.
- *  - Incentive/overtime (rule "over" N, area Billable): worked hours beyond N.
+ *  - Regular (rule "up to" N, area Billable): billable hours plus INTERNAL
+ *    hours that did not match an earning type (blank/unmatched description).
+ *  - Incentive/overtime (rule "over" N, area Billable): those same hours beyond N.
+ *  - INTERNAL rows whose Description matches an earning type with Where =
+ *    Internal (e.g. Bereavement, Jury Duty) export as that DETCODE, not Regular.
  *  - Holiday: emitted as entered under its detcode (overtime allowed).
  *  - PTO rows: mapped to the earning type whose name matches the row's
- *    Description (Bereavement / Comp Time Used / Jury Duty / Paid Time Off);
- *    if blank/unmatched, defaults to the Paid Time Off (PTO) earning type.
- *    Emitted as entered (the "can't go over 40" cap is intentionally not
- *    applied to avoid silently dropping leave hours — adjust here if payroll
- *    requires capping).
+ *    Description (and Where = PTO when set); if blank/unmatched, defaults to
+ *    Paid Time Off (PTO). Leave hours are not silently dropped by the
+ *    "can't go over 40" cap.
  *
  * Only rows with hours > 0 are returned.
  */
@@ -159,22 +214,31 @@ export function allocatePayrollRows(
   const regThreshold = num(reg?.rule_value, 40)
   const overThreshold = num(over?.rule_value, 40)
 
-  const internalHours = input.unbillable
-    .filter((u) => u.type === 'INTERNAL')
-    .reduce((s, u) => s + (Number(u.hours) || 0), 0)
+  const mappedInternal: Array<{ et: PayrollEarningType; hours: number }> = []
+  let unmatchedInternal = 0
+  for (const row of input.unbillable) {
+    if (row.type !== 'INTERNAL') continue
+    const hours = Number(row.hours) || 0
+    if (hours <= 0) continue
+    const et = findEarningByDescription(config, 'INTERNAL', row.description)
+    if (et) mappedInternal.push({ et, hours })
+    else unmatchedInternal += hours
+  }
 
-  const workedHours = (Number(input.billableHours) || 0) + internalHours
+  const workedHours = (Number(input.billableHours) || 0) + unmatchedInternal
 
   add(reg, Math.min(workedHours, regThreshold), 'Regular Hours')
   if (over) add(over, Math.max(workedHours - overThreshold, 0), 'Incentive Time')
+  for (const { et, hours } of mappedInternal) add(et, hours)
 
   for (const row of input.unbillable) {
     const hours = Number(row.hours) || 0
     if (hours <= 0) continue
-    if (row.type === 'INTERNAL') continue // already folded into worked/regular
+    if (row.type === 'INTERNAL') continue
 
     if (row.type === 'HOLIDAY') {
       const hol =
+        findEarningByDescription(config, 'HOLIDAY', row.description) ||
         config.find((c) => (c.where_value || '').toLowerCase() === 'holiday') ||
         config.find((c) => (c.detcode || '').toUpperCase() === 'HOL') ||
         config.find((c) => (c.earning_type || '').toLowerCase() === 'holiday')
@@ -182,10 +246,10 @@ export function allocatePayrollRows(
       continue
     }
 
-    // PTO row: map by the selected Description, else default to the PTO earning type.
+    // PTO row: map by Description + Where=PTO, else name-only, else default PTO.
     const desc = (row.description || '').trim().toLowerCase()
-    let et: PayrollEarningType | undefined
-    if (desc) {
+    let et: PayrollEarningType | undefined = findEarningByDescription(config, 'PTO', row.description)
+    if (!et && desc) {
       et = config.find((c) => (c.earning_type || '').trim().toLowerCase() === desc)
     }
     if (!et) {
@@ -264,6 +328,41 @@ export async function logPayrollAudit(params: {
 
 const DAY_FIELDS = ['mon_hours', 'tue_hours', 'wed_hours', 'thu_hours', 'fri_hours', 'sat_hours', 'sun_hours'] as const
 
+/** PostgREST URL/filter length limit — keep `.in()` lists under this size. */
+const IN_CHUNK = 150
+/** Default PostgREST max rows; unpaged selects silently stop here. */
+const PAGE_SIZE = 1000
+
+async function fetchAllPages<T>(
+  runPage: (
+    from: number,
+    to: number
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>
+): Promise<T[]> {
+  const out: T[] = []
+  let from = 0
+  for (;;) {
+    const { data, error } = await runPage(from, from + PAGE_SIZE - 1)
+    if (error) throw new Error(error.message)
+    const rows = (data || []) as T[]
+    out.push(...rows)
+    if (rows.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return out
+}
+
+async function fetchInIdChunks<T>(
+  ids: string[],
+  runChunk: (chunk: string[]) => Promise<T[]>
+): Promise<T[]> {
+  const out: T[] = []
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    out.push(...(await runChunk(ids.slice(i, i + IN_CHUNK))))
+  }
+  return out
+}
+
 function sumDays(row: Record<string, unknown>): number {
   return DAY_FIELDS.reduce((s, f) => s + (Number(row[f]) || 0), 0)
 }
@@ -279,14 +378,14 @@ async function loadInternalUserIds(
   userIds: string[]
 ): Promise<Set<string>> {
   if (userIds.length === 0) return new Set()
-  const { data } = await admin
-    .from('user_profiles')
-    .select('id, employee_type')
-    .in('id', userIds)
   const internal = new Set<string>()
-  for (const p of (data || []) as Array<{ id: string; employee_type: string | null }>) {
-    const type = (p.employee_type || 'internal').toLowerCase()
-    if (type === 'internal') internal.add(p.id)
+  for (let i = 0; i < userIds.length; i += IN_CHUNK) {
+    const chunk = userIds.slice(i, i + IN_CHUNK)
+    const { data } = await admin.from('user_profiles').select('id, employee_type').in('id', chunk)
+    for (const p of (data || []) as Array<{ id: string; employee_type: string | null }>) {
+      const type = (p.employee_type || 'internal').toLowerCase()
+      if (type === 'internal') internal.add(p.id)
+    }
   }
   return internal
 }
@@ -316,12 +415,17 @@ export interface PayrollDetailRow {
  */
 export async function listPayrollWeeks(): Promise<PayrollWeekSummary[]> {
   const admin = createAdminClient()
-  const { data: timesheets } = await admin
-    .from('weekly_timesheets')
-    .select('id, user_id, week_ending, status')
-    .eq('status', 'approved')
+  const timesheets = await fetchAllPages<{ id: string; user_id: string; week_ending: string }>((from, to) =>
+    admin
+      .from('weekly_timesheets')
+      .select('id, user_id, week_ending, status')
+      .eq('status', 'approved')
+      .order('week_ending', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  let tsList = (timesheets || []) as Array<{ id: string; user_id: string; week_ending: string }>
+  let tsList = timesheets
   if (tsList.length === 0) return []
 
   // Payroll only covers internal employees.
@@ -330,9 +434,29 @@ export async function listPayrollWeeks(): Promise<PayrollWeekSummary[]> {
   if (tsList.length === 0) return []
 
   const tsIds = tsList.map((t) => t.id)
-  const [{ data: billable }, { data: unbillable }] = await Promise.all([
-    admin.from('timesheet_entries').select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours').in('timesheet_id', tsIds),
-    admin.from('timesheet_unbillable').select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours').in('timesheet_id', tsIds),
+  const hourSelect =
+    'id, timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours'
+  const [billable, unbillable] = await Promise.all([
+    fetchInIdChunks(tsIds, (chunk) =>
+      fetchAllPages<Record<string, unknown>>((from, to) =>
+        admin
+          .from('timesheet_entries')
+          .select(hourSelect)
+          .in('timesheet_id', chunk)
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+    ),
+    fetchInIdChunks(tsIds, (chunk) =>
+      fetchAllPages<Record<string, unknown>>((from, to) =>
+        admin
+          .from('timesheet_unbillable')
+          .select(hourSelect)
+          .in('timesheet_id', chunk)
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+    ),
   ])
 
   const billableByTs = new Map<string, number>()
@@ -398,37 +522,64 @@ export async function aggregatePayrollForWeeks(weekEndings: string[]): Promise<P
   const admin = createAdminClient()
   const config = await loadPayrollConfig()
 
-  const { data: timesheets } = await admin
-    .from('weekly_timesheets')
-    .select('id, user_id, week_ending')
-    .eq('status', 'approved')
-    .in('week_ending', weeks)
-
-  let tsList = (timesheets || []) as Array<{ id: string; user_id: string; week_ending: string }>
+  const tsList = (
+    await fetchInIdChunks(weeks, (chunk) =>
+      fetchAllPages<{ id: string; user_id: string; week_ending: string }>((from, to) =>
+        admin
+          .from('weekly_timesheets')
+          .select('id, user_id, week_ending')
+          .eq('status', 'approved')
+          .in('week_ending', chunk)
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+    )
+  ).filter(Boolean)
   if (tsList.length === 0) return []
 
   // Payroll only covers internal employees.
   const internalIds = await loadInternalUserIds(admin, [...new Set(tsList.map((t) => t.user_id))])
-  tsList = tsList.filter((t) => internalIds.has(t.user_id))
-  if (tsList.length === 0) return []
+  const internalTs = tsList.filter((t) => internalIds.has(t.user_id))
+  if (internalTs.length === 0) return []
 
-  const tsIds = tsList.map((t) => t.id)
-  const userIds = [...new Set(tsList.map((t) => t.user_id))]
+  const tsIds = internalTs.map((t) => t.id)
+  const userIds = [...new Set(internalTs.map((t) => t.user_id))]
 
-  const [{ data: billable }, { data: unbillable }, { data: profiles }] = await Promise.all([
-    admin.from('timesheet_entries').select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours').in('timesheet_id', tsIds),
-    admin.from('timesheet_unbillable').select('timesheet_id, description, notes, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours').in('timesheet_id', tsIds),
-    admin.from('user_profiles').select('id, name, employee_id').in('id', userIds),
+  const [billable, unbillable, profiles] = await Promise.all([
+    fetchInIdChunks(tsIds, (chunk) =>
+      fetchAllPages<Record<string, unknown>>((from, to) =>
+        admin
+          .from('timesheet_entries')
+          .select('id, timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
+          .in('timesheet_id', chunk)
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+    ),
+    fetchInIdChunks(tsIds, (chunk) =>
+      fetchAllPages<Record<string, unknown>>((from, to) =>
+        admin
+          .from('timesheet_unbillable')
+          .select('id, timesheet_id, description, notes, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
+          .in('timesheet_id', chunk)
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+    ),
+    fetchInIdChunks(userIds, async (chunk) => {
+      const { data } = await admin.from('user_profiles').select('id, name, employee_id').in('id', chunk)
+      return (data || []) as Array<{ id: string; name: string; employee_id: string | null }>
+    }),
   ])
 
   const profileById = new Map<string, { name: string; employee_id: string | null }>()
-  for (const p of (profiles || []) as Array<{ id: string; name: string; employee_id: string | null }>) {
+  for (const p of profiles) {
     profileById.set(p.id, { name: p.name, employee_id: p.employee_id })
   }
 
   // timesheet_id -> { userId, week } so we can group allocation per employee per week.
   const tsToUserWeek = new Map<string, { uid: string; week: string }>()
-  for (const t of tsList) tsToUserWeek.set(t.id, { uid: t.user_id, week: String(t.week_ending).slice(0, 10) })
+  for (const t of internalTs) tsToUserWeek.set(t.id, { uid: t.user_id, week: String(t.week_ending).slice(0, 10) })
 
   const groupKey = (uid: string, week: string) => `${uid}|${week}`
 
@@ -456,7 +607,7 @@ export async function aggregatePayrollForWeeks(weekEndings: string[]): Promise<P
 
   // Every (user, week) pair that has an approved timesheet, so allocation runs once each.
   const groups = new Map<string, { uid: string; week: string }>()
-  for (const t of tsList) {
+  for (const t of internalTs) {
     const week = String(t.week_ending).slice(0, 10)
     groups.set(groupKey(t.user_id, week), { uid: t.user_id, week })
   }

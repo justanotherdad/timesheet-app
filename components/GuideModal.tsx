@@ -214,6 +214,7 @@ function GuideContent() {
           <li><strong>Budget Detail</strong> – PO budgets, invoices, expenses, billable hours and cost, and bill rates.</li>
           <li><strong>Reports</strong> – Outstanding Invoices, PO Status, and generated budget status reports.</li>
           <li><strong>Export Timesheets</strong> – Export timesheets for any week.</li>
+          <li><strong>Payroll</strong> – Weekly payroll export for approved internal timesheets (admins only). Earning types are configured under Manage Organization → Payroll.</li>
         </ul>
         <h4 className="text-sm font-semibold mt-3 mb-1">Tiles that depend on a specific grant</h4>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">

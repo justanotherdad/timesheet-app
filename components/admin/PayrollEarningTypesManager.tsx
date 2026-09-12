@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import {
   PAYROLL_COLUMNS,
+  PAYROLL_FIELD_HELP,
   type PayrollEarningType,
   type PayrollAuditEntry,
 } from '@/lib/payroll'
@@ -216,6 +217,13 @@ export default function PayrollEarningTypesManager({ readOnly = false }: { readO
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Maps each earning type to its DET / DETCODE and the rules used by the Payroll export.
           </p>
+          <div className="mt-3 text-xs text-gray-600 dark:text-gray-400 space-y-1.5 max-w-3xl">
+            {PAYROLL_FIELD_HELP.map((row) => (
+              <p key={row.label}>
+                <span className="font-medium text-gray-700 dark:text-gray-300">{row.label}:</span> {row.text}
+              </p>
+            ))}
+          </div>
         </div>
         {!readOnly && (
           <button

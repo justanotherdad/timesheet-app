@@ -114,6 +114,7 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
   const canManageOrg = !isClient && ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
   const canManageBudget = !isClient && ['manager', 'admin', 'super_admin'].includes(userRole)
   const canBidSheets = !isClient && ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
+  const canManagePayroll = !isClient && ['admin', 'super_admin'].includes(userRole)
 
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm print:hidden">
@@ -286,6 +287,11 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                       {canAccessPendingApprovals && (
                         <Link href="/dashboard/approvals" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
                           Pending Approvals
+                        </Link>
+                      )}
+                      {canManagePayroll && (
+                        <Link href="/dashboard/admin/payroll" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                          Payroll
                         </Link>
                       )}
                       {!isClient && (
