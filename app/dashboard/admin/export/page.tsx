@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic'
 
 import { requireRole } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchByIds, fetchInIdChunksPaged } from '@/lib/supabase-fetch'
 import Header from '@/components/Header'
 import AdminExport from '@/components/admin/AdminExport'
 
@@ -39,27 +41,28 @@ export default async function AdminExportPage() {
     return Array.from(seen.values())
   })()
 
-  // Get all timesheet entries to calculate hours
+  // Hours / site / PO come from timesheet_entries. Use the admin client and
+  // chunk+page the `.in()` so we don't hit PostgREST's URL-length 400 or the
+  // silent 1000-row cap (both look like every timesheet has 0 hours / N/A).
+  const admin = createAdminClient()
   const timesheetIds = deduplicatedTimesheets.map((ts: any) => ts.id)
-  let entriesData: any[] = []
-  
-  if (timesheetIds.length > 0) {
-    const { data: entries } = await supabase
+  const entriesData = await fetchInIdChunksPaged<any>(timesheetIds, (chunk, from, to) =>
+    admin
       .from('timesheet_entries')
       .select('timesheet_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours, client_project_id, po_id, system_id, system_name')
-      .in('timesheet_id', timesheetIds)
-    
-    entriesData = entries || []
-  }
+      .in('timesheet_id', chunk)
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
   // Calculate total hours for each timesheet and get site/PO info
   const timesheetsWithHours = deduplicatedTimesheets.map((ts: any) => {
     const entries = entriesData.filter((e: any) => e.timesheet_id === ts.id)
     const totalHours = entries.reduce((sum: number, entry: any) => {
-      return sum + (entry.mon_hours || 0) + (entry.tue_hours || 0) + 
-             (entry.wed_hours || 0) + (entry.thu_hours || 0) + 
-             (entry.fri_hours || 0) + (entry.sat_hours || 0) + 
-             (entry.sun_hours || 0)
+      return sum + (Number(entry.mon_hours) || 0) + (Number(entry.tue_hours) || 0) +
+             (Number(entry.wed_hours) || 0) + (Number(entry.thu_hours) || 0) +
+             (Number(entry.fri_hours) || 0) + (Number(entry.sat_hours) || 0) +
+             (Number(entry.sun_hours) || 0)
     }, 0)
     
     const siteIdsForTs = Array.from(new Set(entries.map((e: any) => e.client_project_id).filter(Boolean)))
@@ -80,46 +83,34 @@ export default async function AdminExportPage() {
   const siteIds = Array.from(new Set(timesheetsWithHours.flatMap((ts: any) => ts._site_ids || [])))
   const poIds = Array.from(new Set(timesheetsWithHours.flatMap((ts: any) => ts._po_ids || [])))
 
-  // Fetch site names
-  let sitesMap: Record<string, any> = {}
-  if (siteIds.length > 0) {
-    const { data: sites } = await supabase
-      .from('sites')
-      .select('id, name')
-      .in('id', siteIds)
-    sitesMap = (sites || []).reduce((acc: Record<string, any>, site: any) => {
-      acc[site.id] = site
-      return acc
-    }, {})
-  }
-
-  // Fetch PO names with site_id, department_id for cascading filters
-  let posMap: Record<string, any> = {}
-  if (poIds.length > 0) {
-    const { data: pos } = await supabase
-      .from('purchase_orders')
-      .select('id, po_number, site_id, department_id')
-      .in('id', poIds)
-    posMap = (pos || []).reduce((acc: Record<string, any>, po: any) => {
-      acc[po.id] = po
-      return acc
-    }, {})
-  }
-
-  // Fetch systems for filter options
   const systemIdsFromTs = Array.from(new Set(timesheetsWithHours.flatMap((ts: any) => ts._system_ids || [])))
   const customSystemNames = Array.from(new Set(timesheetsWithHours.flatMap((ts: any) => ts._system_names || [])))
-  let systemsMap: Record<string, any> = {}
-  if (systemIdsFromTs.length > 0) {
-    const { data: systemsData } = await supabase
-      .from('systems')
-      .select('id, name')
-      .in('id', systemIdsFromTs)
-    systemsMap = (systemsData || []).reduce((acc: Record<string, any>, s: any) => {
-      acc[s.id] = s
-      return acc
-    }, {})
-  }
+
+  const [sitesRows, posRows, systemsRows] = await Promise.all([
+    fetchByIds<{ id: string; name: string }>(siteIds as string[], (chunk) =>
+      admin.from('sites').select('id, name').in('id', chunk)
+    ),
+    fetchByIds<{ id: string; po_number: string; site_id?: string; department_id?: string }>(
+      poIds as string[],
+      (chunk) => admin.from('purchase_orders').select('id, po_number, site_id, department_id').in('id', chunk)
+    ),
+    fetchByIds<{ id: string; name: string }>(systemIdsFromTs as string[], (chunk) =>
+      admin.from('systems').select('id, name').in('id', chunk)
+    ),
+  ])
+
+  const sitesMap: Record<string, any> = (sitesRows || []).reduce((acc: Record<string, any>, site: any) => {
+    acc[site.id] = site
+    return acc
+  }, {})
+  const posMap: Record<string, any> = (posRows || []).reduce((acc: Record<string, any>, po: any) => {
+    acc[po.id] = po
+    return acc
+  }, {})
+  const systemsMap: Record<string, any> = (systemsRows || []).reduce((acc: Record<string, any>, s: any) => {
+    acc[s.id] = s
+    return acc
+  }, {})
 
   // Fetch departments for cascading filters
   const { data: departmentsData } = await supabase

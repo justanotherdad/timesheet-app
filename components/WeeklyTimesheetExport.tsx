@@ -128,7 +128,7 @@ export default function WeeklyTimesheetExport({
     const html = buildExportHtml(entriesToUse, unbillableToUse)
     const printHint = options.autoPrint
       ? `<div class="print-hide">
-          <strong>Before printing:</strong> In the print dialog, open &quot;More settings&quot;
+          <strong>Before printing:</strong> Set Layout to <strong>Landscape</strong>. Then open &quot;More settings&quot;
           and <strong>uncheck &quot;Headers and footers&quot;</strong> to remove the URL and page numbers.
         </div>`
       : ''
@@ -138,13 +138,13 @@ export default function WeeklyTimesheetExport({
   <head>
     <title>Weekly Time Sheet - ${formatDate(weekDates.end)}</title>
     <style>
-      @page { size: landscape; margin: 0.25in; }
+      @page { size: letter landscape; margin: 0.25in; }
       html, body {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
       @media print {
-        @page { size: landscape; margin: 0.25in; }
+        @page { size: letter landscape; margin: 0.25in; }
         html, body { margin: 0; padding: 0; }
         .print-hide { display: none !important; }
         /* Safety net: never let content bleed past the page boundary */

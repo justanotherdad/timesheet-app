@@ -142,10 +142,21 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
     return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1 inline" /> : <ArrowDown className="h-3 w-3 ml-1 inline" />
   }
 
+  const sortTimesheetsAscending = (list: any[]) => {
+    return [...list].sort((a, b) => {
+      const week = String(a.week_ending || '').localeCompare(String(b.week_ending || ''))
+      if (week !== 0) return week
+      return String(a.user_profiles?.name || '').localeCompare(String(b.user_profiles?.name || ''), undefined, {
+        sensitivity: 'base',
+      })
+    })
+  }
+
   const getExportData = () => {
-    return selectedTimesheets.length > 0
+    const source = selectedTimesheets.length > 0
       ? timesheets.filter(ts => selectedTimesheets.includes(ts.id))
       : filteredTimesheets
+    return sortTimesheetsAscending(source)
   }
 
   const handleExportCSV = () => {
@@ -259,6 +270,19 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
         timesheetData = await response.json()
       }
       if (!timesheetData) throw new Error('No timesheet data')
+
+      // PDF pages follow this list, not PostgREST `.in()` order. Week ending
+      // oldest-first, then employee A–Z.
+      const exportOrder = new Map(toExport.map((ts, i) => [ts.id, i]))
+      timesheetData = [...timesheetData].sort((a: any, b: any) => {
+        const ai = exportOrder.get(a.timesheet?.id) ?? Number.MAX_SAFE_INTEGER
+        const bi = exportOrder.get(b.timesheet?.id) ?? Number.MAX_SAFE_INTEGER
+        if (ai !== bi) return ai - bi
+        const week = String(a.timesheet?.week_ending || '').localeCompare(String(b.timesheet?.week_ending || ''))
+        if (week !== 0) return week
+        return String(a.user?.name || '').localeCompare(String(b.user?.name || ''), undefined, { sensitivity: 'base' })
+      })
+
       const origin = window.location.origin
 
       const printWindow = window.open('', '_blank')
@@ -489,13 +513,13 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
           <head>
             <title>Timesheets Export - ${formatDateInEastern(new Date())}</title>
             <style>
-              @page { size: landscape; margin: 0.25in; }
+              @page { size: letter landscape; margin: 0.25in; }
               html, body {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
               }
               @media print {
-                @page { size: landscape; margin: 0.25in; }
+                @page { size: letter landscape; margin: 0.25in; }
                 html, body { margin: 0; padding: 0; }
                 .print-hide { display: none !important; }
                 .timesheet-page { overflow: hidden; }
@@ -535,7 +559,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
           </head>
           <body>
             <div class="print-hide">
-              <strong>Before printing:</strong> In the print dialog, open &quot;More settings&quot;
+              <strong>Before printing:</strong> Set Layout to <strong>Landscape</strong>. Then open &quot;More settings&quot;
               and <strong>uncheck &quot;Headers and footers&quot;</strong> to remove the URL and page numbers from the output.
             </div>
             ${htmlContent}
