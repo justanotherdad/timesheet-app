@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient } from './supabase/server'
 import { UserRole, User } from '@/types/database'
 import { withTimeout, withQueryTimeout } from './timeout'
@@ -8,7 +9,32 @@ export interface CurrentUser {
   profile: User
 }
 
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+/** Auth/profile check timed out or the Auth gateway failed. Not the same as "logged out". */
+export class AuthUnavailableError extends Error {
+  constructor(message = 'Sign-in is temporarily unavailable. Please try again.') {
+    super(message)
+    this.name = 'AuthUnavailableError'
+  }
+}
+
+function isTimeoutLike(error: unknown): boolean {
+  const msg =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'object' && error && 'message' in error
+        ? String((error as { message?: unknown }).message || '')
+        : String(error || '')
+  const code =
+    typeof error === 'object' && error && 'code' in error
+      ? String((error as { code?: unknown }).code || '')
+      : ''
+  return (
+    code === 'TIMEOUT' ||
+    /timed out|timeout|Auth check timeout|Authentication check timed out/i.test(msg)
+  )
+}
+
+export const getCurrentUser = cache(async function getCurrentUser(): Promise<CurrentUser | null> {
   try {
     const supabase = await createClient()
     
@@ -21,7 +47,13 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     
     const { data: { user }, error } = authResult || { data: { user: null }, error: null }
     
-    if (error || !user) return null
+    if (error) {
+      if (isTimeoutLike(error)) {
+        throw new AuthUnavailableError()
+      }
+      return null
+    }
+    if (!user) return null
 
     // Add timeout to profile query (5 seconds)
     const profileResult = await withQueryTimeout(
@@ -32,6 +64,10 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
         .single(),
       5000
     )
+
+    if (profileResult.error && isTimeoutLike(profileResult.error)) {
+      throw new AuthUnavailableError()
+    }
 
     const profile = profileResult.data as (User & { active?: boolean }) | null
 
@@ -46,10 +82,13 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       profile
     } as CurrentUser
   } catch (error) {
+    if (error instanceof AuthUnavailableError || isTimeoutLike(error)) {
+      throw error instanceof AuthUnavailableError ? error : new AuthUnavailableError()
+    }
     console.error('Error in getCurrentUser:', error)
     return null
   }
-}
+})
 
 export async function requireAuth() {
   const user = await getCurrentUser()
@@ -86,4 +125,3 @@ export function canManageUsers(userRole: UserRole): boolean {
 export function canChangeUserRole(userRole: UserRole): boolean {
   return userRole === 'super_admin'
 }
-

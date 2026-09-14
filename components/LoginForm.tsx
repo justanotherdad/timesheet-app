@@ -8,6 +8,22 @@ import { SESSION_START_KEY } from '@/components/AutoLogout'
 
 const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
+function messageFromAuthResponse(
+  res: Response,
+  data: { error?: unknown },
+  fallback: string
+): string {
+  const fromBody = typeof data.error === 'string' ? data.error.trim() : ''
+  if (fromBody && fromBody !== '{}' && fromBody !== '[object Object]') {
+    return fromBody
+  }
+  if (res.status === 429) return 'Too many attempts. Please try again later.'
+  if (res.status === 503 || res.status >= 500) {
+    return 'Sign-in is temporarily unavailable. Please try again.'
+  }
+  return fallback
+}
+
 export default function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -52,7 +68,7 @@ export default function LoginForm() {
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Sign-in failed')
+        throw new Error(messageFromAuthResponse(res, data, 'Sign-in failed'))
       }
 
       // Anchor the absolute-session clock (AutoLogout) to this login.
@@ -109,7 +125,7 @@ export default function LoginForm() {
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to send reset email')
+        throw new Error(messageFromAuthResponse(res, data, 'Failed to send reset email'))
       }
 
       setForgotPasswordSuccess(true)

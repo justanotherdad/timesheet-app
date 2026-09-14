@@ -22,7 +22,10 @@ export async function middleware(request: NextRequest) {
       'unknown'
     const { ok } = await checkAuthRateLimit(ip)
     if (!ok) {
-      return new NextResponse('Too many attempts. Please try again later.', { status: 429 })
+      return NextResponse.json(
+        { error: 'Too many attempts. Please try again later.' },
+        { status: 429 }
+      )
     }
   }
 

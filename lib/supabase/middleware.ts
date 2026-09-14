@@ -13,6 +13,65 @@ function toSessionCookieOptions(options: CookieOptions = {}): CookieOptions {
   return rest
 }
 
+function isPublicPath(pathname: string): boolean {
+  if (
+    pathname === '/' ||
+    pathname === '/login' ||
+    pathname === '/signup' ||
+    pathname === '/auth/setup-password' ||
+    pathname === '/auth/invite'
+  ) {
+    return true
+  }
+  if (pathname.startsWith('/auth')) return true
+  if (pathname === '/api/auth/login' || pathname === '/api/auth/forgot-password') {
+    return true
+  }
+  return false
+}
+
+function copyCookies(from: NextResponse, to: NextResponse): NextResponse {
+  from.cookies.getAll().forEach((cookie) => to.cookies.set(cookie))
+  return to
+}
+
+function unavailableResponse(request: NextRequest, from: NextResponse): NextResponse {
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    return copyCookies(
+      from,
+      NextResponse.json(
+        { error: 'Sign-in is temporarily unavailable. Please try again.' },
+        { status: 503 }
+      )
+    )
+  }
+  return copyCookies(
+    from,
+    new NextResponse(
+      `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Temporarily unavailable</title>
+  </head>
+  <body style="font-family:system-ui,sans-serif;padding:2rem;line-height:1.5">
+    <h1 style="font-size:1.25rem">Temporarily unavailable</h1>
+    <p>We could not verify your session. Your login was not cleared — refresh this page in a moment.</p>
+    <p><a href="/dashboard">Retry</a> · <a href="/login">Sign in</a></p>
+  </body>
+</html>`,
+      {
+        status: 503,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+        },
+      }
+    )
+  )
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -23,6 +82,13 @@ export async function updateSession(request: NextRequest) {
 
   // If env vars are missing, skip Supabase auth check and allow request through
   if (!supabaseUrl || !supabaseKey) {
+    return supabaseResponse
+  }
+
+  // Login and other public routes must not wait on getUser(). During an Auth
+  // outage that 5s timeout was blocking POST /api/auth/login and looking like
+  // a failed sign-in. Skipping here does not grant access to /dashboard.
+  if (isPublicPath(request.nextUrl.pathname)) {
     return supabaseResponse
   }
 
@@ -62,51 +128,23 @@ export async function updateSession(request: NextRequest) {
       data: { user },
     } = await Promise.race([authPromise, timeoutPromise])
 
-    // Allow public access to landing page, login, signup, and password setup
-    const publicPaths = ['/', '/login', '/signup', '/auth/setup-password']
-    const isPublicPath = publicPaths.includes(request.nextUrl.pathname)
-
-    // Session is created by these routes — must not require an existing user
-    const publicAuthApiPaths = ['/api/auth/login', '/api/auth/forgot-password']
-    const isPublicAuthApi = publicAuthApiPaths.includes(request.nextUrl.pathname)
-
-    if (
-      !user &&
-      !isPublicPath &&
-      !request.nextUrl.pathname.startsWith('/auth') &&
-      !isPublicAuthApi
-    ) {
+    if (!user) {
       // API routes: return 401 JSON so the client gets a proper error, not an HTML redirect
       if (request.nextUrl.pathname.startsWith('/api/')) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        return copyCookies(
+          supabaseResponse,
+          NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        )
       }
       const url = request.nextUrl.clone()
       url.pathname = '/login'
-      return NextResponse.redirect(url)
+      return copyCookies(supabaseResponse, NextResponse.redirect(url))
     }
   } catch (error) {
-    // If Supabase connection fails or times out, allow request through to prevent timeouts
-    // This prevents Error 522 when Supabase is unavailable or slow
+    // Fail closed (no dashboard data) but do not send people to /login — that
+    // looked like a failed sign-in and raced with cookies from a successful grant.
     console.error('Supabase auth error in middleware:', error)
-    
-    // For public paths, always allow through
-    const publicPaths = ['/', '/login', '/signup', '/auth/setup-password', '/auth/invite']
-    const isPublicPath = publicPaths.includes(request.nextUrl.pathname)
-    
-    const publicAuthApiPaths = ['/api/auth/login', '/api/auth/forgot-password']
-    const isPublicAuthApi = publicAuthApiPaths.includes(request.nextUrl.pathname)
-
-    if (isPublicPath || request.nextUrl.pathname.startsWith('/auth') || isPublicAuthApi) {
-      return supabaseResponse
-    }
-    
-    // API routes: return 401 JSON instead of redirect
-    if (request.nextUrl.pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+    return unavailableResponse(request, supabaseResponse)
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
@@ -124,4 +162,3 @@ export async function updateSession(request: NextRequest) {
 
   return supabaseResponse
 }
-

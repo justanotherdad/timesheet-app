@@ -43,13 +43,17 @@ export async function POST(request: Request) {
     // on — they can't self-serve out of it either, since password resets aren't
     // emailed to unconfirmed addresses.
     const isUnconfirmed = /email not confirmed/i.test(signInError.message || '')
+    const raw = (signInError.message || '').trim()
+    const emptyOrOpaque = !raw || raw === '{}' || raw === '[object Object]'
     return NextResponse.json(
       {
         error: isUnconfirmed
           ? 'Your account has not been activated yet. Please contact your administrator to have your password set.'
-          : signInError.message || 'Invalid email or password.',
+          : emptyOrOpaque
+            ? 'Sign-in is temporarily unavailable. Please try again.'
+            : raw,
       },
-      { status: 401 }
+      { status: emptyOrOpaque && !isUnconfirmed ? 503 : 401 }
     )
   }
 
@@ -63,11 +67,21 @@ export async function POST(request: Request) {
     .eq('id', authData.user.id)
     .single()
 
-  if (profileError || !profile) {
+  // Only destroy the session when we know there is no profile row.
+  // Timeouts / 5xx after a successful password grant used to sign the user
+  // out and bounce them back to login with no useful error.
+  const missingProfile = !profile && (profileError?.code === 'PGRST116' || !profileError)
+  if (missingProfile) {
     await supabase.auth.signOut()
     return NextResponse.json(
       { error: 'Your account is not fully set up. Please contact your administrator to complete your profile.' },
       { status: 403 }
+    )
+  }
+  if (profileError || !profile) {
+    return NextResponse.json(
+      { error: 'Sign-in is temporarily unavailable. Please try again.' },
+      { status: 503 }
     )
   }
 
