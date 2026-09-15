@@ -1,12 +1,23 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccessPoBudget } from '@/lib/access'
-import { getCurrentUser } from '@/lib/auth'
+import { AuthUnavailableError, getCurrentUser } from '@/lib/auth'
 import {
   buildInvoiceDeletedDescription,
   buildInvoiceUpdatedDescription,
   logPoBudgetContainerAudit,
 } from '@/lib/po-budget-container-audit'
+
+function handleInvoiceRouteError(error: unknown, fallback: string) {
+  if (error instanceof AuthUnavailableError) {
+    return NextResponse.json(
+      { error: error.message || 'Sign-in is temporarily unavailable. Please try again.' },
+      { status: 503 }
+    )
+  }
+  console.error('[invoices]', error)
+  return NextResponse.json({ error: fallback }, { status: 500 })
+}
 
 /** PO Balance = total budget - invoices only. Prior amount spent affects Budget Balance, not PO Balance. */
 async function updatePoBalance(supabase: any, poId: string) {

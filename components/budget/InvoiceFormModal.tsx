@@ -71,7 +71,7 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
         body: JSON.stringify({ payment_received_date: null }),
       })
       if (!res.ok) {
-        const err = await res.json()
+        const err = await res.json().catch(() => ({}))
         throw new Error(err.error || 'Failed to clear')
       }
       setForm((f) => ({ ...f, payment_received_date: null }))
@@ -100,7 +100,7 @@ export default function InvoiceFormModal({ poId, invoice, onSave, onClose }: Inv
       }
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!res.ok) {
-        const err = await res.json()
+        const err = await res.json().catch(() => ({}))
         throw new Error(err.error || 'Failed to save')
       }
       onSave()
