@@ -37,99 +37,123 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ poId: string; invoiceId: string }> }
 ) {
-  const { poId, invoiceId } = await params
-  const user = await getCurrentUser()
-  if (!user || !['admin', 'super_admin'].includes(user.profile.role)) {
-    return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+  try {
+    const { poId, invoiceId } = await params
+    const user = await getCurrentUser()
+    if (!user || !['admin', 'super_admin'].includes(user.profile.role)) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+
+    const supabase = await createClient()
+    const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
+    if (!allowed) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+
+    const { data: existing, error: existingErr } = await supabase
+      .from('po_invoices')
+      .select('*')
+      .eq('id', invoiceId)
+      .eq('po_id', poId)
+      .maybeSingle()
+
+    if (existingErr || !existing) {
+      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+    }
+
+    const body = await req.json()
+    const updates: Record<string, any> = {}
+    if (body.invoice_date != null) updates.invoice_date = body.invoice_date
+    if ('invoice_number' in body) updates.invoice_number = body.invoice_number
+    if (Array.isArray(body.periods) && body.periods.length > 0) {
+      updates.periods = body.periods.map((p: any) => ({ month: parseInt(String(p.month), 10), year: parseInt(String(p.year), 10) }))
+      updates.period_month = updates.periods[0].month
+      updates.period_year = updates.periods[0].year
+    } else if (body.period_month != null) updates.period_month = parseInt(String(body.period_month), 10)
+    else if (body.period_year != null) updates.period_year = parseInt(String(body.period_year), 10)
+    if (body.amount != null) updates.amount = parseFloat(String(body.amount))
+    if ('payment_received_date' in body) updates.payment_received_date = body.payment_received_date
+    if ('notes' in body) updates.notes = body.notes
+
+    const { data, error } = await supabase
+      .from('po_invoices')
+      .update(updates)
+      .eq('id', invoiceId)
+      .eq('po_id', poId)
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    try {
+      await updatePoBalance(supabase, poId)
+    } catch (err) {
+      console.error('[invoices] Failed to update PO balance:', err)
+    }
+    try {
+      void logPoBudgetContainerAudit({
+        poId,
+        container: 'invoices',
+        actorId: user.id,
+        actorName: user.profile.name,
+        description: buildInvoiceUpdatedDescription(existing, data),
+      })
+    } catch (err) {
+      console.error('[invoices] Failed to log audit:', err)
+    }
+    return NextResponse.json(data)
+  } catch (error) {
+    return handleInvoiceRouteError(error, 'Failed to save invoice. Please try again.')
   }
-
-  const supabase = await createClient()
-  const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
-  if (!allowed) {
-    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-  }
-
-  const { data: existing, error: existingErr } = await supabase
-    .from('po_invoices')
-    .select('*')
-    .eq('id', invoiceId)
-    .eq('po_id', poId)
-    .maybeSingle()
-
-  if (existingErr || !existing) {
-    return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
-  }
-
-  const body = await req.json()
-  const updates: Record<string, any> = {}
-  if (body.invoice_date != null) updates.invoice_date = body.invoice_date
-  if ('invoice_number' in body) updates.invoice_number = body.invoice_number
-  if (Array.isArray(body.periods) && body.periods.length > 0) {
-    updates.periods = body.periods.map((p: any) => ({ month: parseInt(String(p.month), 10), year: parseInt(String(p.year), 10) }))
-    updates.period_month = updates.periods[0].month
-    updates.period_year = updates.periods[0].year
-  } else if (body.period_month != null) updates.period_month = parseInt(String(body.period_month), 10)
-  else if (body.period_year != null) updates.period_year = parseInt(String(body.period_year), 10)
-  if (body.amount != null) updates.amount = parseFloat(String(body.amount))
-  if ('payment_received_date' in body) updates.payment_received_date = body.payment_received_date
-  if ('notes' in body) updates.notes = body.notes
-
-  const { data, error } = await supabase
-    .from('po_invoices')
-    .update(updates)
-    .eq('id', invoiceId)
-    .eq('po_id', poId)
-    .select()
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  await updatePoBalance(supabase, poId)
-  void logPoBudgetContainerAudit({
-    poId,
-    container: 'invoices',
-    actorId: user.id,
-    actorName: user.profile.name,
-    description: buildInvoiceUpdatedDescription(existing, data),
-  })
-  return NextResponse.json(data)
 }
 
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ poId: string; invoiceId: string }> }
 ) {
-  const { poId, invoiceId } = await params
-  const user = await getCurrentUser()
-  if (!user || !['admin', 'super_admin'].includes(user.profile.role)) {
-    return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+  try {
+    const { poId, invoiceId } = await params
+    const user = await getCurrentUser()
+    if (!user || !['admin', 'super_admin'].includes(user.profile.role)) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+
+    const supabase = await createClient()
+    const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
+    if (!allowed) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+
+    const { data: existing, error: existingErr } = await supabase
+      .from('po_invoices')
+      .select('invoice_number, amount')
+      .eq('id', invoiceId)
+      .eq('po_id', poId)
+      .maybeSingle()
+
+    if (existingErr || !existing) {
+      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+    }
+
+    const { error } = await supabase.from('po_invoices').delete().eq('id', invoiceId).eq('po_id', poId)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    try {
+      await updatePoBalance(supabase, poId)
+    } catch (err) {
+      console.error('[invoices] Failed to update PO balance:', err)
+    }
+    try {
+      void logPoBudgetContainerAudit({
+        poId,
+        container: 'invoices',
+        actorId: user.id,
+        actorName: user.profile.name,
+        description: buildInvoiceDeletedDescription(existing),
+      })
+    } catch (err) {
+      console.error('[invoices] Failed to log audit:', err)
+    }
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return handleInvoiceRouteError(error, 'Failed to delete invoice. Please try again.')
   }
-
-  const supabase = await createClient()
-  const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
-  if (!allowed) {
-    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-  }
-
-  const { data: existing, error: existingErr } = await supabase
-    .from('po_invoices')
-    .select('invoice_number, amount')
-    .eq('id', invoiceId)
-    .eq('po_id', poId)
-    .maybeSingle()
-
-  if (existingErr || !existing) {
-    return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
-  }
-
-  const { error } = await supabase.from('po_invoices').delete().eq('id', invoiceId).eq('po_id', poId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  await updatePoBalance(supabase, poId)
-  void logPoBudgetContainerAudit({
-    poId,
-    container: 'invoices',
-    actorId: user.id,
-    actorName: user.profile.name,
-    description: buildInvoiceDeletedDescription(existing),
-  })
-  return NextResponse.json({ success: true })
 }

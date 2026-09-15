@@ -2,11 +2,22 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessPoBudget } from '@/lib/access'
-import { getCurrentUser } from '@/lib/auth'
+import { AuthUnavailableError, getCurrentUser } from '@/lib/auth'
 import {
   buildInvoiceAddedDescription,
   logPoBudgetContainerAudit,
 } from '@/lib/po-budget-container-audit'
+
+function handleInvoiceRouteError(error: unknown, fallback: string) {
+  if (error instanceof AuthUnavailableError) {
+    return NextResponse.json(
+      { error: error.message || 'Sign-in is temporarily unavailable. Please try again.' },
+      { status: 503 }
+    )
+  }
+  console.error('[invoices]', error)
+  return NextResponse.json({ error: fallback }, { status: 500 })
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -64,58 +75,70 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ poId: string }> }
 ) {
-  const { poId } = await params
-  const user = await getCurrentUser()
-  if (!user || !['admin', 'super_admin'].includes(user.profile.role)) {
-    return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+  try {
+    const { poId } = await params
+    const user = await getCurrentUser()
+    if (!user || !['admin', 'super_admin'].includes(user.profile.role)) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+
+    const supabase = await createClient()
+    const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
+    if (!allowed) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+
+    const body = await req.json()
+    const { invoice_date, invoice_number, periods, period_month, period_year, amount, payment_received_date, notes } = body
+
+    const periodsList = Array.isArray(periods) && periods.length > 0
+      ? periods.map((p: any) => ({ month: parseInt(String(p.month), 10), year: parseInt(String(p.year), 10) }))
+      : period_month != null && period_year != null
+        ? [{ month: parseInt(String(period_month), 10), year: parseInt(String(period_year), 10) }]
+        : null
+
+    if (!invoice_date || !periodsList?.length || amount == null) {
+      return NextResponse.json({ error: 'invoice_date, at least one period (month/year), and amount are required' }, { status: 400 })
+    }
+
+    const firstPeriod = periodsList[0]
+    const { data: inv, error } = await supabase
+      .from('po_invoices')
+      .insert({
+        po_id: poId,
+        invoice_date,
+        invoice_number: invoice_number || null,
+        period_month: firstPeriod.month,
+        period_year: firstPeriod.year,
+        periods: periodsList,
+        amount: parseFloat(String(amount)),
+        payment_received_date: payment_received_date || null,
+        notes: notes || null,
+        created_by: user.id,
+      })
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    try {
+      await updatePoBalance(supabase, poId)
+    } catch (err) {
+      console.error('[invoices] Failed to update PO balance:', err)
+    }
+    try {
+      void logPoBudgetContainerAudit({
+        poId,
+        container: 'invoices',
+        actorId: user.id,
+        actorName: user.profile.name,
+        description: buildInvoiceAddedDescription(inv),
+      })
+    } catch (err) {
+      console.error('[invoices] Failed to log audit:', err)
+    }
+    return NextResponse.json(inv)
+  } catch (error) {
+    return handleInvoiceRouteError(error, 'Failed to save invoice. Please try again.')
   }
-
-  const supabase = await createClient()
-  const allowed = await canAccessPoBudget(supabase, user.id, user.profile.role, poId)
-  if (!allowed) {
-    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-  }
-
-  const body = await req.json()
-  const { invoice_date, invoice_number, periods, period_month, period_year, amount, payment_received_date, notes } = body
-
-  const periodsList = Array.isArray(periods) && periods.length > 0
-    ? periods.map((p: any) => ({ month: parseInt(String(p.month), 10), year: parseInt(String(p.year), 10) }))
-    : period_month != null && period_year != null
-      ? [{ month: parseInt(String(period_month), 10), year: parseInt(String(period_year), 10) }]
-      : null
-
-  if (!invoice_date || !periodsList?.length || amount == null) {
-    return NextResponse.json({ error: 'invoice_date, at least one period (month/year), and amount are required' }, { status: 400 })
-  }
-
-  const firstPeriod = periodsList[0]
-  const { data: inv, error } = await supabase
-    .from('po_invoices')
-    .insert({
-      po_id: poId,
-      invoice_date,
-      invoice_number: invoice_number || null,
-      period_month: firstPeriod.month,
-      period_year: firstPeriod.year,
-      periods: periodsList,
-      amount: parseFloat(String(amount)),
-      payment_received_date: payment_received_date || null,
-      notes: notes || null,
-      created_by: user.id,
-    })
-    .select()
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  await updatePoBalance(supabase, poId)
-  void logPoBudgetContainerAudit({
-    poId,
-    container: 'invoices',
-    actorId: user.id,
-    actorName: user.profile.name,
-    description: buildInvoiceAddedDescription(inv),
-  })
-  return NextResponse.json(inv)
 }
