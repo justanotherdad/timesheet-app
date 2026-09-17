@@ -148,6 +148,7 @@ function ActivitiesMonthTable({ table }: { table: ReportBillableActivitiesMonth 
                       currentWeekEnding: table.currentWeekEnding,
                       userId: r.userId,
                       approvedTimesheetUserIds: table.approvedTimesheetUserIds,
+                      approvedTimesheetUserIdsByWeek: table.approvedTimesheetUserIdsByWeek,
                     })
                       ? 'NTS'
                       : (r.weekHours[we] || 0) === 0
@@ -216,6 +217,7 @@ function CostMonthTable({ table }: { table: ReportBillableCostMonth }) {
                       currentWeekEnding: table.currentWeekEnding,
                       userId: r.userId,
                       approvedTimesheetUserIds: table.approvedTimesheetUserIds,
+                      approvedTimesheetUserIdsByWeek: table.approvedTimesheetUserIdsByWeek,
                     })
                       ? 'NTS'
                       : moneyExact(r.weekCosts[we] || 0)}

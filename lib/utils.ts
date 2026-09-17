@@ -171,8 +171,38 @@ export function currentWeekEnding(weekStartsOn: number = 1, asOf: Date = new Dat
 }
 
 /**
+ * Approved weekly-timesheet owners keyed by week-ending, for current and later weeks.
+ * Empty arrays mean nobody is approved yet (those cells are NTS).
+ */
+export function buildApprovedTimesheetUserIdsByWeek(
+  timesheets: Array<{ user_id?: string | null; week_ending?: string | null }>,
+  weekEndings: string[],
+  thisWeekEnding: string
+): Record<string, string[]> {
+  const sets: Record<string, Set<string>> = {}
+  for (const we of weekEndings) {
+    if (we >= thisWeekEnding) sets[we] = new Set()
+  }
+  for (const t of timesheets) {
+    const we = String(t.week_ending ?? '').trim().slice(0, 10)
+    const uid = t.user_id
+    if (!we || !uid || !sets[we]) continue
+    sets[we].add(uid)
+  }
+  const out: Record<string, string[]> = {}
+  for (const we of Object.keys(sets)) {
+    out[we] = [...sets[we]]
+  }
+  return out
+}
+
+/**
  * True when this employee×week cell should show NTS (no approved timesheet yet)
- * instead of an empty dash. Only the current week-ending uses this; hours > 0 never NTS.
+ * instead of an empty dash. Hours > 0 never NTS.
+ *
+ * New payloads pass `approvedTimesheetUserIdsByWeek` so current + later weeks NTS
+ * until that week's sheet is approved. Older saved reports only have the flat
+ * list and stay current-week-only.
  */
 export function isNoTimesheetCell(opts: {
   weekEnding: string
@@ -180,9 +210,20 @@ export function isNoTimesheetCell(opts: {
   currentWeekEnding?: string | null
   userId: string
   approvedTimesheetUserIds?: string[] | null
+  approvedTimesheetUserIdsByWeek?: Record<string, string[]> | null
 }): boolean {
   if ((Number(opts.hours) || 0) > 0) return false
-  if (!opts.currentWeekEnding || opts.weekEnding !== opts.currentWeekEnding) return false
+  if (!opts.currentWeekEnding) return false
+
+  const byWeek = opts.approvedTimesheetUserIdsByWeek
+  if (byWeek) {
+    if (opts.weekEnding < opts.currentWeekEnding) return false
+    const approved = byWeek[opts.weekEnding]
+    if (!approved) return true
+    return !approved.includes(opts.userId)
+  }
+
+  if (opts.weekEnding !== opts.currentWeekEnding) return false
   const approved = opts.approvedTimesheetUserIds
   if (!approved) return false
   return !approved.includes(opts.userId)

@@ -31,13 +31,18 @@ export interface ReportBillableActivitiesMonth {
   columnTotals: Record<string, number>
   grandTotal: number
   /**
-   * Frozen at generation: current week-ending if it falls in this month.
-   * Combined with approvedTimesheetUserIds so the viewer can show NTS.
-   * Absent on reports saved before this field existed.
+   * Frozen at generation: the then-current week-ending (app timezone).
+   * Combined with approvedTimesheetUserIds / approvedTimesheetUserIdsByWeek for NTS.
+   * Absent on reports saved before NTS existed.
    */
   currentWeekEnding?: string | null
-  /** User ids with an approved weekly timesheet for currentWeekEnding. */
+  /** User ids with an approved weekly timesheet for currentWeekEnding (legacy). */
   approvedTimesheetUserIds?: string[]
+  /**
+   * User ids with an approved weekly timesheet, keyed by week-ending, for the
+   * current week and later. Presence of this field expands NTS past the current week.
+   */
+  approvedTimesheetUserIdsByWeek?: Record<string, string[]>
 }
 
 /** One employee row in a monthly Billable Cost ($) table. */
@@ -59,6 +64,7 @@ export interface ReportBillableCostMonth {
   grandTotal: number
   currentWeekEnding?: string | null
   approvedTimesheetUserIds?: string[]
+  approvedTimesheetUserIdsByWeek?: Record<string, string[]>
 }
 
 export interface ReportPoSummary {

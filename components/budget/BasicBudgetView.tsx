@@ -615,6 +615,8 @@ export default function BasicBudgetView({
 
   const currentWeekEnding = (billableData?.currentWeekEnding as string | null | undefined) || null
   const approvedTimesheetUserIds = (billableData?.approvedTimesheetUserIds as string[] | undefined) || []
+  const approvedTimesheetUserIdsByWeek =
+    (billableData?.approvedTimesheetUserIdsByWeek as Record<string, string[]> | undefined) || undefined
   const cellIsNts = (userId: string, we: string, hours: number) =>
     isNoTimesheetCell({
       weekEnding: we,
@@ -622,6 +624,7 @@ export default function BasicBudgetView({
       currentWeekEnding,
       userId,
       approvedTimesheetUserIds,
+      approvedTimesheetUserIdsByWeek,
     })
 
   const handleBillableSort = (col: string) => {

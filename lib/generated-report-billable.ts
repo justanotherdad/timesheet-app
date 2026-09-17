@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getWeekEndingsForMonth, currentWeekEnding } from '@/lib/utils'
+import { getWeekEndingsForMonth, currentWeekEnding, buildApprovedTimesheetUserIdsByWeek } from '@/lib/utils'
 import { pickEffectiveRateForWeek } from '@/lib/po-bill-rate-utils'
 import type {
   ReportBillableActivitiesMonth,
@@ -209,15 +209,12 @@ export async function buildBillableTablesForPoMonth(
   const userIds = Object.keys(hoursByUserWeek)
 
   const thisWeekEnding = currentWeekEnding(weekStartsOn)
-  const currentWeInView = weekEndings.includes(thisWeekEnding) ? thisWeekEnding : null
-  const approvedTimesheetUserIds = currentWeInView
-    ? [...new Set(
-        (timesheets || [])
-          .filter((t) => normWeekEnding((t as { week_ending: string }).week_ending) === currentWeInView)
-          .map((t) => (t as { user_id: string }).user_id)
-          .filter(Boolean)
-      )]
-    : []
+  const approvedTimesheetUserIdsByWeek = buildApprovedTimesheetUserIdsByWeek(
+    (timesheets || []) as Array<{ user_id?: string | null; week_ending?: string | null }>,
+    weekEndings,
+    thisWeekEnding
+  )
+  const approvedTimesheetUserIds = approvedTimesheetUserIdsByWeek[thisWeekEnding] || []
 
   // Skip empty months (no activity for this PO).
   if (userIds.length === 0) {
@@ -264,8 +261,9 @@ export async function buildBillableTablesForPoMonth(
       rows,
       columnTotals,
       grandTotal,
-      currentWeekEnding: currentWeInView,
+      currentWeekEnding: thisWeekEnding,
       approvedTimesheetUserIds,
+      approvedTimesheetUserIdsByWeek,
     }
   }
 
@@ -311,8 +309,9 @@ export async function buildBillableTablesForPoMonth(
       rows,
       columnTotals,
       grandTotal,
-      currentWeekEnding: currentWeInView,
+      currentWeekEnding: thisWeekEnding,
       approvedTimesheetUserIds,
+      approvedTimesheetUserIdsByWeek,
     }
   }
 

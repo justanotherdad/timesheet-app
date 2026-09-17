@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
-import { getWeekEndingsForMonth, currentWeekEnding } from '@/lib/utils'
+import { getWeekEndingsForMonth, currentWeekEnding, buildApprovedTimesheetUserIdsByWeek } from '@/lib/utils'
 
 /** Timesheet week_ending from DB may include time/TZ; column keys must match UI + bill-rate helpers (YYYY-MM-DD). */
 function normWeekEnding(v: unknown): string {
@@ -181,15 +181,12 @@ export async function GET(
   const grandTotal = rows.reduce((sum, r) => sum + r.rowTotal, 0)
 
   const thisWeekEnding = currentWeekEnding(weekStartsOn)
-  const currentWeInView = weekEndings.includes(thisWeekEnding) ? thisWeekEnding : null
-  const approvedTimesheetUserIds = currentWeInView
-    ? [...new Set(
-        (timesheets || [])
-          .filter((t: { user_id?: string; week_ending?: string }) => normWeekEnding(t.week_ending) === currentWeInView)
-          .map((t: { user_id: string }) => t.user_id)
-          .filter(Boolean)
-      )]
-    : []
+  const approvedTimesheetUserIdsByWeek = buildApprovedTimesheetUserIdsByWeek(
+    timesheets || [],
+    weekEndings,
+    thisWeekEnding
+  )
+  const approvedTimesheetUserIds = approvedTimesheetUserIdsByWeek[thisWeekEnding] || []
 
   return NextResponse.json({
     rows,
@@ -198,7 +195,8 @@ export async function GET(
     grandTotal,
     monthLabel: month && year ? `${month}/${year}` : null,
     allMonths,
-    currentWeekEnding: currentWeInView,
+    currentWeekEnding: thisWeekEnding,
     approvedTimesheetUserIds,
+    approvedTimesheetUserIdsByWeek,
   })
 }
