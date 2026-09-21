@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Download, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
 import { parseISO, format } from 'date-fns'
 import { formatWeekEnding, getWeekEndingSundayOptions } from '@/lib/utils'
@@ -114,10 +114,12 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
   const [error, setError] = useState<string | null>(null)
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null)
 
-  const catalogUsers = filterOptions?.users ?? users
-  const catalogSites = filterOptions?.sites ?? sites
-  const catalogDepartments = filterOptions?.departments ?? departments
-  const catalogPOs = filterOptions?.purchaseOrders ?? purchaseOrders
+  const catalogUsers = filterOptions?.users?.length ? filterOptions.users : users
+  const catalogSites = filterOptions?.sites?.length ? filterOptions.sites : sites
+  const catalogDepartments = filterOptions?.departments?.length ? filterOptions.departments : departments
+  const catalogPOs = filterOptions?.purchaseOrders?.length ? filterOptions.purchaseOrders : purchaseOrders
+  const requestSeq = useRef(0)
+  const firstLoad = useRef(true)
 
   const poSortKey = (s: string | null | undefined) =>
     String(s ?? '')
@@ -219,8 +221,9 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
     selectedStatuses.length > 0
 
   const loadData = async () => {
-    setLoading(true)
+    const seq = ++requestSeq.current
     setError(null)
+    setLoading(true)
 
     try {
       const params = new URLSearchParams()
@@ -239,24 +242,54 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
       }
 
       const { expanded, filterOptions: nextFilterOptions } = await res.json()
+      if (seq !== requestSeq.current) return
       setEntries([])
       setExpandedEntries((expanded || []).map((e: any) => ({
         ...e,
         non_billable_hours: e.non_billable_hours ?? 0
       })))
       if (nextFilterOptions) {
-        setFilterOptions(nextFilterOptions)
+        setFilterOptions((prev) => {
+          const incomingUsers = nextFilterOptions.users || []
+          const prevUsers = prev?.users?.length ? prev.users : users
+          const keepWiderUserList =
+            selectedUsers.length > 0 && prevUsers.length > incomingUsers.length
+          return {
+            users: keepWiderUserList
+              ? prevUsers
+              : incomingUsers.length
+                ? incomingUsers
+                : prevUsers,
+            sites: nextFilterOptions.sites?.length ? nextFilterOptions.sites : prev?.sites ?? sites,
+            departments: nextFilterOptions.departments?.length
+              ? nextFilterOptions.departments
+              : prev?.departments ?? departments,
+            purchaseOrders: nextFilterOptions.purchaseOrders?.length
+              ? nextFilterOptions.purchaseOrders
+              : prev?.purchaseOrders ?? purchaseOrders,
+          }
+        })
       }
       setSelectedRowIds(new Set())
     } catch (err: any) {
+      if (seq !== requestSeq.current) return
       setError(err.message || 'Failed to load timesheet data')
     } finally {
-      setLoading(false)
+      if (seq === requestSeq.current) setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadData()
+    const immediate = firstLoad.current
+    if (firstLoad.current) firstLoad.current = false
+    if (immediate) {
+      loadData()
+      return
+    }
+    const t = window.setTimeout(() => {
+      loadData()
+    }, 300)
+    return () => window.clearTimeout(t)
   }, [
     selectedUsers.join(','),
     fromWeekEnding,
@@ -474,12 +507,12 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
 
       {/* Results - single scroll container: both scrollbars at viewport edges, sticky header + sticky Select/User */}
       <div className="overflow-x-scroll overflow-y-auto max-h-[calc(100vh-22rem)] min-h-[300px]">
-        {loading ? (
+        {loading && expandedEntries.length === 0 ? (
           <div className="text-center py-8 text-gray-600 dark:text-gray-300">Loading...</div>
         ) : expandedEntries.length === 0 ? (
           <div className="text-center py-8 text-gray-600 dark:text-gray-300">No timesheet entries found</div>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <table className={`min-w-full divide-y divide-gray-200 dark:divide-gray-700 ${loading ? 'opacity-60' : ''}`}>
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
                 <th className="sticky left-0 top-0 z-30 min-w-[72px] bg-gray-50 dark:bg-gray-700 px-4 py-3 text-left shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">

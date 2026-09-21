@@ -105,16 +105,24 @@ export async function GET(request: NextRequest) {
     const accessibleSiteIds = mergeDataViewSiteScope(rawSiteIds, access.grantedSiteIds)
     const siteScopeSet = accessibleSiteIds === null ? null : new Set(accessibleSiteIds)
     const accessibleUserIdSet = new Set(accessibleUserIds)
+    const accessibleUsers = profiles
+      .filter((p) => accessibleUserIdSet.has(p.id))
+      .map((p) => ({ id: p.id, name: p.name }))
 
-    const userIdsToFetch =
-      selectedUsers.length > 0
-        ? selectedUsers.filter((id) => accessibleUserIdSet.has(id))
-        : accessibleUserIds
+    const selectedUserIds = selectedUsers.filter((id) => accessibleUserIdSet.has(id))
+    const userIdsToFetch = selectedUserIds.length > 0 ? selectedUserIds : accessibleUserIds
+
+    if (selectedUsers.length > 0 && selectedUserIds.length === 0) {
+      return NextResponse.json({
+        expanded: [],
+        filterOptions: { users: accessibleUsers, sites: [], departments: [], purchaseOrders: [] },
+      })
+    }
 
     if (userIdsToFetch.length === 0) {
       return NextResponse.json({
         expanded: [],
-        filterOptions: { users: [], sites: [], departments: [], purchaseOrders: [] },
+        filterOptions: { users: accessibleUsers, sites: [], departments: [], purchaseOrders: [] },
       })
     }
 
@@ -143,7 +151,7 @@ export async function GET(request: NextRequest) {
     if (!timesheets || timesheets.length === 0) {
       return NextResponse.json({
         expanded: [],
-        filterOptions: { users: [], sites: [], departments: [], purchaseOrders: [] },
+        filterOptions: { users: accessibleUsers, sites: [], departments: [], purchaseOrders: [] },
       })
     }
 
@@ -325,10 +333,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const accessibleUsers = profiles
-      .filter((p) => accessibleUserIdSet.has(p.id))
-      .map((p) => ({ id: p.id, name: p.name }))
-
     const userIdsInPool = new Set(
       filtered.filter((r) => matchesExcept(r, 'user')).map((r) => r.user_id)
     )
@@ -347,7 +351,12 @@ export async function GET(request: NextRequest) {
     )
 
     const filterOptions = {
-      users: accessibleUsers.filter((u) => userIdsInPool.has(u.id)),
+      // Keep the full user pick list when a user filter is active so the
+      // dropdown does not collapse to the already-selected names (Excel).
+      users:
+        selectedUserIds.length > 0
+          ? accessibleUsers
+          : accessibleUsers.filter((u) => userIdsInPool.has(u.id)),
       sites: scopedSites.filter((s) => siteIdsInPool.size === 0 || siteIdsInPool.has(s.id)),
       departments: scopedDepts.filter((d) => deptIdsInPool.size === 0 || deptIdsInPool.has(d.id)),
       purchaseOrders: scopedPos.filter((p) => poIdsInPool.size === 0 || poIdsInPool.has(p.id)),
