@@ -9,15 +9,23 @@ type CalendarMeta = {
   updated_at: string
 }
 
+type CalendarTab = 'holiday' | 'expense'
+
 type HolidayCalendarClientProps = {
   isAdmin: boolean
   defaultYear: number
 }
 
+const TABS: { id: CalendarTab; label: string; api: string; noun: string }[] = [
+  { id: 'holiday', label: 'Holiday & Pay Calendar', api: '/api/holiday-calendars', noun: 'holiday & pay calendar' },
+  { id: 'expense', label: 'Expense Calendar', api: '/api/expense-calendars', noun: 'expense calendar' },
+]
+
 export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayCalendarClientProps) {
-  const [calendars, setCalendars] = useState<CalendarMeta[]>([])
+  const [tab, setTab] = useState<CalendarTab>('holiday')
+  const [holidayCalendars, setHolidayCalendars] = useState<CalendarMeta[]>([])
+  const [expenseCalendars, setExpenseCalendars] = useState<CalendarMeta[]>([])
   const [selectedYear, setSelectedYear] = useState(defaultYear)
-  const [uploadYear, setUploadYear] = useState(defaultYear)
   const [loadingList, setLoadingList] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -26,16 +34,27 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
   /** Bumped after upload/delete so the iframe reloads the PDF stream. */
   const [viewKey, setViewKey] = useState(0)
 
-  const loadList = useCallback(async () => {
-    setLoadingList(true)
+  const activeTab = TABS.find((t) => t.id === tab) || TABS[0]
+  const calendars = tab === 'holiday' ? holidayCalendars : expenseCalendars
+
+  const loadList = useCallback(async (opts?: { quiet?: boolean }) => {
+    if (!opts?.quiet) setLoadingList(true)
     try {
-      const res = await fetch('/api/holiday-calendars')
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Failed to load calendars')
+      const [holidayRes, expenseRes] = await Promise.all([
+        fetch('/api/holiday-calendars'),
+        fetch('/api/expense-calendars'),
+      ])
+      const holidayJson = await holidayRes.json().catch(() => ({}))
+      const expenseJson = await expenseRes.json().catch(() => ({}))
+      if (!holidayRes.ok) {
+        throw new Error(holidayJson.error || 'Failed to load calendars')
       }
-      const json = await res.json()
-      setCalendars(json.calendars || [])
+      setHolidayCalendars(holidayJson.calendars || [])
+      if (expenseRes.ok) {
+        setExpenseCalendars(expenseJson.calendars || [])
+      } else {
+        setExpenseCalendars([])
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load calendars')
     } finally {
@@ -48,8 +67,9 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
   }, [loadList])
 
   const yearOptions = (() => {
-    const years = new Set<number>([defaultYear, selectedYear, uploadYear])
-    calendars.forEach((c) => years.add(c.calendar_year))
+    const years = new Set<number>([defaultYear, selectedYear])
+    holidayCalendars.forEach((c) => years.add(c.calendar_year))
+    expenseCalendars.forEach((c) => years.add(c.calendar_year))
     for (let y = defaultYear - 2; y <= defaultYear + 3; y++) years.add(y)
     return [...years].sort((a, b) => b - a)
   })()
@@ -67,16 +87,15 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
     try {
       const form = new FormData()
       form.set('file', file)
-      form.set('year', String(uploadYear))
-      const res = await fetch('/api/holiday-calendars', { method: 'POST', body: form })
+      form.set('year', String(selectedYear))
+      const res = await fetch(activeTab.api, { method: 'POST', body: form })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error || 'Upload failed')
       }
-      setMessage(`Calendar for ${uploadYear} uploaded successfully.`)
-      setSelectedYear(uploadYear)
+      setMessage(`Calendar for ${selectedYear} uploaded.`)
       setViewKey((k) => k + 1)
-      await loadList()
+      await loadList({ quiet: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
@@ -86,20 +105,20 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
 
   const handleDelete = async () => {
     if (!hasCalendarForYear) return
-    if (!window.confirm(`Delete the ${selectedYear} holiday & pay calendar?`)) return
+    if (!window.confirm(`Delete the ${selectedYear} ${activeTab.noun}?`)) return
 
     setDeleting(true)
     setError(null)
     setMessage(null)
     try {
-      const res = await fetch(`/api/holiday-calendars/${selectedYear}`, { method: 'DELETE' })
+      const res = await fetch(`${activeTab.api}/${selectedYear}`, { method: 'DELETE' })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error || 'Delete failed')
       }
       setMessage(`Calendar for ${selectedYear} deleted.`)
       setViewKey((k) => k + 1)
-      await loadList()
+      await loadList({ quiet: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Delete failed')
     } finally {
@@ -109,6 +128,30 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
+      <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700 print:hidden">
+        {TABS.map((t) => {
+          const selected = tab === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => {
+                setTab(t.id)
+                setError(null)
+                setMessage(null)
+              }}
+              className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${
+                selected
+                  ? 'border-blue-600 text-gray-900 dark:text-gray-100'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+              }`}
+            >
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+
       <div className="flex flex-wrap items-end gap-4 mb-4 print:hidden">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -132,22 +175,6 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
           <>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Upload year
-              </label>
-              <select
-                value={uploadYear}
-                onChange={(e) => setUploadYear(parseInt(e.target.value, 10))}
-                className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm"
-              >
-                {yearOptions.map((y) => (
-                  <option key={`up-${y}`} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Upload PDF
               </label>
               <label className="inline-flex items-center gap-2 min-h-[42px] px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 cursor-pointer disabled:opacity-50">
@@ -156,7 +183,7 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
                 ) : (
                   <Upload className="h-4 w-4" />
                 )}
-                {uploading ? 'Uploading…' : calendars.some((c) => c.calendar_year === uploadYear) ? 'Replace PDF' : 'Upload PDF'}
+                {uploading ? 'Uploading…' : hasCalendarForYear ? 'Replace PDF' : 'Upload PDF'}
                 <input
                   type="file"
                   accept="application/pdf,.pdf"
@@ -200,9 +227,9 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
           </div>
         ) : hasCalendarForYear ? (
           <iframe
-            key={`${selectedYear}-${viewKey}`}
-            src={`/api/holiday-calendars/${selectedYear}/view#view=FitH&toolbar=1`}
-            title={`Holiday & Pay Calendar ${selectedYear}`}
+            key={`${tab}-${selectedYear}-${viewKey}`}
+            src={`${activeTab.api}/${selectedYear}/view#view=FitH&toolbar=1`}
+            title={`${activeTab.label} ${selectedYear}`}
             className="w-full h-full block border-0 bg-white"
           />
         ) : (
@@ -213,8 +240,8 @@ export default function HolidayCalendarClient({ isAdmin, defaultYear }: HolidayC
               </p>
               <p className="text-sm">
                 {isAdmin
-                  ? 'Use Upload PDF above to add the holiday and pay calendar for this year.'
-                  : 'An administrator has not uploaded the holiday and pay calendar for this year yet.'}
+                  ? `Use Upload PDF above to add the ${activeTab.noun} for this year.`
+                  : `An administrator has not uploaded the ${activeTab.noun} for this year yet.`}
               </p>
             </div>
           </div>

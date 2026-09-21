@@ -14,7 +14,7 @@ export default async function HolidayCalendarPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
-      <Header title="Holiday & Pay Calendar" showBack backUrl="/dashboard" user={user} />
+      <Header title="Calendars" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1 flex flex-col min-h-0">
         <HolidayCalendarClient isAdmin={isAdmin} defaultYear={defaultYear} />
       </div>

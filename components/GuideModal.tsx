@@ -14,7 +14,7 @@ const SECTIONS: { id: string; title: string }[] = [
   { id: 'bid-sheets', title: 'Bid Sheets' },
   { id: 'reports', title: 'Reports' },
   { id: 'data-export', title: 'View Timesheet Data & Export' },
-  { id: 'holiday-calendar', title: 'Holiday & Pay Calendar' },
+  { id: 'holiday-calendar', title: 'Calendars' },
   { id: 'confirmations', title: 'Timesheet Confirmations' },
   { id: 'pto', title: 'PTO Requests' },
   { id: 'need-help', title: 'Need Help?' },
@@ -197,7 +197,7 @@ function GuideContent() {
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
           <li><strong>New Timesheet</strong> – Start a timesheet for the current week.</li>
           <li><strong>My Timesheets</strong> – Your own timesheets, with history and status. Admins see all timesheets here with filters. Supervisors and managers open other people’s timesheets from <strong>Pending Approvals</strong> or <strong>Approved Timesheets</strong> instead.</li>
-          <li><strong>Holiday &amp; Pay Calendar</strong> – The company holiday and pay schedule. Opens in a new browser tab.</li>
+          <li><strong>Calendars</strong> – Holiday &amp; pay and expense calendars. Opens in a new browser tab.</li>
           <li><strong>Request PTO</strong> – Internal employees can submit and track time-off requests. External employees do not see this tile. See section 13.</li>
           <li><strong>Most Recent Timesheets</strong> – A panel listing your five most recent timesheets in any status (draft, submitted, approved, rejected), colour-coded, each with a <strong>View</strong> link.</li>
         </ul>
@@ -602,15 +602,16 @@ function GuideContent() {
 
       <section data-section="holiday-calendar" className="scroll-mt-4">
         <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">
-          11. Holiday &amp; Pay Calendar
+          11. Calendars
         </h3>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <strong>Where:</strong> Dashboard → <strong>Holiday &amp; Pay Calendar</strong>, which opens
-          in a new browser tab so you can keep it beside your timesheet. Everyone can view it. It
-          shows the company holidays and the pay schedule for a year, and you can switch years.
-          <strong> Admins</strong> can edit the calendar; everyone else sees it read-only. Use it to
-          confirm which days should be entered as Holiday in the{' '}
-          <strong>Non-Billable Time</strong> section.
+          <strong>Where:</strong> Dashboard → <strong>Calendars</strong>, which opens in a new
+          browser tab so you can keep it beside your timesheet. Everyone can view it. There are two
+          tabs: <strong>Holiday &amp; Pay Calendar</strong> and <strong>Expense Calendar</strong>.
+          Each has its own PDF for a year; use <strong>View year</strong> to switch years.
+          <strong> Admins</strong> upload or replace the PDF for the year you are viewing; everyone
+          else sees it read-only. Use Holiday &amp; Pay to confirm which days should be entered as
+          Holiday in the <strong>Non-Billable Time</strong> section.
         </p>
       </section>
 
@@ -666,7 +667,7 @@ function GuideContent() {
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-6 italic">
           Last updated to match the current CTG Timesheet Management site: bill-rate–driven timesheet
           POs and site access, grant-based budget access, approval delegation, Bid Sheets, Reports,
-          Holiday &amp; Pay Calendar, Timesheet Confirmations, and PTO requests.
+          Calendars, Timesheet Confirmations, and PTO requests.
         </p>
       </section>
     </div>

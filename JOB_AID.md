@@ -20,7 +20,7 @@ The guide covers:
 8. Bid Sheets
 9. Reports
 10. View Timesheet Data & Export
-11. Holiday & Pay Calendar
+11. Calendars
 12. Timesheet Confirmations
 13. Need Help?
 

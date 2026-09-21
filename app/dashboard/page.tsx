@@ -371,8 +371,8 @@ export default async function DashboardPage() {
                 <Calendar className="h-6 w-6 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Holiday & Pay Calendar</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300">View company holiday and pay schedule</p>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Calendars</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Holiday, pay, and expense calendars</p>
               </div>
             </div>
           </a>
