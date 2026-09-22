@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Menu, BookOpen, Sun, Moon, ClipboardCheck, CalendarOff } from 'lucide-react'
+import { Menu, BookOpen, Sun, Moon, ClipboardCheck, CalendarOff, ChevronRight } from 'lucide-react'
 import GuideModal from './GuideModal'
+import { useHeaderNav } from './HeaderNavProvider'
 
 interface HeaderProps {
   title?: string
@@ -19,84 +20,57 @@ interface HeaderProps {
   }
 }
 
+function MenuLink({
+  href,
+  onClick,
+  children,
+  className = 'block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
+}: {
+  href: string
+  onClick: () => void
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <Link href={href} className={className} onClick={onClick}>
+      {children}
+    </Link>
+  )
+}
+
+function MenuGroup({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+      >
+        <span>{label}</span>
+        <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+      {open && <div className="bg-gray-50 dark:bg-gray-900/40">{children}</div>}
+    </div>
+  )
+}
+
 export default function Header({ title, titleHref, showBack = false, backUrl, user }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(true)
-  const [timesheetConfirmNav, setTimesheetConfirmNav] = useState<{ show: boolean; pending: number }>({
-    show: false,
-    pending: 0,
-  })
-  const [ptoNav, setPtoNav] = useState<{ showRequest: boolean; showReview: boolean; pending: number }>({
-    showRequest: false,
-    showReview: false,
-    pending: 0,
-  })
-  /** Clients only: show Budget Detail when they have can_view_budget on any PO. */
-  const [clientBudgetNav, setClientBudgetNav] = useState(false)
+  const nav = useHeaderNav()
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setDarkMode(document.documentElement.classList.contains('dark'))
   }, [])
-
-  useEffect(() => {
-    if (!user) return
-    let cancelled = false
-    fetch('/api/timesheet-confirmations/nav', { credentials: 'include', cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : { showLink: false, pendingCount: 0 }))
-      .then((j) => {
-        if (cancelled) return
-        setTimesheetConfirmNav({
-          show: !!j.showLink,
-          pending: typeof j.pendingCount === 'number' ? j.pendingCount : 0,
-        })
-      })
-      .catch((err) => {
-        console.warn('Failed to load timesheet confirmation nav count:', err)
-        if (!cancelled) setTimesheetConfirmNav({ show: false, pending: 0 })
-      })
-    fetch('/api/pto/nav', { credentials: 'include', cache: 'no-store' })
-      .then((res) =>
-        res.ok
-          ? res.json()
-          : { showRequestLink: false, showReviewLink: false, pendingCount: 0 }
-      )
-      .then((j) => {
-        if (cancelled) return
-        setPtoNav({
-          showRequest: !!j.showRequestLink,
-          showReview: !!j.showReviewLink,
-          pending: typeof j.pendingCount === 'number' ? j.pendingCount : 0,
-        })
-      })
-      .catch((err) => {
-        console.warn('Failed to load PTO nav:', err)
-        if (!cancelled) setPtoNav({ showRequest: false, showReview: false, pending: 0 })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [user])
-
-  useEffect(() => {
-    if (!user || user.profile.role !== 'client') {
-      setClientBudgetNav(false)
-      return
-    }
-    let cancelled = false
-    fetch('/api/budget/client-nav', { credentials: 'include', cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : { showBudget: false }))
-      .then((j) => {
-        if (!cancelled) setClientBudgetNav(!!j.showBudget)
-      })
-      .catch(() => {
-        if (!cancelled) setClientBudgetNav(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [user])
 
   const toggleTheme = () => {
     const isDark = !document.documentElement.classList.contains('dark')
@@ -104,7 +78,7 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
     try {
       localStorage.setItem('theme', isDark ? 'dark' : 'light')
     } catch {
-      // localStorage unavailable (e.g. storage quota exceeded or private browsing restriction)
+      // localStorage unavailable
     }
     setDarkMode(isDark)
   }
@@ -122,9 +96,10 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
     }
   }, [menuOpen])
 
+  const closeMenu = () => setMenuOpen(false)
+
   const userRole = user?.profile.role || ''
   const isClient = userRole === 'client'
-  /** Supervisors+ see approval menus; employees may only need Pending when acting as a delegate. Clients always do. */
   const canApprove = ['supervisor', 'manager', 'admin', 'super_admin', 'client'].includes(userRole)
   const canAccessPendingApprovals = [
     'employee',
@@ -139,18 +114,44 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
   const canBidSheets = !isClient && ['supervisor', 'manager', 'admin', 'super_admin'].includes(userRole)
   const canManagePayroll = !isClient && ['admin', 'super_admin'].includes(userRole)
 
+  const timesheetItems: Array<{ href: string; label: string }> = []
+  if (!isClient) {
+    timesheetItems.push({ href: '/dashboard/timesheets/new', label: 'New Timesheet' })
+    timesheetItems.push({ href: '/dashboard/timesheets', label: 'My Timesheets' })
+  }
+  if (!isClient && canManageBudget) {
+    timesheetItems.push({ href: '/dashboard/admin/data-view', label: 'View Timesheet Data' })
+    timesheetItems.push({ href: '/dashboard/admin/export', label: 'Export Timesheets' })
+  }
+
+  const manageItems: Array<{ href: string; label: string }> = []
+  if (!isClient && canManageOrg) {
+    manageItems.push({ href: '/dashboard/admin/organization', label: 'Organization' })
+    manageItems.push({ href: '/dashboard/admin/timesheet-options', label: 'Timesheet Options' })
+    manageItems.push({ href: '/dashboard/admin/users', label: 'Users' })
+  }
+
+  const budgetItems: Array<{ href: string; label: string }> = []
+  if (canManageBudget || nav.clientBudget) {
+    budgetItems.push({ href: '/dashboard/budget', label: 'Budget Detail' })
+  }
+  if (canBidSheets) {
+    budgetItems.push({ href: '/dashboard/bid-sheets', label: 'Bid Sheets' })
+  }
+
+  const subLinkClass =
+    'block px-8 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm print:hidden">
       <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
         <div className="flex items-center justify-between gap-2 min-w-0">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-            {/* CTG Logo */}
             <Link
               href="/dashboard"
               prefetch={false}
               className="flex items-center shrink-0 hover:opacity-80 transition-opacity pointer-events-auto"
             >
-              {/* Image logo - now active */}
               <Image
                 src="/ctg-logo.png"
                 alt="CTG Logo"
@@ -160,24 +161,8 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                 draggable={false}
                 unoptimized
               />
-              
-              {/* Text-based logo - now commented out */}
-              {/* <div className="flex items-center">
-                <span className="text-2xl font-bold text-blue-700 dark:text-blue-400">
-                  CT
-                </span>
-                <span className="text-2xl font-bold text-blue-700 dark:text-blue-400 border-2 border-blue-700 dark:border-blue-400 rounded-sm px-1">
-                  G
-                </span>
-              </div>
-              <div className="text-xs text-blue-700 dark:text-blue-400 font-semibold leading-tight">
-                COMPLIANCE<br />
-                TECHNOLOGY<br />
-                GROUP, INC.
-              </div> */}
             </Link>
 
-            {/* Back Button */}
             {showBack && (
               <Link
                 href={backUrl || '#'}
@@ -187,7 +172,6 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
               </Link>
             )}
 
-            {/* Title */}
             {title && (
               titleHref ? (
                 <Link
@@ -204,7 +188,6 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
             )}
           </div>
 
-          {/* User Info, Guide, and Hamburger Menu */}
           {user && (
             <div className="flex items-center gap-2 sm:gap-4">
               <span className="hidden md:block text-sm text-gray-600 dark:text-gray-300">
@@ -240,121 +223,136 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                 </button>
 
                 {menuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 max-h-[80vh] overflow-y-auto">
                     <div className="py-1">
                       {canApprove && (
-                        <Link href="/dashboard/approvals/approved" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                        <MenuLink href="/dashboard/approvals/approved" onClick={closeMenu}>
                           Approved Timesheets
-                        </Link>
+                        </MenuLink>
                       )}
-                      {(canManageBudget || clientBudgetNav) && (
-                        <Link href="/dashboard/budget" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
-                          Budget Detail
-                        </Link>
+                      {budgetItems.length > 1 ? (
+                        <MenuGroup label="Budgets">
+                          {budgetItems.map((item) => (
+                            <MenuLink key={item.href} href={item.href} onClick={closeMenu} className={subLinkClass}>
+                              {item.label}
+                            </MenuLink>
+                          ))}
+                        </MenuGroup>
+                      ) : (
+                        budgetItems.map((item) => (
+                          <MenuLink key={item.href} href={item.href} onClick={closeMenu}>
+                            {item.label}
+                          </MenuLink>
+                        ))
                       )}
-                      {canBidSheets && (
-                        <Link href="/dashboard/bid-sheets" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
-                          Bid Sheets
-                        </Link>
-                      )}
-                      <Link href="/dashboard" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                      <MenuLink href="/dashboard" onClick={closeMenu}>
                         Dashboard
-                      </Link>
+                      </MenuLink>
                       {!isClient && canManageBudget && (
-                        <Link href="/dashboard/reports" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                        <MenuLink href="/dashboard/reports" onClick={closeMenu}>
                           Reports
-                        </Link>
+                        </MenuLink>
                       )}
-                      {!isClient && canManageBudget && (
-                        <Link href="/dashboard/admin/export" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
-                          Export Timesheets
-                        </Link>
+                      {timesheetItems.length > 1 ? (
+                        <MenuGroup label="Timesheets">
+                          {timesheetItems.map((item) => (
+                            <MenuLink key={item.href} href={item.href} onClick={closeMenu} className={subLinkClass}>
+                              {item.label}
+                            </MenuLink>
+                          ))}
+                        </MenuGroup>
+                      ) : (
+                        timesheetItems.map((item) => (
+                          <MenuLink key={item.href} href={item.href} onClick={closeMenu}>
+                            {item.label}
+                          </MenuLink>
+                        ))
                       )}
-                      {!isClient && canManageOrg && (
-                        <Link href="/dashboard/admin/organization" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
-                          Manage Organization
-                        </Link>
+                      {manageItems.length > 1 ? (
+                        <MenuGroup label="Manage">
+                          {manageItems.map((item) => (
+                            <MenuLink key={item.href} href={item.href} onClick={closeMenu} className={subLinkClass}>
+                              {item.label}
+                            </MenuLink>
+                          ))}
+                        </MenuGroup>
+                      ) : (
+                        manageItems.map((item) => (
+                          <MenuLink key={item.href} href={item.href} onClick={closeMenu}>
+                            {item.label}
+                          </MenuLink>
+                        ))
                       )}
-                      {!isClient && canManageOrg && (
-                        <Link href="/dashboard/admin/timesheet-options" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
-                          Manage Timesheet Options
-                        </Link>
-                      )}
-                      {!isClient && canManageOrg && (
-                        <Link href="/dashboard/admin/users" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
-                          Manage Users
-                        </Link>
-                      )}
-                      {!isClient && (
-                        <Link href="/dashboard/timesheets" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
-                          My Timesheets
-                        </Link>
-                      )}
-                      {!isClient && timesheetConfirmNav.show && (
+                      {!isClient && nav.timesheetConfirm.show && (
                         <Link
                           href="/dashboard/timesheet-confirmations"
                           className="flex items-center justify-between gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                          onClick={() => setMenuOpen(false)}
+                          onClick={closeMenu}
                         >
                           <span className="flex items-center gap-2">
                             <ClipboardCheck className="h-4 w-4 shrink-0" />
                             Timesheet Confirmations
                           </span>
-                          {timesheetConfirmNav.pending > 0 && (
+                          {nav.timesheetConfirm.pending > 0 && (
                             <span className="min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold">
-                              {timesheetConfirmNav.pending > 99 ? '99+' : timesheetConfirmNav.pending}
+                              {nav.timesheetConfirm.pending > 99 ? '99+' : nav.timesheetConfirm.pending}
                             </span>
                           )}
                         </Link>
                       )}
                       {canAccessPendingApprovals && (
-                        <Link href="/dashboard/approvals" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                        <MenuLink href="/dashboard/approvals" onClick={closeMenu}>
                           Pending Approvals
-                        </Link>
+                        </MenuLink>
                       )}
                       {canManagePayroll && (
-                        <Link href="/dashboard/admin/payroll" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                        <MenuLink href="/dashboard/admin/payroll" onClick={closeMenu}>
                           Payroll
-                        </Link>
+                        </MenuLink>
                       )}
-                      {ptoNav.showReview && (
+                      {nav.pto.showReview && (
                         <Link
                           href="/dashboard/pto/review"
                           className="flex items-center justify-between gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                          onClick={() => setMenuOpen(false)}
+                          onClick={closeMenu}
                         >
                           <span className="flex items-center gap-2">
                             <CalendarOff className="h-4 w-4 shrink-0" />
                             PTO Requests
                           </span>
-                          {ptoNav.pending > 0 && (
+                          {nav.pto.pending > 0 && (
                             <span className="min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold">
-                              {ptoNav.pending > 99 ? '99+' : ptoNav.pending}
+                              {nav.pto.pending > 99 ? '99+' : nav.pto.pending}
                             </span>
                           )}
                         </Link>
                       )}
-                      {ptoNav.showRequest && (
-                        <Link href="/dashboard/pto" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                      {nav.pto.showRequest && (
+                        <MenuLink href="/dashboard/pto" onClick={closeMenu}>
                           Request PTO
-                        </Link>
+                        </MenuLink>
                       )}
                       {!isClient && (
-                        <button type="button" onClick={() => { setGuideOpen(true); setMenuOpen(false) }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGuideOpen(true)
+                            closeMenu()
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        >
                           Site Guide
                         </button>
                       )}
-                      {!isClient && canManageBudget && (
-                        <Link href="/dashboard/admin/data-view" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
-                          View Timesheet Data
-                        </Link>
-                      )}
                       <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
-                      <Link href="/dashboard/change-password" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setMenuOpen(false)}>
+                      <MenuLink href="/dashboard/change-password" onClick={closeMenu}>
                         Change Password
-                      </Link>
+                      </MenuLink>
                       <form action="/auth/logout" method="post" className="block">
-                        <button type="submit" className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <button
+                          type="submit"
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        >
                           Sign Out
                         </button>
                       </form>
