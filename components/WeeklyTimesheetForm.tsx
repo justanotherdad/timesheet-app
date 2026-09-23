@@ -9,7 +9,7 @@ import DeleteTimesheetButton from './DeleteTimesheetButton'
 import { getWeekDates, formatDate, formatDateShort, formatDateForInput, formatHours, formatWeekEnding, getWeekEndingSundayOptions, normalizeTimesheetHours } from '@/lib/utils'
 import { billRateAppliesToWeekEnding } from '@/lib/po-bill-rate-utils'
 import { format } from 'date-fns'
-import { Plus, Trash2, Edit2, X, ChevronUp, ChevronDown } from 'lucide-react'
+import { GripVertical, Plus, Trash2, X } from 'lucide-react'
 
 interface WeeklyTimesheetFormProps {
   sites: Array<{ id: string; name: string; code?: string }>
@@ -202,11 +202,8 @@ export default function WeeklyTimesheetForm({
   const createdTimesheetIdRef = useRef<string | null>(null)
   // Hard guard against overlapping saves (double-click / rapid Save+Submit).
   const savingRef = useRef(false)
-  const [editingIndex, setEditingIndex] = useState<number | null>(null)
-  const [editingEntry, setEditingEntry] = useState<BillableEntry | null>(null)
   const [showCopyModal, setShowCopyModal] = useState(false)
   const [showUnbillableTypeMenu, setShowUnbillableTypeMenu] = useState(false)
-  const modalRef = useRef<HTMLDivElement>(null)
   // Week ending: create, draft, rejected — or any status when an admin is editing.
   const canChangeWeekEnding =
     isAdminEditor ||
@@ -244,23 +241,23 @@ export default function WeeklyTimesheetForm({
     billRateWindows.some((w) => w.po_id === poId && billRateAppliesToWeekEnding(w, weekEnding))
   const availablePurchaseOrders = useMemo(() => {
     if (!restrictPosToBillRates) return purchaseOrders
+    const kept = new Set(billableEntries.map((e) => e.po_id).filter(Boolean))
     return purchaseOrders.filter(
       (po) =>
         billRateWindows.some((w) => w.po_id === po.id && billRateAppliesToWeekEnding(w, weekEnding)) ||
-        editingEntry?.po_id === po.id
+        kept.has(po.id)
     )
-  }, [restrictPosToBillRates, purchaseOrders, billRateWindows, weekEnding, editingEntry?.po_id])
+  }, [restrictPosToBillRates, purchaseOrders, billRateWindows, weekEnding, billableEntries])
   const availableSites = useMemo(() => {
     if (!restrictPosToBillRates) return sites
     const siteIds = new Set(
       availablePurchaseOrders.map((po) => po.site_id).filter(Boolean) as string[]
     )
-    if (editingEntry?.client_project_id) siteIds.add(editingEntry.client_project_id)
+    for (const entry of billableEntries) {
+      if (entry.client_project_id) siteIds.add(entry.client_project_id)
+    }
     return sites.filter((s) => siteIds.has(s.id))
-  }, [restrictPosToBillRates, sites, availablePurchaseOrders, editingEntry?.client_project_id])
-
-  // Modal closing is now handled by onMouseDown on the backdrop
-  // This prevents closing when selecting text inside the modal
+  }, [restrictPosToBillRates, sites, availablePurchaseOrders, billableEntries])
 
   const calculateTotal = (entry: BillableEntry | UnbillableEntry): number => {
     return entry.mon_hours + entry.tue_hours + entry.wed_hours + entry.thu_hours + 
@@ -281,66 +278,17 @@ export default function WeeklyTimesheetForm({
     return billableTotal + unbillableTotal
   }
 
-  const getClientName = (clientId?: string): string => {
-    if (!clientId) return ''
-    const client = sites.find(s => s.id === clientId)
-    return client ? `${client.name}${client.code ? ` (${client.code})` : ''}` : ''
-  }
-
   const getPOName = (poId?: string): string => {
     if (!poId) return ''
     const po = purchaseOrders.find(p => p.id === poId)
     return po ? `${po.po_number}${po.description ? ` - ${po.description}` : ''}` : ''
   }
 
-  const getSystemName = (entry: BillableEntry): string => {
-    // Check for custom system name first
-    if (entry.system_name) return entry.system_name
-    // Then check for system_id
-    if (entry.system_id) {
-      const system = systems.find(s => s.id === entry.system_id)
-      return system ? system.name : ''
-    }
-    return ''
-  }
-
-  const getDeliverableName = (deliverableId?: string): string => {
-    if (!deliverableId) return ''
-    const deliverable = deliverables.find(d => d.id === deliverableId)
-    return deliverable ? deliverable.name : ''
-  }
-
-  const getActivityName = (activityId?: string): string => {
-    if (!activityId) return ''
-    const activity = activities.find(a => a.id === activityId)
-    return activity ? activity.name : ''
-  }
-
-  const handleOpenEditModal = (index: number) => {
-    setEditingIndex(index)
-    setEditingEntry({ ...billableEntries[index] })
-  }
-
-  const handleCloseModal = () => {
-    setEditingIndex(null)
-    setEditingEntry(null)
-  }
-
-  const handleSaveEntry = () => {
-    if (editingIndex === null || !editingEntry) return
-    // If adding new row (editingIndex === length), append; otherwise update existing
-    const updated = [...billableEntries]
-    if (editingIndex >= updated.length) {
-      updated.push(editingEntry)
-    } else {
-      updated[editingIndex] = editingEntry
-    }
-    setBillableEntries(updated)
-    handleCloseModal()
+  const updateBillable = (index: number, next: BillableEntry) => {
+    setBillableEntries((prev) => prev.map((row, i) => (i === index ? next : row)))
   }
 
   const handleAddEntry = () => {
-    // Open modal with new entry in memory only; row is added to timesheet only when user clicks Save
     const newEntry: BillableEntry = {
       task_description: '',
       system_name: undefined,
@@ -350,10 +298,9 @@ export default function WeeklyTimesheetForm({
       thu_hours: 0,
       fri_hours: 0,
       sat_hours: 0,
-      sun_hours: 0
+      sun_hours: 0,
     }
-    setEditingIndex(billableEntries.length)
-    setEditingEntry(newEntry)
+    setBillableEntries((prev) => [...prev, newEntry])
   }
 
   const handleRemoveEntry = (index: number) => {
@@ -362,15 +309,58 @@ export default function WeeklyTimesheetForm({
     }
   }
 
-  // Reorder a billable row up/down. Order is persisted via sort_order on save.
-  const moveEntry = (index: number, direction: -1 | 1) => {
-    const target = index + direction
-    if (target < 0 || target >= billableEntries.length) return
+  // Drag the grip to reorder. Order is persisted via sort_order on save.
+  const billableRowRefs = useRef<Array<HTMLTableRowElement | null>>([])
+  const dragFromRef = useRef<number | null>(null)
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+
+  const indexAtPointer = (clientY: number) => {
+    const count = billableEntries.length
+    let over = Math.max(0, count - 1)
+    for (let i = 0; i < count; i++) {
+      const el = billableRowRefs.current[i]
+      if (!el) continue
+      const rect = el.getBoundingClientRect()
+      if (clientY < rect.top + rect.height / 2) return i
+      over = i
+    }
+    return over
+  }
+
+  const reorderBillable = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0) return
     setBillableEntries((prev) => {
+      if (from >= prev.length || to >= prev.length) return prev
       const next = [...prev]
-      ;[next[index], next[target]] = [next[target], next[index]]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
       return next
     })
+  }
+
+  const onGripPointerDown = (index: number, event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dragFromRef.current = index
+    setDraggingIndex(index)
+    setDragOverIndex(index)
+  }
+
+  const onGripPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (dragFromRef.current === null) return
+    setDragOverIndex(indexAtPointer(event.clientY))
+  }
+
+  const onGripPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const from = dragFromRef.current
+    if (from === null) return
+    const over = indexAtPointer(event.clientY)
+    dragFromRef.current = null
+    setDraggingIndex(null)
+    setDragOverIndex(null)
+    reorderBillable(from, over)
   }
 
   const saveTimesheet = async (shouldSubmit: boolean = false) => {
@@ -679,159 +669,165 @@ export default function WeeklyTimesheetForm({
     setUnbillableEntries((prev) => prev.filter((_, i) => i !== index))
   }
 
-  // Filter POs by selected client (site) - when client is selected, only show POs assigned to that client
-  const poOptions = (editingEntry?.client_project_id
-    ? availablePurchaseOrders.filter(po => po.site_id === editingEntry.client_project_id)
-    : availablePurchaseOrders
-  ).map(po => ({
-    id: po.id,
-    name: po.po_number,
-    code: po.description,
-  }))
-
-  // When the selected PO is a project budget, the matrix is the exclusive
-  // allowlist. Do not apply site / Manage Timesheet Options junction filters
-  // on top — anyone with a bill rate on this PO should see every cell.
-  const projectCombosForPo: Array<{ systemId: string; deliverableId: string; activityId: string }> =
-    editingEntry?.po_id ? projectBudgetCombosByPo[editingEntry.po_id] || [] : []
-  const usingProjectCombos = projectCombosForPo.length > 0
-
-  // Systems/deliverables/activities are stored per project PO, so the same name
-  // (e.g. "Project", "EMPV") exists as many rows across the site — one per PO.
-  // In project-budget mode we MUST restrict the System dropdown to the exact
-  // system ids that appear in this PO's matrix; otherwise the user can pick a
-  // like-named system belonging to another PO whose id matches no combo here,
-  // and the Deliverable/Activity dropdowns come back empty.
-  //
-  // In basic-budget mode we only show globally-scoped rows (project_po_id IS
-  // NULL), then filter by site + PO/department the same way Deliverable does.
-  // That stops project-matrix systems from leaking into other POs' dropdowns.
-  // If this entry already has a system_id that falls outside the allowlist
-  // (legacy bad data), keep it in the options so the saved value still displays.
-  const systemOptions = (() => {
-    let list = systems
-    if (usingProjectCombos) {
-      const allowedSystemIds = new Set(projectCombosForPo.map(c => c.systemId))
-      list = list.filter(s => allowedSystemIds.has(s.id))
-    } else {
-      list = list.filter(s => !s.project_po_id)
-      if (editingEntry?.client_project_id) {
-        list = list.filter(s => s.site_id === editingEntry.client_project_id)
-      }
-      if (editingEntry?.po_id) {
-        const selectedPO = purchaseOrders.find(p => p.id === editingEntry.po_id)
-        const poDepartmentId = selectedPO?.department_id
-        list = list.filter(s => {
-          const poIds = systemPOIds[s.id] || []
-          if (poIds.length > 0) {
-            return poIds.includes(editingEntry.po_id!)
-          }
-          const sysDeptIds = systemDepartmentIds[s.id] || []
-          if (sysDeptIds.length === 0) return true
-          if (!poDepartmentId) return false
-          return sysDeptIds.includes(poDepartmentId)
-        })
-      }
-    }
-    // Preserve a previously-saved selection that is no longer in the allowlist
-    // so edit view still shows the value; it just won't be offered as a new pick.
-    if (editingEntry?.system_id && !list.some(s => s.id === editingEntry.system_id)) {
-      const saved = systems.find(s => s.id === editingEntry.system_id)
-      if (saved) list = [...list, saved]
-    }
-    return list.map(s => ({
-      id: s.id,
-      name: s.name,
-      code: s.code,
+  // Per-row dropdowns. Same filters the old popup used: client limits POs,
+  // and a project-budget PO limits system / deliverable / activity to its matrix.
+  const rowChoices = (entry: BillableEntry) => {
+    // Filter POs by selected client (site) - when client is selected, only show POs assigned to that client
+    const poOptions = (entry.client_project_id
+      ? availablePurchaseOrders.filter(po => po.site_id === entry.client_project_id)
+      : availablePurchaseOrders
+    ).map(po => ({
+      id: po.id,
+      name: po.po_number,
+      code: po.description,
     }))
-  })()
 
-  // Filter deliverables by client (site) and PO; deduplicate by id
-  // When deliverable has no PO assignments: only show if its department matches the selected PO's department
-  const filteredDeliverables = (() => {
-    let list = deliverables
-    if (editingEntry?.po_id && usingProjectCombos) {
-      // Strict project-budget mode: matrix cells only. Skip site/junction
-      // filters so a PO-private row cannot be hidden from someone who can
-      // already charge this PO.
-      const allowedIds = new Set<string>()
-      for (const combo of projectCombosForPo) {
-        if (editingEntry.system_id && combo.systemId !== editingEntry.system_id) continue
-        if (editingEntry.activity_id && combo.activityId !== editingEntry.activity_id) continue
-        allowedIds.add(combo.deliverableId)
-      }
-      list = list.filter(d => allowedIds.has(d.id))
-    } else {
-      if (editingEntry?.client_project_id) {
-        list = list.filter(d => d.site_id === editingEntry.client_project_id)
-      }
-      if (editingEntry?.po_id) {
-        // Basic budget: never offer project-scoped private rows.
-        list = list.filter(d => !d.project_po_id)
-        const selectedPO = purchaseOrders.find(p => p.id === editingEntry.po_id)
-        const poDepartmentId = selectedPO?.department_id
-        list = list.filter(d => {
-          const poIds = deliverablePOIds[d.id] || []
-          if (poIds.length > 0) {
-            return poIds.includes(editingEntry.po_id!)
-          }
-          // No PO assignments
-          const delDeptIds = deliverableDepartmentIds[d.id] || []
-          if (delDeptIds.length === 0) return true // N/A department: show for any PO
-          if (!poDepartmentId) return false
-          return delDeptIds.includes(poDepartmentId)
-        })
-      }
-    }
-    if (editingEntry?.deliverable_id && !list.some(d => d.id === editingEntry.deliverable_id)) {
-      const saved = deliverables.find(d => d.id === editingEntry.deliverable_id)
-      if (saved) list = [...list, saved]
-    }
-    return Array.from(new Map(list.map(d => [d.id, d])).values())
-  })()
+    // When the selected PO is a project budget, the matrix is the exclusive
+    // allowlist. Do not apply site / Manage Timesheet Options junction filters
+    // on top — anyone with a bill rate on this PO should see every cell.
+    const projectCombosForPo: Array<{ systemId: string; deliverableId: string; activityId: string }> =
+      entry.po_id ? projectBudgetCombosByPo[entry.po_id] || [] : []
+    const usingProjectCombos = projectCombosForPo.length > 0
 
-  const deliverableOptions = filteredDeliverables.map(d => ({
-    id: d.id,
-    name: d.name,
-    code: d.code,
-  }))
+    // Systems/deliverables/activities are stored per project PO, so the same name
+    // (e.g. "Project", "EMPV") exists as many rows across the site — one per PO.
+    // In project-budget mode we MUST restrict the System dropdown to the exact
+    // system ids that appear in this PO's matrix; otherwise the user can pick a
+    // like-named system belonging to another PO whose id matches no combo here,
+    // and the Deliverable/Activity dropdowns come back empty.
+    //
+    // In basic-budget mode we only show globally-scoped rows (project_po_id IS
+    // NULL), then filter by site + PO/department the same way Deliverable does.
+    // That stops project-matrix systems from leaking into other POs' dropdowns.
+    // If this entry already has a system_id that falls outside the allowlist
+    // (legacy bad data), keep it in the options so the saved value still displays.
+    const systemOptions = (() => {
+      let list = systems
+      if (usingProjectCombos) {
+        const allowedSystemIds = new Set(projectCombosForPo.map(c => c.systemId))
+        list = list.filter(s => allowedSystemIds.has(s.id))
+      } else {
+        list = list.filter(s => !s.project_po_id)
+        if (entry.client_project_id) {
+          list = list.filter(s => s.site_id === entry.client_project_id)
+        }
+        if (entry.po_id) {
+          const selectedPO = purchaseOrders.find(p => p.id === entry.po_id)
+          const poDepartmentId = selectedPO?.department_id
+          list = list.filter(s => {
+            const poIds = systemPOIds[s.id] || []
+            if (poIds.length > 0) {
+              return poIds.includes(entry.po_id!)
+            }
+            const sysDeptIds = systemDepartmentIds[s.id] || []
+            if (sysDeptIds.length === 0) return true
+            if (!poDepartmentId) return false
+            return sysDeptIds.includes(poDepartmentId)
+          })
+        }
+      }
+      // Preserve a previously-saved selection that is no longer in the allowlist
+      // so edit view still shows the value; it just won't be offered as a new pick.
+      if (entry.system_id && !list.some(s => s.id === entry.system_id)) {
+        const saved = systems.find(s => s.id === entry.system_id)
+        if (saved) list = [...list, saved]
+      }
+      return list.map(s => ({
+        id: s.id,
+        name: s.name,
+        code: s.code,
+      }))
+    })()
 
-  // Filter activities by client (site) and PO; deduplicate by id
-  const filteredActivities = (() => {
-    let list = activities
-    if (editingEntry?.po_id && usingProjectCombos) {
-      // Strict project-budget mode (mirrors filteredDeliverables above).
-      const allowedIds = new Set<string>()
-      for (const combo of projectCombosForPo) {
-        if (editingEntry.system_id && combo.systemId !== editingEntry.system_id) continue
-        if (editingEntry.deliverable_id && combo.deliverableId !== editingEntry.deliverable_id) continue
-        allowedIds.add(combo.activityId)
+    // Filter deliverables by client (site) and PO; deduplicate by id
+    // When deliverable has no PO assignments: only show if its department matches the selected PO's department
+    const filteredDeliverables = (() => {
+      let list = deliverables
+      if (entry.po_id && usingProjectCombos) {
+        // Strict project-budget mode: matrix cells only. Skip site/junction
+        // filters so a PO-private row cannot be hidden from someone who can
+        // already charge this PO.
+        const allowedIds = new Set<string>()
+        for (const combo of projectCombosForPo) {
+          if (entry.system_id && combo.systemId !== entry.system_id) continue
+          if (entry.activity_id && combo.activityId !== entry.activity_id) continue
+          allowedIds.add(combo.deliverableId)
+        }
+        list = list.filter(d => allowedIds.has(d.id))
+      } else {
+        if (entry.client_project_id) {
+          list = list.filter(d => d.site_id === entry.client_project_id)
+        }
+        if (entry.po_id) {
+          // Basic budget: never offer project-scoped private rows.
+          list = list.filter(d => !d.project_po_id)
+          const selectedPO = purchaseOrders.find(p => p.id === entry.po_id)
+          const poDepartmentId = selectedPO?.department_id
+          list = list.filter(d => {
+            const poIds = deliverablePOIds[d.id] || []
+            if (poIds.length > 0) {
+              return poIds.includes(entry.po_id!)
+            }
+            // No PO assignments
+            const delDeptIds = deliverableDepartmentIds[d.id] || []
+            if (delDeptIds.length === 0) return true // N/A department: show for any PO
+            if (!poDepartmentId) return false
+            return delDeptIds.includes(poDepartmentId)
+          })
+        }
       }
-      list = list.filter(a => allowedIds.has(a.id))
-    } else {
-      if (editingEntry?.client_project_id) {
-        list = list.filter(a => a.site_id === editingEntry.client_project_id)
+      if (entry.deliverable_id && !list.some(d => d.id === entry.deliverable_id)) {
+        const saved = deliverables.find(d => d.id === entry.deliverable_id)
+        if (saved) list = [...list, saved]
       }
-      if (editingEntry?.po_id) {
-        list = list.filter(a => !a.project_po_id)
-        list = list.filter(a => {
-          const poIds = activityPOIds[a.id] || []
-          return poIds.length === 0 || poIds.includes(editingEntry.po_id!)
-        })
-      }
-    }
-    if (editingEntry?.activity_id && !list.some(a => a.id === editingEntry.activity_id)) {
-      const saved = activities.find(a => a.id === editingEntry.activity_id)
-      if (saved) list = [...list, saved]
-    }
-    return Array.from(new Map(list.map(a => [a.id, a])).values())
-  })()
+      return Array.from(new Map(list.map(d => [d.id, d])).values())
+    })()
 
-  const activityOptions = filteredActivities.map(a => ({
-    id: a.id,
-    name: a.name,
-    code: a.code,
-  }))
+    const deliverableOptions = filteredDeliverables.map(d => ({
+      id: d.id,
+      name: d.name,
+      code: d.code,
+    }))
+
+    // Filter activities by client (site) and PO; deduplicate by id
+    const filteredActivities = (() => {
+      let list = activities
+      if (entry.po_id && usingProjectCombos) {
+        // Strict project-budget mode (mirrors filteredDeliverables above).
+        const allowedIds = new Set<string>()
+        for (const combo of projectCombosForPo) {
+          if (entry.system_id && combo.systemId !== entry.system_id) continue
+          if (entry.deliverable_id && combo.deliverableId !== entry.deliverable_id) continue
+          allowedIds.add(combo.activityId)
+        }
+        list = list.filter(a => allowedIds.has(a.id))
+      } else {
+        if (entry.client_project_id) {
+          list = list.filter(a => a.site_id === entry.client_project_id)
+        }
+        if (entry.po_id) {
+          list = list.filter(a => !a.project_po_id)
+          list = list.filter(a => {
+            const poIds = activityPOIds[a.id] || []
+            return poIds.length === 0 || poIds.includes(entry.po_id!)
+          })
+        }
+      }
+      if (entry.activity_id && !list.some(a => a.id === entry.activity_id)) {
+        const saved = activities.find(a => a.id === entry.activity_id)
+        if (saved) list = [...list, saved]
+      }
+      return Array.from(new Map(list.map(a => [a.id, a])).values())
+    })()
+
+    const activityOptions = filteredActivities.map(a => ({
+      id: a.id,
+      name: a.name,
+      code: a.code,
+    }))
+
+    return { poOptions, systemOptions, deliverableOptions, activityOptions, usingProjectCombos }
+  }
 
   // Note: a previous version of this component auto-filled the Deliverable
   // and Activity dropdowns whenever there was only one valid option. That
@@ -988,13 +984,12 @@ export default function WeeklyTimesheetForm({
             <table className="min-w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
               <colgroup>
                 <col className="w-12" />         {/* reorder up/down */}
-                <col className="w-10" />         {/* edit btn */}
-                <col />                           {/* Client — fills remaining space */}
-                <col className="w-28" />          {/* PO# */}
-                <col />                           {/* Task Description — fills remaining space */}
-                <col className="w-24" />          {/* System */}
-                <col className="w-24" />          {/* Deliverable */}
-                <col className="w-24" />          {/* Activity */}
+                <col className="w-40" />         {/* Client */}
+                <col className="w-36" />         {/* PO# */}
+                <col className="w-40" />         {/* Task Description */}
+                <col className="w-36" />         {/* System */}
+                <col className="w-36" />         {/* Deliverable */}
+                <col className="w-36" />         {/* Activity */}
                 {weekDates.days.map((_, idx) => (
                   <col key={idx} className="w-[3.5rem]" />  /* day columns */
                 ))}
@@ -1003,9 +998,11 @@ export default function WeeklyTimesheetForm({
               </colgroup>
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100" title="Reorder rows">↕</th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100"></th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Client / Project #</th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100" title="Drag to reorder">
+                    <GripVertical className="h-4 w-4 mx-auto text-gray-500" aria-hidden />
+                    <span className="sr-only">Reorder</span>
+                  </th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Client / Project #</th>
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">PO#</th>
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Task Description</th>
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">System</th>
@@ -1022,64 +1019,160 @@ export default function WeeklyTimesheetForm({
                 </tr>
               </thead>
               <tbody>
-                {billableEntries.map((entry, entryIdx) => (
-                  <tr key={entryIdx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                {billableEntries.map((entry, entryIdx) => {
+                  const choices = rowChoices(entry)
+                  const cell = 'border border-gray-300 dark:border-gray-600 px-1 py-1 align-top'
+                  return (
+                  <tr
+                    key={entryIdx}
+                    ref={(el) => { billableRowRefs.current[entryIdx] = el }}
+                    className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${draggingIndex === entryIdx ? 'opacity-60' : ''} ${dragOverIndex === entryIdx && draggingIndex !== null ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}
+                  >
                     <td className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center align-middle">
-                      <div className="flex flex-col items-center gap-0.5">
-                        <button
-                          type="button"
-                          onClick={() => moveEntry(entryIdx, -1)}
-                          disabled={entryIdx === 0}
-                          aria-label={`Move row ${entryIdx + 1} up`}
-                          title="Move up"
-                          className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <ChevronUp className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveEntry(entryIdx, 1)}
-                          disabled={entryIdx === billableEntries.length - 1}
-                          aria-label={`Move row ${entryIdx + 1} down`}
-                          title="Move down"
-                          className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <ChevronDown className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center">
                       <button
                         type="button"
-                        onClick={() => handleOpenEditModal(entryIdx)}
-                        aria-label={`Edit row ${entryIdx + 1}`}
-                        title="Edit row"
-                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                        aria-label={`Drag to reorder row ${entryIdx + 1}`}
+                        title="Drag to reorder"
+                        onPointerDown={(e) => onGripPointerDown(entryIdx, e)}
+                        onPointerMove={onGripPointerMove}
+                        onPointerUp={onGripPointerUp}
+                        onPointerCancel={() => {
+                          dragFromRef.current = null
+                          setDraggingIndex(null)
+                          setDragOverIndex(null)
+                        }}
+                        className="cursor-grab active:cursor-grabbing touch-none text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1"
                       >
-                        <Edit2 className="h-4 w-4" />
+                        <GripVertical className="h-4 w-4" />
                       </button>
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
-                      {getClientName(entry.client_project_id) || '-'}
+                    <td className={cell}>
+                      <SearchableSelect
+                        compact
+                        options={availableSites}
+                        value={entry.client_project_id || null}
+                        onChange={(value) => {
+                          const newClientId = value || undefined
+                          const poStillValid = !newClientId || !entry.po_id || availablePurchaseOrders.some(po => po.id === entry.po_id && po.site_id === newClientId)
+                          const delStillValid = !newClientId || !entry.deliverable_id || deliverables.some(d => d.id === entry.deliverable_id && d.site_id === newClientId)
+                          const actStillValid = !newClientId || !entry.activity_id || activities.some(a => a.id === entry.activity_id && a.site_id === newClientId)
+                          updateBillable(entryIdx, {
+                            ...entry,
+                            client_project_id: newClientId,
+                            ...(poStillValid ? {} : { po_id: undefined }),
+                            ...(delStillValid ? {} : { deliverable_id: undefined }),
+                            ...(actStillValid ? {} : { activity_id: undefined }),
+                          })
+                        }}
+                        placeholder="Client..."
+                      />
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
-                      {getPOName(entry.po_id) || '-'}
+                    <td className={cell}>
+                      <SearchableSelect
+                        compact
+                        options={choices.poOptions}
+                        value={entry.po_id || null}
+                        onChange={(value) => {
+                          const newPOId = value || undefined
+                          const delStillValid = !newPOId || !entry.deliverable_id || (() => {
+                            const poIds = deliverablePOIds[entry.deliverable_id!] || []
+                            if (poIds.length > 0) return poIds.includes(newPOId)
+                            const delDeptIds = deliverableDepartmentIds[entry.deliverable_id!] || []
+                            if (delDeptIds.length === 0) return true
+                            const newPO = purchaseOrders.find(p => p.id === newPOId)
+                            if (!newPO?.department_id) return false
+                            return delDeptIds.includes(newPO.department_id)
+                          })()
+                          const actStillValid = !newPOId || !entry.activity_id || (() => {
+                            const poIds = activityPOIds[entry.activity_id!] || []
+                            return poIds.length === 0 || poIds.includes(newPOId)
+                          })()
+                          updateBillable(entryIdx, {
+                            ...entry,
+                            po_id: newPOId,
+                            ...(delStillValid ? {} : { deliverable_id: undefined }),
+                            ...(actStillValid ? {} : { activity_id: undefined }),
+                          })
+                        }}
+                        placeholder="PO..."
+                      />
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
-                      {entry.task_description || '-'}
+                    <td className={cell}>
+                      <input
+                        type="text"
+                        value={entry.task_description}
+                        onChange={(e) => updateBillable(entryIdx, { ...entry, task_description: e.target.value })}
+                        placeholder="Task..."
+                        className="w-full min-w-0 px-1.5 py-1 border border-gray-300 dark:border-gray-600 rounded text-xs text-gray-900 bg-white dark:bg-white"
+                      />
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
-                      {getSystemName(entry) || '-'}
+                    <td className={cell}>
+                      <SystemInput
+                        compact
+                        options={choices.systemOptions}
+                        allowCustom={!choices.usingProjectCombos}
+                        value={entry.system_id || null}
+                        customValue={entry.system_name}
+                        onChange={(value, customValue) => {
+                          if (customValue) {
+                            updateBillable(entryIdx, {
+                              ...entry,
+                              system_id: undefined,
+                              system_name: customValue,
+                              deliverable_id: undefined,
+                              activity_id: undefined,
+                            })
+                          } else {
+                            updateBillable(entryIdx, {
+                              ...entry,
+                              system_id: value || undefined,
+                              system_name: undefined,
+                              deliverable_id: undefined,
+                              activity_id: undefined,
+                            })
+                          }
+                        }}
+                        placeholder="System..."
+                      />
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
-                      {getDeliverableName(entry.deliverable_id) || '-'}
+                    <td className={cell}>
+                      <SearchableSelect
+                        compact
+                        options={choices.deliverableOptions}
+                        value={entry.deliverable_id || null}
+                        onChange={(value) => updateBillable(entryIdx, { ...entry, deliverable_id: value || undefined })}
+                        placeholder="Deliverable..."
+                      />
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
-                      {getActivityName(entry.activity_id) || '-'}
+                    <td className={cell}>
+                      <SearchableSelect
+                        compact
+                        options={choices.activityOptions}
+                        value={entry.activity_id || null}
+                        onChange={(value) => updateBillable(entryIdx, { ...entry, activity_id: value || undefined })}
+                        placeholder="Activity..."
+                      />
                     </td>
                     {days.map((day) => (
-                      <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm text-gray-900 dark:text-gray-100">
-                        {formatHours(entry[`${day}_hours`])}
+                      <td key={day} className={cell}>
+                        <input
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          max="24"
+                          value={entry[`${day}_hours`] || ''}
+                          onChange={(e) => {
+                            const raw = e.target.value
+                            if (raw === '') {
+                              updateBillable(entryIdx, { ...entry, [`${day}_hours`]: 0 })
+                              return
+                            }
+                            const parsed = e.target.valueAsNumber
+                            if (isNaN(parsed)) return
+                            updateBillable(entryIdx, { ...entry, [`${day}_hours`]: normalizeTimesheetHours(parsed) })
+                          }}
+                          className="w-full max-w-[3.25rem] min-w-[3rem] mx-auto px-1 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-sm text-gray-900 bg-white dark:bg-white"
+                        />
                       </td>
                     ))}
                     <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center font-medium text-sm text-gray-900 dark:text-gray-100">
@@ -1097,11 +1190,12 @@ export default function WeeklyTimesheetForm({
                       </button>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
                 
                 {/* Sub Totals Row */}
                 <tr className="bg-yellow-50 dark:bg-yellow-900/30 font-semibold">
-                  <td colSpan={8} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
+                  <td colSpan={7} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
                   {days.map((day) => (
                     <td key={day} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-gray-900 dark:text-gray-100">
                       {formatHours(getBillableSubtotal(day))}
@@ -1351,243 +1445,6 @@ export default function WeeklyTimesheetForm({
         </div>
       </form>
 
-      {/* Edit Modal */}
-      {editingIndex !== null && editingEntry && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
-          onMouseDown={(e) => {
-            // Only close if clicking directly on the backdrop, not on selected text
-            if (e.target === e.currentTarget) {
-              handleCloseModal()
-            }
-          }}
-        >
-          <div
-            ref={modalRef}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 sm:p-6 min-h-[28rem] max-h-[min(90vh,calc(100vh-2rem))] overflow-auto resize w-[calc(100vw-2rem)] max-w-full min-w-0 mx-auto md:mx-4 md:w-[min(104rem,96vw)] md:min-w-[48rem] md:max-h-[90vh]"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                {editingIndex === billableEntries.length ? 'Add Billable Entry' : 'Edit Billable Entry'}
-              </h3>
-              <button
-                type="button"
-                onClick={handleCloseModal}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Row 1: Client and PO */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Client
-                  </label>
-                  <SearchableSelect
-                    options={availableSites}
-                    value={editingEntry.client_project_id || null}
-                    onChange={(value) => {
-                      const newClientId = value || undefined
-                      // When client changes, clear PO if it's not assigned to the new client
-                      const poStillValid = !newClientId || !editingEntry.po_id || availablePurchaseOrders.some(po => po.id === editingEntry.po_id && po.site_id === newClientId)
-                      // Clear deliverable/activity if they won't be in the filtered list for the new client
-                      const delStillValid = !newClientId || !editingEntry.deliverable_id || deliverables.some(d => d.id === editingEntry.deliverable_id && d.site_id === newClientId)
-                      const actStillValid = !newClientId || !editingEntry.activity_id || activities.some(a => a.id === editingEntry.activity_id && a.site_id === newClientId)
-                      setEditingEntry({
-                        ...editingEntry,
-                        client_project_id: newClientId,
-                        ...(poStillValid ? {} : { po_id: undefined }),
-                        ...(delStillValid ? {} : { deliverable_id: undefined }),
-                        ...(actStillValid ? {} : { activity_id: undefined }),
-                      })
-                    }}
-                    placeholder="Select Client..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    PO
-                  </label>
-                  <SearchableSelect
-                    options={poOptions}
-                    value={editingEntry.po_id || null}
-                    onChange={(value) => {
-                      const newPOId = value || undefined
-                      // When PO changes, clear deliverable/activity if they're not valid for the new PO
-                      const delStillValid = !newPOId || !editingEntry.deliverable_id || (() => {
-                        const poIds = deliverablePOIds[editingEntry.deliverable_id!] || []
-                        if (poIds.length > 0) return poIds.includes(newPOId)
-                        const delDeptIds = deliverableDepartmentIds[editingEntry.deliverable_id!] || []
-                        if (delDeptIds.length === 0) return true // N/A department: valid for any PO
-                        const newPO = purchaseOrders.find(p => p.id === newPOId)
-                        if (!newPO?.department_id) return false
-                        return delDeptIds.includes(newPO.department_id)
-                      })()
-                      const actStillValid = !newPOId || !editingEntry.activity_id || (() => {
-                        const poIds = activityPOIds[editingEntry.activity_id!] || []
-                        return poIds.length === 0 || poIds.includes(newPOId)
-                      })()
-                      setEditingEntry({
-                        ...editingEntry,
-                        po_id: newPOId,
-                        ...(delStillValid ? {} : { deliverable_id: undefined }),
-                        ...(actStillValid ? {} : { activity_id: undefined }),
-                      })
-                    }}
-                    placeholder="Select PO..."
-                  />
-                </div>
-              </div>
-
-              {/* Row 2: Task Description */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Task Description
-                </label>
-                <input
-                  type="text"
-                  value={editingEntry.task_description}
-                  onChange={(e) => setEditingEntry({ ...editingEntry, task_description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                  placeholder="Enter task description..."
-                />
-              </div>
-
-              {/* Row 3: System, Deliverable, Activity */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    System
-                  </label>
-                  <SystemInput
-                    options={systemOptions}
-                    allowCustom={!usingProjectCombos}
-                    value={editingEntry.system_id || null}
-                    customValue={editingEntry.system_name}
-                    onChange={(value, customValue) => {
-                      if (customValue) {
-                        // Custom value - store in system_name, clear system_id
-                        setEditingEntry({
-                          ...editingEntry,
-                          system_id: undefined,
-                          system_name: customValue,
-                          deliverable_id: undefined,
-                          activity_id: undefined,
-                        })
-                      } else {
-                        // Selected from dropdown - store in system_id, clear system_name
-                        setEditingEntry({
-                          ...editingEntry,
-                          system_id: value || undefined,
-                          system_name: undefined,
-                          deliverable_id: undefined,
-                          activity_id: undefined,
-                        })
-                      }
-                    }}
-                    placeholder="Select or type System..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Deliverable
-                  </label>
-                  <SearchableSelect
-                    options={deliverableOptions}
-                    value={editingEntry.deliverable_id || null}
-                    onChange={(value) => setEditingEntry({ ...editingEntry, deliverable_id: value || undefined })}
-                    placeholder="Select Deliverable..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Activity
-                  </label>
-                  <SearchableSelect
-                    options={activityOptions}
-                    value={editingEntry.activity_id || null}
-                    onChange={(value) => setEditingEntry({ ...editingEntry, activity_id: value || undefined })}
-                    placeholder="Select Activity..."
-                  />
-                </div>
-              </div>
-
-              {/* Row 4: Days of the week */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Hours by Day
-                </label>
-                <div className="grid grid-cols-7 gap-2 items-end">
-                  {days.map((day, idx) => (
-                    <div key={day} className="flex flex-col min-h-[3.25rem]">
-                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 shrink-0">
-                        {format(weekDates.days[idx], 'EEE')}
-                      </label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        min="0"
-                        max="24"
-                        value={editingEntry[`${day}_hours`] || ''}
-                        onChange={(e) => {
-                          // Treat an empty input as "cleared" rather than
-                          // falling back to the previous value. This is what
-                          // makes backspace work: deleting the last digit
-                          // leaves the field empty (valueAsNumber → NaN);
-                          // previously the handler kept the prior value, so
-                          // the user could never clear a populated cell
-                          // without first highlighting it.
-                          const raw = e.target.value
-                          if (raw === '') {
-                            setEditingEntry({
-                              ...editingEntry,
-                              [`${day}_hours`]: 0,
-                            })
-                            return
-                          }
-                          const parsed = e.target.valueAsNumber
-                          if (isNaN(parsed)) {
-                            // Mid-typing states like "-" or "." — leave the
-                            // previous value alone; the browser preserves
-                            // the field text until the user enters a digit.
-                            return
-                          }
-                          setEditingEntry({
-                            ...editingEntry,
-                            [`${day}_hours`]: normalizeTimesheetHours(parsed),
-                          })
-                        }}
-                        className="w-full h-9 min-h-9 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-base focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white box-border"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-4 mt-6">
-              <button
-                type="button"
-                onClick={handleCloseModal}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveEntry}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }

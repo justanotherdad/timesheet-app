@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, X } from 'lucide-react'
 
 interface Option {
@@ -22,6 +23,8 @@ interface SystemInputProps {
    * must map to an existing matrix system.
    */
   allowCustom?: boolean
+  /** Shorter control for use inside a table cell. The menu still opens over the page. */
+  compact?: boolean
 }
 
 export default function SystemInput({
@@ -32,26 +35,54 @@ export default function SystemInput({
   placeholder = 'Select or type...',
   label,
   allowCustom = true,
+  compact = false,
 }: SystemInputProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [isCustom, setIsCustom] = useState(!!propCustomValue)
   const [customValue, setCustomValue] = useState(propCustomValue || '')
+  const [menuStyle, setMenuStyle] = useState<{ top: number; left: number; width: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const selectedOption = options.find((opt) => opt.id === value)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-        setSearchTerm('')
-      }
+      const target = event.target as Node
+      if (containerRef.current?.contains(target)) return
+      if (menuRef.current?.contains(target)) return
+      setIsOpen(false)
+      setSearchTerm('')
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useLayoutEffect(() => {
+    if (!isOpen) return
+    function place() {
+      const rect = buttonRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const width = Math.max(rect.width, 240)
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))
+      const menuHeight = 280
+      const spaceBelow = window.innerHeight - rect.bottom
+      const top = spaceBelow < menuHeight && rect.top > spaceBelow
+        ? Math.max(8, rect.top - menuHeight - 4)
+        : rect.bottom + 4
+      setMenuStyle({ top, left, width })
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [isOpen])
 
   // Sync with prop customValue
   useEffect(() => {
@@ -136,9 +167,14 @@ export default function SystemInput({
         ) : (
           <>
             <button
+              ref={buttonRef}
               type="button"
               onClick={() => setIsOpen(!isOpen)}
-              className="w-full min-h-[2.5rem] px-4 py-2 text-left bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-center justify-between text-gray-900 dark:text-gray-100 text-base"
+              className={
+                compact
+                  ? 'w-full min-h-8 px-1.5 py-1 text-left bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-center justify-between text-gray-900 dark:text-gray-100 text-xs'
+                  : 'w-full min-h-[2.5rem] px-4 py-2 text-left bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-center justify-between text-gray-900 dark:text-gray-100 text-base'
+              }
             >
               <span className={`min-w-0 truncate block text-left ${selectedOption ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}`}>
                 {selectedOption
@@ -158,7 +194,7 @@ export default function SystemInput({
                 <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
               </div>
             </button>
-            {!isOpen && allowCustom && (
+            {!isOpen && allowCustom && !compact && (
               <button
                 type="button"
                 onClick={() => {
@@ -173,8 +209,12 @@ export default function SystemInput({
               </button>
             )}
 
-            {isOpen && (
-              <div className="absolute left-0 right-0 z-[9999] mt-1 w-full min-w-0 max-w-[min(100%,calc(100vw-2rem))] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+            {isOpen && menuStyle && typeof document !== 'undefined' && createPortal(
+              <div
+                ref={menuRef}
+                style={{ position: 'fixed', top: menuStyle.top, left: menuStyle.left, width: menuStyle.width, zIndex: 9999 }}
+                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto"
+              >
                 <div className="p-2 sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                   <input
                     type="text"
@@ -241,7 +281,8 @@ export default function SystemInput({
                     </>
                   )}
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
           </>
         )}
