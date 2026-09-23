@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, Pencil, Plus, Printer, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, ExternalLink, Pencil, Plus, Printer, Trash2, X } from 'lucide-react'
 import { formatHours } from '@/lib/utils'
 import ProjectBySystemView from './ProjectBySystemView'
 import ProjectByIndividualView from './ProjectByIndividualView'
@@ -2800,8 +2800,9 @@ export default function ProjectBudgetMatrix({
                 <h3 className="font-semibold text-gray-900 dark:text-gray-100">Reassign timesheet entries</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   Pick the matrix cell each entry should land on. Dropdowns are restricted to
-                  (system, deliverable, activity) combos that exist on this PO. Saving updates
-                  the entry directly — the matrix and CSV export will reflect the new cell.
+                  (system, deliverable, activity) combos that exist on this PO. The week date
+                  opens that timesheet in a new tab so you can see how the hours were logged.
+                  Saving updates the entry directly — the matrix and CSV export will reflect the new cell.
                 </p>
               </div>
               <button
@@ -2849,8 +2850,23 @@ export default function ProjectBudgetMatrix({
                       return (
                         <tr key={e.entryId} className="border-b border-gray-100 dark:border-gray-700/50 align-top">
                           <td className="py-2 pr-2 text-gray-900 dark:text-gray-100">{e.userName || '—'}</td>
-                          <td className="py-2 pr-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                            {e.weekEnding ? e.weekEnding.slice(0, 10) : '—'}
+                          <td className="py-2 pr-2 whitespace-nowrap">
+                            {e.weekEnding && e.timesheetId ? (
+                              <a
+                                href={`/dashboard/timesheets/${e.timesheetId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Open this timesheet in a new tab"
+                                className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                              >
+                                {e.weekEnding.slice(0, 10)}
+                                <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+                              </a>
+                            ) : (
+                              <span className="text-gray-700 dark:text-gray-300">
+                                {e.weekEnding ? e.weekEnding.slice(0, 10) : '—'}
+                              </span>
+                            )}
                           </td>
                           <td className="py-2 pr-2 text-right text-gray-900 dark:text-gray-100">
                             {e.hours.toFixed(2)}
