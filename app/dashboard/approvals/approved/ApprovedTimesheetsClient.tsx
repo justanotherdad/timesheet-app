@@ -20,6 +20,8 @@ interface ApprovedTimesheetsClientProps {
   filterEnd: string
   sortBy: string
   sortDir: string
+  take: number
+  hasMore: boolean
   signaturesByTimesheetId: Record<string, string[]>
   approverNamesById: Record<string, string>
   withLabelByTimesheetId?: Record<string, string>
@@ -39,6 +41,8 @@ export default function ApprovedTimesheetsClient({
   filterEnd,
   sortBy,
   sortDir,
+  take,
+  hasMore,
   signaturesByTimesheetId,
   approverNamesById,
   withLabelByTimesheetId = {},
@@ -75,14 +79,18 @@ export default function ApprovedTimesheetsClient({
 
   const handleApplyFilters = (e: React.FormEvent) => {
     e.preventDefault()
-    router.push(buildUrl({ start: startInput, end: endInput, user: userInput }))
+    router.push(buildUrl({ start: startInput, end: endInput, user: userInput, take: '' }))
   }
 
   const handleClearFilters = () => {
     setStartInput('')
     setEndInput('')
     setUserInput('')
-    router.push(buildUrl({ start: '', end: '', user: '' }))
+    router.push(buildUrl({ start: '', end: '', user: '', take: '' }))
+  }
+
+  const handleLoadMore = () => {
+    router.push(buildUrl({ take: String(take + 100) }))
   }
 
   const handleSort = (column: string) => {
@@ -246,6 +254,15 @@ export default function ApprovedTimesheetsClient({
         <p className="text-sm text-gray-600 dark:text-gray-400 px-1">
           Showing {timesheets.length} timesheet{timesheets.length !== 1 ? 's' : ''} (approved or partially approved by you)
         </p>
+        {hasMore && (
+          <button
+            type="button"
+            onClick={handleLoadMore}
+            className="w-full mt-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+          >
+            Load more
+          </button>
+        )}
       </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
@@ -379,8 +396,19 @@ export default function ApprovedTimesheetsClient({
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-300">
-              Showing {timesheets.length} timesheet{timesheets.length !== 1 ? 's' : ''} (approved or partially approved by you)
+            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-300 flex flex-wrap items-center justify-between gap-3">
+              <span>
+                Showing {timesheets.length} timesheet{timesheets.length !== 1 ? 's' : ''} (approved or partially approved by you)
+              </span>
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={handleLoadMore}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                >
+                  Load more
+                </button>
+              )}
             </div>
           </>
         ) : (
@@ -397,7 +425,7 @@ export default function ApprovedTimesheetsClient({
       {/* Mobile detail popup */}
       {selectedTimesheet && (
         <div
-          className="md:hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+          className="md:hidden fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
           onClick={() => setSelectedTimesheet(null)}
         >
           <div

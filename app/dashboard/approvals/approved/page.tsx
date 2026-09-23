@@ -19,7 +19,9 @@ import ApprovedTimesheetsClient from './ApprovedTimesheetsClient'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10
 
-type SearchParams = { user?: string; start?: string; end?: string; sort?: string; dir?: string }
+type SearchParams = { user?: string; start?: string; end?: string; sort?: string; dir?: string; take?: string }
+
+const PAGE_SIZE = 100
 
 export default async function ApprovedTimesheetsPage(props: { searchParams: Promise<SearchParams> }) {
   const { searchParams } = props
@@ -30,15 +32,21 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
   const filterEnd = params.end || ''
   const sortBy = params.sort || 'week_ending'
   const sortDir = (params.dir || 'desc') as 'asc' | 'desc'
+  const takeRaw = parseInt(params.take || '', 10)
+  const take = Number.isFinite(takeRaw) ? Math.min(Math.max(takeRaw, PAGE_SIZE), 2000) : PAGE_SIZE
   const isClient = user.profile.role === 'client'
 
   const adminSupabase = createAdminClient()
 
-  let timesheets = await getApprovedTimesheetsForViewer(user, {
+  const loaded = await getApprovedTimesheetsForViewer(user, {
     filterUser,
     filterStart,
     filterEnd,
+    limit: take,
+    offset: 0,
   })
+  let timesheets = loaded.rows
+  const hasMore = loaded.hasMore
 
   // Auto-approve submitted timesheets where employee has no approvers left
   const submittedInList = timesheets.filter((ts: any) => ts.status === 'submitted')
@@ -226,6 +234,8 @@ export default async function ApprovedTimesheetsPage(props: { searchParams: Prom
             filterEnd={filterEnd}
             sortBy={sortBy}
             sortDir={sortDir}
+            take={take}
+            hasMore={hasMore}
             signaturesByTimesheetId={signaturesByTimesheetId}
             approverNamesById={approverNamesById}
             withLabelByTimesheetId={withLabelByTimesheetId}

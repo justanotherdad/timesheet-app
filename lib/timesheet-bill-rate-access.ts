@@ -1,18 +1,47 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { withQueryTimeout } from '@/lib/timeout'
-import { billRateIsActiveOnDate } from '@/lib/po-bill-rate-utils'
+import { billRateAppliesToWeekEnding, billRateIsActiveOnDate } from '@/lib/po-bill-rate-utils'
 
-/** Distinct PO ids where this user has an active bill rate (not ended before today). */
-export async function getBillRatePoIdsForUser(admin: SupabaseClient, userId: string): Promise<string[]> {
+export type BillRateWindow = {
+  po_id: string
+  effective_from_date?: string | null
+  effective_to_date?: string | null
+}
+
+/** All bill-rate windows for this user (any from/to). Used to filter timesheet POs by week ending. */
+export async function getBillRateWindowsForUser(
+  admin: SupabaseClient,
+  userId: string
+): Promise<BillRateWindow[]> {
   const { data, error } = await admin
     .from('po_bill_rates')
     .select('po_id,effective_from_date,effective_to_date')
     .eq('user_id', userId)
   if (error || !data) return []
-  const today = new Date().toISOString().slice(0, 10)
+  return (data as BillRateWindow[]).filter((r) => Boolean(r.po_id))
+}
+
+/**
+ * Distinct PO ids where this user has a bill rate.
+ * Pass `weekEnding` for timesheet create/edit (rate must cover that week).
+ * Omit it for "active today" screens (user list, Bill Rates by Person).
+ */
+export async function getBillRatePoIdsForUser(
+  admin: SupabaseClient,
+  userId: string,
+  weekEnding?: string
+): Promise<string[]> {
+  const rows = await getBillRateWindowsForUser(admin, userId)
   const ids = new Set<string>()
-  for (const r of data as { po_id: string; effective_from_date?: string | null; effective_to_date?: string | null }[]) {
-    if (r.po_id && billRateIsActiveOnDate(r, today)) ids.add(r.po_id)
+  if (weekEnding) {
+    for (const r of rows) {
+      if (billRateAppliesToWeekEnding(r, weekEnding)) ids.add(r.po_id)
+    }
+  } else {
+    const today = new Date().toISOString().slice(0, 10)
+    for (const r of rows) {
+      if (billRateIsActiveOnDate(r, today)) ids.add(r.po_id)
+    }
   }
   return [...ids]
 }
@@ -297,6 +326,8 @@ export type TimesheetDropdownPayload = {
    * and keep the looser dept/PO filter.
    */
   projectBudgetCombosByPo: Record<string, ProjectDetailCombo[]>
+  /** Employee bill-rate windows so the form can re-filter POs when week ending changes. Empty for admins. */
+  billRateWindows: BillRateWindow[]
 }
 
 /**
@@ -324,6 +355,7 @@ export async function loadTimesheetDropdownData(params: {
   let systems: any[] = []
   let deliverables: any[] = []
   let activities: any[] = []
+  let billRateWindows: BillRateWindow[] = []
 
   if (isAdmin) {
     const [sitesResult, purchaseOrdersResult, systemsResult, deliverablesResult, activitiesResult] = await Promise.all([
@@ -339,7 +371,12 @@ export async function loadTimesheetDropdownData(params: {
     deliverables = (deliverablesResult.data || []) as any[]
     activities = (activitiesResult.data || []) as any[]
   } else {
-    const billRatePoIds = await getBillRatePoIdsForUser(admin, userId)
+    // Load every PO this person has a bill-rate row on (any from/to). The form
+    // then shows only POs whose window covers the selected week ending, so a
+    // rate ending mid-week (e.g. Tue 9/22) still appears for WE 20 Sep.
+    const billRateWindowsForUser = await getBillRateWindowsForUser(admin, userId)
+    billRateWindows = billRateWindowsForUser
+    const billRatePoIds = [...new Set(billRateWindowsForUser.map((w) => w.po_id))]
     const mergedPoIds = [...new Set([...billRatePoIds, ...entryPoIds.filter(Boolean)])]
 
     if (mergedPoIds.length === 0) {
@@ -355,6 +392,7 @@ export async function loadTimesheetDropdownData(params: {
         deliverableDepartmentIds: {},
         activityPOIds: {},
         projectBudgetCombosByPo: {},
+        billRateWindows,
       }
     }
 
@@ -383,6 +421,7 @@ export async function loadTimesheetDropdownData(params: {
         deliverableDepartmentIds: {},
         activityPOIds: {},
         projectBudgetCombosByPo: {},
+        billRateWindows,
       }
     }
 
@@ -557,5 +596,6 @@ export async function loadTimesheetDropdownData(params: {
     deliverableDepartmentIds,
     activityPOIds,
     projectBudgetCombosByPo,
+    billRateWindows,
   }
 }

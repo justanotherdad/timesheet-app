@@ -43,7 +43,7 @@ export default async function DashboardMainPanels({
       : Promise.resolve([] as any[])
 
   const approvedPromise = showApproved
-    ? getApprovedTimesheetsForViewer(user, { limit: 5 })
+    ? getApprovedTimesheetsForViewer(user, { limit: 5 }).then((r) => r.rows)
     : Promise.resolve([] as any[])
 
   let recentTimesheets: any[]

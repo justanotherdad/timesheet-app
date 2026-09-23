@@ -126,6 +126,7 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
     deliverableDepartmentIds,
     activityPOIds,
     projectBudgetCombosByPo,
+    billRateWindows,
   } = await loadTimesheetDropdownData({
     supabase,
     admin: adminSupabase,
@@ -268,6 +269,7 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
               activityPOIds={activityPOIds}
               projectBudgetCombosByPo={projectBudgetCombosByPo}
               unbillableDescriptionOptions={unbillableDescriptionOptions}
+              billRateWindows={billRateWindows}
               defaultWeekEnding={effectiveWeekEndingStr}
               userId={targetUserId}
               isAdminEditor={isAdmin}

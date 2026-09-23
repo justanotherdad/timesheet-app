@@ -7,6 +7,7 @@ import SearchableSelect from './SearchableSelect'
 import SystemInput from './SystemInput'
 import DeleteTimesheetButton from './DeleteTimesheetButton'
 import { getWeekDates, formatDate, formatDateShort, formatDateForInput, formatHours, formatWeekEnding, getWeekEndingSundayOptions, normalizeTimesheetHours } from '@/lib/utils'
+import { billRateAppliesToWeekEnding } from '@/lib/po-bill-rate-utils'
 import { format } from 'date-fns'
 import { Plus, Trash2, Edit2, X, ChevronUp, ChevronDown } from 'lucide-react'
 
@@ -38,6 +39,16 @@ interface WeeklyTimesheetFormProps {
    * dropdown = 'Y'). Employees can pick one or type their own value.
    */
   unbillableDescriptionOptions?: Partial<Record<'HOLIDAY' | 'INTERNAL' | 'PTO', string[]>>
+  /**
+   * Employee bill-rate windows. When present, PO/client dropdowns only include
+   * POs whose rate covers the selected week ending. Empty for admin editors
+   * (they see all active POs).
+   */
+  billRateWindows?: Array<{
+    po_id: string
+    effective_from_date?: string | null
+    effective_to_date?: string | null
+  }>
   defaultWeekEnding: string
   userId: string
   timesheetId?: string
@@ -160,6 +171,7 @@ export default function WeeklyTimesheetForm({
   activityPOIds = {},
   projectBudgetCombosByPo = {},
   unbillableDescriptionOptions = {},
+  billRateWindows = [],
   defaultWeekEnding,
   userId,
   timesheetId,
@@ -226,6 +238,26 @@ export default function WeeklyTimesheetForm({
       { description: 'PTO', notes: '', mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 },
     ]
   )
+
+  const restrictPosToBillRates = billRateWindows.length > 0
+  const poAppliesToSelectedWeek = (poId: string) =>
+    billRateWindows.some((w) => w.po_id === poId && billRateAppliesToWeekEnding(w, weekEnding))
+  const availablePurchaseOrders = useMemo(() => {
+    if (!restrictPosToBillRates) return purchaseOrders
+    return purchaseOrders.filter(
+      (po) =>
+        billRateWindows.some((w) => w.po_id === po.id && billRateAppliesToWeekEnding(w, weekEnding)) ||
+        editingEntry?.po_id === po.id
+    )
+  }, [restrictPosToBillRates, purchaseOrders, billRateWindows, weekEnding, editingEntry?.po_id])
+  const availableSites = useMemo(() => {
+    if (!restrictPosToBillRates) return sites
+    const siteIds = new Set(
+      availablePurchaseOrders.map((po) => po.site_id).filter(Boolean) as string[]
+    )
+    if (editingEntry?.client_project_id) siteIds.add(editingEntry.client_project_id)
+    return sites.filter((s) => siteIds.has(s.id))
+  }, [restrictPosToBillRates, sites, availablePurchaseOrders, editingEntry?.client_project_id])
 
   // Modal closing is now handled by onMouseDown on the backdrop
   // This prevents closing when selecting text inside the modal
@@ -581,6 +613,21 @@ export default function WeeklyTimesheetForm({
       return
     }
 
+    if (restrictPosToBillRates) {
+      const expiredRows = billableEntries
+        .map((entry, index) => ({ entry, rowNumber: index + 1 }))
+        .filter(({ entry }) => calculateTotal(entry) > 0 && entry.po_id && !poAppliesToSelectedWeek(entry.po_id))
+      if (expiredRows.length > 0) {
+        const rowList = expiredRows
+          .map(({ rowNumber, entry }) => `Row ${rowNumber} (${getPOName(entry.po_id) || 'PO'})`)
+          .join('; ')
+        setError(
+          `Cannot submit: those POs are not available for week ending ${formatWeekEnding(weekEnding)}. ${rowList}`
+        )
+        return
+      }
+    }
+
     // Block regular employees from submitting a second timesheet for a week they
     // already have one for. Admin/manager editors are exempt so they can still
     // make corrections. The timesheet currently being edited/created is excluded.
@@ -634,8 +681,8 @@ export default function WeeklyTimesheetForm({
 
   // Filter POs by selected client (site) - when client is selected, only show POs assigned to that client
   const poOptions = (editingEntry?.client_project_id
-    ? purchaseOrders.filter(po => po.site_id === editingEntry.client_project_id)
-    : purchaseOrders
+    ? availablePurchaseOrders.filter(po => po.site_id === editingEntry.client_project_id)
+    : availablePurchaseOrders
   ).map(po => ({
     id: po.id,
     name: po.po_number,
@@ -1341,12 +1388,12 @@ export default function WeeklyTimesheetForm({
                     Client
                   </label>
                   <SearchableSelect
-                    options={sites}
+                    options={availableSites}
                     value={editingEntry.client_project_id || null}
                     onChange={(value) => {
                       const newClientId = value || undefined
                       // When client changes, clear PO if it's not assigned to the new client
-                      const poStillValid = !newClientId || !editingEntry.po_id || purchaseOrders.some(po => po.id === editingEntry.po_id && po.site_id === newClientId)
+                      const poStillValid = !newClientId || !editingEntry.po_id || availablePurchaseOrders.some(po => po.id === editingEntry.po_id && po.site_id === newClientId)
                       // Clear deliverable/activity if they won't be in the filtered list for the new client
                       const delStillValid = !newClientId || !editingEntry.deliverable_id || deliverables.some(d => d.id === editingEntry.deliverable_id && d.site_id === newClientId)
                       const actStillValid = !newClientId || !editingEntry.activity_id || activities.some(a => a.id === editingEntry.activity_id && a.site_id === newClientId)
