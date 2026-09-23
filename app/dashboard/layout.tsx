@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { getCurrentUser } from '@/lib/auth'
 import { getHeaderNavFlags } from '@/lib/nav-flags'
 import AutoLogout from '@/components/AutoLogout'
@@ -16,7 +17,9 @@ export default async function DashboardLayout({
 
   return (
     <HeaderNavProvider value={nav}>
-      <NavigationProgress />
+      <Suspense fallback={null}>
+        <NavigationProgress />
+      </Suspense>
       <AutoLogout timeoutMinutes={60} />
       <PasswordChangeGuard mustChangePassword={mustChangePassword}>
         <ClientRouteGuard role={user?.profile.role}>
