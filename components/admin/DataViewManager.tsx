@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Download, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
-import { parseISO, format } from 'date-fns'
-import { formatWeekEnding, getWeekEndingSundayOptions } from '@/lib/utils'
+import { parseISO, format, subWeeks } from 'date-fns'
+import { formatDateForInput, formatWeekEnding, getPreviousWeekEnding, getWeekEndingSundayOptions } from '@/lib/utils'
 import MultiSelectDropdown from './MultiSelectDropdown'
 
 interface User {
@@ -97,13 +97,28 @@ interface DataViewManagerProps {
   purchaseOrders: PurchaseOrder[]
 }
 
+/** Last two completed week endings (Mon–Sun). The in-progress week is not included. */
+function lastTwoWeekEndings(): { from: string; to: string } {
+  const to = getPreviousWeekEnding()
+  return {
+    from: formatDateForInput(subWeeks(to, 1)),
+    to: formatDateForInput(to),
+  }
+}
+
+const csvCell = (value: string | number | null | undefined) =>
+  `"${String(value ?? '').replace(/"/g, '""')}"`
+
 export default function DataViewManager({ users, sites, departments, purchaseOrders }: DataViewManagerProps) {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([])
   const [selectedSites, setSelectedSites] = useState<string[]>([])
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([])
   const [selectedPOs, setSelectedPOs] = useState<string[]>([])
-  const [fromWeekEnding, setFromWeekEnding] = useState<string>('')
-  const [toWeekEnding, setToWeekEnding] = useState<string>('')
+  const [fromWeekEnding, setFromWeekEnding] = useState(() => lastTwoWeekEndings().from)
+  const [toWeekEnding, setToWeekEnding] = useState(() => lastTwoWeekEndings().to)
+  // 'default' = we own the two-week window. A user, site, department, PO, or
+  // status filter clears it. 'custom' = the user set the week dropdowns.
+  const [weekChoice, setWeekChoice] = useState<'default' | 'custom'>('default')
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([])
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
   const [sortColumn, setSortColumn] = useState<string>('week_ending')
@@ -182,43 +197,97 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
 
   const pruneTo = (ids: string[], allowed: Set<string>) => ids.filter((id) => allowed.has(id))
 
+  // Dimension filters drop the default two-week window so the match is complete.
+  // Dates the user picked stay in place. Clearing the last dimension filter
+  // restores the window unless they chose the week range themselves.
+  const syncWeekWindow = (usersIds: string[], siteIds: string[], deptIds: string[], poIds: string[], statusIds: string[]) => {
+    if (weekChoice !== 'default') return
+    const any = usersIds.length > 0 || siteIds.length > 0 || deptIds.length > 0 || poIds.length > 0 || statusIds.length > 0
+    if (any) {
+      setFromWeekEnding('')
+      setToWeekEnding('')
+      return
+    }
+    const window = lastTwoWeekEndings()
+    setFromWeekEnding(window.from)
+    setToWeekEnding(window.to)
+  }
+
+  const onUsersChange = (ids: string[]) => {
+    setSelectedUsers(ids)
+    syncWeekWindow(ids, selectedSites, selectedDepartments, selectedPOs, selectedStatuses)
+  }
+
   const onSitesChange = (ids: string[]) => {
     setSelectedSites(ids)
-    if (ids.length === 0) return
+    if (ids.length === 0) {
+      syncWeekWindow(selectedUsers, ids, selectedDepartments, selectedPOs, selectedStatuses)
+      return
+    }
     const deptsAtSites = catalogDepartments.filter((d) => ids.includes(d.site_id))
     const posAtSites = catalogPOs.filter((p) => p.site_id && ids.includes(p.site_id))
-    setSelectedDepartments((prev) => pruneTo(prev, new Set(deptsAtSites.map((d) => d.id))))
-    setSelectedPOs((prev) => pruneTo(prev, new Set(posAtSites.map((p) => p.id))))
+    const nextDepts = pruneTo(selectedDepartments, new Set(deptsAtSites.map((d) => d.id)))
+    const nextPOs = pruneTo(selectedPOs, new Set(posAtSites.map((p) => p.id)))
+    setSelectedDepartments(nextDepts)
+    setSelectedPOs(nextPOs)
+    syncWeekWindow(selectedUsers, ids, nextDepts, nextPOs, selectedStatuses)
   }
 
   const onDepartmentsChange = (ids: string[]) => {
     setSelectedDepartments(ids)
-    if (ids.length === 0) return
+    if (ids.length === 0) {
+      syncWeekWindow(selectedUsers, selectedSites, ids, selectedPOs, selectedStatuses)
+      return
+    }
     let posForDept = catalogPOs.filter((p) => p.department_id && ids.includes(p.department_id))
     if (selectedSites.length > 0) {
       posForDept = posForDept.filter((p) => p.site_id && selectedSites.includes(p.site_id))
     }
-    setSelectedPOs((prev) => pruneTo(prev, new Set(posForDept.map((p) => p.id))))
+    const nextPOs = pruneTo(selectedPOs, new Set(posForDept.map((p) => p.id)))
+    setSelectedPOs(nextPOs)
+    syncWeekWindow(selectedUsers, selectedSites, ids, nextPOs, selectedStatuses)
+  }
+
+  const onPOsChange = (ids: string[]) => {
+    setSelectedPOs(ids)
+    syncWeekWindow(selectedUsers, selectedSites, selectedDepartments, ids, selectedStatuses)
+  }
+
+  const onStatusesChange = (ids: string[]) => {
+    setSelectedStatuses(ids)
+    syncWeekWindow(selectedUsers, selectedSites, selectedDepartments, selectedPOs, ids)
+  }
+
+  const onFromWeekChange = (value: string) => {
+    setWeekChoice('custom')
+    setFromWeekEnding(value)
+  }
+
+  const onToWeekChange = (value: string) => {
+    setWeekChoice('custom')
+    setToWeekEnding(value)
   }
 
   const clearAllFilters = () => {
+    const window = lastTwoWeekEndings()
     setSelectedUsers([])
     setSelectedSites([])
     setSelectedDepartments([])
     setSelectedPOs([])
-    setFromWeekEnding('')
-    setToWeekEnding('')
+    setWeekChoice('default')
+    setFromWeekEnding(window.from)
+    setToWeekEnding(window.to)
     setSelectedStatuses([])
   }
 
-  const hasActiveFilters =
+  const hasDimensionFilter =
     selectedUsers.length > 0 ||
     selectedSites.length > 0 ||
     selectedDepartments.length > 0 ||
     selectedPOs.length > 0 ||
-    fromWeekEnding ||
-    toWeekEnding ||
     selectedStatuses.length > 0
+
+  const hasActiveFilters = hasDimensionFilter || weekChoice === 'custom'
 
   const loadData = async () => {
     const seq = ++requestSeq.current
@@ -248,7 +317,17 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
         ...e,
         non_billable_hours: e.non_billable_hours ?? 0
       })))
-      if (nextFilterOptions) {
+      const window = lastTwoWeekEndings()
+      const onDefaultWindow =
+        weekChoice === 'default' &&
+        !hasDimensionFilter &&
+        fromWeekEnding === window.from &&
+        toWeekEnding === window.to
+      // Keep the full user/site/PO lists while the default window is showing,
+      // so an older PO can still be picked. Filtered loads keep cascading lists.
+      if (onDefaultWindow) {
+        setFilterOptions(null)
+      } else if (nextFilterOptions) {
         setFilterOptions((prev) => {
           const incomingUsers = nextFilterOptions.users || []
           const prevUsers = prev?.users?.length ? prev.users : users
@@ -367,19 +446,19 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
     }
 
     const csv = [
-      ['Week Ending', 'User', 'Site', 'PO', 'Task Description', 'System', 'Activity', 'Deliverable', 'Hours', 'Non-Billable Hours', 'Status'].join(','),
+      ['Week Ending', 'User', 'Site', 'PO', 'Task Description', 'System', 'Activity', 'Deliverable', 'Hours', 'Non-Billable Hours', 'Status'].map(csvCell).join(','),
       ...toExport.map(entry => [
-        entry.week_ending,
-        entry.user_name,
-        entry.site_name,
-        entry.po_number,
-        `"${(entry.task_description || '').replace(/"/g, '""')}"`, // Escape quotes in CSV
-        entry.system_name,
-        entry.activity_name,
-        entry.deliverable_name,
-        entry.hours,
-        entry.non_billable_hours ?? 0,
-        entry.status,
+        csvCell(entry.week_ending),
+        csvCell(entry.user_name),
+        csvCell(entry.site_name),
+        csvCell(entry.po_number),
+        csvCell(entry.task_description),
+        csvCell(entry.system_name),
+        csvCell(entry.activity_name),
+        csvCell(entry.deliverable_name),
+        csvCell(entry.hours),
+        csvCell(entry.non_billable_hours ?? 0),
+        csvCell(entry.status),
       ].join(','))
     ].join('\n')
 
@@ -420,7 +499,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">From Week Ending</label>
             <select
               value={fromWeekEnding}
-              onChange={(e) => setFromWeekEnding(e.target.value)}
+              onChange={(e) => onFromWeekChange(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             >
               <option value="">Any</option>
@@ -433,7 +512,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">To Week Ending</label>
             <select
               value={toWeekEnding}
-              onChange={(e) => setToWeekEnding(e.target.value)}
+              onChange={(e) => onToWeekChange(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
             >
               <option value="">Any</option>
@@ -451,7 +530,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
             allLabel="All Users"
             options={filteredUsers.map((u) => ({ id: u.id, label: u.name }))}
             selected={selectedUsers}
-            onChange={setSelectedUsers}
+            onChange={onUsersChange}
           />
 
           <MultiSelectDropdown
@@ -475,7 +554,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
             allLabel="All POs"
             options={filteredPOs.map((po) => ({ id: po.id, label: po.po_number }))}
             selected={selectedPOs}
-            onChange={setSelectedPOs}
+            onChange={onPOsChange}
           />
 
           <MultiSelectDropdown
@@ -488,7 +567,7 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
               { id: 'rejected', label: 'Rejected' },
             ]}
             selected={selectedStatuses}
-            onChange={setSelectedStatuses}
+            onChange={onStatusesChange}
           />
 
           <div className="flex items-end">
@@ -631,6 +710,9 @@ export default function DataViewManager({ users, sites, departments, purchaseOrd
       {expandedEntries.length > 0 && (
         <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">
           Showing {expandedEntries.length} entries
+          {weekChoice === 'default' && !hasDimensionFilter && fromWeekEnding && toWeekEnding
+            ? ` for week endings ${formatWeekEnding(fromWeekEnding)} – ${formatWeekEnding(toWeekEnding)}. Filter by user, site, department, PO, or status to load every matching row, or set a week range.`
+            : ''}
         </div>
       )}
     </div>
