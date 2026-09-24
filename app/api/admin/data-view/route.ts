@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
 import { getAccessibleSiteIds } from '@/lib/access'
 import { getDataViewAccess, mergeDataViewSiteScope } from '@/lib/data-view-access'
+import { fetchInIdChunksPaged } from '@/lib/supabase-fetch'
 import { parseISO } from 'date-fns'
 
 const csvList = (searchParams: URLSearchParams, key: string): string[] => {
@@ -137,7 +138,9 @@ export async function GET(request: NextRequest) {
       user_profiles: unknown
     }
 
-    const timesheets = await fetchByIdsInChunks<TimesheetRow>(userIdsToFetch, (chunk) => {
+    // Page past PostgREST's ~1000-row cap. An unpaged select silently drops
+    // later weeks on high-volume accounts (the rows Billable Activities still shows).
+    const timesheets = await fetchInIdChunksPaged<TimesheetRow>(userIdsToFetch, (chunk, from, to) => {
       let q = adminSupabase
         .from('weekly_timesheets')
         .select(`id, user_id, week_ending, status, user_profiles!user_id (name, email)`)
@@ -145,7 +148,7 @@ export async function GET(request: NextRequest) {
       if (selectedStatuses.length > 0) q = q.in('status', selectedStatuses)
       if (weekStartBound) q = q.gte('week_ending', weekStartBound)
       if (weekEndBound) q = q.lte('week_ending', weekEndBound)
-      return q
+      return q.order('id', { ascending: true }).range(from, to)
     })
 
     if (!timesheets || timesheets.length === 0) {
@@ -158,11 +161,21 @@ export async function GET(request: NextRequest) {
     const timesheetIds = timesheets.map((t) => t.id)
 
     const [entries, unbillable] = await Promise.all([
-      fetchByIdsInChunks<Record<string, unknown>>(timesheetIds, (chunk) =>
-        adminSupabase.from('timesheet_entries').select('*').in('timesheet_id', chunk)
+      fetchInIdChunksPaged<Record<string, unknown>>(timesheetIds, (chunk, from, to) =>
+        adminSupabase
+          .from('timesheet_entries')
+          .select('*')
+          .in('timesheet_id', chunk)
+          .order('id', { ascending: true })
+          .range(from, to)
       ),
-      fetchByIdsInChunks<Record<string, unknown>>(timesheetIds, (chunk) =>
-        adminSupabase.from('timesheet_unbillable').select('*').in('timesheet_id', chunk)
+      fetchInIdChunksPaged<Record<string, unknown>>(timesheetIds, (chunk, from, to) =>
+        adminSupabase
+          .from('timesheet_unbillable')
+          .select('*')
+          .in('timesheet_id', chunk)
+          .order('id', { ascending: true })
+          .range(from, to)
       ),
     ])
 
