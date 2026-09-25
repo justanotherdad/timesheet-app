@@ -463,9 +463,9 @@ export default async function TimesheetDetailPage({
             {entries && entries.length > 0 && (
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
-                <div className={`overflow-x-auto ${entries.length > 6 ? 'max-h-[35vh] overflow-y-auto' : ''}`}>
+                <div className="overflow-x-auto">
                   <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
-                    <thead className={`${entries.length > 6 ? 'sticky top-0 z-10' : ''} bg-gray-100 dark:bg-gray-700`}>
+                    <thead className="bg-gray-100 dark:bg-gray-700">
                       <tr>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Client/Project</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">PO#</th>

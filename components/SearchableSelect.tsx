@@ -139,11 +139,11 @@ export default function SearchableSelect({
           onClick={() => setIsOpen(!isOpen)}
           className={
             compact
-              ? 'w-full min-h-8 px-1.5 py-1 text-left bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-center justify-between text-gray-900 dark:text-gray-100 text-xs'
+              ? 'w-full min-w-0 min-h-8 px-1.5 py-1 text-left bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-start justify-between text-gray-900 dark:text-gray-100 text-xs'
               : 'w-full min-h-[2.5rem] px-4 py-2 text-left bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-center justify-between text-gray-900 dark:text-gray-100 text-base'
           }
         >
-          <span className={`min-w-0 truncate block text-left ${selectedOption ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}`}>
+          <span className={`min-w-0 block text-left ${compact ? 'whitespace-normal break-words' : 'truncate'} ${selectedOption ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}`}>
             {selectedOption
               ? `${selectedOption.name}${selectedOption.code ? ` (${selectedOption.code})` : ''}`
               : placeholder}

@@ -33,8 +33,8 @@ type UnbillablePayload = {
   sun_hours?: number
 }
 
-function entryTotal(e: BillablePayload): number {
-  return (
+function billableRowHasData(e: BillablePayload): boolean {
+  const hours =
     Number(e.mon_hours || 0) +
     Number(e.tue_hours || 0) +
     Number(e.wed_hours || 0) +
@@ -42,6 +42,15 @@ function entryTotal(e: BillablePayload): number {
     Number(e.fri_hours || 0) +
     Number(e.sat_hours || 0) +
     Number(e.sun_hours || 0)
+  return Boolean(
+    e.client_project_id ||
+      e.po_id ||
+      (e.task_description || '').trim() ||
+      e.system_id ||
+      (e.system_name || '').trim() ||
+      e.deliverable_id ||
+      e.activity_id ||
+      hours > 0
   )
 }
 
@@ -108,8 +117,8 @@ export async function POST(request: Request) {
 
     const id = (timesheet as { id: string }).id
 
-    const entriesToInsert = billableEntries
-      .filter((e) => (e.task_description || '').trim() || entryTotal(e) > 0)
+    const rowsToSave = shouldSubmit ? billableEntries.filter(billableRowHasData) : billableEntries
+    const entriesToInsert = rowsToSave
       .map((e, idx) => ({
         timesheet_id: id,
         sort_order: idx,

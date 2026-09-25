@@ -248,8 +248,8 @@ export default async function NewTimesheetPage(props: { searchParams?: Promise<S
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header title="New Weekly Timesheet" showBack backUrl="/dashboard/timesheets" user={user} />
-      <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
-        <div className="max-w-7xl mx-auto overflow-hidden">
+      <div className="w-full px-3 sm:px-4 py-6 sm:py-8">
+        <div className="mx-auto w-full max-w-[min(100%,calc(50vw+40rem))] overflow-hidden">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
             {isAdmin && employees.length > 0 && (
               <Suspense fallback={null}>

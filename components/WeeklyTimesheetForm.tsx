@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useMemo } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import SearchableSelect from './SearchableSelect'
@@ -142,6 +142,74 @@ interface BillableEntry {
   fri_hours: number
   sat_hours: number
   sun_hours: number
+}
+
+function billableRowHasData(entry: BillableEntry): boolean {
+  return Boolean(
+    entry.client_project_id ||
+      entry.po_id ||
+      (entry.task_description || '').trim() ||
+      entry.system_id ||
+      (entry.system_name || '').trim() ||
+      entry.deliverable_id ||
+      entry.activity_id ||
+      entry.mon_hours + entry.tue_hours + entry.wed_hours + entry.thu_hours + entry.fri_hours + entry.sat_hours + entry.sun_hours > 0
+  )
+}
+
+function HourInput({
+  value,
+  onChange,
+  className,
+}: {
+  value: number
+  onChange: (hours: number) => void
+  className: string
+}) {
+  const [text, setText] = useState(value ? String(value) : '')
+  const focusedRef = useRef(false)
+
+  useEffect(() => {
+    if (!focusedRef.current) setText(value ? String(value) : '')
+  }, [value])
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={text}
+      onFocus={() => {
+        focusedRef.current = true
+      }}
+      onBlur={() => {
+        focusedRef.current = false
+        const parsed = text.trim() === '' || text === '.' ? 0 : Number(text)
+        const next = normalizeTimesheetHours(Number.isFinite(parsed) ? parsed : 0)
+        onChange(next)
+        setText(next ? String(next) : '')
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault()
+      }}
+      onWheel={(e) => {
+        e.currentTarget.blur()
+      }}
+      onChange={(e) => {
+        const raw = e.target.value
+        if (raw !== '' && !/^\d{0,2}(\.\d{0,3})?$/.test(raw)) return
+        setText(raw)
+        if (raw === '' || raw === '.') {
+          onChange(0)
+          return
+        }
+        const leading = raw.endsWith('.') ? raw.slice(0, -1) : raw
+        const parsed = Number(leading)
+        if (!Number.isFinite(parsed)) return
+        onChange(normalizeTimesheetHours(parsed))
+      }}
+      className={className}
+    />
+  )
 }
 
 interface UnbillableEntry {
@@ -463,10 +531,6 @@ export default function WeeklyTimesheetForm({
           .eq('id', currentTimesheetId)
 
         if (updateError) throw updateError
-
-        // Delete existing entries
-        await supabase.from('timesheet_entries').delete().eq('timesheet_id', currentTimesheetId)
-        await supabase.from('timesheet_unbillable').delete().eq('timesheet_id', currentTimesheetId)
       } else {
         // Always create a new timesheet (allow multiple per week per user)
         const insertData: any = {
@@ -504,37 +568,27 @@ export default function WeeklyTimesheetForm({
         setCurrentStatus(newStatus)
       }
 
-      // Insert billable entries
-      const entriesToInsert = billableEntries
-        .filter(e => e.task_description.trim() || calculateTotal(e) > 0)
-        .map((e, idx) => ({
-          timesheet_id: currentTimesheetId!,
-          sort_order: idx,
-          client_project_id: e.client_project_id || null,
-          po_id: e.po_id || null,
-          task_description: e.task_description,
-          system_id: e.system_id || null, // Only set if from dropdown, null if custom
-          system_name: e.system_name || null, // Custom system name (not in systems table)
-          deliverable_id: e.deliverable_id || null,
-          activity_id: e.activity_id || null,
-          mon_hours: normalizeTimesheetHours(Number(e.mon_hours) || 0),
-          tue_hours: normalizeTimesheetHours(Number(e.tue_hours) || 0),
-          wed_hours: normalizeTimesheetHours(Number(e.wed_hours) || 0),
-          thu_hours: normalizeTimesheetHours(Number(e.thu_hours) || 0),
-          fri_hours: normalizeTimesheetHours(Number(e.fri_hours) || 0),
-          sat_hours: normalizeTimesheetHours(Number(e.sat_hours) || 0),
-          sun_hours: normalizeTimesheetHours(Number(e.sun_hours) || 0),
-        }))
+      const replacingExisting = Boolean(timesheetId || createdTimesheetIdRef.current || createdTimesheetId)
+      const rowsToSave = shouldSubmit ? billableEntries.filter(billableRowHasData) : billableEntries
+      const entriesToInsert = rowsToSave.map((e, idx) => ({
+        timesheet_id: currentTimesheetId!,
+        sort_order: idx,
+        client_project_id: e.client_project_id || null,
+        po_id: e.po_id || null,
+        task_description: e.task_description || '',
+        system_id: e.system_id || null,
+        system_name: e.system_name || null,
+        deliverable_id: e.deliverable_id || null,
+        activity_id: e.activity_id || null,
+        mon_hours: normalizeTimesheetHours(Number(e.mon_hours) || 0),
+        tue_hours: normalizeTimesheetHours(Number(e.tue_hours) || 0),
+        wed_hours: normalizeTimesheetHours(Number(e.wed_hours) || 0),
+        thu_hours: normalizeTimesheetHours(Number(e.thu_hours) || 0),
+        fri_hours: normalizeTimesheetHours(Number(e.fri_hours) || 0),
+        sat_hours: normalizeTimesheetHours(Number(e.sat_hours) || 0),
+        sun_hours: normalizeTimesheetHours(Number(e.sun_hours) || 0),
+      }))
 
-      if (entriesToInsert.length > 0) {
-        const { error: entriesError } = await supabase
-          .from('timesheet_entries')
-          .insert(entriesToInsert)
-
-        if (entriesError) throw entriesError
-      }
-
-      // Insert/update unbillable entries
       const unbillableToInsert = unbillableEntries.map(e => ({
         timesheet_id: currentTimesheetId!,
         description: e.description,
@@ -548,11 +602,32 @@ export default function WeeklyTimesheetForm({
         sun_hours: normalizeTimesheetHours(Number(e.sun_hours) || 0),
       }))
 
-      const { error: unbillableError } = await supabase
-        .from('timesheet_unbillable')
-        .insert(unbillableToInsert)
+      const { data: previousEntries } = replacingExisting
+        ? await supabase.from('timesheet_entries').select('id').eq('timesheet_id', currentTimesheetId!)
+        : { data: [] as { id: string }[] }
+      const { data: previousUnbillable } = replacingExisting
+        ? await supabase.from('timesheet_unbillable').select('id').eq('timesheet_id', currentTimesheetId!)
+        : { data: [] as { id: string }[] }
 
-      if (unbillableError) throw unbillableError
+      if (entriesToInsert.length > 0) {
+        const { error: entriesError } = await supabase.from('timesheet_entries').insert(entriesToInsert)
+        if (entriesError) throw entriesError
+      }
+      if (unbillableToInsert.length > 0) {
+        const { error: unbillableError } = await supabase.from('timesheet_unbillable').insert(unbillableToInsert)
+        if (unbillableError) throw unbillableError
+      }
+
+      const oldEntryIds = (previousEntries || []).map((row) => row.id)
+      if (oldEntryIds.length > 0) {
+        const { error: deleteEntriesError } = await supabase.from('timesheet_entries').delete().in('id', oldEntryIds)
+        if (deleteEntriesError) throw deleteEntriesError
+      }
+      const oldUnbillableIds = (previousUnbillable || []).map((row) => row.id)
+      if (oldUnbillableIds.length > 0) {
+        const { error: deleteUnbillableError } = await supabase.from('timesheet_unbillable').delete().in('id', oldUnbillableIds)
+        if (deleteUnbillableError) throw deleteUnbillableError
+      }
 
       // After Submit for Approval: check if final approver (no one above) → auto-approve, then go to list
       if (shouldSubmit) {
@@ -983,13 +1058,13 @@ export default function WeeklyTimesheetForm({
                 w-[3.5rem] as the unbillable table so both grids stay visually consistent. */}
             <table className="min-w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
               <colgroup>
-                <col className="w-12" />         {/* reorder up/down */}
-                <col className="w-40" />         {/* Client */}
-                <col className="w-36" />         {/* PO# */}
-                <col className="w-40" />         {/* Task Description */}
-                <col className="w-36" />         {/* System */}
-                <col className="w-36" />         {/* Deliverable */}
-                <col className="w-36" />         {/* Activity */}
+                <col className="w-12" />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
                 {weekDates.days.map((_, idx) => (
                   <col key={idx} className="w-[3.5rem]" />  /* day columns */
                 ))}
@@ -1155,22 +1230,9 @@ export default function WeeklyTimesheetForm({
                     </td>
                     {days.map((day) => (
                       <td key={day} className={cell}>
-                        <input
-                          type="number"
-                          step="0.001"
-                          min="0"
-                          max="24"
-                          value={entry[`${day}_hours`] || ''}
-                          onChange={(e) => {
-                            const raw = e.target.value
-                            if (raw === '') {
-                              updateBillable(entryIdx, { ...entry, [`${day}_hours`]: 0 })
-                              return
-                            }
-                            const parsed = e.target.valueAsNumber
-                            if (isNaN(parsed)) return
-                            updateBillable(entryIdx, { ...entry, [`${day}_hours`]: normalizeTimesheetHours(parsed) })
-                          }}
+                        <HourInput
+                          value={entry[`${day}_hours`] || 0}
+                          onChange={(hours) => updateBillable(entryIdx, { ...entry, [`${day}_hours`]: hours })}
                           className="w-full max-w-[3.25rem] min-w-[3rem] mx-auto px-1 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-sm text-gray-900 bg-white dark:bg-white"
                         />
                       </td>
@@ -1289,24 +1351,9 @@ export default function WeeklyTimesheetForm({
                     </td>
                     {days.map((day) => (
                       <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2">
-                        <input
-                          type="number"
-                          step="0.001"
-                          min="0"
-                          max="24"
-                          value={entry[`${day}_hours`] || ''}
-                          onChange={(e) => {
-                            const raw = e.target.value
-                            if (raw === '') {
-                              updateUnbillableEntry(entryIdx, day, 0)
-                              return
-                            }
-                            const parsed = e.target.valueAsNumber
-                            if (isNaN(parsed)) {
-                              return
-                            }
-                            updateUnbillableEntry(entryIdx, day, normalizeTimesheetHours(parsed))
-                          }}
+                        <HourInput
+                          value={entry[`${day}_hours`] || 0}
+                          onChange={(hours) => updateUnbillableEntry(entryIdx, day, hours)}
                           className="w-full max-w-[3.25rem] min-w-[3rem] mx-auto px-1 py-1 border border-gray-300 dark:border-gray-600 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-white"
                         />
                       </td>

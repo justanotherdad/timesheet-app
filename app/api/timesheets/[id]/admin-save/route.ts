@@ -104,8 +104,8 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    const entriesToInsert = billableEntries
-      .filter((e) => (e.task_description || '').trim() || entryTotal(e) > 0)
+    const rowsToSave = shouldSubmit ? billableEntries.filter(billableRowHasData) : billableEntries
+    const entriesToInsert = rowsToSave
       .map((e, idx) => ({
         timesheet_id: id,
         sort_order: idx,
@@ -138,44 +138,46 @@ export async function POST(
       sun_hours: normalizeTimesheetHours(Number(e.sun_hours) || 0),
     }))
 
-    // Replace line items under service role. If insert fails after delete, retry
-    // insert of the same payload so we do not leave an empty timesheet.
-    const { error: delEntriesError } = await admin.from('timesheet_entries').delete().eq('timesheet_id', id)
-    if (delEntriesError) {
-      return NextResponse.json({ error: delEntriesError.message }, { status: 500 })
+    const { data: previousEntries, error: previousEntriesError } = await admin
+      .from('timesheet_entries')
+      .select('id')
+      .eq('timesheet_id', id)
+    if (previousEntriesError) {
+      return NextResponse.json({ error: previousEntriesError.message }, { status: 500 })
     }
-    const { error: delUnbillableError } = await admin.from('timesheet_unbillable').delete().eq('timesheet_id', id)
-    if (delUnbillableError) {
-      return NextResponse.json({ error: delUnbillableError.message }, { status: 500 })
+    const { data: previousUnbillable, error: previousUnbillableError } = await admin
+      .from('timesheet_unbillable')
+      .select('id')
+      .eq('timesheet_id', id)
+    if (previousUnbillableError) {
+      return NextResponse.json({ error: previousUnbillableError.message }, { status: 500 })
     }
 
     if (entriesToInsert.length > 0) {
-      let { error: entriesError } = await admin.from('timesheet_entries').insert(entriesToInsert)
+      const { error: entriesError } = await admin.from('timesheet_entries').insert(entriesToInsert)
       if (entriesError) {
-        ;({ error: entriesError } = await admin.from('timesheet_entries').insert(entriesToInsert))
+        return NextResponse.json({ error: entriesError.message }, { status: 500 })
       }
-      if (entriesError) {
-        return NextResponse.json(
-          {
-            error: `Failed to save billable rows after clearing previous ones: ${entriesError.message}`,
-          },
-          { status: 500 }
-        )
+    }
+    if (unbillableToInsert.length > 0) {
+      const { error: unbillableError } = await admin.from('timesheet_unbillable').insert(unbillableToInsert)
+      if (unbillableError) {
+        return NextResponse.json({ error: unbillableError.message }, { status: 500 })
       }
     }
 
-    if (unbillableToInsert.length > 0) {
-      let { error: unbillableError } = await admin.from('timesheet_unbillable').insert(unbillableToInsert)
-      if (unbillableError) {
-        ;({ error: unbillableError } = await admin.from('timesheet_unbillable').insert(unbillableToInsert))
+    const oldEntryIds = (previousEntries || []).map((row) => row.id as string)
+    if (oldEntryIds.length > 0) {
+      const { error: delEntriesError } = await admin.from('timesheet_entries').delete().in('id', oldEntryIds)
+      if (delEntriesError) {
+        return NextResponse.json({ error: delEntriesError.message }, { status: 500 })
       }
-      if (unbillableError) {
-        return NextResponse.json(
-          {
-            error: `Failed to save non-billable rows after clearing previous ones: ${unbillableError.message}`,
-          },
-          { status: 500 }
-        )
+    }
+    const oldUnbillableIds = (previousUnbillable || []).map((row) => row.id as string)
+    if (oldUnbillableIds.length > 0) {
+      const { error: delUnbillableError } = await admin.from('timesheet_unbillable').delete().in('id', oldUnbillableIds)
+      if (delUnbillableError) {
+        return NextResponse.json({ error: delUnbillableError.message }, { status: 500 })
       }
     }
 
@@ -197,8 +199,8 @@ export async function POST(
   }
 }
 
-function entryTotal(e: BillablePayload): number {
-  return (
+function billableRowHasData(e: BillablePayload): boolean {
+  const hours =
     Number(e.mon_hours || 0) +
     Number(e.tue_hours || 0) +
     Number(e.wed_hours || 0) +
@@ -206,5 +208,14 @@ function entryTotal(e: BillablePayload): number {
     Number(e.fri_hours || 0) +
     Number(e.sat_hours || 0) +
     Number(e.sun_hours || 0)
+  return Boolean(
+    e.client_project_id ||
+      e.po_id ||
+      (e.task_description || '').trim() ||
+      e.system_id ||
+      (e.system_name || '').trim() ||
+      e.deliverable_id ||
+      e.activity_id ||
+      hours > 0
   )
 }
