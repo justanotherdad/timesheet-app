@@ -645,7 +645,7 @@ function GuideContent() {
         </p>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
           <li><strong>Request:</strong> Dashboard → <strong>Request PTO</strong>, or the <strong>menu</strong> (☰). External employees do not see this. Choose a type (Paid Time Off, Vacation, Bereavement, Jury Duty, Comp Time Used, or type your own), start and end dates, and hours per day (up to 8). You can cancel a request while it is still pending.</li>
-          <li><strong>Review:</strong> people named under <strong>Manage Organization</strong> → <strong>Company Information</strong> → <strong>PTO Request Reviewers</strong> see a <strong>PTO Requests</strong> tile and menu item with a badge. The first Approve or Deny removes the request from every reviewer’s list. Deny requires a short reason, which the employee can see.</li>
+          <li><strong>Review:</strong> people named under <strong>Manage Organization</strong> → <strong>Company Information</strong> → <strong>PTO Request Reviewers</strong> see a <strong>PTO Requests</strong> tile and menu item with a badge. The first Approve or Deny settles the request for every reviewer and moves it to <strong>History</strong>, where you can filter by employee, status, type, and dates. Deny requires a short reason, which the employee can see.</li>
         </ul>
       </section>
 

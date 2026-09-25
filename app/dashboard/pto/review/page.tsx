@@ -23,7 +23,7 @@ export default async function PtoReviewPage() {
       <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-3xl">
           Pending leave requests from internal employees. The first Approve or Deny settles the
-          request for every reviewer and removes it from this list.
+          request for every reviewer. Settled requests stay on History.
         </p>
         <PtoReviewClient />
       </div>

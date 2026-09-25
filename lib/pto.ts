@@ -14,6 +14,25 @@ export interface PtoQueueRow extends PtoRequest {
   employee_name: string
 }
 
+export interface PtoHistoryRow extends PtoQueueRow {
+  reviewer_name: string | null
+}
+
+async function loadProfileNames(admin: SupabaseClient, ids: string[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>()
+  const unique = [...new Set(ids.filter((id) => id.length > 0))]
+  if (unique.length === 0) return names
+  const { data: profiles } = await admin.from('user_profiles').select('id, name').in('id', unique)
+  for (const p of profiles || []) {
+    names.set((p as { id: string }).id, (p as { name: string | null }).name || 'Unknown')
+  }
+  return names
+}
+
+function decisionTime(row: PtoRequest): string {
+  return row.reviewed_at || row.cancelled_at || row.submitted_at
+}
+
 function mapRow(row: Record<string, unknown>): PtoRequest {
   return {
     id: String(row.id),
@@ -61,15 +80,27 @@ export async function listPendingPtoQueue(admin: SupabaseClient): Promise<PtoQue
     .order('submitted_at', { ascending: true })
   if (error) throw error
   const rows = (data || []).map((row) => mapRow(row as Record<string, unknown>))
-  const userIds = [...new Set(rows.map((r) => r.user_id))]
-  const names = new Map<string, string>()
-  if (userIds.length > 0) {
-    const { data: profiles } = await admin.from('user_profiles').select('id, name').in('id', userIds)
-    for (const p of profiles || []) {
-      names.set((p as { id: string }).id, (p as { name: string | null }).name || 'Unknown')
-    }
-  }
+  const names = await loadProfileNames(admin, rows.map((r) => r.user_id))
   return rows.map((r) => ({ ...r, employee_name: names.get(r.user_id) || 'Unknown' }))
+}
+
+export async function listReviewedPtoQueue(admin: SupabaseClient): Promise<PtoHistoryRow[]> {
+  const { data, error } = await admin
+    .from('pto_requests')
+    .select('*')
+    .neq('status', 'pending')
+  if (error) throw error
+  const rows = (data || []).map((row) => mapRow(row as Record<string, unknown>))
+  rows.sort((a, b) => decisionTime(b).localeCompare(decisionTime(a)))
+  const names = await loadProfileNames(
+    admin,
+    rows.flatMap((r) => [r.user_id, r.reviewed_by_id || ''])
+  )
+  return rows.map((r) => ({
+    ...r,
+    employee_name: names.get(r.user_id) || 'Unknown',
+    reviewer_name: r.reviewed_by_id ? names.get(r.reviewed_by_id) || 'Unknown' : null,
+  }))
 }
 
 export interface CreatePtoInput {
