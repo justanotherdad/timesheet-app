@@ -63,7 +63,21 @@ function collectGuideMatches(root: HTMLElement, query: string): { ranges: Range[
   return { ranges, sectionIds }
 }
 
+function ensureGuideHighlightStyles() {
+  if (typeof document === 'undefined') return
+  if (document.getElementById('guide-search-highlight-style')) return
+  const style = document.createElement('style')
+  style.id = 'guide-search-highlight-style'
+  // Injected at runtime so the production CSS parser never has to accept ::highlight().
+  style.textContent = `
+    ::highlight(guide-search) { background-color: #fde68a; color: #111827; }
+    ::highlight(guide-search-active) { background-color: #f59e0b; color: #111827; }
+  `
+  document.head.appendChild(style)
+}
+
 function paintGuideHighlights(ranges: Range[], activeIndex: number) {
+  ensureGuideHighlightStyles()
   if (typeof CSS === 'undefined' || !('highlights' in CSS) || typeof Highlight === 'undefined') return
   CSS.highlights.delete('guide-search')
   CSS.highlights.delete('guide-search-active')

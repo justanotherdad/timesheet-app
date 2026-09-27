@@ -30,16 +30,6 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Site guide search. Highlight ranges are registered in GuideModal. */
-::highlight(guide-search) {
-  background-color: #fde68a;
-  color: #111827;
-}
-::highlight(guide-search-active) {
-  background-color: #f59e0b;
-  color: #111827;
-}
-
 /* Bulletin Board rich content (editor + rendered posts) */
 .bulletin-content,
 .bulletin-editor.ProseMirror {
