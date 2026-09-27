@@ -1,7 +1,7 @@
 'use client'
 
-import { useRef, useCallback } from 'react'
-import { X, BookOpen } from 'lucide-react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { X, BookOpen, Search, ChevronUp, ChevronDown } from 'lucide-react'
 
 const SECTIONS: { id: string; title: string }[] = [
   { id: 'getting-started', title: 'Getting Started' },
@@ -25,16 +25,257 @@ interface GuideModalProps {
   onClose: () => void
 }
 
+function collectGuideMatches(root: HTMLElement, query: string): { ranges: Range[]; sectionIds: Set<string> } {
+  const ranges: Range[] = []
+  const sectionIds = new Set<string>()
+  const needle = query.trim().toLowerCase()
+  if (!needle) return { ranges, sectionIds }
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement
+      if (!parent) return NodeFilter.FILTER_REJECT
+      if (parent.closest('[data-guide-chrome]')) return NodeFilter.FILTER_REJECT
+      if (!node.textContent) return NodeFilter.FILTER_REJECT
+      return NodeFilter.FILTER_ACCEPT
+    },
+  })
+
+  let current = walker.nextNode()
+  while (current) {
+    const text = current.textContent || ''
+    const hay = text.toLowerCase()
+    let from = 0
+    while (from <= hay.length - needle.length) {
+      const idx = hay.indexOf(needle, from)
+      if (idx === -1) break
+      const range = document.createRange()
+      range.setStart(current, idx)
+      range.setEnd(current, idx + needle.length)
+      ranges.push(range)
+      const sectionId = current.parentElement?.closest('[data-section]')?.getAttribute('data-section')
+      if (sectionId) sectionIds.add(sectionId)
+      from = idx + needle.length
+    }
+    current = walker.nextNode()
+  }
+
+  return { ranges, sectionIds }
+}
+
+function paintGuideHighlights(ranges: Range[], activeIndex: number) {
+  if (typeof CSS === 'undefined' || !('highlights' in CSS) || typeof Highlight === 'undefined') return
+  CSS.highlights.delete('guide-search')
+  CSS.highlights.delete('guide-search-active')
+  if (!ranges.length || activeIndex < 0) return
+
+  const rest = ranges.filter((_, index) => index !== activeIndex)
+  if (rest.length) {
+    const all = new Highlight(...rest)
+    all.priority = 0
+    CSS.highlights.set('guide-search', all)
+  }
+  const active = ranges[activeIndex]
+  if (active) {
+    const current = new Highlight(active)
+    current.priority = 1
+    CSS.highlights.set('guide-search-active', current)
+  }
+}
+
+function scrollRangeIntoView(range: Range, container: HTMLElement) {
+  const node = range.startContainer
+  const el = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement
+  if (!el) return
+  const elRect = el.getBoundingClientRect()
+  const containerRect = container.getBoundingClientRect()
+  const delta = elRect.top - containerRect.top - containerRect.height / 2 + elRect.height / 2
+  container.scrollBy({ top: delta, behavior: 'smooth' })
+}
+
+function GuideSearch({
+  id,
+  query,
+  matchCount,
+  activeMatch,
+  onQueryChange,
+  onPrev,
+  onNext,
+  onClear,
+}: {
+  id: string
+  query: string
+  matchCount: number
+  activeMatch: number
+  onQueryChange: (value: string) => void
+  onPrev: () => void
+  onNext: () => void
+  onClear: () => void
+}) {
+  const trimmed = query.trim()
+  return (
+    <div className="mb-3">
+      <label htmlFor={id} className="sr-only">
+        Search the site guide
+      </label>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+        <input
+          id={id}
+          type="search"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              e.stopPropagation()
+              onClear()
+              return
+            }
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              if (e.shiftKey) onPrev()
+              else onNext()
+            }
+          }}
+          placeholder="Search guide"
+          className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-8 pr-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+        />
+      </div>
+      {trimmed && (
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {matchCount === 0 ? 'No matches' : `${activeMatch + 1} of ${matchCount}`}
+          </p>
+          {matchCount > 0 && (
+            <div className="flex gap-0.5">
+              <button
+                type="button"
+                onClick={onPrev}
+                className="rounded p-1 text-gray-500 hover:bg-gray-200 hover:text-gray-800 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+                aria-label="Previous match"
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={onNext}
+                className="rounded p-1 text-gray-500 hover:bg-gray-200 hover:text-gray-800 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+                aria-label="Next match"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function GuideModal({ isOpen, onClose }: GuideModalProps) {
   const contentRef = useRef<HTMLDivElement>(null)
+  const rangesRef = useRef<Range[]>([])
+  const [query, setQuery] = useState('')
+  const [matchCount, setMatchCount] = useState(0)
+  const [activeMatch, setActiveMatch] = useState(0)
+  const [matchingIds, setMatchingIds] = useState<Set<string> | null>(null)
 
-  const scrollToSection = useCallback((id: string) => {
-    if (!contentRef.current) return
-    const el = contentRef.current.querySelector(`[data-section="${id}"]`)
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const trimmedQuery = query.trim()
+
+  const focusMatch = useCallback((index: number) => {
+    const ranges = rangesRef.current
+    const container = contentRef.current
+    if (!ranges.length || !container) {
+      paintGuideHighlights([], -1)
+      return
+    }
+    const next = ((index % ranges.length) + ranges.length) % ranges.length
+    paintGuideHighlights(ranges, next)
+    scrollRangeIntoView(ranges[next], container)
   }, [])
 
+  useEffect(() => {
+    if (!isOpen || !query) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setQuery('')
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [isOpen, query])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const root = contentRef.current
+    if (!root || !trimmedQuery) {
+      rangesRef.current = []
+      setMatchCount(0)
+      setActiveMatch(0)
+      setMatchingIds(null)
+      paintGuideHighlights([], -1)
+      return
+    }
+
+    const found = collectGuideMatches(root, trimmedQuery)
+    rangesRef.current = found.ranges
+    setMatchCount(found.ranges.length)
+    setActiveMatch(0)
+    setMatchingIds(found.sectionIds)
+    if (found.ranges.length) focusMatch(0)
+    else paintGuideHighlights([], -1)
+
+    return () => {
+      paintGuideHighlights([], -1)
+    }
+  }, [trimmedQuery, isOpen, focusMatch])
+
+  const goToMatch = useCallback(
+    (delta: number) => {
+      const total = rangesRef.current.length
+      if (!total) return
+      const next = (activeMatch + delta + total) % total
+      setActiveMatch(next)
+      focusMatch(next)
+    },
+    [activeMatch, focusMatch]
+  )
+
+  const scrollToSection = useCallback(
+    (id: string) => {
+      const ranges = rangesRef.current
+      const matchIndex = ranges.findIndex((range) =>
+        range.startContainer.parentElement?.closest(`[data-section="${id}"]`)
+      )
+      if (matchIndex >= 0) {
+        setActiveMatch(matchIndex)
+        focusMatch(matchIndex)
+        return
+      }
+      contentRef.current
+        ?.querySelector(`[data-section="${id}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    },
+    [focusMatch]
+  )
+
+  const visibleSections =
+    !trimmedQuery || matchingIds === null
+      ? SECTIONS
+      : SECTIONS.filter((section) => matchingIds.has(section.id))
+
   if (!isOpen) return null
+
+  const searchProps = {
+    query,
+    matchCount,
+    activeMatch,
+    onQueryChange: setQuery,
+    onPrev: () => goToMatch(-1),
+    onNext: () => goToMatch(1),
+    onClear: () => setQuery(''),
+  }
 
   return (
     <div
@@ -44,6 +285,13 @@ export default function GuideModal({ isOpen, onClose }: GuideModalProps) {
       <div
         className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl flex flex-col w-full max-w-4xl max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && query) {
+            e.preventDefault()
+            e.stopPropagation()
+            setQuery('')
+          }
+        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
@@ -66,26 +314,33 @@ export default function GuideModal({ isOpen, onClose }: GuideModalProps) {
         <div className="flex flex-1 min-h-0">
           {/* TOC - sidebar on desktop, compact on mobile */}
           <nav
-            className="shrink-0 w-56 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 overflow-y-auto hidden sm:block"
+            className="hidden sm:flex shrink-0 w-56 flex-col border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 min-h-0"
             aria-label="Guide sections"
           >
-            <div className="sticky top-0 py-3 px-3">
+            <div className="shrink-0 px-3 pt-3">
+              <GuideSearch id="guide-search-desktop" {...searchProps} />
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 pb-3">
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                 Contents
               </p>
-              <ul className="space-y-0.5">
-                {SECTIONS.map(({ id, title }) => (
-                  <li key={id}>
-                    <button
-                      type="button"
-                      onClick={() => scrollToSection(id)}
-                      className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
-                    >
-                      {title}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              {trimmedQuery && matchingIds !== null && matchCount === 0 ? (
+                <p className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">No matches</p>
+              ) : (
+                <ul className="space-y-0.5">
+                  {visibleSections.map(({ id, title }) => (
+                    <li key={id}>
+                      <button
+                        type="button"
+                        onClick={() => scrollToSection(id)}
+                        className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                      >
+                        {title}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </nav>
 
@@ -103,22 +358,30 @@ export default function GuideModal({ isOpen, onClose }: GuideModalProps) {
             </p>
 
             {/* Mobile TOC */}
-            <div className="sm:hidden mb-6 p-3 rounded-lg bg-gray-100 dark:bg-gray-700/50">
+            <div
+              className="sm:hidden mb-6 p-3 rounded-lg bg-gray-100 dark:bg-gray-700/50"
+              data-guide-chrome
+            >
+              <GuideSearch id="guide-search-mobile" {...searchProps} />
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                 Jump to section
               </p>
-              <div className="flex flex-wrap gap-2">
-                {SECTIONS.map(({ id, title }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => scrollToSection(id)}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 text-gray-700 dark:text-gray-300"
-                  >
-                    {title.length > 25 ? title.slice(0, 24) + '…' : title}
-                  </button>
-                ))}
-              </div>
+              {trimmedQuery && matchingIds !== null && matchCount === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No matches</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {visibleSections.map(({ id, title }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => scrollToSection(id)}
+                      className="px-3 py-1.5 rounded-md text-xs font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 text-gray-700 dark:text-gray-300"
+                    >
+                      {title.length > 25 ? title.slice(0, 24) + '…' : title}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <GuideContent />
@@ -129,7 +392,7 @@ export default function GuideModal({ isOpen, onClose }: GuideModalProps) {
   )
 }
 
-function GuideContent() {
+const GuideContent = memo(function GuideContent() {
   return (
     <div className="space-y-8 prose prose-sm dark:prose-invert max-w-none prose-headings:scroll-mt-4">
       <section data-section="getting-started" className="scroll-mt-4">
@@ -672,4 +935,4 @@ function GuideContent() {
       </section>
     </div>
   )
-}
+})

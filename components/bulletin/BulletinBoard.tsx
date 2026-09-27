@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Megaphone, Pin, Plus } from 'lucide-react'
+import { Megaphone, Pin, Plus, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { BulletinAudience, BulletinPost } from '@/types/database'
 import { sanitizeBulletinHtml } from '@/lib/bulletin'
@@ -19,6 +19,17 @@ const BulletinEditorModal = dynamic(() => import('./BulletinEditorModal'), {
     </div>
   ),
 })
+
+const EXCERPT_LENGTH = 180
+
+function postPreview(html: string): { excerpt: string; imageSrc: string | null } {
+  const doc = new DOMParser().parseFromString(html || '', 'text/html')
+  const imageSrc = doc.querySelector('img')?.getAttribute('src') || null
+  const text = (doc.body.textContent || '').replace(/\s+/g, ' ').trim()
+  const excerpt =
+    text.length > EXCERPT_LENGTH ? `${text.slice(0, EXCERPT_LENGTH).trimEnd()}…` : text
+  return { excerpt, imageSrc }
+}
 
 type AudienceMode = 'admin' | 'employee' | 'client'
 
@@ -40,6 +51,8 @@ export default function BulletinBoard({
   // undefined = closed; null = new; object = edit
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [reading, setReading] = useState<BulletinPost | null>(null)
+  const [previewsReady, setPreviewsReady] = useState(false)
   const [activeTab, setActiveTab] = useState<BulletinAudience>(
     audienceMode === 'client' ? 'client' : 'employee'
   )
@@ -47,6 +60,10 @@ export default function BulletinBoard({
   useEffect(() => {
     setPosts(initialPosts)
   }, [initialPosts])
+
+  useEffect(() => {
+    setPreviewsReady(true)
+  }, [])
 
   const showTabs = audienceMode === 'admin' && canEdit
 
@@ -67,6 +84,23 @@ export default function BulletinBoard({
       }),
     [visiblePosts]
   )
+
+  const pinned = useMemo(() => sorted.filter((post) => post.is_pinned), [sorted])
+  const unpinned = useMemo(() => sorted.filter((post) => !post.is_pinned), [sorted])
+
+  useEffect(() => {
+    if (reading && !sorted.some((post) => post.id === reading.id)) {
+      setReading(null)
+    }
+  }, [reading, sorted])
+  const previews = useMemo(() => {
+    const next = new Map<string, { excerpt: string; imageSrc: string | null }>()
+    if (!previewsReady) return next
+    for (const post of unpinned) {
+      next.set(post.id, postPreview(post.body_html || ''))
+    }
+    return next
+  }, [unpinned, previewsReady])
 
   const onSaved = (post: BulletinPost) => {
     setPosts((prev) => {
@@ -188,58 +222,19 @@ export default function BulletinBoard({
         </p>
       ) : (
         <div className="space-y-4">
-          {sorted.map((post) => (
+          {pinned.map((post) => (
             <article
               key={post.id}
               className="rounded-lg border border-gray-200 dark:border-gray-700 p-4"
             >
-              <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    {post.is_pinned && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
-                        <Pin className="h-3 w-3" />
-                        Pinned
-                      </span>
-                    )}
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {post.title}
-                    </h3>
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {formatDate(post.created_at)}
-                    {post.author_name ? ` · ${post.author_name}` : ''}
-                  </p>
-                </div>
-                {canEdit && (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={busyId === post.id}
-                      onClick={() => void togglePin(post)}
-                      className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
-                    >
-                      {post.is_pinned ? 'Unpin' : 'Pin'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyId === post.id}
-                      onClick={() => setEditing(post)}
-                      className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyId === post.id}
-                      onClick={() => void remove(post.id)}
-                      className="text-xs sm:text-sm text-red-600 hover:text-red-700 dark:text-red-400"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
+              <PostHeader
+                post={post}
+                canEdit={canEdit}
+                busy={busyId === post.id}
+                onPin={() => void togglePin(post)}
+                onEdit={() => setEditing(post)}
+                onDelete={() => void remove(post.id)}
+              />
               <div
                 className="bulletin-content max-w-none text-gray-800 dark:text-gray-200"
                 dangerouslySetInnerHTML={{
@@ -248,7 +243,53 @@ export default function BulletinBoard({
               />
             </article>
           ))}
+
+          {unpinned.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {unpinned.map((post) => {
+                const preview = previews.get(post.id)
+                return (
+                  <article
+                    key={post.id}
+                    className="flex h-full flex-col rounded-lg border border-gray-200 dark:border-gray-700 p-4"
+                  >
+                    <PostHeader
+                      post={post}
+                      canEdit={canEdit}
+                      busy={busyId === post.id}
+                      onPin={() => void togglePin(post)}
+                      onEdit={() => setEditing(post)}
+                      onDelete={() => void remove(post.id)}
+                    />
+                    {preview?.imageSrc && (
+                      <img
+                        src={preview.imageSrc}
+                        alt=""
+                        className="mt-3 h-28 w-full rounded-md object-cover"
+                      />
+                    )}
+                    {preview?.excerpt && (
+                      <p className="mt-3 line-clamp-3 text-sm text-gray-700 dark:text-gray-300">
+                        {preview.excerpt}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setReading(post)}
+                      className="mt-auto pt-3 text-left text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                    >
+                      Read more
+                    </button>
+                  </article>
+                )
+              })}
+            </div>
+          )}
         </div>
+      )}
+
+      {reading && (
+        <BulletinPostDialog post={reading} onClose={() => setReading(null)} />
       )}
 
       {editing !== undefined && (
@@ -259,6 +300,134 @@ export default function BulletinBoard({
           onSaved={onSaved}
         />
       )}
+    </div>
+  )
+}
+
+function PostHeader({
+  post,
+  canEdit,
+  busy,
+  onPin,
+  onEdit,
+  onDelete,
+}: {
+  post: BulletinPost
+  canEdit: boolean
+  busy: boolean
+  onPin: () => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2 mb-1">
+          {post.is_pinned && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
+              <Pin className="h-3 w-3" />
+              Pinned
+            </span>
+          )}
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {post.title}
+          </h3>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {formatDate(post.created_at)}
+          {post.author_name ? ` · ${post.author_name}` : ''}
+        </p>
+      </div>
+      {canEdit && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onPin}
+            className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+          >
+            {post.is_pinned ? 'Unpin' : 'Pin'}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onEdit}
+            className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onDelete}
+            className="text-xs sm:text-sm text-red-600 hover:text-red-700 dark:text-red-400"
+          >
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BulletinPostDialog({
+  post,
+  onClose,
+}: {
+  post: BulletinPost
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-2 sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bulletin-post-title"
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl flex flex-col w-full max-w-3xl max-h-[90vh] overflow-hidden"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 shrink-0 px-4 sm:px-6 py-3 border-b border-gray-200 dark:border-gray-700">
+          <div className="min-w-0">
+            <h2
+              id="bulletin-post-title"
+              className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+            >
+              {post.title}
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {formatDate(post.created_at)}
+              {post.author_name ? ` · ${post.author_name}` : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+            aria-label="Close post"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-4 sm:px-6 py-4">
+          <div
+            className="bulletin-content max-w-none text-gray-800 dark:text-gray-200"
+            dangerouslySetInnerHTML={{
+              __html: sanitizeBulletinHtml(post.body_html || ''),
+            }}
+          />
+        </div>
+      </div>
     </div>
   )
 }
