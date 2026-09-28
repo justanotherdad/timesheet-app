@@ -8,7 +8,7 @@ import type { PtoRequest, PtoRequestStatus } from '@/types/database'
 
 type QueueRow = PtoRequest & { employee_name: string }
 type HistoryRow = QueueRow & { reviewer_name: string | null }
-type Tab = 'queue' | 'history'
+type Tab = 'queue' | 'history' | 'calendar'
 type StatusFilter = 'all' | Exclude<PtoRequestStatus, 'pending'>
 
 function formatRange(start: string, end: string): string {
@@ -36,7 +36,35 @@ function decisionLine(row: HistoryRow): string {
 }
 
 const fieldClass =
-  'px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700'
+  'h-10 box-border px-3 py-0 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700'
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
+
+function toDateKey(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function formatDayHours(hours: number): string {
+  if (!Number.isFinite(hours)) return ''
+  const rounded = Math.round(hours * 100) / 100
+  return `${rounded}h`
+}
+
+/** Monday-first month grid, including leading and trailing days. Drops a trailing week that sits entirely in the next month. */
+function calendarDays(year: number, month: number): Date[] {
+  const first = new Date(year, month, 1)
+  const mondayOffset = (first.getDay() + 6) % 7
+  const start = new Date(year, month, 1 - mondayOffset)
+  const days: Date[] = []
+  for (let i = 0; i < 42; i++) {
+    days.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i))
+  }
+  const lastWeekInNextMonth = days.slice(35).every((day) => day.getMonth() !== month)
+  return lastWeekInNextMonth ? days.slice(0, 35) : days
+}
 
 export default function PtoReviewClient() {
   const router = useRouter()
@@ -55,6 +83,11 @@ export default function PtoReviewClient() {
   const [leaveType, setLeaveType] = useState('all')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [calendarEmployeeId, setCalendarEmployeeId] = useState('all')
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = !!opts?.silent
@@ -211,6 +244,9 @@ export default function PtoReviewClient() {
         <button type="button" role="tab" aria-selected={tab === 'history'} className={tabClass(tab === 'history')} onClick={() => setTab('history')}>
           History
         </button>
+        <button type="button" role="tab" aria-selected={tab === 'calendar'} className={tabClass(tab === 'calendar')} onClick={() => setTab('calendar')}>
+          Calendar
+        </button>
       </div>
 
       {tab === 'queue' ? (
@@ -233,7 +269,7 @@ export default function PtoReviewClient() {
             setDenyReason('')
           }}
         />
-      ) : (
+      ) : tab === 'history' ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -253,7 +289,7 @@ export default function PtoReviewClient() {
             </label>
             <div>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</p>
-              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Status">
+              <div className="flex h-10 flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Status">
                 {(
                   [
                     ['all', 'All'],
@@ -353,7 +389,201 @@ export default function PtoReviewClient() {
             </div>
           ))}
         </div>
+      ) : (
+        <CalendarPanel
+          pending={rows}
+          history={history}
+          loading={loading || historyLoading}
+          error={historyError}
+          employeeId={calendarEmployeeId}
+          onEmployeeId={setCalendarEmployeeId}
+          month={calendarMonth}
+          onMonth={setCalendarMonth}
+        />
       )}
+    </div>
+  )
+}
+
+type CalendarEntry = {
+  id: string
+  user_id: string
+  employee_name: string
+  leave_type: string
+  hours_per_day: number
+  start_date: string
+  end_date: string
+  status: 'approved' | 'pending'
+}
+
+function CalendarPanel({
+  pending,
+  history,
+  loading,
+  error,
+  employeeId,
+  onEmployeeId,
+  month,
+  onMonth,
+}: {
+  pending: QueueRow[]
+  history: HistoryRow[]
+  loading: boolean
+  error: string | null
+  employeeId: string
+  onEmployeeId: (id: string) => void
+  month: Date
+  onMonth: (month: Date) => void
+}) {
+  const year = month.getFullYear()
+  const monthIndex = month.getMonth()
+  const days = useMemo(() => calendarDays(year, monthIndex), [year, monthIndex])
+  const todayKey = toDateKey(new Date())
+
+  const entries = useMemo(() => {
+    const approved: CalendarEntry[] = history
+      .filter((row) => row.status === 'approved')
+      .map((row) => ({
+        id: row.id,
+        user_id: row.user_id,
+        employee_name: row.employee_name,
+        leave_type: row.leave_type,
+        hours_per_day: row.hours_per_day,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        status: 'approved',
+      }))
+    const waiting: CalendarEntry[] = pending.map((row) => ({
+      id: row.id,
+      user_id: row.user_id,
+      employee_name: row.employee_name,
+      leave_type: row.leave_type,
+      hours_per_day: row.hours_per_day,
+      start_date: row.start_date,
+      end_date: row.end_date,
+      status: 'pending',
+    }))
+    return [...approved, ...waiting]
+  }, [history, pending])
+
+  const employees = useMemo(() => {
+    const byId = new Map<string, string>()
+    for (const entry of entries) byId.set(entry.user_id, entry.employee_name)
+    return [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  }, [entries])
+
+  const visible = employeeId === 'all' ? entries : entries.filter((entry) => entry.user_id === employeeId)
+  const title = month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Previous month"
+              onClick={() => onMonth(new Date(year, monthIndex - 1, 1))}
+              className="h-10 w-10 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              ‹
+            </button>
+            <h2 className="min-w-[11rem] text-center text-base font-semibold text-gray-900 dark:text-gray-100">
+              {title}
+            </h2>
+            <button
+              type="button"
+              aria-label="Next month"
+              onClick={() => onMonth(new Date(year, monthIndex + 1, 1))}
+              className="h-10 w-10 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              ›
+            </button>
+          </div>
+          <p className="mt-2 flex gap-4 text-sm font-semibold">
+            <span className="text-green-700 dark:text-green-400">Approved</span>
+            <span className="text-amber-700 dark:text-amber-400">Pending</span>
+          </p>
+        </div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Employee
+          <select
+            value={employeeId}
+            onChange={(e) => onEmployeeId(e.target.value)}
+            className={`mt-1 block ${fieldClass}`}
+          >
+            <option value="all">All</option>
+            {employees.map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {loading && visible.length === 0 && !error && (
+        <p className="text-gray-600 dark:text-gray-400">Loading…</p>
+      )}
+
+      <div className="overflow-x-auto">
+        <div className="grid min-w-[44rem] grid-cols-7 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          {WEEKDAYS.map((label, index) => (
+            <div
+              key={label}
+              className={`bg-gray-50 dark:bg-gray-900 px-2 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 ${
+                index === 0 ? '' : 'border-l border-gray-200 dark:border-gray-700'
+              }`}
+            >
+              {label}
+            </div>
+          ))}
+          {days.map((day) => {
+            const key = toDateKey(day)
+            const inMonth = day.getMonth() === monthIndex
+            const onDay = visible
+              .filter((entry) => entry.start_date <= key && entry.end_date >= key)
+              .sort((a, b) => a.employee_name.localeCompare(b.employee_name) || a.leave_type.localeCompare(b.leave_type))
+            return (
+              <div
+                key={key}
+                className={`min-h-[6.5rem] border-t border-gray-200 dark:border-gray-700 p-1.5 ${
+                  inMonth ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900/60'
+                } ${day.getDay() === 1 ? '' : 'border-l border-gray-200 dark:border-gray-700'}`}
+              >
+                <p
+                  className={`text-xs font-medium ${
+                    key === todayKey
+                      ? 'text-blue-600 dark:text-blue-400'
+                      : inMonth
+                        ? 'text-gray-900 dark:text-gray-100'
+                        : 'text-gray-400 dark:text-gray-500'
+                  }`}
+                >
+                  {day.getDate()}
+                </p>
+                <div className="mt-1 space-y-1.5">
+                  {onDay.map((entry) => (
+                    <p
+                      key={entry.id}
+                      className={`text-[11px] leading-snug break-words ${
+                        entry.status === 'approved'
+                          ? 'text-green-700 dark:text-green-400'
+                          : 'text-amber-700 dark:text-amber-400'
+                      }`}
+                    >
+                      <span className="font-semibold">{entry.employee_name}</span>
+                      <br />
+                      {entry.leave_type} · {formatDayHours(entry.hours_per_day)}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
