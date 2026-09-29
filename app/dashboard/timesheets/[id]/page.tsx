@@ -465,10 +465,10 @@ export default async function TimesheetDetailPage({
             {entries && entries.length > 0 && (
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
-                  <table className="w-full min-w-[72rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+                  <table className="w-full min-w-[78rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
                     <colgroup>
                       <col />
-                      <col />
+                      <col className="w-40" />
                       <col />
                       <col />
                       <col />
@@ -483,9 +483,9 @@ export default async function TimesheetDetailPage({
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Client/Project</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">PO#</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Task Description</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">System</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Deliverable</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Activity</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">System</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">Deliverable</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">Activity</th>
                         {weekDates.days.map((day, idx) => (
                           <th key={idx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                             <div>{format(day, 'EEE')}</div>
@@ -501,7 +501,7 @@ export default async function TimesheetDetailPage({
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
                             {entry.sites?.name || 'N/A'}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">
                             {entry.po_id && budgetAccessPoIds.includes(entry.po_id) ? (
                               <POLinkWithBalanceTooltip
                                 poId={entry.po_id}
@@ -519,13 +519,13 @@ export default async function TimesheetDetailPage({
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
                             {entry.task_description}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">
                             {entry.system_name || entry.systems?.name || '—'}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">
                             {entry.deliverables?.name || '—'}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">
                             {entry.activities?.name || '—'}
                           </td>
                           {days.map((day) => (
@@ -579,7 +579,7 @@ export default async function TimesheetDetailPage({
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Non-Billable Time</h2>
                     {/* Same colgroup as billable so Mon–Sun line up. Type/Description
                         span the six left columns. */}
-                    <table className="w-full min-w-[72rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+                    <table className="w-full min-w-[78rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
                       <colgroup>
                         <col />
                         <col />

@@ -1060,11 +1060,11 @@ export default function WeeklyTimesheetForm({
         <div className="relative">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
 
-            <table className="w-full min-w-[78rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+            <table className="w-full min-w-[84rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
               <colgroup>
                 <col className="w-12" />
                 <col />
-                <col />
+                <col className="w-40" />
                 <col />
                 <col />
                 <col />
@@ -1084,9 +1084,9 @@ export default function WeeklyTimesheetForm({
                   <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Client / Project #</th>
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">PO#</th>
                   <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Task Description</th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">System</th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Deliverable</th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Activity</th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">System</th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">Deliverable</th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">Activity</th>
                   {weekDates.days.map((day, idx) => (
                     <th key={idx} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                       <div>{format(day, 'EEE')}</div>
@@ -1299,7 +1299,7 @@ export default function WeeklyTimesheetForm({
           ))}
             {/* Same colgroup as billable (grip + 6 fields + days + total + actions)
                 so Mon–Sun line up. Type/Description span the left columns. */}
-            <table className="w-full min-w-[78rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+            <table className="w-full min-w-[84rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
               <colgroup>
                 <col className="w-12" />
                 <col />

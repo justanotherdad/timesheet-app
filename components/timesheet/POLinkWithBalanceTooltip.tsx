@@ -60,10 +60,10 @@ export default function POLinkWithBalanceTooltip({ poId, poNumber, projectName }
       : '—'
 
   return (
-    <span className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+    <span className="relative block max-w-full" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       <Link
         href={`/dashboard/budget?poId=${poId}`}
-        className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+        className="text-blue-600 dark:text-blue-400 hover:underline font-medium break-words"
       >
         {poNumber}
       </Link>
