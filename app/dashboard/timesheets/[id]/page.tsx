@@ -459,30 +459,34 @@ export default async function TimesheetDetailPage({
               </span>
             </div>
 
-            {/* Billable and non-billable share one scroll and the same day/total
-                column widths, so Monday lines up with Monday. */}
+            {/* Billable and non-billable share one scroll and the same column
+                widths, so Monday lines up with Monday. Client and Activity are
+                fixed and wrap; Task, System, and Deliverable share the rest. */}
             <div className="overflow-x-auto">
             {entries && entries.length > 0 && (
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
-                  <table className="w-full min-w-[78rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+                  <table className="w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
                     <colgroup>
-                      <col />
+                      <col className="w-24" />
                       <col className="w-40" />
                       <col />
                       <col />
                       <col />
-                      <col />
+                      <col className="w-28" />
                       {weekDates.days.map((_, idx) => (
                         <col key={idx} className="w-16" />
                       ))}
-                      <col className="w-[4.5rem]" />
+                      <col className="w-[5.25rem]" />
                     </colgroup>
                     <thead className="bg-gray-100 dark:bg-gray-700">
                       <tr>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Client/Project</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">PO#</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Task Description</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal align-top">
+                          <div>Client</div>
+                          <div>Project</div>
+                        </th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">PO#</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">Task Description</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">System</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">Deliverable</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">Activity</th>
@@ -492,13 +496,13 @@ export default async function TimesheetDetailPage({
                             <div className="text-xs font-normal">{formatDateShort(weekDates.days[idx])}</div>
                           </th>
                         ))}
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">Total</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap tabular-nums">Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       {entries.map((entry, idx) => (
                         <tr key={idx}>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">
                             {entry.sites?.name || 'N/A'}
                           </td>
                           <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">
@@ -516,7 +520,7 @@ export default async function TimesheetDetailPage({
                               entry.purchase_orders?.po_number || 'N/A'
                             )}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">
                             {entry.task_description}
                           </td>
                           <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-normal break-words align-top">
@@ -533,7 +537,7 @@ export default async function TimesheetDetailPage({
                               {formatHoursDayCell(Number(entry[`${day}_hours`]) || 0)}
                             </td>
                           ))}
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-right font-medium text-gray-900 dark:text-gray-100">
+                          <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-sm text-right font-medium tabular-nums whitespace-nowrap text-gray-900 dark:text-gray-100">
                             {formatHoursAmount(calculateTotal(entry))}
                           </td>
                         </tr>
@@ -545,7 +549,7 @@ export default async function TimesheetDetailPage({
                             {formatHoursAmount(entries?.reduce((sum, e) => sum + (e[`${day}_hours`] || 0), 0) || 0)}
                           </td>
                         ))}
-                        <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-right font-medium text-gray-900 dark:text-gray-100">
+                        <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-sm text-right font-medium tabular-nums whitespace-nowrap text-gray-900 dark:text-gray-100">
                           {formatHoursAmount(billableTotal)}
                         </td>
                       </tr>
@@ -579,18 +583,18 @@ export default async function TimesheetDetailPage({
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Non-Billable Time</h2>
                     {/* Same colgroup as billable so Mon–Sun line up. Type/Description
                         span the six left columns. */}
-                    <table className="w-full min-w-[78rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+                    <table className="w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
                       <colgroup>
+                        <col className="w-24" />
+                        <col className="w-40" />
                         <col />
                         <col />
                         <col />
-                        <col />
-                        <col />
-                        <col />
+                        <col className="w-28" />
                         {weekDates.days.map((_, idx) => (
                           <col key={idx} className="w-16" />
                         ))}
-                        <col className="w-[4.5rem]" />
+                        <col className="w-[5.25rem]" />
                       </colgroup>
                       <thead>
                         <tr className="bg-gray-100 dark:bg-gray-700">
