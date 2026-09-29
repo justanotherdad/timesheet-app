@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, FileText, X } from 'lucide-react'
 import { parseMoney } from '@/lib/utils'
+import { MISSING_PO_NUMBER_MESSAGE, normalizePoNumber, poNumberSaveError } from '@/lib/po-number'
 import SiteDetailView from './SiteDetailView'
 import OptionsManager from './OptionsManager'
 import PayrollEarningTypesManager from './PayrollEarningTypesManager'
@@ -387,7 +388,12 @@ export default function ConsolidatedManager({
     setLoading(true)
 
     const formData = new FormData(e.currentTarget)
-    const poNumber = formData.get('po_number') as string
+    const poNumber = normalizePoNumber(formData.get('po_number'))
+    if (!poNumber) {
+      setError(MISSING_PO_NUMBER_MESSAGE)
+      setLoading(false)
+      return
+    }
     const description = formData.get('description') as string || null
     const departmentId = formData.get('department_id') as string || null
     const clientContactName = formData.get('client_contact_name') as string || null
@@ -441,7 +447,7 @@ export default function ConsolidatedManager({
         router.push(`/dashboard/budget?poId=${data.id}`)
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(poNumberSaveError(err) || err.message || 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -828,7 +834,7 @@ export default function ConsolidatedManager({
                       <input
                         type="text"
                         name="po_number"
-                        placeholder="PO Number"
+                        placeholder="PO number, or TBD-client"
                         required
                         className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
                       />
@@ -1359,7 +1365,12 @@ export default function ConsolidatedManager({
                   setError(null)
                   setLoading(true)
                   const formData = new FormData(e.currentTarget)
-                  const poNumber = formData.get('po_number') as string
+                  const poNumber = normalizePoNumber(formData.get('po_number'))
+                  if (!poNumber) {
+                    setError(MISSING_PO_NUMBER_MESSAGE)
+                    setLoading(false)
+                    return
+                  }
                   const description = formData.get('description') as string || null
                   const deptId = formData.get('department_id') as string || null
                   try {
@@ -1375,7 +1386,7 @@ export default function ConsolidatedManager({
                     setPurchaseOrders(purchaseOrders.map(po => po.id === editingItem.id ? { ...po, po_number: poNumber, description: description || undefined, department_id: deptId || undefined } : po))
                     setEditingItem(null)
                   } catch (err: any) {
-                    setError(err.message || 'An error occurred')
+                    setError(poNumberSaveError(err) || err.message || 'An error occurred')
                   } finally {
                     setLoading(false)
                   }

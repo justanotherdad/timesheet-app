@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Trash2, Upload, FileText, X, BarChart3 } from 'lucide-react'
 import { parseMoney } from '@/lib/utils'
+import { MISSING_PO_NUMBER_MESSAGE, normalizePoNumber, poNumberSaveError } from '@/lib/po-number'
 
 const ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 
@@ -77,11 +78,17 @@ export default function POInfoCard({
     e.preventDefault()
     setError(null)
     setLoading(true)
+    const poNumber = normalizePoNumber(form.po_number)
+    if (!poNumber) {
+      setError(MISSING_PO_NUMBER_MESSAGE)
+      setLoading(false)
+      return
+    }
     try {
-      await supabase
+      const { error: updateError } = await supabase
         .from('purchase_orders')
         .update({
-          po_number: form.po_number,
+          po_number: poNumber,
           original_po_amount: form.original_po_amount != null && form.original_po_amount !== '' ? parseMoney(form.original_po_amount) : null,
           po_issue_date: form.po_issue_date || null,
           proposal_number: form.proposal_number || null,
@@ -95,6 +102,7 @@ export default function POInfoCard({
           prior_period_notes: form.prior_period_notes || null,
         })
         .eq('id', po.id)
+      if (updateError) throw updateError
 
       for (const co of changeOrders) {
         if (co.id) {
@@ -119,7 +127,7 @@ export default function POInfoCard({
       onSave()
       onClose()
     } catch (err: any) {
-      setError(err.message || 'Failed to save')
+      setError(poNumberSaveError(err) || err.message || 'Failed to save')
     } finally {
       setLoading(false)
     }

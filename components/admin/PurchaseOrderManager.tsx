@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, FileText, X } from 'lucide-react'
 import { parseMoney } from '@/lib/utils'
+import { MISSING_PO_NUMBER_MESSAGE, normalizePoNumber, poNumberSaveError } from '@/lib/po-number'
 
 interface Site {
   id: string
@@ -123,7 +124,12 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
     setLoading(true)
 
     const formData = new FormData(e.currentTarget)
-    const poNumber = formData.get('po_number') as string
+    const poNumber = normalizePoNumber(formData.get('po_number'))
+    if (!poNumber) {
+      setError(MISSING_PO_NUMBER_MESSAGE)
+      setLoading(false)
+      return
+    }
     const description = formData.get('description') as string || null
     const departmentId = formData.get('department_id') as string || null
     const clientContactName = formData.get('client_contact_name') as string || null
@@ -172,7 +178,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
       if (e.currentTarget) e.currentTarget.reset()
       setShowAddForm(false)
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(poNumberSaveError(err) || err.message || 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -186,7 +192,12 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
     setLoading(true)
 
     const formData = new FormData(e.currentTarget)
-    const poNumber = formData.get('po_number') as string
+    const poNumber = normalizePoNumber(formData.get('po_number'))
+    if (!poNumber) {
+      setError(MISSING_PO_NUMBER_MESSAGE)
+      setLoading(false)
+      return
+    }
     const description = formData.get('description') as string || null
 
     try {
@@ -204,7 +215,7 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
       setPurchaseOrders(purchaseOrders.map(po => po.id === editingPO.id ? { ...po, department_id: selectedDepartment || undefined, po_number: poNumber, description: description || undefined } : po))
       setEditingPO(null)
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(poNumberSaveError(err) || err.message || 'An error occurred')
     } finally {
       setLoading(false)
     }

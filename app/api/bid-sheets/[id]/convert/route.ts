@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { effectiveIndirectTreatAs, indirectLineDollarTotal } from '@/lib/bid-sheet-indirect'
 import { roundToCents } from '@/lib/utils'
+import { poNumberSaveError } from '@/lib/po-number'
 import { upsertIndirectActivityForProject } from '@/lib/syncBidSheetToProject'
 
 export const dynamic = 'force-dynamic'
@@ -116,7 +117,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .select()
     .single()
 
-  if (poErr || !po) return NextResponse.json({ error: poErr?.message || 'Failed to create PO' }, { status: 500 })
+  if (poErr || !po) {
+    const duplicate = poNumberSaveError(poErr)
+    return NextResponse.json(
+      { error: duplicate || poErr?.message || 'Failed to create PO' },
+      { status: duplicate ? 409 : 500 }
+    )
+  }
 
   if ((items || []).length > 0) {
     const siteId = sheet.site_id

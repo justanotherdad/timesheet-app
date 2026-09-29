@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { canAccessPoBudget } from '@/lib/access'
 import { normalizePoIssueDateForDb, parseMoney } from '@/lib/utils'
+import { MISSING_PO_NUMBER_MESSAGE, normalizePoNumber, poNumberSaveError } from '@/lib/po-number'
 import {
   logPoBudgetContainerAudit,
   buildBudgetSummaryUpdatedDescription,
@@ -321,7 +322,13 @@ export async function PATCH(
         weekly_burn !== undefined || target_end_date !== undefined ||
         active !== undefined) {
       const updateData: Record<string, unknown> = {}
-      if (po_number !== undefined) updateData.po_number = po_number
+      if (po_number !== undefined) {
+        const poNumber = normalizePoNumber(po_number)
+        if (!poNumber) {
+          return NextResponse.json({ error: MISSING_PO_NUMBER_MESSAGE }, { status: 400 })
+        }
+        updateData.po_number = poNumber
+      }
       if (original_po_amount !== undefined) updateData.original_po_amount = original_po_amount === '' || original_po_amount == null ? null : parseMoney(original_po_amount)
       if (po_issue_date !== undefined) updateData.po_issue_date = normalizePoIssueDateForDb(po_issue_date)
       if (proposal_number !== undefined) updateData.proposal_number = proposal_number || null
@@ -466,6 +473,8 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true, po: poAfter })
   } catch (err: unknown) {
+    const duplicate = poNumberSaveError(err)
+    if (duplicate) return NextResponse.json({ error: duplicate }, { status: 409 })
     const message = err instanceof Error ? err.message : 'Failed to update'
     return NextResponse.json({ error: message }, { status: 500 })
   }
