@@ -4,7 +4,6 @@ import { useEffect } from 'react'
 
 export default function AppError({
   error,
-  reset,
 }: {
   error: Error & { digest?: string }
   reset: () => void
@@ -30,7 +29,7 @@ export default function AppError({
         </p>
         <button
           type="button"
-          onClick={reset}
+          onClick={() => window.location.reload()}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
         >
           Try again

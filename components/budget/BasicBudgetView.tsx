@@ -22,6 +22,7 @@ import BillRateFormModal from './BillRateFormModal'
 import BillRateRemoveModal from './BillRateRemoveModal'
 import BudgetContainerAuditTrail, { type ContainerAuditRow } from './BudgetContainerAuditTrail'
 import NoteImages from './NoteImages'
+import SearchableSelect from '@/components/SearchableSelect'
 
 const ATTACHMENT_ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx']
 
@@ -1081,17 +1082,18 @@ export default function BasicBudgetView({
             {sitePOs.length > 0 && onSelectPo && (
               <div className="w-full sm:min-w-[200px] sm:flex-1">
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">PO</label>
-                <select
+                <SearchableSelect
+                  options={sitePOs.map((p) => ({
+                    id: p.id,
+                    name: `${p.po_number}${(p.description || p.departments?.name) ? ` — ${p.description || p.departments?.name}` : ''}`,
+                  }))}
                   value={selectedPoId || po.id}
-                  onChange={(e) => onSelectPo(e.target.value)}
-                  className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                >
-                  {sitePOs.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.po_number}{(p.description || p.departments?.name) ? ` — ${p.description || p.departments?.name}` : ''}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => {
+                    if (id) onSelectPo(id)
+                  }}
+                  placeholder="Search POs..."
+                  clearable={false}
+                />
               </div>
             )}
           </div>

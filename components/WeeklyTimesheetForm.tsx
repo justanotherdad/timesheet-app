@@ -13,7 +13,7 @@ import { GripVertical, Plus, Trash2, X } from 'lucide-react'
 
 interface WeeklyTimesheetFormProps {
   sites: Array<{ id: string; name: string; code?: string }>
-  purchaseOrders: Array<{ id: string; po_number: string; description?: string; site_id?: string; department_id?: string }>
+  purchaseOrders: Array<{ id: string; po_number: string; description?: string; site_id?: string; department_id?: string; budget_type?: string | null }>
   systems?: Array<{ id: string; name: string; code?: string; site_id?: string; project_po_id?: string | null }>
   deliverables?: Array<{ id: string; name: string; code?: string; site_id?: string; project_po_id?: string | null }>
   activities?: Array<{ id: string; name: string; code?: string; site_id?: string; project_po_id?: string | null }>
@@ -762,7 +762,12 @@ export default function WeeklyTimesheetForm({
     // on top — anyone with a bill rate on this PO should see every cell.
     const projectCombosForPo: Array<{ systemId: string; deliverableId: string; activityId: string }> =
       entry.po_id ? projectBudgetCombosByPo[entry.po_id] || [] : []
-    const usingProjectCombos = projectCombosForPo.length > 0
+    const selectedPoRecord = entry.po_id ? purchaseOrders.find(p => p.id === entry.po_id) : undefined
+    // A project-budget PO is matrix-only even when this week's combo list is
+    // empty. Falling through to the site catalog is what let someone type a
+    // system that is not on the matrix.
+    const usingProjectCombos =
+      selectedPoRecord?.budget_type === 'project' || projectCombosForPo.length > 0
 
     // Systems/deliverables/activities are stored per project PO, so the same name
     // (e.g. "Project", "EMPV") exists as many rows across the site — one per PO.
@@ -1049,14 +1054,13 @@ export default function WeeklyTimesheetForm({
           </div>
         )}
 
-        {/* Billable Time Section */}
+        {/* Billable and non-billable share one horizontal scroll and the same
+            day/total/actions column widths, so Monday lines up with Monday. */}
+        <div className="overflow-x-auto">
         <div className="relative">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
-          
-          <div className="overflow-x-auto">
-            {/* table-fixed so <col> widths are respected. Day columns use the same
-                w-[3.5rem] as the unbillable table so both grids stay visually consistent. */}
-            <table className="min-w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+
+            <table className="w-full min-w-[78rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
               <colgroup>
                 <col className="w-12" />
                 <col />
@@ -1066,10 +1070,10 @@ export default function WeeklyTimesheetForm({
                 <col />
                 <col />
                 {weekDates.days.map((_, idx) => (
-                  <col key={idx} className="w-[3.5rem]" />  /* day columns */
+                  <col key={idx} className="w-16" />
                 ))}
-                <col className="w-[4.5rem]" />   {/* Total */}
-                <col className="w-10" />          {/* delete btn */}
+                <col className="w-[4.5rem]" />
+                <col className="w-10" />
               </colgroup>
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
@@ -1270,7 +1274,6 @@ export default function WeeklyTimesheetForm({
                 </tr>
               </tbody>
             </table>
-          </div>
 
           <button
             type="button"
@@ -1284,7 +1287,7 @@ export default function WeeklyTimesheetForm({
         </div>
 
         {/* Unbillable Time */}
-        <div>
+        <div className="mt-6">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Non-Billable Time</h2>
           
           {(['HOLIDAY', 'INTERNAL', 'PTO'] as const).map((t) => (
@@ -1294,22 +1297,35 @@ export default function WeeklyTimesheetForm({
               ))}
             </datalist>
           ))}
-          <div className="overflow-x-auto">
-            <table className="min-w-full w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+            {/* Same colgroup as billable (grip + 6 fields + days + total + actions)
+                so Mon–Sun line up. Type/Description span the left columns. */}
+            <table className="w-full min-w-[78rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
               <colgroup>
-                <col className="w-[6.5rem]" />
+                <col className="w-12" />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
                 <col />
                 {weekDates.days.map((_, idx) => (
-                  <col key={idx} className="w-[3.5rem]" />
+                  <col key={idx} className="w-16" />
                 ))}
                 <col className="w-[4.5rem]" />
+                <col className="w-10" />
               </colgroup>
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                  <th
+                    colSpan={2}
+                    className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap"
+                  >
                     Type
                   </th>
-                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 min-w-0">
+                  <th
+                    colSpan={5}
+                    className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 min-w-0"
+                  >
                     Description
                   </th>
                   {weekDates.days.map((day, idx) => (
@@ -1321,12 +1337,16 @@ export default function WeeklyTimesheetForm({
                   <th className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                     Total
                   </th>
+                  <th className="border border-gray-300 dark:border-gray-600 px-1 py-2" aria-hidden />
                 </tr>
               </thead>
               <tbody>
                 {unbillableEntries.map((entry, entryIdx) => (
                   <tr key={entryIdx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                    <td
+                      colSpan={2}
+                      className="border border-gray-300 dark:border-gray-600 px-2 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap"
+                    >
                       <div className="flex items-center justify-between gap-1">
                         <span>{entry.description}</span>
                         <button
@@ -1339,7 +1359,7 @@ export default function WeeklyTimesheetForm({
                         </button>
                       </div>
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 min-w-0">
+                    <td colSpan={5} className="border border-gray-300 dark:border-gray-600 px-2 py-2 min-w-0">
                       <input
                         type="text"
                         list={`unbillable-desc-${entry.description}`}
@@ -1361,12 +1381,13 @@ export default function WeeklyTimesheetForm({
                     <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-right tabular-nums font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                       {formatHours(calculateTotal(entry))}
                     </td>
+                    <td className="border border-gray-300 dark:border-gray-600 px-1 py-2" aria-hidden />
                   </tr>
                 ))}
                 
                 {/* Sub Totals Row */}
                 <tr className="bg-yellow-50 dark:bg-yellow-900/30 font-semibold">
-                  <td colSpan={2} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
+                  <td colSpan={7} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-gray-900 dark:text-gray-100">Sub Totals</td>
                   {days.map((day) => (
                     <td key={day} className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-gray-900 dark:text-gray-100">
                       {formatHours(getUnbillableSubtotal(day))}
@@ -1375,10 +1396,10 @@ export default function WeeklyTimesheetForm({
                   <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-right tabular-nums text-gray-900 dark:text-gray-100 whitespace-nowrap">
                     {formatHours(unbillableEntries.reduce((sum, e) => sum + calculateTotal(e), 0))}
                   </td>
+                  <td className="border border-gray-300 dark:border-gray-600 px-1 py-2" aria-hidden />
                 </tr>
               </tbody>
             </table>
-          </div>
 
           <div className="mt-3 relative inline-block">
             <button
@@ -1403,6 +1424,7 @@ export default function WeeklyTimesheetForm({
               </div>
             )}
           </div>
+        </div>
         </div>
 
         {/* Notes Section */}

@@ -30,7 +30,10 @@ export default function MultiSelectDropdown({
   const selectAllRef = useRef<HTMLInputElement>(null)
 
   const checked = new Set(selected)
-  const isAll = selected.length === 0
+  // An empty selection and a fully checked list are the same filter: everything.
+  // "22 selected" is only a real subset.
+  const allOptionsSelected = options.length > 0 && options.every((o) => checked.has(o.id))
+  const isAll = selected.length === 0 || allOptionsSelected
   const q = query.trim().toLowerCase()
   const shown = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options
 

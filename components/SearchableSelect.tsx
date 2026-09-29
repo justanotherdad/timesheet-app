@@ -19,6 +19,8 @@ interface SearchableSelectProps {
   required?: boolean
   /** Shorter control for use inside a table cell. The menu still opens over the page. */
   compact?: boolean
+  /** When false, the selection cannot be cleared. Use for a required switcher. */
+  clearable?: boolean
 }
 
 export default function SearchableSelect({
@@ -29,6 +31,7 @@ export default function SearchableSelect({
   label,
   required = false,
   compact = false,
+  clearable = true,
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -36,6 +39,7 @@ export default function SearchableSelect({
   const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   const selectedOption = options.find((opt) => opt.id === value)
 
@@ -51,6 +55,12 @@ export default function SearchableSelect({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const focusTimer = window.setTimeout(() => searchRef.current?.focus(), 0)
+    return () => window.clearTimeout(focusTimer)
+  }, [isOpen])
 
   useLayoutEffect(() => {
     if (!isOpen) return
@@ -87,9 +97,10 @@ export default function SearchableSelect({
       className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto"
     >
       <div className="p-2 sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <input
-          type="text"
-          value={searchTerm}
+          <input
+            ref={searchRef}
+            type="text"
+            value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search..."
           className="w-full min-w-0 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white dark:bg-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
@@ -149,7 +160,7 @@ export default function SearchableSelect({
               : placeholder}
           </span>
           <div className="flex items-center gap-1 shrink-0">
-            {value && (
+            {clearable && value && (
               <X
                 className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600"
                 onClick={(e) => {

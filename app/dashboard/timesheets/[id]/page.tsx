@@ -459,12 +459,25 @@ export default async function TimesheetDetailPage({
               </span>
             </div>
 
-            {/* Billable Entries */}
+            {/* Billable and non-billable share one scroll and the same day/total
+                column widths, so Monday lines up with Monday. */}
+            <div className="overflow-x-auto">
             {entries && entries.length > 0 && (
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Billable Time</h2>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
+                  <table className="w-full min-w-[72rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+                    <colgroup>
+                      <col />
+                      <col />
+                      <col />
+                      <col />
+                      <col />
+                      <col />
+                      {weekDates.days.map((_, idx) => (
+                        <col key={idx} className="w-16" />
+                      ))}
+                      <col className="w-[4.5rem]" />
+                    </colgroup>
                     <thead className="bg-gray-100 dark:bg-gray-700">
                       <tr>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Client/Project</th>
@@ -538,7 +551,6 @@ export default async function TimesheetDetailPage({
                       </tr>
                     </tbody>
                   </table>
-                </div>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                   Billable Total: {formatHoursAmount(billableTotal)} hours
                   {!isApproverScopedView && entries.length > 6 && (
@@ -565,22 +577,33 @@ export default async function TimesheetDetailPage({
               return (
                 <div id="unbillable-section" className="mb-6 scroll-mt-4">
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Non-Billable Time</h2>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full w-full table-fixed border-collapse border border-gray-300 dark:border-gray-600">
+                    {/* Same colgroup as billable so Mon–Sun line up. Type/Description
+                        span the six left columns. */}
+                    <table className="w-full min-w-[72rem] table-fixed border-collapse border border-gray-300 dark:border-gray-600">
                       <colgroup>
-                        <col className="w-[5.5rem]" />
+                        <col />
+                        <col />
+                        <col />
+                        <col />
+                        <col />
                         <col />
                         {weekDates.days.map((_, idx) => (
-                          <col key={idx} className="w-12" />
+                          <col key={idx} className="w-16" />
                         ))}
                         <col className="w-[4.5rem]" />
                       </colgroup>
                       <thead>
                         <tr className="bg-gray-100 dark:bg-gray-700">
-                          <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                          <th
+                            colSpan={1}
+                            className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap"
+                          >
                             Type
                           </th>
-                          <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm text-gray-900 dark:text-gray-100 min-w-0">
+                          <th
+                            colSpan={5}
+                            className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left text-sm text-gray-900 dark:text-gray-100 min-w-0"
+                          >
                             Description
                           </th>
                           {weekDates.days.map((day, idx) => (
@@ -600,7 +623,10 @@ export default async function TimesheetDetailPage({
                             <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                               {entry.description}
                             </td>
-                            <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 min-w-0 break-words">
+                            <td
+                              colSpan={5}
+                              className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 min-w-0 break-words"
+                            >
                               {(entry as { notes?: string }).notes || '—'}
                             </td>
                             {days.map((day) => (
@@ -615,11 +641,11 @@ export default async function TimesheetDetailPage({
                         ))}
                       </tbody>
                     </table>
-                  </div>
                   <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Non-Billable Total: {formatHoursAmount(displayUnbillableTotal)} hours</p>
                 </div>
               )
             })()}
+            </div>
 
             {/* Grand Total — scoped viewers: visible billable rows only */}
             <div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-lg mb-6">
