@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatDate } from '@/lib/utils'
-import { totalPtoHours } from '@/lib/pto-shared'
+import { ptoReviewerNote, totalPtoHours } from '@/lib/pto-shared'
 import type { PtoRequest, PtoRequestStatus } from '@/types/database'
 
 type QueueRow = PtoRequest & { employee_name: string }
@@ -76,6 +76,8 @@ export default function PtoReviewClient() {
   const [error, setError] = useState<string | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [actingId, setActingId] = useState<string | null>(null)
+  const [approveId, setApproveId] = useState<string | null>(null)
+  const [approveNote, setApproveNote] = useState('')
   const [denyId, setDenyId] = useState<string | null>(null)
   const [denyReason, setDenyReason] = useState('')
   const [employeeId, setEmployeeId] = useState('all')
@@ -151,15 +153,23 @@ export default function PtoReviewClient() {
   }, [load, loadHistory])
 
   const approve = async (id: string) => {
+    const note = approveNote.trim()
     setActingId(id)
     setError(null)
     try {
-      const res = await fetch(`/api/pto/${id}/approve`, { method: 'POST', credentials: 'include' })
+      const res = await fetch(`/api/pto/${id}/approve`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note }),
+      })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setError((json as { error?: string }).error || 'Could not approve.')
         return
       }
+      setApproveId(null)
+      setApproveNote('')
       setRows((prev) => prev.filter((r) => r.id !== id))
       void loadHistory({ silent: true })
       router.refresh()
@@ -255,13 +265,28 @@ export default function PtoReviewClient() {
           loading={loading}
           error={error}
           actingId={actingId}
+          approveId={approveId}
+          approveNote={approveNote}
+          onApproveNote={setApproveNote}
           denyId={denyId}
           denyReason={denyReason}
           onDenyReason={setDenyReason}
+          onStartApprove={(id) => {
+            setApproveId(id)
+            setApproveNote('')
+            setDenyId(null)
+            setDenyReason('')
+          }}
           onApprove={(id) => void approve(id)}
+          onCancelApprove={() => {
+            setApproveId(null)
+            setApproveNote('')
+          }}
           onStartDeny={(id) => {
             setDenyId(id)
             setDenyReason('')
+            setApproveId(null)
+            setApproveNote('')
           }}
           onDeny={(id) => void deny(id)}
           onCancelDeny={() => {
@@ -377,8 +402,16 @@ export default function PtoReviewClient() {
                     {totalPtoHours(r.hours_per_day, r.start_date, r.end_date)} hrs ({r.hours_per_day} / day)
                   </p>
                   {r.notes && <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">{r.notes}</p>}
-                  {r.status === 'denied' && r.denial_reason && (
-                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">Reason: {r.denial_reason}</p>
+                  {ptoReviewerNote(r) && (r.status === 'approved' || r.status === 'denied') && (
+                    <p
+                      className={`text-sm mt-1 ${
+                        r.status === 'denied'
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-gray-700 dark:text-gray-300'
+                      }`}
+                    >
+                      Reviewer note: {ptoReviewerNote(r)}
+                    </p>
                   )}
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{decisionLine(r)}</p>
                 </div>
@@ -593,10 +626,15 @@ function QueuePanel({
   loading,
   error,
   actingId,
+  approveId,
+  approveNote,
+  onApproveNote,
   denyId,
   denyReason,
   onDenyReason,
+  onStartApprove,
   onApprove,
+  onCancelApprove,
   onStartDeny,
   onDeny,
   onCancelDeny,
@@ -605,10 +643,15 @@ function QueuePanel({
   loading: boolean
   error: string | null
   actingId: string | null
+  approveId: string | null
+  approveNote: string
+  onApproveNote: (value: string) => void
   denyId: string | null
   denyReason: string
   onDenyReason: (value: string) => void
+  onStartApprove: (id: string) => void
   onApprove: (id: string) => void
+  onCancelApprove: () => void
   onStartDeny: (id: string) => void
   onDeny: (id: string) => void
   onCancelDeny: () => void
@@ -649,11 +692,11 @@ function QueuePanel({
             <div className="flex gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => onApprove(r.id)}
+                onClick={() => onStartApprove(r.id)}
                 disabled={actingId === r.id}
                 className="bg-green-600 text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
               >
-                {actingId === r.id && denyId !== r.id ? 'Approving…' : 'Approve'}
+                Approve
               </button>
               <button
                 type="button"
@@ -665,15 +708,48 @@ function QueuePanel({
               </button>
             </div>
           </div>
+          {approveId === r.id && (
+            <div className="space-y-2 border-t border-gray-200 dark:border-gray-700 pt-3">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300" htmlFor={`approve-${r.id}`}>
+                Note (optional)
+              </label>
+              <textarea
+                id={`approve-${r.id}`}
+                rows={3}
+                maxLength={500}
+                value={approveNote}
+                onChange={(e) => onApproveNote(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onApprove(r.id)}
+                  disabled={actingId === r.id}
+                  className="bg-green-600 text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
+                >
+                  {actingId === r.id ? 'Approving…' : 'Confirm approve'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancelApprove}
+                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-3 py-2 rounded-lg text-sm font-semibold"
+                >
+                  Never mind
+                </button>
+              </div>
+            </div>
+          )}
           {denyId === r.id && (
             <div className="space-y-2 border-t border-gray-200 dark:border-gray-700 pt-3">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300" htmlFor={`deny-${r.id}`}>
-                Reason
+                Note
               </label>
               <textarea
                 id={`deny-${r.id}`}
                 rows={3}
                 required
+                maxLength={500}
                 value={denyReason}
                 onChange={(e) => onDenyReason(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"

@@ -7,7 +7,7 @@ import { isPtoApprover, loadPtoApproverIds, reviewPtoRequest } from '@/lib/pto'
 export const dynamic = 'force-dynamic'
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser()
@@ -21,8 +21,11 @@ export async function POST(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const body = await req.json().catch(() => ({}))
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : ''
+
   const { id } = await params
-  const result = await reviewPtoRequest(admin, id, user.id, 'approved')
+  const result = await reviewPtoRequest(admin, id, user.id, 'approved', note)
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }
@@ -33,7 +36,7 @@ export async function POST(
     action: 'pto.approve',
     entityType: 'pto_request',
     entityId: id,
-    newValues: { status: 'approved' },
+    newValues: { status: 'approved', reviewer_note: note || null },
   })
   return NextResponse.json({ ok: true })
 }

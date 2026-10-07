@@ -8,6 +8,7 @@ import {
   PTO_OTHER_LEAVE_TYPE,
   inclusiveDayCount,
   isYmd,
+  ptoReviewerNote,
   totalPtoHours,
 } from '@/lib/pto-shared'
 import { formatDate } from '@/lib/utils'
@@ -109,8 +110,10 @@ export default function PtoRequestClient() {
     }
   }
 
-  const cancel = async (id: string) => {
-    if (!window.confirm('Cancel this pending request?')) return
+  const cancel = async (id: string, status: string) => {
+    const message =
+      status === 'approved' ? 'Cancel this approved request?' : 'Cancel this pending request?'
+    if (!window.confirm(message)) return
     setCancellingId(id)
     setListError(null)
     try {
@@ -274,13 +277,21 @@ export default function PtoRequestClient() {
                   {r.status}
                 </span>
               </div>
-              {r.status === 'denied' && r.denial_reason && (
-                <p className="text-sm text-red-600 dark:text-red-400">Reason: {r.denial_reason}</p>
+              {ptoReviewerNote(r) && (r.status === 'approved' || r.status === 'denied') && (
+                <p
+                  className={`text-sm ${
+                    r.status === 'denied'
+                      ? 'text-red-600 dark:text-red-400'
+                      : 'text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  Reviewer note: {ptoReviewerNote(r)}
+                </p>
               )}
-              {r.status === 'pending' && (
+              {(r.status === 'pending' || r.status === 'approved') && (
                 <button
                   type="button"
-                  onClick={() => void cancel(r.id)}
+                  onClick={() => void cancel(r.id, r.status)}
                   disabled={cancellingId === r.id}
                   className="text-sm text-red-600 dark:text-red-400 hover:underline disabled:opacity-50"
                 >

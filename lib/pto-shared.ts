@@ -38,6 +38,15 @@ export function isPtoApprover(userId: string, approverIds: string[]): boolean {
   return approverIds.length > 0 && approverIds.includes(userId)
 }
 
+/** Reviewer note shown to the employee. Older denials stored the text in denial_reason. */
+export function ptoReviewerNote(row: {
+  reviewer_note?: string | null
+  denial_reason?: string | null
+}): string | null {
+  const note = (row.reviewer_note || row.denial_reason || '').trim()
+  return note || null
+}
+
 const YMD = /^\d{4}-\d{2}-\d{2}$/
 
 export function isYmd(value: string): boolean {

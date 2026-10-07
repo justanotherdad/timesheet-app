@@ -36,7 +36,7 @@ export async function POST(
     action: 'pto.deny',
     entityType: 'pto_request',
     entityId: id,
-    newValues: { status: 'denied', denial_reason: reason.trim() },
+    newValues: { status: 'denied', reviewer_note: reason.trim().slice(0, 500) },
   })
   return NextResponse.json({ ok: true })
 }

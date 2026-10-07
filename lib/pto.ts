@@ -46,6 +46,7 @@ function mapRow(row: Record<string, unknown>): PtoRequest {
     submitted_at: String(row.submitted_at),
     reviewed_by_id: (row.reviewed_by_id as string | null) ?? null,
     reviewed_at: (row.reviewed_at as string | null) ?? null,
+    reviewer_note: (row.reviewer_note as string | null) ?? null,
     denial_reason: (row.denial_reason as string | null) ?? null,
     cancelled_at: (row.cancelled_at as string | null) ?? null,
     created_at: String(row.created_at),
@@ -142,13 +143,15 @@ export async function cancelPtoRequest(
   if (error) return { ok: false, status: 500, error: error.message }
   if (!data) return { ok: false, status: 404, error: 'Request not found' }
   if (data.user_id !== userId) return { ok: false, status: 403, error: 'Not your request' }
-  if (data.status !== 'pending') return { ok: false, status: 400, error: 'Only pending requests can be cancelled' }
+  if (data.status !== 'pending' && data.status !== 'approved') {
+    return { ok: false, status: 400, error: 'Only pending or approved requests can be cancelled' }
+  }
   const now = new Date().toISOString()
   const { error: updErr } = await admin
     .from('pto_requests')
     .update({ status: 'cancelled', cancelled_at: now, updated_at: now })
     .eq('id', requestId)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'approved'])
   if (updErr) return { ok: false, status: 500, error: updErr.message }
   return { ok: true }
 }
@@ -158,23 +161,23 @@ export async function reviewPtoRequest(
   requestId: string,
   reviewerId: string,
   decision: 'approved' | 'denied',
-  denialReason?: string | null
+  reviewerNote?: string | null
 ): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   const { data, error } = await admin.from('pto_requests').select('*').eq('id', requestId).maybeSingle()
   if (error) return { ok: false, status: 500, error: error.message }
   if (!data) return { ok: false, status: 404, error: 'Request not found' }
   if (data.status !== 'pending') return { ok: false, status: 400, error: 'This request is no longer pending' }
+  const note = (reviewerNote || '').trim().slice(0, 500)
+  if (decision === 'denied' && !note) {
+    return { ok: false, status: 400, error: 'A reason is required to deny a request' }
+  }
   const now = new Date().toISOString()
   const patch: Record<string, unknown> = {
     status: decision,
     reviewed_by_id: reviewerId,
     reviewed_at: now,
     updated_at: now,
-  }
-  if (decision === 'denied') {
-    const reason = (denialReason || '').trim()
-    if (!reason) return { ok: false, status: 400, error: 'A reason is required to deny a request' }
-    patch.denial_reason = reason.slice(0, 500)
+    reviewer_note: note || null,
   }
   const { error: updErr } = await admin.from('pto_requests').update(patch).eq('id', requestId).eq('status', 'pending')
   if (updErr) return { ok: false, status: 500, error: updErr.message }

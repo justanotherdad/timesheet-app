@@ -147,6 +147,8 @@ export interface PtoRequest {
   submitted_at: string
   reviewed_by_id?: string | null
   reviewed_at?: string | null
+  /** Note from the reviewer. Required on deny, optional on approve. Older denials used denial_reason. */
+  reviewer_note?: string | null
   denial_reason?: string | null
   cancelled_at?: string | null
   created_at: string
