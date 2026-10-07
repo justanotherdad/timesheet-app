@@ -3,9 +3,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
 import {
+  countUnseenPtoDecisions,
   createPtoRequest,
   isInternalEmployee,
   listMyPtoRequests,
+  markPtoDecisionsSeen,
   normalizeLeaveType,
   parseHoursPerDay,
   validateCreatePtoInput,
@@ -25,7 +27,14 @@ export async function GET() {
   try {
     const admin = createAdminClient()
     const requests = await listMyPtoRequests(admin, user.id)
-    return NextResponse.json({ requests })
+    let unseenDecisions = 0
+    try {
+      unseenDecisions = await countUnseenPtoDecisions(admin, user.id)
+      await markPtoDecisionsSeen(admin, user.id)
+    } catch (err) {
+      console.error('[pto] mark decisions seen failed', err)
+    }
+    return NextResponse.json({ requests, unseenDecisions })
   } catch (err) {
     console.error('[pto] list mine failed', err)
     return NextResponse.json({ error: 'Could not load requests' }, { status: 500 })

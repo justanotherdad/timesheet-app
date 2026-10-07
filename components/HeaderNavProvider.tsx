@@ -5,7 +5,7 @@ import type { HeaderNavFlags } from '@/lib/nav-flags'
 
 const empty: HeaderNavFlags = {
   timesheetConfirm: { show: false, pending: 0 },
-  pto: { showRequest: false, showReview: false, pending: 0 },
+  pto: { showRequest: false, showReview: false, pending: 0, decisions: 0 },
   clientBudget: false,
 }
 

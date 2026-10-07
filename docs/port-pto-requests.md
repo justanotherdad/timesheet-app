@@ -1,6 +1,6 @@
 # Port notes: PTO request and review
 
-Copy this change set into EquippedBiz. CTG migrations: `migrations/2026_09_12_pto_requests.sql`, then `migrations/2026_10_07_pto_reviewer_note.sql` — paste into the Supabase SQL editor and Run before using the feature.
+Copy this change set into EquippedBiz. CTG migrations: `migrations/2026_09_12_pto_requests.sql`, then `migrations/2026_10_07_pto_reviewer_note.sql`, then `migrations/2026_10_07_pto_decision_seen.sql` — paste into the Supabase SQL editor and Run before using the feature.
 
 ## Behavior to preserve
 
@@ -10,6 +10,7 @@ Copy this change set into EquippedBiz. CTG migrations: `migrations/2026_09_12_pt
 - Types: Paid Time Off, Vacation, Bereavement, Jury Duty, Comp Time Used, plus **Other** (typed text).
 - Hours per day, 0.25–8. Date range inclusive of weekends, max 90 days.
 - Employee can **Cancel** while status is pending, and also after it is approved. Cancelling an approved request does not change timesheet hours.
+- **Request PTO** (dashboard tile and menu) shows a count badge for that employee’s approved or denied requests they have not opened yet. Opening Request PTO clears it. Existing decisions are marked seen by the migration so only later ones count.
 - After approval, hours are still entered on the weekly timesheet PTO row. Do not auto-fill timesheets.
 
 ### Who can review
@@ -21,7 +22,7 @@ Copy this change set into EquippedBiz. CTG migrations: `migrations/2026_09_12_pt
 
 ## Files
 
-1. `migrations/2026_09_12_pto_requests.sql` — new `pto_requests` table + RLS select-own. `migrations/2026_10_07_pto_reviewer_note.sql` — `reviewer_note`, backfilled from `denial_reason`.
+1. `migrations/2026_09_12_pto_requests.sql` — new `pto_requests` table + RLS select-own. `migrations/2026_10_07_pto_reviewer_note.sql` — `reviewer_note`, backfilled from `denial_reason`. `migrations/2026_10_07_pto_decision_seen.sql` — `decision_seen_at`; existing approvals and denials are marked seen.
 2. `types/database.ts` — `PtoRequestStatus`, `PtoRequest`.
 3. `lib/pto.ts` — helpers, validation, queries.
 4. `lib/audit.ts` — `pto.submit` / `cancel` / `approve` / `deny`, entity `pto_request`.
@@ -43,4 +44,5 @@ Do **not** add `/dashboard/pto*` to `lib/client-access.ts`. Clients stay deny-by
 2. Internal employee: submit Vacation 8 hrs/day Sep 21–23; appears under My requests as Pending; Cancel removes it from the admin queue. After approval, Cancel still works and the request leaves the calendar.
 3. Manage Organization → Company Information: pick PTO reviewers (can differ from confirmation assignees).
 4. Reviewer hamburger: PTO Requests with badge; Approve opens an optional note, then confirms and clears the row for every reviewer; Deny requires a note that the employee can see. An approve note shows on the employee request and in History.
-5. Run the SQL migration in EquippedBiz Supabase before testing.
+5. After approve or deny, the employee’s Request PTO tile and menu item show a count. Opening Request PTO clears it. A later decision brings it back. Older decisions do not count.
+6. Run the SQL migrations in EquippedBiz Supabase before testing.

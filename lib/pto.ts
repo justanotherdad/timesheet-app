@@ -48,10 +48,35 @@ function mapRow(row: Record<string, unknown>): PtoRequest {
     reviewed_at: (row.reviewed_at as string | null) ?? null,
     reviewer_note: (row.reviewer_note as string | null) ?? null,
     denial_reason: (row.denial_reason as string | null) ?? null,
+    decision_seen_at: (row.decision_seen_at as string | null) ?? null,
     cancelled_at: (row.cancelled_at as string | null) ?? null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   }
+}
+
+/** Approved or denied requests this employee has not opened Request PTO to see. */
+export async function countUnseenPtoDecisions(admin: SupabaseClient, userId: string): Promise<number> {
+  const { count, error } = await admin
+    .from('pto_requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .in('status', ['approved', 'denied'])
+    .is('decision_seen_at', null)
+  if (error) throw error
+  return count ?? 0
+}
+
+/** Clear the Request PTO badge for decisions that exist right now. */
+export async function markPtoDecisionsSeen(admin: SupabaseClient, userId: string): Promise<void> {
+  const now = new Date().toISOString()
+  const { error } = await admin
+    .from('pto_requests')
+    .update({ decision_seen_at: now })
+    .eq('user_id', userId)
+    .in('status', ['approved', 'denied'])
+    .is('decision_seen_at', null)
+  if (error) throw error
 }
 
 export async function countPendingPtoRequests(admin: SupabaseClient): Promise<number> {

@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import {
   countPendingPtoRequests,
+  countUnseenPtoDecisions,
   isInternalEmployee,
   isPtoApprover,
   parsePtoApproverIds,
@@ -16,13 +17,13 @@ import {
 
 export type HeaderNavFlags = {
   timesheetConfirm: { show: boolean; pending: number }
-  pto: { showRequest: boolean; showReview: boolean; pending: number }
+  pto: { showRequest: boolean; showReview: boolean; pending: number; decisions: number }
   clientBudget: boolean
 }
 
 const emptyHeaderNav: HeaderNavFlags = {
   timesheetConfirm: { show: false, pending: 0 },
-  pto: { showRequest: false, showReview: false, pending: 0 },
+  pto: { showRequest: false, showReview: false, pending: 0, decisions: 0 },
   clientBudget: false,
 }
 
@@ -63,7 +64,19 @@ export const getHeaderNavFlags = cache(async function getHeaderNavFlags(): Promi
 
   let confirmPending = 0
   let ptoPending = 0
+  let ptoDecisions = 0
   const pendingWork: Promise<void>[] = []
+  if (showRequest) {
+    pendingWork.push(
+      countUnseenPtoDecisions(admin, user.id)
+        .then((n) => {
+          ptoDecisions = n
+        })
+        .catch((err) => {
+          console.error('[pto] unseen decision count failed', err)
+        })
+    )
+  }
   if (showConfirm) {
     pendingWork.push(
       getPendingConfirmationsForUser(admin, user.id, settings)
@@ -90,7 +103,7 @@ export const getHeaderNavFlags = cache(async function getHeaderNavFlags(): Promi
 
   return {
     timesheetConfirm: { show: showConfirm, pending: confirmPending },
-    pto: { showRequest, showReview, pending: ptoPending },
+    pto: { showRequest, showReview, pending: ptoPending, decisions: ptoDecisions },
     clientBudget,
   }
 })

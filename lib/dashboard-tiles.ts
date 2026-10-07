@@ -72,13 +72,18 @@ export function buildEmployeeDashboardTiles(
   })
 
   if (nav.pto.showRequest) {
+    const decisions = nav.pto.decisions
     tiles.push({
       id: 'request-pto',
       title: 'Request PTO',
-      description: 'Submit and track time-off requests',
+      description:
+        decisions > 0
+          ? `${decisions} new decision${decisions === 1 ? '' : 's'}`
+          : 'Submit and track time-off requests',
       icon: 'calendarOff',
       color: 'teal',
       href: '/dashboard/pto',
+      badge: decisions,
     })
   }
 

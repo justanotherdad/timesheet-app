@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   PTO_LEAVE_TYPE_OPTIONS,
   PTO_MAX_HOURS_PER_DAY,
@@ -27,6 +28,8 @@ function formatRange(start: string, end: string): string {
 }
 
 export default function PtoRequestClient() {
+  const router = useRouter()
+  const clearedBadge = useRef(false)
   const [leaveType, setLeaveType] = useState<string>(PTO_LEAVE_TYPE_OPTIONS[0])
   const [customLeaveType, setCustomLeaveType] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -54,13 +57,18 @@ export default function PtoRequestClient() {
       }
       const json = await res.json()
       setRows(Array.isArray(json.requests) ? json.requests : [])
+      const unseen = Number((json as { unseenDecisions?: unknown }).unseenDecisions)
+      if (!clearedBadge.current && Number.isFinite(unseen) && unseen > 0) {
+        clearedBadge.current = true
+        router.refresh()
+      }
     } catch {
       setListError('Could not load your requests.')
       setRows([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [router])
 
   useEffect(() => {
     void load()

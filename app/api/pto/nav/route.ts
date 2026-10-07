@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
-import { countPendingPtoRequests, isInternalEmployee, isPtoApprover, loadPtoApproverIds } from '@/lib/pto'
+import {
+  countPendingPtoRequests,
+  countUnseenPtoDecisions,
+  isInternalEmployee,
+  isPtoApprover,
+  loadPtoApproverIds,
+} from '@/lib/pto'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,12 +24,16 @@ export async function GET() {
   const admin = createAdminClient()
   let showReviewLink = false
   let pendingCount = 0
+  let decisionCount = 0
   try {
     const approvers = await loadPtoApproverIds(admin)
     showReviewLink = !isClient && isPtoApprover(user.id, approvers)
-    if (showReviewLink) {
-      pendingCount = await countPendingPtoRequests(admin)
-    }
+    const [pending, decisions] = await Promise.all([
+      showReviewLink ? countPendingPtoRequests(admin) : Promise.resolve(0),
+      showRequestLink ? countUnseenPtoDecisions(admin, user.id) : Promise.resolve(0),
+    ])
+    pendingCount = pending
+    decisionCount = decisions
   } catch (err) {
     console.error('[pto] nav count failed', err)
   }
@@ -32,5 +42,6 @@ export async function GET() {
     showRequestLink,
     showReviewLink,
     pendingCount,
+    decisionCount,
   })
 }

@@ -328,9 +328,18 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                         </Link>
                       )}
                       {nav.pto.showRequest && (
-                        <MenuLink href="/dashboard/pto" onClick={closeMenu}>
-                          Request PTO
-                        </MenuLink>
+                        <Link
+                          href="/dashboard/pto"
+                          className="flex items-center justify-between gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          onClick={closeMenu}
+                        >
+                          <span>Request PTO</span>
+                          {nav.pto.decisions > 0 && (
+                            <span className="min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold">
+                              {nav.pto.decisions > 99 ? '99+' : nav.pto.decisions}
+                            </span>
+                          )}
+                        </Link>
                       )}
                       {!isClient && (
                         <button

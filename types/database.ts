@@ -150,6 +150,8 @@ export interface PtoRequest {
   /** Note from the reviewer. Required on deny, optional on approve. Older denials used denial_reason. */
   reviewer_note?: string | null
   denial_reason?: string | null
+  /** Set when the employee opens Request PTO after an approval or denial. */
+  decision_seen_at?: string | null
   cancelled_at?: string | null
   created_at: string
   updated_at: string
