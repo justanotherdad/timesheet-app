@@ -68,6 +68,14 @@ const controlClass =
   'mt-1 box-border h-10 w-full px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700'
 const dropdownClass = 'h-10 box-border'
 
+function parsePayInput(raw: string): number | null {
+  const text = raw.trim().replace(/[$,\s]/g, '')
+  if (!/^\d+(\.\d{1,4})?$/.test(text)) return null
+  const amount = Number(text)
+  if (!Number.isFinite(amount) || amount < 0) return null
+  return amount
+}
+
 function csvEscape(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`
   return value
@@ -401,18 +409,29 @@ export default function LaborBillRateReport({
 
   const addRate = async () => {
     setRateError(null)
-    // A date field can show a value before React state catches the change.
-    addUserRef.current?.blur()
-    addAmountRef.current?.blur()
-    addFromRef.current?.blur()
     const userId = addUserRef.current?.value || addUserLive.current || addUserId
-    const amountText = addAmountRef.current?.value || addAmountLive.current || addAmount
-    const from = addFromRef.current?.value || addFromLive.current || addFrom
+    const amountText = (addAmountRef.current?.value || addAmountLive.current || addAmount).trim()
+    const dateEl = addFromRef.current
+    let from = dateEl?.value || ''
+    if (!from && dateEl && !dateEl.validity.badInput) {
+      dateEl.blur()
+      from = dateEl.value || ''
+    }
+    if (!from) from = addFromLive.current || addFrom
     if (userId !== addUserId) setAddUserId(userId)
     if (amountText !== addAmount) setAddAmount(amountText)
     if (from !== addFrom) setAddFrom(from)
-    if (!userId || !from || amountText.trim() === '') {
-      setRateError('Choose a person, a pay rate, and a start date.')
+    if (!userId) {
+      setRateError('Choose a person.')
+      return
+    }
+    const amount = parsePayInput(amountText)
+    if (amount == null) {
+      setRateError('Enter a pay rate. Up to 4 decimal places.')
+      return
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+      setRateError(dateEl?.validity.badInput ? 'Choose the start date again.' : 'Choose a start date.')
       return
     }
     const open = rates.find((r) => r.userId === userId && !r.effectiveTo)
@@ -430,7 +449,7 @@ export default function LaborBillRateReport({
         body: JSON.stringify({
           userId,
           classification: addKind,
-          amount: Number(amountText),
+          amount,
           effectiveFrom: from,
           effectiveTo: proposedEnd,
           closeOpenOn: closing ? closeOn || dayBefore(from) : null,
@@ -712,9 +731,9 @@ export default function LaborBillRateReport({
             <span className="col-start-1 row-start-1 whitespace-nowrap">Pay per hour</span>
             <input
               ref={addAmountRef}
-              type="number"
-              min="0"
-              step="any"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
               value={addAmount}
               onChange={(e) => {
                 addAmountLive.current = e.target.value
@@ -731,6 +750,7 @@ export default function LaborBillRateReport({
               type="date"
               value={addFrom}
               onChange={(e) => {
+                if (!e.target.value && e.target.validity.badInput) return
                 addFromLive.current = e.target.value
                 setAddFrom(e.target.value)
                 setRateError(null)
@@ -769,6 +789,7 @@ export default function LaborBillRateReport({
         </div>
         <button
           type="button"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={addRate}
           disabled={rateBusy}
           className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm disabled:opacity-50"
