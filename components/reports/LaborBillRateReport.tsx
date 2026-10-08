@@ -587,48 +587,40 @@ export default function LaborBillRateReport({
         <p className="text-sm text-gray-600 dark:text-gray-400">
           A rate is stored once and reused. Leave the end date empty when it is still current. A person with no row still appears on a report, with cost and profit left blank.
         </p>
-        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-800 text-left text-gray-500 dark:text-gray-400">
-              <tr>
-                <th className="px-3 py-2 font-medium">Employee</th>
-                <th className="px-3 py-2 font-medium">Class</th>
-                <th className="px-3 py-2 font-medium text-right">Pay / hr</th>
-                <th className="px-3 py-2 font-medium">Starts</th>
-                <th className="px-3 py-2 font-medium">Ends</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {rateRows.map((r) => {
-                const person = employees.find((e) => e.id === r.userId)
-                return (
-                  <tr key={r.id} className="border-t border-gray-100 dark:border-gray-700">
-                    <td className="px-3 py-2 text-gray-900 dark:text-gray-100">{person?.name || 'Unknown'}</td>
-                    <td className="px-3 py-2 uppercase">{r.classification}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{money(r.amount)}</td>
-                    <td className="px-3 py-2">{formatDay(r.effectiveFrom)}</td>
-                    <td className="px-3 py-2">{r.effectiveTo ? formatDay(r.effectiveTo) : 'Current'}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button type="button" onClick={() => removeRate(r.id)} className="text-red-600 dark:text-red-400">
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-              {rateRows.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-3 text-gray-500 dark:text-gray-400">
-                    No pay rates yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-sm text-gray-700 dark:text-gray-300 w-full lg:w-[calc((100%-1.5rem)/4.5)]">
+        <div className="grid w-full items-end justify-start gap-x-3 gap-y-3 overflow-x-auto [grid-template-columns:minmax(11rem,calc((100%-1.5rem)/4.5))_max-content_max-content_max-content_max-content_max-content]">
+          <div className="col-span-6 grid grid-cols-subgrid overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="col-span-6 grid grid-cols-subgrid bg-gray-50 text-left text-sm text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+              <div className="px-3 py-2 font-medium">Employee</div>
+              <div className="px-3 py-2 font-medium">Class</div>
+              <div className="px-3 py-2 font-medium">Pay / hr</div>
+              <div className="px-3 py-2 font-medium">Starts</div>
+              <div className="px-3 py-2 font-medium">Ends</div>
+              <div className="px-3 py-2" />
+            </div>
+            {rateRows.map((r) => {
+              const person = employees.find((e) => e.id === r.userId)
+              return (
+                <div key={r.id} className="col-span-6 grid grid-cols-subgrid border-t border-gray-100 text-sm dark:border-gray-700">
+                  <div className="px-3 py-2 text-gray-900 dark:text-gray-100">{person?.name || 'Unknown'}</div>
+                  <div className="px-3 py-2 uppercase">{r.classification}</div>
+                  <div className="px-3 py-2 tabular-nums">{money(r.amount)}</div>
+                  <div className="whitespace-nowrap px-3 py-2">{formatDay(r.effectiveFrom)}</div>
+                  <div className="whitespace-nowrap px-3 py-2">{r.effectiveTo ? formatDay(r.effectiveTo) : 'Current'}</div>
+                  <div className="px-3 py-2 text-right">
+                    <button type="button" onClick={() => removeRate(r.id)} className="text-red-600 dark:text-red-400">
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+            {rateRows.length === 0 && (
+              <div className="col-span-6 border-t border-gray-100 px-3 py-3 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                No pay rates yet.
+              </div>
+            )}
+          </div>
+          <label className="min-w-0 px-3 text-sm text-gray-700 dark:text-gray-300">
             Employee
             <select
               value={addUserId}
@@ -643,7 +635,7 @@ export default function LaborBillRateReport({
               ))}
             </select>
           </label>
-          <label className="inline-grid text-sm text-gray-700 dark:text-gray-300">
+          <label className="inline-grid px-3 text-sm text-gray-700 dark:text-gray-300">
             <span className="col-start-1 row-start-1 whitespace-nowrap">Classification</span>
             <select
               value={addKind}
@@ -654,7 +646,7 @@ export default function LaborBillRateReport({
               <option value="1099">1099</option>
             </select>
           </label>
-          <label className="inline-grid text-sm text-gray-700 dark:text-gray-300">
+          <label className="inline-grid px-3 text-sm text-gray-700 dark:text-gray-300">
             <span className="col-start-1 row-start-1 whitespace-nowrap">Pay per hour</span>
             <input
               type="number"
@@ -665,7 +657,7 @@ export default function LaborBillRateReport({
               className={`${controlClass} col-start-1 row-start-2 !w-0 !min-w-full px-2`}
             />
           </label>
-          <label className="text-sm text-gray-700 dark:text-gray-300">
+          <label className="px-3 text-sm text-gray-700 dark:text-gray-300">
             Starts
             <input
               type="date"
@@ -674,32 +666,34 @@ export default function LaborBillRateReport({
               className={`${controlClass} !w-auto`}
             />
           </label>
-          <label className="flex h-10 items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-            <input type="checkbox" checked={addCurrent} onChange={(e) => setAddCurrent(e.target.checked)} />
-            Current (no end date)
-          </label>
-          {!addCurrent && (
-            <label className="text-sm text-gray-700 dark:text-gray-300">
-              Ends
-              <input
-                type="date"
-                value={addTo}
-                onChange={(e) => setAddTo(e.target.value)}
-                className={`${controlClass} !w-auto`}
-              />
+          <div className="flex items-end gap-3 px-3">
+            <label className="flex h-10 items-center gap-2 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+              <input type="checkbox" checked={addCurrent} onChange={(e) => setAddCurrent(e.target.checked)} />
+              Current (no end date)
             </label>
-          )}
-          {needsClose && (
-            <label className="text-sm text-gray-700 dark:text-gray-300">
-              End the current rate on
-              <input
-                type="date"
-                value={closeOn}
-                onChange={(e) => setCloseOn(e.target.value)}
-                className={`${controlClass} !w-auto`}
-              />
-            </label>
-          )}
+            {!addCurrent && (
+              <label className="text-sm text-gray-700 dark:text-gray-300">
+                Ends
+                <input
+                  type="date"
+                  value={addTo}
+                  onChange={(e) => setAddTo(e.target.value)}
+                  className={`${controlClass} !w-auto`}
+                />
+              </label>
+            )}
+            {needsClose && (
+              <label className="text-sm text-gray-700 dark:text-gray-300">
+                End the current rate on
+                <input
+                  type="date"
+                  value={closeOn}
+                  onChange={(e) => setCloseOn(e.target.value)}
+                  className={`${controlClass} !w-auto`}
+                />
+              </label>
+            )}
+          </div>
         </div>
         <button
           type="button"
