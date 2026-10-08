@@ -94,6 +94,24 @@ export async function updateUserProfile(
 
     if (error) return { error: error.message }
 
+    if (updates.role && updates.role !== 'super_admin') {
+      const { data: accessRow } = await adminClient
+        .from('labor_report_access')
+        .select('is_owner')
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (accessRow && !(accessRow as { is_owner?: boolean }).is_owner) {
+        const { error: revokeError } = await adminClient
+          .from('labor_report_access')
+          .delete()
+          .eq('user_id', userId)
+          .eq('is_owner', false)
+        if (revokeError && !/labor_report_access|schema cache|does not exist/i.test(revokeError.message || '')) {
+          console.error('labor report access revoke', revokeError)
+        }
+      }
+    }
+
     revalidatePath('/dashboard/admin/users')
     return { success: true }
   } catch (error: any) {
