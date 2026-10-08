@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import MultiSelectDropdown from '@/components/admin/MultiSelectDropdown'
 import {
@@ -551,27 +552,31 @@ export default function LaborBillRateReport({
                 ))}
               </tbody>
             </table>
-            {candidates.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={grantId}
-                  onChange={(e) => setGrantId(e.target.value)}
-                  className={`${controlClass} mt-0 w-auto min-w-[12rem]`}
-                >
-                  <option value="">Add a super admin</option>
-                  {candidates.map((c) => (
-                    <option key={c.userId} value={c.userId}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" onClick={grant} disabled={!grantId || accessBusy} className="box-border h-10 text-sm px-3 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-50">
-                  Add
-                </button>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500 dark:text-gray-400">Promoting someone to super admin does not add them here.</p>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={grantId}
+                onChange={(e) => setGrantId(e.target.value)}
+                disabled={candidates.length === 0}
+                className={`${controlClass} mt-0 w-auto min-w-[12rem] disabled:opacity-60`}
+              >
+                <option value="">{candidates.length === 0 ? 'No other super admins' : 'Add a super admin'}</option>
+                {candidates.map((c) => (
+                  <option key={c.userId} value={c.userId}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={grant} disabled={!grantId || accessBusy} className="box-border h-10 text-sm px-3 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-50">
+                Add
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Make them a super admin in{' '}
+              <Link href="/dashboard/admin/users" className="text-orange-600 dark:text-orange-400 underline">
+                Manage Users
+              </Link>
+              , then choose them here. Becoming a super admin does not add them by itself.
+            </p>
             {accessError && <p className="text-sm text-red-600 dark:text-red-400">{accessError}</p>}
           </div>
         </section>
@@ -660,18 +665,16 @@ export default function LaborBillRateReport({
               className={`${controlClass} col-start-1 row-start-2 !w-0 !min-w-full px-2`}
             />
           </label>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <label className="text-sm text-gray-700 dark:text-gray-300">
             Starts
             <input
               type="date"
               value={addFrom}
               onChange={(e) => setAddFrom(e.target.value)}
-              className={controlClass}
+              className={`${controlClass} !w-auto`}
             />
           </label>
-          <label className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2 mt-6">
+          <label className="flex h-10 items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
             <input type="checkbox" checked={addCurrent} onChange={(e) => setAddCurrent(e.target.checked)} />
             Current (no end date)
           </label>
@@ -682,18 +685,18 @@ export default function LaborBillRateReport({
                 type="date"
                 value={addTo}
                 onChange={(e) => setAddTo(e.target.value)}
-                className={controlClass}
+                className={`${controlClass} !w-auto`}
               />
             </label>
           )}
           {needsClose && (
-            <label className="text-sm text-gray-700 dark:text-gray-300 sm:col-span-2">
+            <label className="text-sm text-gray-700 dark:text-gray-300">
               End the current rate on
               <input
                 type="date"
                 value={closeOn}
                 onChange={(e) => setCloseOn(e.target.value)}
-                className={controlClass}
+                className={`${controlClass} !w-auto`}
               />
             </label>
           )}
