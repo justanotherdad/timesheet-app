@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { laborNotFound, requireLaborAccess } from '@/lib/labor-report-access'
-import { rangesOverlap, type PayKind } from '@/lib/labor-profit-math'
+import { rangesOverlap, roundPay, type PayKind } from '@/lib/labor-profit-math'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,7 +45,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const classification: PayKind =
     body.classification === '1099' ? '1099' : body.classification === 'w2' ? 'w2' : row.classification
-  const amount = body.amount == null ? row.amount : Number(body.amount)
+  const amount = body.amount == null ? row.amount : roundPay(Number(body.amount))
   const effectiveFrom = body.effectiveFrom == null ? row.effectiveFrom : String(body.effectiveFrom).slice(0, 10)
   const effectiveTo =
     body.effectiveTo === undefined

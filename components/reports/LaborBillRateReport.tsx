@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MultiSelectDropdown from '@/components/admin/MultiSelectDropdown'
 import {
   buildStatement,
@@ -9,6 +9,7 @@ import {
   hoursLabel,
   marginLabel,
   money,
+  payMoney,
   type LaborWeek,
   type PayKind,
   type PayRateRow,
@@ -125,6 +126,16 @@ export default function LaborBillRateReport({
   const [closeOn, setCloseOn] = useState('')
   const [rateError, setRateError] = useState<string | null>(null)
   const [rateBusy, setRateBusy] = useState(false)
+  const [rateSort, setRateSort] = useState<{ key: 'name' | 'class' | 'pay' | 'starts' | 'ends'; dir: 'asc' | 'desc' }>({
+    key: 'name',
+    dir: 'asc',
+  })
+  const addUserRef = useRef<HTMLSelectElement>(null)
+  const addAmountRef = useRef<HTMLInputElement>(null)
+  const addFromRef = useRef<HTMLInputElement>(null)
+  const addUserLive = useRef('')
+  const addAmountLive = useRef('')
+  const addFromLive = useRef('')
 
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const address = `${origin}/dashboard/${pathSegment}`
@@ -390,26 +401,45 @@ export default function LaborBillRateReport({
 
   const addRate = async () => {
     setRateError(null)
-    if (!addUserId || !addFrom || addAmount.trim() === '') {
+    // A date field can show a value before React state catches the change.
+    addUserRef.current?.blur()
+    addAmountRef.current?.blur()
+    addFromRef.current?.blur()
+    const userId = addUserRef.current?.value || addUserLive.current || addUserId
+    const amountText = addAmountRef.current?.value || addAmountLive.current || addAmount
+    const from = addFromRef.current?.value || addFromLive.current || addFrom
+    if (userId !== addUserId) setAddUserId(userId)
+    if (amountText !== addAmount) setAddAmount(amountText)
+    if (from !== addFrom) setAddFrom(from)
+    if (!userId || !from || amountText.trim() === '') {
       setRateError('Choose a person, a pay rate, and a start date.')
       return
     }
+    const open = rates.find((r) => r.userId === userId && !r.effectiveTo)
+    const proposedEnd = addCurrent ? null : addTo || null
+    const closing =
+      !!open &&
+      (addCurrent || !!proposedEnd) &&
+      open.effectiveFrom <= (proposedEnd || '9999-12-31') &&
+      from <= (proposedEnd || '9999-12-31')
     setRateBusy(true)
     try {
       const res = await fetch('/api/reports/labor-profit/pay-rates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: addUserId,
+          userId,
           classification: addKind,
-          amount: Number(addAmount),
-          effectiveFrom: addFrom,
-          effectiveTo: addCurrent ? null : addTo,
-          closeOpenOn: needsClose ? closeOn : null,
+          amount: Number(amountText),
+          effectiveFrom: from,
+          effectiveTo: proposedEnd,
+          closeOpenOn: closing ? closeOn || dayBefore(from) : null,
         }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'The pay rate could not be saved.')
+      addAmountLive.current = ''
+      addFromLive.current = ''
       setAddAmount('')
       setAddFrom('')
       setAddTo('')
@@ -488,13 +518,25 @@ export default function LaborBillRateReport({
     await loadAccess()
   }
 
+  const rateName = (userId: string) => employees.find((e) => e.id === userId)?.name || ''
   const rateRows = [...rates].sort((a, b) => {
-    const an = employees.find((e) => e.id === a.userId)?.name || ''
-    const bn = employees.find((e) => e.id === b.userId)?.name || ''
-    const name = an.localeCompare(bn, undefined, { sensitivity: 'base' })
+    const dir = rateSort.dir === 'asc' ? 1 : -1
+    let cmp = 0
+    if (rateSort.key === 'name') cmp = rateName(a.userId).localeCompare(rateName(b.userId), undefined, { sensitivity: 'base' })
+    else if (rateSort.key === 'class') cmp = a.classification.localeCompare(b.classification)
+    else if (rateSort.key === 'pay') cmp = a.amount - b.amount
+    else if (rateSort.key === 'starts') cmp = a.effectiveFrom.localeCompare(b.effectiveFrom)
+    else cmp = (a.effectiveTo || '9999-12-31').localeCompare(b.effectiveTo || '9999-12-31')
+    if (cmp !== 0) return cmp * dir
+    const name = rateName(a.userId).localeCompare(rateName(b.userId), undefined, { sensitivity: 'base' })
     if (name !== 0) return name
     return a.effectiveFrom.localeCompare(b.effectiveFrom)
   })
+  const toggleRateSort = (key: typeof rateSort.key) => {
+    setRateSort((current) =>
+      current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
+    )
+  }
 
   return (
     <div className="space-y-8">
@@ -590,11 +632,26 @@ export default function LaborBillRateReport({
         <div className="grid w-full items-end justify-start gap-x-3 gap-y-3 overflow-x-auto [grid-template-columns:minmax(11rem,calc((100%-1.5rem)/4.5))_max-content_max-content_max-content_max-content_max-content]">
           <div className="col-span-6 grid grid-cols-subgrid overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
             <div className="col-span-6 grid grid-cols-subgrid bg-gray-50 text-left text-sm text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-              <div className="px-3 py-2 font-medium">Employee</div>
-              <div className="px-3 py-2 font-medium">Class</div>
-              <div className="px-3 py-2 font-medium">Pay / hr</div>
-              <div className="px-3 py-2 font-medium">Starts</div>
-              <div className="px-3 py-2 font-medium">Ends</div>
+              {(
+                [
+                  ['name', 'Employee'],
+                  ['class', 'Class'],
+                  ['pay', 'Pay / hr'],
+                  ['starts', 'Starts'],
+                  ['ends', 'Ends'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleRateSort(key)}
+                  className="px-3 py-2 text-left font-medium hover:text-gray-900 dark:hover:text-gray-100"
+                  aria-sort={rateSort.key === key ? (rateSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                >
+                  {label}
+                  {rateSort.key === key ? (rateSort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
+                </button>
+              ))}
               <div className="px-3 py-2" />
             </div>
             {rateRows.map((r) => {
@@ -603,7 +660,7 @@ export default function LaborBillRateReport({
                 <div key={r.id} className="col-span-6 grid grid-cols-subgrid border-t border-gray-100 text-sm dark:border-gray-700">
                   <div className="px-3 py-2 text-gray-900 dark:text-gray-100">{person?.name || 'Unknown'}</div>
                   <div className="px-3 py-2 uppercase">{r.classification}</div>
-                  <div className="px-3 py-2 tabular-nums">{money(r.amount)}</div>
+                  <div className="px-3 py-2 tabular-nums">{payMoney(r.amount)}</div>
                   <div className="whitespace-nowrap px-3 py-2">{formatDay(r.effectiveFrom)}</div>
                   <div className="whitespace-nowrap px-3 py-2">{r.effectiveTo ? formatDay(r.effectiveTo) : 'Current'}</div>
                   <div className="px-3 py-2 text-right">
@@ -623,8 +680,13 @@ export default function LaborBillRateReport({
           <label className="min-w-0 px-3 text-sm text-gray-700 dark:text-gray-300">
             Employee
             <select
+              ref={addUserRef}
               value={addUserId}
-              onChange={(e) => setAddUserId(e.target.value)}
+              onChange={(e) => {
+                addUserLive.current = e.target.value
+                setAddUserId(e.target.value)
+                setRateError(null)
+              }}
               className={controlClass}
             >
               <option value="">Select</option>
@@ -649,20 +711,30 @@ export default function LaborBillRateReport({
           <label className="inline-grid px-3 text-sm text-gray-700 dark:text-gray-300">
             <span className="col-start-1 row-start-1 whitespace-nowrap">Pay per hour</span>
             <input
+              ref={addAmountRef}
               type="number"
               min="0"
-              step="0.01"
+              step="any"
               value={addAmount}
-              onChange={(e) => setAddAmount(e.target.value)}
+              onChange={(e) => {
+                addAmountLive.current = e.target.value
+                setAddAmount(e.target.value)
+                setRateError(null)
+              }}
               className={`${controlClass} col-start-1 row-start-2 !w-0 !min-w-full px-2`}
             />
           </label>
           <label className="px-3 text-sm text-gray-700 dark:text-gray-300">
             Starts
             <input
+              ref={addFromRef}
               type="date"
               value={addFrom}
-              onChange={(e) => setAddFrom(e.target.value)}
+              onChange={(e) => {
+                addFromLive.current = e.target.value
+                setAddFrom(e.target.value)
+                setRateError(null)
+              }}
               className={`${controlClass} !w-auto`}
             />
           </label>

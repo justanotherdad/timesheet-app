@@ -33,7 +33,7 @@ create table if not exists public.labor_pay_rates (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.user_profiles(id) on delete cascade,
   classification text not null check (classification in ('w2', '1099')),
-  amount numeric(12, 2) not null check (amount >= 0),
+  amount numeric(15, 3) not null check (amount >= 0),
   effective_from date not null,
   effective_to date,
   created_at timestamptz not null default now(),
@@ -72,3 +72,7 @@ comment on table public.labor_pay_rates is
   'W2 or 1099 pay rates with a start date and optional end date. Reports look these up; they are not stored on the user profile.';
 comment on table public.labor_profit_reports is
   'Saved labor profitability snapshots. Hours and bill rates are frozen. Pay is read from labor_pay_rates when opened. Kept 1 year.';
+
+-- Existing databases created amount as numeric(12, 2). Widen it so a rate can keep thousandths.
+alter table public.labor_pay_rates
+  alter column amount type numeric(15, 3);

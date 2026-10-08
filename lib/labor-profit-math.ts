@@ -93,6 +93,20 @@ export function money(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
+/** Pay rates keep up to three decimal places. Totals stay in cents. */
+export function payMoney(n: number): string {
+  return n.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 3,
+  })
+}
+
+export function roundPay(n: number): number {
+  return Math.round(n * 1000) / 1000
+}
+
 export function hoursLabel(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
 }
