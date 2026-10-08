@@ -18,8 +18,18 @@ export default async function LaborDoorPage({ params }: { params: Promise<{ door
     notFound()
   }
 
-  const { data: settings } = await admin.from('labor_report_settings').select('path_segment').eq('id', 1).maybeSingle()
+  const withOverhead = await admin
+    .from('labor_report_settings')
+    .select('path_segment, w2_overhead')
+    .eq('id', 1)
+    .maybeSingle()
+  const settings = withOverhead.error
+    ? (await admin.from('labor_report_settings').select('path_segment').eq('id', 1).maybeSingle()).data
+    : withOverhead.data
   const segment = String((settings as { path_segment?: string } | null)?.path_segment || '').toLowerCase()
+  const overheadRaw = (settings as { w2_overhead?: number | string } | null)?.w2_overhead
+  const overhead = Number(overheadRaw)
+  const w2Overhead = Number.isFinite(overhead) ? overhead : 0.25
   if (!segment || door.toLowerCase() !== segment) notFound()
 
   const { data: access } = await admin
@@ -37,6 +47,7 @@ export default async function LaborDoorPage({ params }: { params: Promise<{ door
           <LaborBillRateReport
             isOwner={!!(access as { is_owner?: boolean }).is_owner}
             pathSegment={segment}
+            w2Overhead={w2Overhead}
             viewerName={user.profile.name || 'Unknown'}
           />
         </div>

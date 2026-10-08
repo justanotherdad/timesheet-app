@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { laborNotFound, normalizePathSegment, requireLaborAccess } from '@/lib/labor-report-access'
+import { DEFAULT_W2_OVERHEAD, parseOverheadPercent } from '@/lib/labor-profit-math'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,7 +9,15 @@ export async function GET() {
   if (!gate) return laborNotFound()
   const { admin } = gate
 
-  const { data: settings } = await admin.from('labor_report_settings').select('path_segment').eq('id', 1).maybeSingle()
+  let settingsQuery = await admin
+    .from('labor_report_settings')
+    .select('path_segment, w2_overhead')
+    .eq('id', 1)
+    .maybeSingle()
+  if (settingsQuery.error) {
+    settingsQuery = await admin.from('labor_report_settings').select('path_segment').eq('id', 1).maybeSingle()
+  }
+  const settings = settingsQuery.data
   const { data: access } = await admin.from('labor_report_access').select('user_id, is_owner')
   const { data: supers } = await admin
     .from('user_profiles')
@@ -26,8 +35,11 @@ export async function GET() {
     for (const p of (extra || []) as Array<{ id: string; name: string }>) names.set(p.id, p.name || 'Unknown')
   }
 
+  const overheadRaw = (settings as { w2_overhead?: number | string } | null)?.w2_overhead
+  const overhead = Number(overheadRaw)
   return NextResponse.json({
     pathSegment: String((settings as { path_segment?: string } | null)?.path_segment || 'rv'),
+    w2Overhead: Number.isFinite(overhead) ? overhead : DEFAULT_W2_OVERHEAD,
     members: ((access || []) as Array<{ user_id: string; is_owner: boolean }>)
       .map((r) => ({ userId: r.user_id, name: names.get(r.user_id) || 'Unknown', isOwner: !!r.is_owner }))
       .sort((a, b) => Number(b.isOwner) - Number(a.isOwner) || a.name.localeCompare(b.name)),
@@ -66,22 +78,43 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const gate = await requireLaborAccess({ owner: true })
   if (!gate) return laborNotFound()
-  let body: { pathSegment?: string }
+  let body: { pathSegment?: string; w2OverheadPercent?: string | number }
   try {
     body = await req.json()
   } catch {
     return laborNotFound()
   }
-  const segment = normalizePathSegment(String(body.pathSegment || ''))
-  if (!segment) {
-    return NextResponse.json(
-      { error: 'Use 2–40 letters, numbers, or hyphens. That word is already a page in the app.' },
-      { status: 400 }
-    )
+  const updates: { path_segment?: string; w2_overhead?: number } = {}
+  let pathSegment: string | undefined
+  if (body.pathSegment != null) {
+    const segment = normalizePathSegment(String(body.pathSegment || ''))
+    if (!segment) {
+      return NextResponse.json(
+        { error: 'Use 2–40 letters, numbers, or hyphens. That word is already a page in the app.' },
+        { status: 400 }
+      )
+    }
+    updates.path_segment = segment
+    pathSegment = segment
   }
-  const { error } = await gate.admin.from('labor_report_settings').update({ path_segment: segment }).eq('id', 1)
-  if (error) return laborNotFound()
-  return NextResponse.json({ pathSegment: segment })
+  let w2Overhead: number | undefined
+  if (body.w2OverheadPercent != null) {
+    const parsed = parseOverheadPercent(String(body.w2OverheadPercent))
+    if (parsed == null) {
+      return NextResponse.json({ error: 'Enter an overhead from 0 to 200.' }, { status: 400 })
+    }
+    updates.w2_overhead = parsed
+    w2Overhead = parsed
+  }
+  if (!updates.path_segment && updates.w2_overhead == null) return laborNotFound()
+  const { error } = await gate.admin.from('labor_report_settings').update(updates).eq('id', 1)
+  if (error) {
+    if (updates.w2_overhead != null) {
+      return NextResponse.json({ error: 'Add the overhead column in Supabase, then save again.' }, { status: 400 })
+    }
+    return laborNotFound()
+  }
+  return NextResponse.json({ pathSegment, w2Overhead })
 }
 
 export async function DELETE(req: Request) {

@@ -69,22 +69,36 @@ export type StatementModel = {
   peopleWithPay: number
 }
 
-const W2_OVERHEAD = 0.25
+export const DEFAULT_W2_OVERHEAD = 0.25
 
 export function roundMoney(n: number): number {
   return Math.round(n * 100) / 100
 }
 
-export function loadedHourlyCost(kind: PayKind, amount: number): number {
-  return kind === 'w2' ? roundMoney(amount * (1 + W2_OVERHEAD)) : roundMoney(amount)
+/** Percent text such as "25" or "25.5" becomes the fraction stored on the setting. */
+export function parseOverheadPercent(raw: string): number | null {
+  const text = raw.trim().replace(/%/g, '')
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) return null
+  const pct = Number(text)
+  if (!Number.isFinite(pct) || pct < 0 || pct > 200) return null
+  return Math.round(pct * 100) / 10000
 }
 
-export function payCaption(kind: PayKind, amount: number): string {
+export function overheadPercentText(fraction: number): string {
+  const pct = Math.round(fraction * 10000) / 100
+  return String(pct)
+}
+
+export function loadedHourlyCost(kind: PayKind, amount: number, overhead = DEFAULT_W2_OVERHEAD): number {
+  return kind === 'w2' ? roundMoney(amount * (1 + overhead)) : roundMoney(amount)
+}
+
+export function payCaption(kind: PayKind, amount: number, overhead = DEFAULT_W2_OVERHEAD): string {
   const pay = payMoney(amount)
   if (kind === 'w2') {
-    const overhead = money(roundMoney(amount * W2_OVERHEAD))
-    const loaded = money(loadedHourlyCost(kind, amount))
-    return `W2 ${pay}/hr + 25% overhead (${overhead}) = ${loaded} loaded cost/hr`
+    const overheadAmount = money(roundMoney(amount * overhead))
+    const loaded = money(loadedHourlyCost(kind, amount, overhead))
+    return `W2 ${pay}/hr + ${overheadPercentText(overhead)}% overhead (${overheadAmount}) = ${loaded} loaded cost/hr`
   }
   return `1099 ${pay}/hr, no overhead`
 }
@@ -149,13 +163,17 @@ type Bucket = {
   payAmount: number | null
 }
 
-export function buildStatement(weeks: LaborWeek[], payRates: PayRateRow[]): StatementModel {
+export function buildStatement(
+  weeks: LaborWeek[],
+  payRates: PayRateRow[],
+  overhead = DEFAULT_W2_OVERHEAD
+): StatementModel {
   const buckets = new Map<string, Bucket>()
 
   for (const week of weeks) {
     if (week.hours <= 0) continue
     const pay = payRateForWeek(payRates, week.userId, week.weekEnding)
-    const loaded = pay ? loadedHourlyCost(pay.classification, pay.amount) : null
+    const loaded = pay ? loadedHourlyCost(pay.classification, pay.amount, overhead) : null
     const loadedKey = loaded == null ? 'none' : loaded.toFixed(2)
     const key = [week.userId, week.poId, week.billRate.toFixed(4), loadedKey].join('|')
     const prev = buckets.get(key)
@@ -230,7 +248,7 @@ export function buildStatement(weeks: LaborWeek[], payRates: PayRateRow[]): Stat
     const captions: string[] = []
     for (const line of userLines) {
       if (line.payKind == null || line.payAmount == null) continue
-      const caption = payCaption(line.payKind, line.payAmount)
+      const caption = payCaption(line.payKind, line.payAmount, overhead)
       if (!captions.includes(caption)) captions.push(caption)
     }
     return {

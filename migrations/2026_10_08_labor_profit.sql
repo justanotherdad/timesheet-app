@@ -7,7 +7,8 @@
 
 create table if not exists public.labor_report_settings (
   id integer primary key default 1 check (id = 1),
-  path_segment text not null default 'rv'
+  path_segment text not null default 'rv',
+  w2_overhead numeric(7, 4) not null default 0.25 check (w2_overhead >= 0 and w2_overhead <= 2)
 );
 
 insert into public.labor_report_settings (id, path_segment)
@@ -76,3 +77,13 @@ comment on table public.labor_profit_reports is
 -- Existing databases created amount as numeric(12, 2). Widen it so a rate can keep four decimal places.
 alter table public.labor_pay_rates
   alter column amount type numeric(15, 4);
+
+-- 0.25 means 25% added to each W2 pay rate. 1099 rates do not use it.
+alter table public.labor_report_settings
+  add column if not exists w2_overhead numeric(7, 4) not null default 0.25;
+
+alter table public.labor_report_settings
+  drop constraint if exists labor_report_settings_w2_overhead_check;
+
+alter table public.labor_report_settings
+  add constraint labor_report_settings_w2_overhead_check check (w2_overhead >= 0 and w2_overhead <= 2);

@@ -9,6 +9,8 @@ import {
   hoursLabel,
   marginLabel,
   money,
+  overheadPercentText,
+  parseOverheadPercent,
   payMoney,
   type LaborWeek,
   type PayKind,
@@ -84,10 +86,12 @@ function csvEscape(value: string): string {
 export default function LaborBillRateReport({
   isOwner,
   pathSegment,
+  w2Overhead,
   viewerName,
 }: {
   isOwner: boolean
   pathSegment: string
+  w2Overhead: number
   viewerName: string
 }) {
   const months = useMemo(monthChoices, [])
@@ -99,6 +103,9 @@ export default function LaborBillRateReport({
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [segment, setSegment] = useState(pathSegment)
+  const [overhead, setOverhead] = useState(w2Overhead)
+  const [overheadText, setOverheadText] = useState(overheadPercentText(w2Overhead))
+  const [overheadBusy, setOverheadBusy] = useState(false)
   const [members, setMembers] = useState<AccessMember[]>([])
   const [candidates, setCandidates] = useState<{ userId: string; name: string }[]>([])
   const [grantId, setGrantId] = useState('')
@@ -179,6 +186,10 @@ export default function LaborBillRateReport({
     setMembers(data.members || [])
     setCandidates(data.superAdmins || [])
     if (data.pathSegment) setSegment(data.pathSegment)
+    if (typeof data.w2Overhead === 'number' && Number.isFinite(data.w2Overhead)) {
+      setOverhead(data.w2Overhead)
+      setOverheadText(overheadPercentText(data.w2Overhead))
+    }
   }, [isOwner])
 
   useEffect(() => {
@@ -223,7 +234,10 @@ export default function LaborBillRateReport({
     if (needsClose && addFrom) setCloseOn(dayBefore(addFrom))
   }, [needsClose, addFrom])
 
-  const statement = useMemo(() => (weeks ? buildStatement(weeks, rates) : null), [weeks, rates])
+  const statement = useMemo(
+    () => (weeks ? buildStatement(weeks, rates, overhead) : null),
+    [weeks, rates, overhead]
+  )
 
   const describeFilters = () => {
     const typeLabel = employeeType === 'all' ? 'All employee types' : employeeType === 'internal' ? 'Internal' : 'External'
@@ -562,6 +576,32 @@ export default function LaborBillRateReport({
     }
   }
 
+  const saveOverhead = async () => {
+    setAccessError(null)
+    const parsed = parseOverheadPercent(overheadText)
+    if (parsed == null) {
+      setAccessError('Enter an overhead from 0 to 200.')
+      return
+    }
+    setOverheadBusy(true)
+    try {
+      const res = await fetch('/api/reports/labor-profit/access', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ w2OverheadPercent: overheadText }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'The overhead could not be saved.')
+      const next = typeof data.w2Overhead === 'number' ? data.w2Overhead : parsed
+      setOverhead(next)
+      setOverheadText(overheadPercentText(next))
+    } catch (err) {
+      setAccessError(err instanceof Error ? err.message : 'The overhead could not be saved.')
+    } finally {
+      setOverheadBusy(false)
+    }
+  }
+
   const grant = async () => {
     if (!grantId) return
     setAccessError(null)
@@ -625,7 +665,9 @@ export default function LaborBillRateReport({
       {isOwner && (
         <section className="print:hidden space-y-3">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Address and access</h2>
-          <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 space-y-4">
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-start">
+            <div className="space-y-4">
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Current address</p>
               <p className="font-medium text-gray-900 dark:text-gray-100 break-all">{address}</p>
@@ -700,6 +742,32 @@ export default function LaborBillRateReport({
               , then choose them here. Becoming a super admin does not add them by itself.
             </p>
             {accessError && <p className="text-sm text-red-600 dark:text-red-400">{accessError}</p>}
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">W2 overhead</p>
+              <div className="flex items-center gap-2">
+                <input
+                  value={overheadText}
+                  onChange={(e) => setOverheadText(e.target.value)}
+                  inputMode="decimal"
+                  aria-label="W2 overhead percent"
+                  className="box-border h-10 w-20 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 text-sm text-gray-900 dark:text-gray-100"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">%</span>
+              </div>
+              <button
+                type="button"
+                onClick={saveOverhead}
+                disabled={overheadBusy}
+                className="box-border h-10 rounded-lg bg-orange-600 text-white px-4 text-sm font-medium disabled:opacity-50"
+              >
+                {overheadBusy ? 'Saving…' : 'Save overhead'}
+              </button>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Added to each W2 pay rate. 1099 rates stay the rate itself. A report already on screen updates when you save.
+              </p>
+            </div>
+            </div>
           </div>
         </section>
       )}
