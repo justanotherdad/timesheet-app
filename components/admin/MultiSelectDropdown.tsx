@@ -12,6 +12,7 @@ interface MultiSelectDropdownProps {
   selected: string[]
   onChange: (ids: string[]) => void
   allLabel?: string
+  buttonClassName?: string
 }
 
 export default function MultiSelectDropdown({
@@ -20,6 +21,7 @@ export default function MultiSelectDropdown({
   selected,
   onChange,
   allLabel = 'All',
+  buttonClassName = '',
 }: MultiSelectDropdownProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -130,7 +132,7 @@ export default function MultiSelectDropdown({
         }
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 text-left flex items-center justify-between gap-2 ${
+        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 text-left flex items-center justify-between gap-2 ${buttonClassName} ${
           !isAll
             ? 'border-orange-400 dark:border-orange-500'
             : 'border-gray-300 dark:border-gray-600'

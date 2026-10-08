@@ -62,6 +62,10 @@ function billLabel(line: StatementLine, lines: StatementLine[]): string {
   return `${rate}  ${span}`
 }
 
+const controlClass =
+  'mt-1 box-border h-10 w-full px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700'
+const dropdownClass = 'h-10 box-border'
+
 function csvEscape(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`
   return value
@@ -503,24 +507,26 @@ export default function LaborBillRateReport({
               <p className="text-xs text-gray-500 dark:text-gray-400">Current address</p>
               <p className="font-medium text-gray-900 dark:text-gray-100 break-all">{address}</p>
             </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="text-sm text-gray-700 dark:text-gray-300">
-                dashboard /
-                <input
-                  value={segment}
-                  onChange={(e) => setSegment(e.target.value)}
-                  className="ml-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1 text-sm"
-                />
-              </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-gray-700 dark:text-gray-300">dashboard /</span>
+              <input
+                value={segment}
+                onChange={(e) => setSegment(e.target.value)}
+                aria-label="Address"
+                className="box-border h-10 w-40 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 text-sm text-gray-900 dark:text-gray-100"
+              />
               <button
                 type="button"
                 onClick={changeAddress}
                 disabled={accessBusy}
-                className="rounded bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 px-3 py-1.5 text-sm disabled:opacity-50"
+                className="box-border h-10 rounded-lg bg-orange-600 text-white px-4 text-sm font-medium disabled:opacity-50"
               >
-                Use this address
+                {accessBusy ? 'Saving…' : 'Save address'}
               </button>
             </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              The address changes only after you save it. Use letters, numbers, and hyphens.
+            </p>
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-gray-500 dark:text-gray-400">
@@ -550,7 +556,7 @@ export default function LaborBillRateReport({
                 <select
                   value={grantId}
                   onChange={(e) => setGrantId(e.target.value)}
-                  className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                  className={`${controlClass} mt-0 w-auto min-w-[12rem]`}
                 >
                   <option value="">Add a super admin</option>
                   {candidates.map((c) => (
@@ -559,7 +565,7 @@ export default function LaborBillRateReport({
                     </option>
                   ))}
                 </select>
-                <button type="button" onClick={grant} disabled={!grantId || accessBusy} className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-50">
+                <button type="button" onClick={grant} disabled={!grantId || accessBusy} className="box-border h-10 text-sm px-3 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-50">
                   Add
                 </button>
               </div>
@@ -616,13 +622,13 @@ export default function LaborBillRateReport({
             </tbody>
           </table>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <label className="text-sm text-gray-700 dark:text-gray-300">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-sm text-gray-700 dark:text-gray-300 w-full lg:w-[calc((100%-1.5rem)/4.5)]">
             Employee
             <select
               value={addUserId}
               onChange={(e) => setAddUserId(e.target.value)}
-              className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5"
+              className={controlClass}
             >
               <option value="">Select</option>
               {employees.map((e) => (
@@ -632,35 +638,37 @@ export default function LaborBillRateReport({
               ))}
             </select>
           </label>
-          <label className="text-sm text-gray-700 dark:text-gray-300">
-            Classification
+          <label className="inline-grid text-sm text-gray-700 dark:text-gray-300">
+            <span className="col-start-1 row-start-1 whitespace-nowrap">Classification</span>
             <select
               value={addKind}
               onChange={(e) => setAddKind(e.target.value as PayKind)}
-              className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5"
+              className={`${controlClass} col-start-1 row-start-2 !w-0 !min-w-full px-2`}
             >
               <option value="w2">W2</option>
               <option value="1099">1099</option>
             </select>
           </label>
-          <label className="text-sm text-gray-700 dark:text-gray-300">
-            Pay per hour
+          <label className="inline-grid text-sm text-gray-700 dark:text-gray-300">
+            <span className="col-start-1 row-start-1 whitespace-nowrap">Pay per hour</span>
             <input
               type="number"
               min="0"
               step="0.01"
               value={addAmount}
               onChange={(e) => setAddAmount(e.target.value)}
-              className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5"
+              className={`${controlClass} col-start-1 row-start-2 !w-0 !min-w-full px-2`}
             />
           </label>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <label className="text-sm text-gray-700 dark:text-gray-300">
             Starts
             <input
               type="date"
               value={addFrom}
               onChange={(e) => setAddFrom(e.target.value)}
-              className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5"
+              className={controlClass}
             />
           </label>
           <label className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2 mt-6">
@@ -674,7 +682,7 @@ export default function LaborBillRateReport({
                 type="date"
                 value={addTo}
                 onChange={(e) => setAddTo(e.target.value)}
-                className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5"
+                className={controlClass}
               />
             </label>
           )}
@@ -685,7 +693,7 @@ export default function LaborBillRateReport({
                 type="date"
                 value={closeOn}
                 onChange={(e) => setCloseOn(e.target.value)}
-                className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5"
+                className={controlClass}
               />
             </label>
           )}
@@ -712,7 +720,7 @@ export default function LaborBillRateReport({
                 setEmployeeType(e.target.value as 'all' | 'internal' | 'external')
                 setEmployeeIds([])
               }}
-              className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5"
+              className={controlClass}
             >
               <option value="all">All</option>
               <option value="internal">Internal</option>
@@ -724,6 +732,7 @@ export default function LaborBillRateReport({
             options={employeeChoices.map((e) => ({ id: e.id, label: e.name }))}
             selected={employeeIds}
             onChange={setEmployeeIds}
+            buttonClassName={dropdownClass}
           />
           <MultiSelectDropdown
             label="Clients"
@@ -733,6 +742,7 @@ export default function LaborBillRateReport({
               setClientIds(ids)
               setPoIds((prev) => prev.filter((id) => pos.some((p) => p.id === id && (ids.length === 0 || ids.includes(p.clientId)))))
             }}
+            buttonClassName={dropdownClass}
           />
           <MultiSelectDropdown
             label="Purchase orders"
@@ -742,13 +752,14 @@ export default function LaborBillRateReport({
             }))}
             selected={poIds}
             onChange={setPoIds}
+            buttonClassName={dropdownClass}
           />
           <label className="text-sm text-gray-700 dark:text-gray-300">
             Timeframe
             <select
               value={timeKind}
               onChange={(e) => setTimeKind(e.target.value as TimeKind | '')}
-              className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5"
+              className={controlClass}
             >
               <option value="">Choose</option>
               <option value="all">All time</option>
@@ -763,17 +774,18 @@ export default function LaborBillRateReport({
               selected={monthIds}
               onChange={setMonthIds}
               allLabel="Choose months"
+              buttonClassName={dropdownClass}
             />
           )}
           {timeKind === 'range' && (
             <>
               <label className="text-sm text-gray-700 dark:text-gray-300">
                 Start
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5" />
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={controlClass} />
               </label>
               <label className="text-sm text-gray-700 dark:text-gray-300">
                 End
-                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5" />
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={controlClass} />
               </label>
             </>
           )}
