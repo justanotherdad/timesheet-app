@@ -80,7 +80,7 @@ export function loadedHourlyCost(kind: PayKind, amount: number): number {
 }
 
 export function payCaption(kind: PayKind, amount: number): string {
-  const pay = money(amount)
+  const pay = payMoney(amount)
   if (kind === 'w2') {
     const overhead = money(roundMoney(amount * W2_OVERHEAD))
     const loaded = money(loadedHourlyCost(kind, amount))
@@ -93,18 +93,18 @@ export function money(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
-/** Pay rates keep up to three decimal places. Totals stay in cents. */
+/** Pay rates keep up to four decimal places. Totals stay in cents. */
 export function payMoney(n: number): string {
   return n.toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 2,
-    maximumFractionDigits: 3,
+    maximumFractionDigits: 4,
   })
 }
 
 export function roundPay(n: number): number {
-  return Math.round(n * 1000) / 1000
+  return Math.round(n * 10000) / 10000
 }
 
 export function hoursLabel(n: number): string {
