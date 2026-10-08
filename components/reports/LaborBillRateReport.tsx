@@ -129,11 +129,20 @@ export default function LaborBillRateReport({
   const [addKind, setAddKind] = useState<PayKind>('w2')
   const [addAmount, setAddAmount] = useState('')
   const [addFrom, setAddFrom] = useState('')
+  const [addFromKey, setAddFromKey] = useState(0)
   const [addTo, setAddTo] = useState('')
   const [addCurrent, setAddCurrent] = useState(true)
   const [closeOn, setCloseOn] = useState('')
   const [rateError, setRateError] = useState<string | null>(null)
   const [rateBusy, setRateBusy] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editKind, setEditKind] = useState<PayKind>('w2')
+  const [editAmount, setEditAmount] = useState('')
+  const [editFrom, setEditFrom] = useState('')
+  const [editTo, setEditTo] = useState('')
+  const [editCurrent, setEditCurrent] = useState(true)
+  const editFromRef = useRef<HTMLInputElement>(null)
+  const editToRef = useRef<HTMLInputElement>(null)
   const [rateSort, setRateSort] = useState<{ key: 'name' | 'class' | 'pay' | 'starts' | 'ends'; dir: 'asc' | 'desc' }>({
     key: 'name',
     dir: 'asc',
@@ -412,12 +421,10 @@ export default function LaborBillRateReport({
     const userId = addUserRef.current?.value || addUserLive.current || addUserId
     const amountText = (addAmountRef.current?.value || addAmountLive.current || addAmount).trim()
     const dateEl = addFromRef.current
-    let from = dateEl?.value || ''
-    if (!from && dateEl && !dateEl.validity.badInput) {
-      dateEl.blur()
-      from = dateEl.value || ''
-    }
-    if (!from) from = addFromLive.current || addFrom
+    // The year and day arrows update the field on screen before the browser
+    // commits a value. Leaving the field commits that first click.
+    dateEl?.blur()
+    const from = dateEl?.value || addFromLive.current || addFrom
     if (userId !== addUserId) setAddUserId(userId)
     if (amountText !== addAmount) setAddAmount(amountText)
     if (from !== addFrom) setAddFrom(from)
@@ -431,7 +438,7 @@ export default function LaborBillRateReport({
       return
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) {
-      setRateError(dateEl?.validity.badInput ? 'Choose the start date again.' : 'Choose a start date.')
+      setRateError('Choose a start date.')
       return
     }
     const open = rates.find((r) => r.userId === userId && !r.effectiveTo)
@@ -461,8 +468,62 @@ export default function LaborBillRateReport({
       addFromLive.current = ''
       setAddAmount('')
       setAddFrom('')
+      setAddFromKey((key) => key + 1)
       setAddTo('')
       setCloseOn('')
+      await loadRates()
+    } catch (err) {
+      setRateError(err instanceof Error ? err.message : 'The pay rate could not be saved.')
+    } finally {
+      setRateBusy(false)
+    }
+  }
+
+  const beginEdit = (row: PayRateRow) => {
+    setEditingId(row.id)
+    setEditKind(row.classification)
+    setEditAmount(String(Math.round(row.amount * 10000) / 10000))
+    setEditFrom(row.effectiveFrom)
+    setEditTo(row.effectiveTo || '')
+    setEditCurrent(!row.effectiveTo)
+    setRateError(null)
+  }
+
+  const saveEdit = async () => {
+    if (!editingId) return
+    setRateError(null)
+    editFromRef.current?.blur()
+    editToRef.current?.blur()
+    const from = editFromRef.current?.value || editFrom
+    const to = editCurrent ? null : editToRef.current?.value || editTo
+    const amount = parsePayInput(editAmount)
+    if (amount == null) {
+      setRateError('Enter a pay rate. Up to 4 decimal places.')
+      return
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+      setRateError('Choose a start date.')
+      return
+    }
+    if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      setRateError('Choose an end date, or mark the rate current.')
+      return
+    }
+    setRateBusy(true)
+    try {
+      const res = await fetch(`/api/reports/labor-profit/pay-rates/${editingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          classification: editKind,
+          amount,
+          effectiveFrom: from,
+          effectiveTo: to,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'The pay rate could not be saved.')
+      setEditingId(null)
       await loadRates()
     } catch (err) {
       setRateError(err instanceof Error ? err.message : 'The pay rate could not be saved.')
@@ -675,18 +736,84 @@ export default function LaborBillRateReport({
             </div>
             {rateRows.map((r) => {
               const person = employees.find((e) => e.id === r.userId)
+              const editing = editingId === r.id
               return (
-                <div key={r.id} className="col-span-6 grid grid-cols-subgrid border-t border-gray-100 text-sm dark:border-gray-700">
+                <div key={r.id} className="col-span-6 grid grid-cols-subgrid items-center border-t border-gray-100 text-sm dark:border-gray-700">
                   <div className="px-3 py-2 text-gray-900 dark:text-gray-100">{person?.name || 'Unknown'}</div>
-                  <div className="px-3 py-2 uppercase">{r.classification}</div>
-                  <div className="px-3 py-2 tabular-nums">{payMoney(r.amount)}</div>
-                  <div className="whitespace-nowrap px-3 py-2">{formatDay(r.effectiveFrom)}</div>
-                  <div className="whitespace-nowrap px-3 py-2">{r.effectiveTo ? formatDay(r.effectiveTo) : 'Current'}</div>
-                  <div className="px-3 py-2 text-right">
-                    <button type="button" onClick={() => removeRate(r.id)} className="text-red-600 dark:text-red-400">
-                      Remove
-                    </button>
-                  </div>
+                  {editing ? (
+                    <>
+                      <div className="px-3 py-2">
+                        <select
+                          value={editKind}
+                          onChange={(e) => setEditKind(e.target.value as PayKind)}
+                          aria-label="Classification"
+                          className="h-10 rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+                        >
+                          <option value="w2">W2</option>
+                          <option value="1099">1099</option>
+                        </select>
+                      </div>
+                      <div className="px-3 py-2">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={editAmount}
+                          onChange={(e) => setEditAmount(e.target.value)}
+                          aria-label="Pay per hour"
+                          className="h-10 w-24 rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+                        />
+                      </div>
+                      <div className="px-3 py-2">
+                        <input
+                          ref={editFromRef}
+                          type="date"
+                          value={editFrom}
+                          onChange={(e) => setEditFrom(e.target.value)}
+                          aria-label="Starts"
+                          className="h-10 rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+                        />
+                      </div>
+                      <div className="px-3 py-2">
+                        <label className="flex items-center gap-2 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                          <input type="checkbox" checked={editCurrent} onChange={(e) => setEditCurrent(e.target.checked)} />
+                          Current
+                        </label>
+                        {!editCurrent && (
+                          <input
+                            ref={editToRef}
+                            type="date"
+                            value={editTo}
+                            onChange={(e) => setEditTo(e.target.value)}
+                            aria-label="Ends"
+                            className="mt-1 h-10 rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+                          />
+                        )}
+                      </div>
+                      <div className="whitespace-nowrap px-3 py-2 text-right">
+                        <button type="button" onClick={saveEdit} disabled={rateBusy} className="text-orange-600 dark:text-orange-400">
+                          Save
+                        </button>
+                        <button type="button" onClick={() => setEditingId(null)} className="ml-3 text-gray-600 dark:text-gray-300">
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="px-3 py-2 uppercase">{r.classification}</div>
+                      <div className="px-3 py-2 tabular-nums">{payMoney(r.amount)}</div>
+                      <div className="whitespace-nowrap px-3 py-2">{formatDay(r.effectiveFrom)}</div>
+                      <div className="whitespace-nowrap px-3 py-2">{r.effectiveTo ? formatDay(r.effectiveTo) : 'Current'}</div>
+                      <div className="whitespace-nowrap px-3 py-2 text-right">
+                        <button type="button" onClick={() => beginEdit(r)} className="text-gray-700 dark:text-gray-200">
+                          Edit
+                        </button>
+                        <button type="button" onClick={() => removeRate(r.id)} className="ml-3 text-red-600 dark:text-red-400">
+                          Remove
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               )
             })}
@@ -746,14 +873,21 @@ export default function LaborBillRateReport({
           <label className="px-3 text-sm text-gray-700 dark:text-gray-300">
             Starts
             <input
+              key={addFromKey}
               ref={addFromRef}
               type="date"
-              value={addFrom}
+              defaultValue=""
+              onInput={(e) => {
+                addFromLive.current = e.currentTarget.value
+              }}
               onChange={(e) => {
-                if (!e.target.value && e.target.validity.badInput) return
                 addFromLive.current = e.target.value
                 setAddFrom(e.target.value)
                 setRateError(null)
+              }}
+              onBlur={(e) => {
+                addFromLive.current = e.target.value
+                setAddFrom(e.target.value)
               }}
               className={`${controlClass} !w-auto`}
             />
@@ -789,7 +923,6 @@ export default function LaborBillRateReport({
         </div>
         <button
           type="button"
-          onMouseDown={(e) => e.preventDefault()}
           onClick={addRate}
           disabled={rateBusy}
           className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm disabled:opacity-50"
