@@ -171,17 +171,18 @@ export function currentWeekEnding(weekStartsOn: number = 1, asOf: Date = new Dat
 }
 
 /**
- * Approved weekly-timesheet owners keyed by week-ending, for current and later weeks.
+ * Approved weekly-timesheet owners keyed by week-ending, for every displayed week.
  * Empty arrays mean nobody is approved yet (those cells are NTS).
+ * `_thisWeekEnding` is unused; callers still pass it.
  */
 export function buildApprovedTimesheetUserIdsByWeek(
   timesheets: Array<{ user_id?: string | null; week_ending?: string | null }>,
   weekEndings: string[],
-  thisWeekEnding: string
+  _thisWeekEnding: string
 ): Record<string, string[]> {
   const sets: Record<string, Set<string>> = {}
   for (const we of weekEndings) {
-    if (we >= thisWeekEnding) sets[we] = new Set()
+    sets[we] = new Set()
   }
   for (const t of timesheets) {
     const we = String(t.week_ending ?? '').trim().slice(0, 10)
@@ -200,9 +201,14 @@ export function buildApprovedTimesheetUserIdsByWeek(
  * True when this employee×week cell should show NTS (no approved timesheet yet)
  * instead of an empty dash. Hours > 0 never NTS.
  *
- * New payloads pass `approvedTimesheetUserIdsByWeek` so current + later weeks NTS
- * until that week's sheet is approved. Older saved reports only have the flat
- * list and stay current-week-only.
+ * When `approvedTimesheetUserIdsByWeek` has this week (including an empty list),
+ * a zero-hour cell is NTS unless that user is in the list. That covers past weeks
+ * as well as the current week and later.
+ *
+ * A past week missing from the map stays a dash. Snapshots saved before past weeks
+ * were tracked only keyed the current week and later, so those zeros cannot be
+ * reclassified. Current and later weeks missing from the map are still NTS.
+ * Older snapshots with only the flat list stay current-week-only.
  */
 export function isNoTimesheetCell(opts: {
   weekEnding: string
@@ -217,9 +223,11 @@ export function isNoTimesheetCell(opts: {
 
   const byWeek = opts.approvedTimesheetUserIdsByWeek
   if (byWeek) {
-    if (opts.weekEnding < opts.currentWeekEnding) return false
     const approved = byWeek[opts.weekEnding]
-    if (!approved) return true
+    if (!approved) {
+      if (opts.weekEnding < opts.currentWeekEnding) return false
+      return true
+    }
     return !approved.includes(opts.userId)
   }
 

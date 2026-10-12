@@ -39,8 +39,10 @@ export interface ReportBillableActivitiesMonth {
   /** User ids with an approved weekly timesheet for currentWeekEnding (legacy). */
   approvedTimesheetUserIds?: string[]
   /**
-   * User ids with an approved weekly timesheet, keyed by week-ending, for the
-   * current week and later. Presence of this field expands NTS past the current week.
+   * User ids with an approved weekly timesheet, keyed by week-ending.
+   * A present key (including []) was tracked: zero-hour cells are NTS unless the
+   * user is listed. Older snapshots only keyed the current week and later;
+   * missing past-week keys stay dashes.
    */
   approvedTimesheetUserIdsByWeek?: Record<string, string[]>
 }
