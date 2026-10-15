@@ -19,11 +19,23 @@ export type WorkflowApprovalTimesheet = PendingTimesheet & {
   awaitingMyApproval: boolean
 }
 
+const SUBMITTED_TIMESHEET_SELECT =
+  '*, user_profiles!user_id!inner(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)'
+/** PostgREST silently stops an unpaged select at about this many rows. */
+const PAGE_SIZE = 1000
+/** Keep `.in()` filters under the PostgREST URL length limit. */
+const IN_CHUNK = 150
+
 /**
  * Submitted timesheets still in workflow where this user is on the chain
  * (profile and/or budget), or covers someone on the chain via delegation,
  * and has not yet acted (own signature or signature recorded for a delegator
  * they cover). After signing, sheets leave this list (Approved Timesheets).
+ *
+ * Loads every in-flight submitted sheet, then keeps a row when this viewer is
+ * on the profile chain or is a required budget approver (or covers someone who
+ * is). Scanning historical entries on approver POs dropped sheets past the
+ * first ~1000 rows.
  */
 export async function getWorkflowApprovalTimesheets(user: {
   id: string
@@ -31,129 +43,49 @@ export async function getWorkflowApprovalTimesheets(user: {
   const adminSupabase = createAdminClient()
   const today = getCalendarDateStringInAppTimezone()
 
-  const reportsResult = await withQueryTimeout(() =>
-    adminSupabase
-      .from('user_profiles')
-      .select('id')
-      .or(
-        `reports_to_id.eq.${user.id},supervisor_id.eq.${user.id},manager_id.eq.${user.id},final_approver_id.eq.${user.id}`
-      )
-  )
-
-  let reports = (reportsResult.data || []) as Array<{ id: string }>
-
   const { data: delegationRows } = await adminSupabase
     .from('approval_delegations')
     .select('delegator_id')
     .eq('delegate_id', user.id)
     .lte('start_date', today)
     .gte('end_date', today)
-  const delegatorIds = [...new Set((delegationRows || []).map((r: any) => r.delegator_id))]
-  const delegatedByIds = new Set(delegatorIds)
+  const delegatedByIds = new Set<string>(
+    (delegationRows || []).map((r: any) => r.delegator_id).filter(Boolean)
+  )
   const hasOutgoingDelegation = await hasActiveOutgoingDelegation(adminSupabase, user.id, today)
-  if (delegatorIds.length > 0) {
-    const seen = new Set(reports.map((r) => r.id))
-    for (const delegatorId of delegatorIds) {
-      const delegatorReportsResult = await withQueryTimeout(() =>
-        adminSupabase
-          .from('user_profiles')
-          .select('id')
-          .or(
-            `reports_to_id.eq.${delegatorId},supervisor_id.eq.${delegatorId},manager_id.eq.${delegatorId},final_approver_id.eq.${delegatorId}`
-          )
-      )
-      const delegatorReports = (delegatorReportsResult.data || []) as Array<{ id: string }>
-      for (const r of delegatorReports) {
-        if (!seen.has(r.id)) {
-          seen.add(r.id)
-          reports = [...reports, r]
-        }
-      }
-    }
-  }
 
-  // Timesheets where this user (or someone they hold delegation for) is a
-  // budget timesheet-approver on a charged PO — may not appear in profile reports.
-  const budgetGrantUserIds = [user.id, ...delegatorIds]
-  const { data: budgetAccessRows } = await adminSupabase
-    .from('po_budget_access')
-    .select('purchase_order_id')
-    .in('user_id', budgetGrantUserIds)
-    .eq('timesheet_approver', true)
-  const budgetPoIds = [...new Set((budgetAccessRows || []).map((r: any) => r.purchase_order_id).filter(Boolean))]
-
-  let budgetCandidateTimesheetIds: string[] = []
-  if (budgetPoIds.length > 0) {
-    const { data: entryRows } = await adminSupabase
-      .from('timesheet_entries')
-      .select('timesheet_id, po_id, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours, sat_hours, sun_hours')
-      .in('po_id', budgetPoIds)
-    const hoursByTsPo: Record<string, number> = {}
-    for (const e of entryRows || []) {
-      const hrs =
-        Number(e.mon_hours || 0) +
-        Number(e.tue_hours || 0) +
-        Number(e.wed_hours || 0) +
-        Number(e.thu_hours || 0) +
-        Number(e.fri_hours || 0) +
-        Number(e.sat_hours || 0) +
-        Number(e.sun_hours || 0)
-      if (hrs <= 0 || !e.timesheet_id) continue
-      const key = `${e.timesheet_id}`
-      hoursByTsPo[key] = (hoursByTsPo[key] || 0) + hrs
-    }
-    budgetCandidateTimesheetIds = Object.keys(hoursByTsPo)
-  }
-
-  const reportIds = reports.map((r) => r.id)
-  if (reportIds.length === 0 && budgetCandidateTimesheetIds.length === 0) return []
-
-  let profileSubmitted: any[] = []
-  if (reportIds.length > 0) {
-    const timesheetsResult = await withQueryTimeout(() =>
+  const allSubmitted: any[] = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const pageResult = await withQueryTimeout(() =>
       adminSupabase
         .from('weekly_timesheets')
-        .select(
-          `*, user_profiles!user_id!inner(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)`
-        )
-        .in('user_id', reportIds)
+        .select(SUBMITTED_TIMESHEET_SELECT)
         .eq('status', 'submitted')
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
     )
-    profileSubmitted = (timesheetsResult.data || []) as any[]
+    const rows = (pageResult.data || []) as any[]
+    allSubmitted.push(...rows)
+    if (rows.length < PAGE_SIZE) break
   }
-
-  let budgetSubmitted: any[] = []
-  if (budgetCandidateTimesheetIds.length > 0) {
-    const budgetTsResult = await withQueryTimeout(() =>
-      adminSupabase
-        .from('weekly_timesheets')
-        .select(
-          `*, user_profiles!user_id!inner(name, email, reports_to_id, supervisor_id, manager_id, final_approver_id)`
-        )
-        .in('id', budgetCandidateTimesheetIds)
-        .eq('status', 'submitted')
-    )
-    budgetSubmitted = (budgetTsResult.data || []) as any[]
-  }
-
-  const byId = new Map<string, any>()
-  for (const ts of profileSubmitted) byId.set(ts.id, ts)
-  for (const ts of budgetSubmitted) byId.set(ts.id, ts)
-  const allSubmitted = [...byId.values()]
   if (allSubmitted.length === 0) return []
 
-  const sigResult = await withQueryTimeout(() =>
-    adminSupabase
-      .from('timesheet_signatures')
-      .select('timesheet_id, signer_id')
-      .in('timesheet_id', allSubmitted.map((t: any) => t.id))
-  )
-  const sigs = (sigResult.data || []) as { timesheet_id: string; signer_id: string }[]
   const signedByTimesheet: Record<string, Set<string>> = {}
-  sigs.forEach((s) => {
-    if (!signedByTimesheet[s.timesheet_id]) signedByTimesheet[s.timesheet_id] = new Set()
-    signedByTimesheet[s.timesheet_id].add(s.signer_id)
-  })
+  const timesheetIds = allSubmitted.map((t: any) => t.id as string)
+  for (let i = 0; i < timesheetIds.length; i += IN_CHUNK) {
+    const chunk = timesheetIds.slice(i, i + IN_CHUNK)
+    const sigResult = await withQueryTimeout(() =>
+      adminSupabase
+        .from('timesheet_signatures')
+        .select('timesheet_id, signer_id')
+        .in('timesheet_id', chunk)
+    )
+    const sigs = (sigResult.data || []) as { timesheet_id: string; signer_id: string }[]
+    sigs.forEach((s) => {
+      if (!signedByTimesheet[s.timesheet_id]) signedByTimesheet[s.timesheet_id] = new Set()
+      signedByTimesheet[s.timesheet_id].add(s.signer_id)
+    })
+  }
 
   const requiredByTimesheet = await getRequiredBudgetApproverIdsByTimesheet(
     adminSupabase,
