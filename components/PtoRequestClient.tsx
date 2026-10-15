@@ -2,13 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { Info } from 'lucide-react'
 import {
+  DEFAULT_PTO_CLIENT_ACK_INFO,
+  DEFAULT_PTO_CLIENT_ACK_LABEL,
   PTO_LEAVE_TYPE_OPTIONS,
   PTO_MAX_HOURS_PER_DAY,
   PTO_MIN_HOURS_PER_DAY,
   PTO_OTHER_LEAVE_TYPE,
   inclusiveDayCount,
   isYmd,
+  ptoClientAckInfo,
+  ptoClientAckLabel,
   ptoReviewerNote,
   totalPtoHours,
 } from '@/lib/pto-shared'
@@ -35,7 +40,9 @@ export default function PtoRequestClient() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [hoursPerDay, setHoursPerDay] = useState('8')
-  const [notes, setNotes] = useState('')
+  const [clientAcknowledged, setClientAcknowledged] = useState(false)
+  const [ackLabel, setAckLabel] = useState(DEFAULT_PTO_CLIENT_ACK_LABEL)
+  const [ackInfo, setAckInfo] = useState(DEFAULT_PTO_CLIENT_ACK_INFO)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [formOk, setFormOk] = useState<string | null>(null)
@@ -74,6 +81,16 @@ export default function PtoRequestClient() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    fetch('/api/company-settings', { cache: 'no-store', credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : {}))
+      .then((data: Record<string, unknown>) => {
+        setAckLabel(ptoClientAckLabel(data || {}))
+        setAckInfo(ptoClientAckInfo(data || {}))
+      })
+      .catch(() => {})
+  }, [])
+
   const preview = useMemo(() => {
     const hours = Number(hoursPerDay)
     if (!isYmd(startDate) || !isYmd(endDate) || endDate < startDate || !Number.isFinite(hours)) {
@@ -99,7 +116,7 @@ export default function PtoRequestClient() {
           startDate,
           endDate,
           hoursPerDay,
-          notes,
+          clientAcknowledged,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -108,7 +125,7 @@ export default function PtoRequestClient() {
         return
       }
       setFormOk('Request submitted.')
-      setNotes('')
+      setClientAcknowledged(false)
       setCustomLeaveType('')
       await load()
     } catch {
@@ -235,19 +252,12 @@ export default function PtoRequestClient() {
             {preview ? ` Total ${preview.total} hours across ${preview.days} day${preview.days === 1 ? '' : 's'}.` : ''}
           </p>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="pto-notes">
-            Notes (optional)
-          </label>
-          <textarea
-            id="pto-notes"
-            rows={3}
-            maxLength={500}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
-          />
-        </div>
+        <ClientAckField
+          label={ackLabel}
+          info={ackInfo}
+          checked={clientAcknowledged}
+          onChange={setClientAcknowledged}
+        />
         {formError && <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>}
         {formOk && <p className="text-sm text-green-700 dark:text-green-400">{formOk}</p>}
         <button
@@ -285,6 +295,9 @@ export default function PtoRequestClient() {
                   {r.status}
                 </span>
               </div>
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                {ackLabel}: {r.client_acknowledged ? 'Yes' : 'No'}
+              </p>
               {ptoReviewerNote(r) && (r.status === 'approved' || r.status === 'denied') && (
                 <p
                   className={`text-sm ${
@@ -310,6 +323,95 @@ export default function PtoRequestClient() {
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+function ClientAckField({
+  label,
+  info,
+  checked,
+  onChange,
+}: {
+  label: string
+  info: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+  const timerRef = useRef<number | null>(null)
+
+  const close = useCallback(() => {
+    setOpen(false)
+    if (timerRef.current != null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+  }, [])
+
+  const openPopup = useCallback(() => {
+    setOpen(true)
+    if (timerRef.current != null) window.clearTimeout(timerRef.current)
+    timerRef.current = window.setTimeout(() => {
+      setOpen(false)
+      timerRef.current = null
+    }, 2000)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const onPointer = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (buttonRef.current?.contains(target) || popupRef.current?.contains(target)) return
+      close()
+    }
+    document.addEventListener('mousedown', onPointer)
+    return () => document.removeEventListener('mousedown', onPointer)
+  }, [open, close])
+
+  useEffect(() => () => {
+    if (timerRef.current != null) window.clearTimeout(timerRef.current)
+  }, [])
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        id="pto-client-ack"
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="rounded border-gray-300 dark:border-gray-600"
+      />
+      <label htmlFor="pto-client-ack" className="text-sm text-gray-900 dark:text-gray-100">
+        {label}
+      </label>
+      <span className="relative inline-flex">
+        <button
+          ref={buttonRef}
+          type="button"
+          aria-label={`About ${label}`}
+          aria-expanded={open}
+          onClick={() => (open ? close() : openPopup())}
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-400 text-gray-600 hover:text-gray-900 dark:border-gray-500 dark:text-gray-300 dark:hover:text-gray-100"
+        >
+          <Info className="h-3 w-3" aria-hidden />
+        </button>
+        {open && (
+          <div
+            ref={popupRef}
+            role="tooltip"
+            className="absolute bottom-full left-0 z-20 mb-2 w-64 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+          >
+            {info}
+            <span
+              aria-hidden
+              className="absolute -bottom-1.5 left-2 h-3 w-3 rotate-45 border-b border-r border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-900"
+            />
+          </div>
+        )}
+      </span>
     </div>
   )
 }

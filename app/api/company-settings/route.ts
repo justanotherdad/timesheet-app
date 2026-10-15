@@ -9,7 +9,15 @@ import {
   parseConfirmationSiteFilters,
   stringifyConfirmationSiteFilters,
 } from '@/lib/timesheet-confirmation'
-import { PTO_APPROVER_IDS_KEY, parsePtoApproverIds, stringifyPtoApproverIds } from '@/lib/pto'
+import {
+  DEFAULT_PTO_CLIENT_ACK_INFO,
+  DEFAULT_PTO_CLIENT_ACK_LABEL,
+  PTO_APPROVER_IDS_KEY,
+  PTO_CLIENT_ACK_INFO_KEY,
+  PTO_CLIENT_ACK_LABEL_KEY,
+  parsePtoApproverIds,
+  stringifyPtoApproverIds,
+} from '@/lib/pto'
 
 export const dynamic = 'force-dynamic'
 
@@ -100,6 +108,14 @@ export async function PATCH(req: Request) {
         : []
     const cleaned = [...new Set((ids as unknown[]).filter((x): x is string => typeof x === 'string' && x.length > 0))]
     updates.push({ key: PTO_APPROVER_IDS_KEY, value: stringifyPtoApproverIds(cleaned) })
+  }
+  if (typeof body.pto_client_ack_label === 'string') {
+    const label = body.pto_client_ack_label.trim().slice(0, 80) || DEFAULT_PTO_CLIENT_ACK_LABEL
+    updates.push({ key: PTO_CLIENT_ACK_LABEL_KEY, value: label })
+  }
+  if (typeof body.pto_client_ack_info === 'string') {
+    const info = body.pto_client_ack_info.trim().slice(0, 500) || DEFAULT_PTO_CLIENT_ACK_INFO
+    updates.push({ key: PTO_CLIENT_ACK_INFO_KEY, value: info })
   }
 
   for (const { key, value } of updates) {

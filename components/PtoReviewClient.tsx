@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatDate } from '@/lib/utils'
-import { ptoReviewerNote, totalPtoHours } from '@/lib/pto-shared'
+import { DEFAULT_PTO_CLIENT_ACK_LABEL, ptoClientAckLabel, ptoReviewerNote, totalPtoHours } from '@/lib/pto-shared'
 import type { PtoRequest, PtoRequestStatus } from '@/types/database'
 
 type QueueRow = PtoRequest & { employee_name: string }
@@ -90,6 +90,7 @@ export default function PtoReviewClient() {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
+  const [ackLabel, setAckLabel] = useState(DEFAULT_PTO_CLIENT_ACK_LABEL)
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = !!opts?.silent
@@ -151,6 +152,13 @@ export default function PtoReviewClient() {
     void load()
     void loadHistory()
   }, [load, loadHistory])
+
+  useEffect(() => {
+    fetch('/api/company-settings', { cache: 'no-store', credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : {}))
+      .then((data: Record<string, unknown>) => setAckLabel(ptoClientAckLabel(data || {})))
+      .catch(() => {})
+  }, [])
 
   const approve = async (id: string) => {
     const note = approveNote.trim()
@@ -261,6 +269,7 @@ export default function PtoReviewClient() {
 
       {tab === 'queue' ? (
         <QueuePanel
+          ackLabel={ackLabel}
           rows={rows}
           loading={loading}
           error={error}
@@ -402,6 +411,9 @@ export default function PtoReviewClient() {
                     {totalPtoHours(r.hours_per_day, r.start_date, r.end_date)} hrs ({r.hours_per_day} / day)
                   </p>
                   {r.notes && <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">{r.notes}</p>}
+                  <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                    {ackLabel}: {r.client_acknowledged ? 'Yes' : 'No'}
+                  </p>
                   {ptoReviewerNote(r) && (r.status === 'approved' || r.status === 'denied') && (
                     <p
                       className={`text-sm mt-1 ${
@@ -622,6 +634,7 @@ function CalendarPanel({
 }
 
 function QueuePanel({
+  ackLabel,
   rows,
   loading,
   error,
@@ -639,6 +652,7 @@ function QueuePanel({
   onDeny,
   onCancelDeny,
 }: {
+  ackLabel: string
   rows: QueueRow[]
   loading: boolean
   error: string | null
@@ -685,6 +699,9 @@ function QueuePanel({
                 {totalPtoHours(r.hours_per_day, r.start_date, r.end_date)} hrs ({r.hours_per_day} / day)
               </p>
               {r.notes && <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">{r.notes}</p>}
+              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                {ackLabel}: {r.client_acknowledged ? 'Yes' : 'No'}
+              </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Submitted {formatDate(r.submitted_at.slice(0, 10))}
               </p>

@@ -143,6 +143,8 @@ export interface PtoRequest {
   end_date: string
   hours_per_day: number
   notes?: string | null
+  /** Whether the employee marked the client-acknowledged checkbox. */
+  client_acknowledged?: boolean
   status: PtoRequestStatus
   submitted_at: string
   reviewed_by_id?: string | null

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, FileText, X } from 'lucide-react'
+import { DEFAULT_PTO_CLIENT_ACK_INFO, DEFAULT_PTO_CLIENT_ACK_LABEL, ptoClientAckInfo, ptoClientAckLabel } from '@/lib/pto-shared'
 import { parseMoney } from '@/lib/utils'
 import { MISSING_PO_NUMBER_MESSAGE, normalizePoNumber, poNumberSaveError } from '@/lib/po-number'
 import SiteDetailView from './SiteDetailView'
@@ -91,6 +92,9 @@ export default function ConsolidatedManager({
   const [confirmationSaving, setConfirmationSaving] = useState(false)
   const [ptoApproverIds, setPtoApproverIds] = useState<string[]>([])
   const [ptoApproverSaving, setPtoApproverSaving] = useState(false)
+  const [clientAckLabel, setClientAckLabel] = useState(DEFAULT_PTO_CLIENT_ACK_LABEL)
+  const [clientAckInfo, setClientAckInfo] = useState(DEFAULT_PTO_CLIENT_ACK_INFO)
+  const [clientAckSaving, setClientAckSaving] = useState(false)
   const [confirmationSiteFilters, setConfirmationSiteFilters] = useState<Record<string, string[]>>({})
   const [filterModalUser, setFilterModalUser] = useState<{ id: string; name: string } | null>(null)
   const [filterModalSiteIds, setFilterModalSiteIds] = useState<string[]>([])
@@ -107,6 +111,8 @@ export default function ConsolidatedManager({
           setConfirmationUserIds(Array.isArray(ids) ? ids : [])
           const ptoIds = data?.pto_request_approver_ids
           setPtoApproverIds(Array.isArray(ptoIds) ? ptoIds : [])
+          setClientAckLabel(ptoClientAckLabel(data || {}))
+          setClientAckInfo(ptoClientAckInfo(data || {}))
           const filters = data?.timesheet_confirmation_site_filters
           setConfirmationSiteFilters(filters && typeof filters === 'object' && !Array.isArray(filters) ? filters : {})
           setCompanyEmailLoaded(true)
@@ -165,6 +171,27 @@ export default function ConsolidatedManager({
       }
     } finally {
       setPtoApproverSaving(false)
+    }
+  }
+
+  const saveClientAckCopy = async (label: string, info: string) => {
+    setClientAckSaving(true)
+    try {
+      const res = await fetch('/api/company-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pto_client_ack_label: label,
+          pto_client_ack_info: info,
+        }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        setClientAckLabel(ptoClientAckLabel(json || {}))
+        setClientAckInfo(ptoClientAckInfo(json || {}))
+      }
+    } finally {
+      setClientAckSaving(false)
     }
   }
 
@@ -1143,7 +1170,8 @@ export default function ConsolidatedManager({
             )}
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 max-w-xl">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               PTO Request Reviewers
             </label>
@@ -1181,6 +1209,53 @@ export default function ConsolidatedManager({
                 {ptoApproverIds.length === 0 ? '—' : `${ptoApproverIds.length} user(s) assigned`}
               </p>
             )}
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="pto-client-ack-label">
+                Checkbox name
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                Shown next to the checkbox on the New request form.
+              </p>
+              {isAdminOrAbove ? (
+                <input
+                  id="pto-client-ack-label"
+                  type="text"
+                  maxLength={80}
+                  value={clientAckLabel}
+                  onChange={(e) => setClientAckLabel(e.target.value)}
+                  onBlur={(e) => void saveClientAckCopy(e.target.value, clientAckInfo)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+                />
+              ) : (
+                <p className="text-sm text-gray-900 dark:text-gray-100 py-2">{clientAckLabel}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="pto-client-ack-info">
+                Info popup
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                Shown when someone clicks the info icon next to the checkbox.
+              </p>
+              {isAdminOrAbove ? (
+                <textarea
+                  id="pto-client-ack-info"
+                  rows={4}
+                  maxLength={500}
+                  value={clientAckInfo}
+                  onChange={(e) => setClientAckInfo(e.target.value)}
+                  onBlur={(e) => void saveClientAckCopy(clientAckLabel, e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+                />
+              ) : (
+                <p className="text-sm text-gray-900 dark:text-gray-100 py-2 whitespace-pre-wrap">{clientAckInfo}</p>
+              )}
+            </div>
+            {clientAckSaving && <p className="text-xs text-gray-500">Saving…</p>}
+          </div>
           </div>
         </div>
       )}

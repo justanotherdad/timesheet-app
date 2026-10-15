@@ -42,6 +42,7 @@ function mapRow(row: Record<string, unknown>): PtoRequest {
     end_date: String(row.end_date).slice(0, 10),
     hours_per_day: Number(row.hours_per_day),
     notes: (row.notes as string | null) ?? null,
+    client_acknowledged: row.client_acknowledged === true,
     status: row.status as PtoRequestStatus,
     submitted_at: String(row.submitted_at),
     reviewed_by_id: (row.reviewed_by_id as string | null) ?? null,
@@ -135,7 +136,7 @@ export interface CreatePtoInput {
   startDate: string
   endDate: string
   hoursPerDay: number
-  notes?: string | null
+  clientAcknowledged?: boolean
 }
 
 export async function createPtoRequest(admin: SupabaseClient, input: CreatePtoInput): Promise<PtoRequest> {
@@ -148,7 +149,8 @@ export async function createPtoRequest(admin: SupabaseClient, input: CreatePtoIn
       start_date: input.startDate,
       end_date: input.endDate,
       hours_per_day: input.hoursPerDay,
-      notes: input.notes ?? null,
+      notes: null,
+      client_acknowledged: input.clientAcknowledged === true,
       status: 'pending',
       submitted_at: now,
       updated_at: now,

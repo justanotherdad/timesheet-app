@@ -58,14 +58,12 @@ export async function POST(req: Request) {
   const hoursPerDay = parseHoursPerDay(body.hoursPerDay)
   const startDate = typeof body.startDate === 'string' ? body.startDate : ''
   const endDate = typeof body.endDate === 'string' ? body.endDate : ''
-  const notes = typeof body.notes === 'string' ? body.notes : ''
-
   const validated = validateCreatePtoInput({
     leaveType,
     startDate,
     endDate,
     hoursPerDay,
-    notes,
+    clientAcknowledged: body.clientAcknowledged === true,
   })
   if (!validated.ok) {
     return NextResponse.json({ error: validated.error }, { status: 400 })
@@ -88,6 +86,7 @@ export async function POST(req: Request) {
         start_date: request.start_date,
         end_date: request.end_date,
         hours_per_day: request.hours_per_day,
+        client_acknowledged: request.client_acknowledged === true,
       },
     })
     return NextResponse.json({ request })

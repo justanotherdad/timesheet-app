@@ -1,4 +1,21 @@
 export const PTO_APPROVER_IDS_KEY = 'pto_request_approver_ids'
+export const PTO_CLIENT_ACK_LABEL_KEY = 'pto_client_ack_label'
+export const PTO_CLIENT_ACK_INFO_KEY = 'pto_client_ack_info'
+export const DEFAULT_PTO_CLIENT_ACK_LABEL = 'Client Acknowledged'
+export const DEFAULT_PTO_CLIENT_ACK_INFO =
+  'Check this if the client has already been told you will be out. Reviewers can see it on the request. It does not notify the client.'
+
+export function ptoClientAckLabel(settings: Record<string, unknown>): string {
+  const raw = settings[PTO_CLIENT_ACK_LABEL_KEY]
+  const text = typeof raw === 'string' ? raw.trim() : ''
+  return text.slice(0, 80) || DEFAULT_PTO_CLIENT_ACK_LABEL
+}
+
+export function ptoClientAckInfo(settings: Record<string, unknown>): string {
+  const raw = settings[PTO_CLIENT_ACK_INFO_KEY]
+  const text = typeof raw === 'string' ? raw.trim() : ''
+  return text.slice(0, 500) || DEFAULT_PTO_CLIENT_ACK_INFO
+}
 
 export const PTO_LEAVE_TYPE_OPTIONS = [
   'Paid Time Off',
@@ -93,8 +110,8 @@ export function validateCreatePtoInput(input: {
   startDate: string
   endDate: string
   hoursPerDay: number | null
-  notes?: string | null
-}): { ok: true; value: { leaveType: string; startDate: string; endDate: string; hoursPerDay: number; notes: string | null } } | { ok: false; error: string } {
+  clientAcknowledged?: boolean
+}): { ok: true; value: { leaveType: string; startDate: string; endDate: string; hoursPerDay: number; clientAcknowledged: boolean } } | { ok: false; error: string } {
   if (!input.leaveType) {
     return { ok: false, error: 'Choose a leave type, or type one in.' }
   }
@@ -111,10 +128,6 @@ export function validateCreatePtoInput(input: {
   if (input.hoursPerDay == null) {
     return { ok: false, error: `Hours per day must be between ${PTO_MIN_HOURS_PER_DAY} and ${PTO_MAX_HOURS_PER_DAY}.` }
   }
-  const notes = (input.notes || '').trim()
-  if (notes.length > 500) {
-    return { ok: false, error: 'Notes must be 500 characters or fewer.' }
-  }
   return {
     ok: true,
     value: {
@@ -122,7 +135,7 @@ export function validateCreatePtoInput(input: {
       startDate: input.startDate,
       endDate: input.endDate,
       hoursPerDay: input.hoursPerDay,
-      notes: notes || null,
+      clientAcknowledged: input.clientAcknowledged === true,
     },
   }
 }
