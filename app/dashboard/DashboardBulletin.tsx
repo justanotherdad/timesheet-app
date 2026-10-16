@@ -14,38 +14,40 @@ export default async function DashboardBulletin({
   const supabase = await createClient()
   const canEditBulletin = isBulletinAdmin(user.profile.role)
   let bulletinPosts: BulletinPost[] = []
-  const load = async (withArchive: boolean) => {
-    const columns = withArchive
-      ? 'id, title, body_html, author_id, author_name, audience, is_pinned, archived_at, created_at, updated_at'
-      : 'id, title, body_html, author_id, author_name, audience, is_pinned, created_at, updated_at'
-    let bulletinQuery = supabase
+  const limit = canEditBulletin ? 200 : 50
+  const audience = isClient ? 'client' : 'employee'
+
+  const toPosts = (rows: Array<{ audience?: string | null }>): BulletinPost[] =>
+    rows.map((p) => ({
+      ...(p as unknown as BulletinPost),
+      audience: (p.audience || 'employee') as BulletinPost['audience'],
+    }))
+
+  try {
+    let query = supabase
       .from('bulletin_posts')
-      .select(columns)
+      .select('id, title, body_html, author_id, author_name, audience, is_pinned, archived_at, created_at, updated_at')
       .is('deleted_at', null)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(canEditBulletin ? 200 : 50)
-
+      .limit(limit)
     if (!canEditBulletin) {
-      bulletinQuery = bulletinQuery.eq('audience', isClient ? 'client' : 'employee')
-      if (withArchive) bulletinQuery = bulletinQuery.is('archived_at', null)
+      query = query.eq('audience', audience).is('archived_at', null)
     }
-
-    return bulletinQuery
-  }
-
-  try {
-    let { data: bulletinData, error: bulletinError } = await load(true)
-    if (bulletinError) {
-      const retry = await load(false)
-      bulletinData = retry.data
-      bulletinError = retry.error
-    }
-    if (!bulletinError && bulletinData) {
-      bulletinPosts = (bulletinData as BulletinPost[]).map((p) => ({
-        ...p,
-        audience: p.audience || 'employee',
-      }))
+    const first = await query
+    if (!first.error && first.data) {
+      bulletinPosts = toPosts(first.data)
+    } else {
+      let fallback = supabase
+        .from('bulletin_posts')
+        .select('id, title, body_html, author_id, author_name, audience, is_pinned, created_at, updated_at')
+        .is('deleted_at', null)
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(limit)
+      if (!canEditBulletin) fallback = fallback.eq('audience', audience)
+      const second = await fallback
+      if (!second.error && second.data) bulletinPosts = toPosts(second.data)
     }
   } catch {
     bulletinPosts = []
