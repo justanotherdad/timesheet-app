@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowDown, ArrowUp, ArrowUpDown, Download, ExternalLink, Pencil, Plus, Printer, Trash2, X } from 'lucide-react'
 import { formatHours } from '@/lib/utils'
@@ -12,6 +12,23 @@ type ProjectBudgetTab = 'matrix' | 'by-system' | 'by-individual'
 /** Variance always shows numeric (0.00 when balanced); formatHours treats 0 as em dash. */
 function fmtVariance(n: number): string {
   return n.toFixed(2)
+}
+
+function assignmentRejectionMessage(result: {
+  updatedCount: number
+  invalidComboCount?: number
+  notOnPoCount?: number
+  notApprovedCount?: number
+  sameCellCount?: number
+  errorCount?: number
+}): string | null {
+  const invalidComboCount = result.invalidComboCount || 0
+  const notOnPoCount = result.notOnPoCount || 0
+  const notApprovedCount = result.notApprovedCount || 0
+  const sameCellCount = result.sameCellCount || 0
+  const errorCount = result.errorCount || 0
+  if (invalidComboCount + notOnPoCount + notApprovedCount + sameCellCount + errorCount <= 0) return null
+  return `Saved ${result.updatedCount}. Some assignments were rejected — invalid combo: ${invalidComboCount}, not on PO: ${notOnPoCount}, not approved: ${notApprovedCount}, already on that cell: ${sameCellCount}, errors: ${errorCount}.`
 }
 
 function fmtMoney(n: number): string {
@@ -391,6 +408,30 @@ export default function ProjectBudgetMatrix({
   // pickable entry). The actual concrete `system_id` is resolved on save from
   // the picked deliverable's parent.
   const [reassignPicks, setReassignPicks] = useState<
+    Record<string, { systemLabel: string; deliverableId: string; activityId: string }>
+  >({})
+
+  // Hours already on one matrix cell. Anyone who can open the budget sees
+  // employee / week / hours. Reassign (same roles as Reassign manually) moves
+  // those approved entries onto a different cell.
+  type RowHoursEntry = {
+    entryId: string
+    timesheetId: string | null
+    userId: string | null
+    userName: string
+    weekEnding: string | null
+    hours: number
+  }
+  const [rowHoursOpen, setRowHoursOpen] = useState(false)
+  const [rowHoursTarget, setRowHoursTarget] = useState<MatrixRow | null>(null)
+  const [rowHoursLoading, setRowHoursLoading] = useState(false)
+  const [rowHoursError, setRowHoursError] = useState<string | null>(null)
+  const [rowHoursSaving, setRowHoursSaving] = useState(false)
+  const [rowHoursEntries, setRowHoursEntries] = useState<RowHoursEntry[]>([])
+  const [rowHoursCombos, setRowHoursCombos] = useState<ValidCombo[]>([])
+  const [rowHoursCanReassign, setRowHoursCanReassign] = useState(false)
+  const [rowHoursExpanded, setRowHoursExpanded] = useState<Record<string, boolean>>({})
+  const [rowHoursPicks, setRowHoursPicks] = useState<
     Record<string, { systemLabel: string; deliverableId: string; activityId: string }>
   >({})
 
@@ -961,26 +1002,38 @@ export default function ProjectBudgetMatrix({
     return c.systemName.trim()
   }, [])
 
-  const reassignSystemOptions = useMemo(() => {
-    const seen = new Map<string, { systemLabel: string; label: string }>()
-    for (const c of validCombos) {
-      const key = systemLabelFor(c).toLowerCase()
-      if (seen.has(key)) continue
-      seen.set(key, { systemLabel: systemLabelFor(c), label: systemLabelFor(c) })
-    }
-    return Array.from(seen.values()).sort((a, b) =>
-      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
-    )
-  }, [validCombos, systemLabelFor])
+  const systemOptionsFrom = useCallback(
+    (combos: ValidCombo[]) => {
+      const seen = new Map<string, { systemLabel: string; label: string }>()
+      for (const c of combos) {
+        const key = systemLabelFor(c).toLowerCase()
+        if (seen.has(key)) continue
+        seen.set(key, { systemLabel: systemLabelFor(c), label: systemLabelFor(c) })
+      }
+      return Array.from(seen.values()).sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+      )
+    },
+    [systemLabelFor]
+  )
+
+  const reassignSystemOptions = useMemo(
+    () => systemOptionsFrom(validCombos),
+    [validCombos, systemOptionsFrom]
+  )
+  const rowHoursSystemOptions = useMemo(
+    () => systemOptionsFrom(rowHoursCombos),
+    [rowHoursCombos, systemOptionsFrom]
+  )
 
   const getDeliverableOptions = useCallback(
-    (systemLabel: string) => {
+    (systemLabel: string, combos: ValidCombo[] = validCombos) => {
       if (!systemLabel) {
         return [] as Array<{ deliverableId: string; label: string; subtext: string }>
       }
       const wanted = systemLabel.trim().toLowerCase()
       const seen = new Map<string, { deliverableId: string; label: string; subtext: string }>()
-      for (const c of validCombos) {
+      for (const c of combos) {
         if (systemLabelFor(c).toLowerCase() !== wanted) continue
         if (seen.has(c.deliverableId)) continue
         // Subtext disambiguates which underlying "Indirect" (or other
@@ -1001,10 +1054,10 @@ export default function ProjectBudgetMatrix({
   )
 
   const getActivityOptions = useCallback(
-    (deliverableId: string) => {
+    (deliverableId: string, combos: ValidCombo[] = validCombos) => {
       if (!deliverableId) return [] as Array<{ activityId: string; label: string }>
       const seen = new Map<string, { activityId: string; label: string }>()
-      for (const c of validCombos) {
+      for (const c of combos) {
         if (c.deliverableId !== deliverableId) continue
         if (seen.has(c.activityId)) continue
         seen.set(c.activityId, { activityId: c.activityId, label: c.activityName })
@@ -1025,9 +1078,14 @@ export default function ProjectBudgetMatrix({
    * system_id and re-point the row onto another system's combo.
    */
   const resolveSystemIdForPick = useCallback(
-    (systemLabel: string, deliverableId: string, activityId: string): string | null => {
+    (
+      systemLabel: string,
+      deliverableId: string,
+      activityId: string,
+      combos: ValidCombo[] = validCombos
+    ): string | null => {
       const wantedSys = systemLabel.trim().toLowerCase()
-      for (const c of validCombos) {
+      for (const c of combos) {
         if (
           systemLabelFor(c).toLowerCase() === wantedSys &&
           c.deliverableId === deliverableId &&
@@ -1105,9 +1163,11 @@ export default function ProjectBudgetMatrix({
       if (!res.ok) throw new Error((body as { error?: string }).error || 'Save failed')
       const result = body as {
         updatedCount: number
-        invalidComboCount: number
-        notOnPoCount: number
-        errorCount: number
+        invalidComboCount?: number
+        notOnPoCount?: number
+        notApprovedCount?: number
+        sameCellCount?: number
+        errorCount?: number
       }
       // Refresh the unmatched list — saved entries should drop off; any with
       // errors stay so the user can fix them.
@@ -1125,12 +1185,9 @@ export default function ProjectBudgetMatrix({
         return next
       })
       bumpRefresh()
-      if (
-        result.invalidComboCount + result.notOnPoCount + result.errorCount > 0
-      ) {
-        setReassignError(
-          `Saved ${result.updatedCount}. Some assignments were rejected — invalid combo: ${result.invalidComboCount}, not on PO: ${result.notOnPoCount}, errors: ${result.errorCount}.`
-        )
+      const rejection = assignmentRejectionMessage(result)
+      if (rejection) {
+        setReassignError(rejection)
       } else if (remaining.length === 0) {
         setReassignOpen(false)
       }
@@ -1138,6 +1195,162 @@ export default function ProjectBudgetMatrix({
       setReassignError(e instanceof Error ? e.message : 'Save failed')
     } finally {
       setReassignSaving(false)
+    }
+  }
+
+  const loadRowHours = async (row: MatrixRow, resetPicks: boolean) => {
+    if (!row.systemId || !row.deliverableId || !row.activityId) {
+      throw new Error('This row has no matrix cell to list')
+    }
+    const qs = new URLSearchParams({
+      systemId: row.systemId,
+      deliverableId: row.deliverableId,
+      activityId: row.activityId,
+    })
+    const res = await fetch(`/api/budget/${poId}/matrix-row-entries?${qs}`, {
+      credentials: 'include',
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error((body as { error?: string }).error || 'Failed to load')
+    const payload = body as {
+      canReassign?: boolean
+      entries?: RowHoursEntry[]
+      validCombos?: ValidCombo[]
+    }
+    const entries = payload.entries || []
+    const blank = { systemLabel: '', deliverableId: '', activityId: '' }
+    setRowHoursEntries(entries)
+    setRowHoursCanReassign(Boolean(payload.canReassign))
+    setRowHoursCombos(payload.validCombos || [])
+    if (resetPicks) {
+      setRowHoursExpanded({})
+      const seed: Record<string, { systemLabel: string; deliverableId: string; activityId: string }> = {}
+      for (const e of entries) seed[e.entryId] = { ...blank }
+      setRowHoursPicks(seed)
+    } else {
+      const ids = new Set(entries.map((e) => e.entryId))
+      setRowHoursExpanded((prev) => {
+        const next: Record<string, boolean> = {}
+        for (const id of ids) if (prev[id]) next[id] = true
+        return next
+      })
+      setRowHoursPicks((prev) => {
+        const next: typeof prev = {}
+        for (const e of entries) next[e.entryId] = prev[e.entryId] || { ...blank }
+        return next
+      })
+    }
+    return entries
+  }
+
+  const openRowHours = async (row: MatrixRow) => {
+    setRowHoursOpen(true)
+    setRowHoursTarget(row)
+    setRowHoursLoading(true)
+    setRowHoursError(null)
+    setRowHoursEntries([])
+    setRowHoursCombos([])
+    setRowHoursCanReassign(false)
+    setRowHoursExpanded({})
+    setRowHoursPicks({})
+    try {
+      await loadRowHours(row, true)
+    } catch (e) {
+      setRowHoursError(e instanceof Error ? e.message : 'Failed to load')
+    } finally {
+      setRowHoursLoading(false)
+    }
+  }
+
+  const handleCloseRowHours = () => {
+    if (rowHoursSaving) return
+    setRowHoursOpen(false)
+    setRowHoursError(null)
+  }
+
+  const setRowHoursPick = (
+    entryId: string,
+    field: 'systemLabel' | 'deliverableId' | 'activityId',
+    value: string
+  ) => {
+    setRowHoursPicks((prev) => {
+      const cur = prev[entryId] || { systemLabel: '', deliverableId: '', activityId: '' }
+      const next = { ...cur, [field]: value }
+      if (field === 'systemLabel') {
+        next.deliverableId = ''
+        next.activityId = ''
+      } else if (field === 'deliverableId') {
+        next.activityId = ''
+      }
+      return { ...prev, [entryId]: next }
+    })
+  }
+
+  const toggleRowHoursReassign = (entryId: string) => {
+    const closing = Boolean(rowHoursExpanded[entryId])
+    setRowHoursExpanded((prev) => ({ ...prev, [entryId]: !prev[entryId] }))
+    if (closing) {
+      setRowHoursPicks((prev) => ({
+        ...prev,
+        [entryId]: { systemLabel: '', deliverableId: '', activityId: '' },
+      }))
+    }
+  }
+
+  const handleSaveRowHours = async () => {
+    if (!rowHoursTarget) return
+    const assignments: Array<{
+      entryId: string
+      systemId: string
+      deliverableId: string
+      activityId: string
+    }> = []
+    for (const [entryId, p] of Object.entries(rowHoursPicks)) {
+      if (!p.systemLabel || !p.deliverableId || !p.activityId) continue
+      const systemId = resolveSystemIdForPick(p.systemLabel, p.deliverableId, p.activityId, rowHoursCombos)
+      if (!systemId) continue
+      assignments.push({
+        entryId,
+        systemId,
+        deliverableId: p.deliverableId,
+        activityId: p.activityId,
+      })
+    }
+    if (assignments.length === 0) {
+      setRowHoursError('Pick a system, deliverable, and activity for at least one entry first.')
+      return
+    }
+    setRowHoursSaving(true)
+    setRowHoursError(null)
+    try {
+      const res = await fetch(`/api/budget/${poId}/sync-timesheet-entries`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignments }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((body as { error?: string }).error || 'Save failed')
+      const result = body as {
+        updatedCount: number
+        invalidComboCount?: number
+        notOnPoCount?: number
+        notApprovedCount?: number
+        sameCellCount?: number
+        errorCount?: number
+      }
+      const remaining = await loadRowHours(rowHoursTarget, false)
+      bumpRefresh()
+      const rejection = assignmentRejectionMessage(result)
+      if (rejection) {
+        setRowHoursError(rejection)
+      } else if (remaining.length === 0) {
+        setRowHoursOpen(false)
+      }
+    } catch (e) {
+      setRowHoursError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setRowHoursSaving(false)
     }
   }
 
@@ -2182,7 +2395,20 @@ export default function ProjectBudgetMatrix({
                 const descText = (r.description ?? '').trim()
                 return (
                   <tr key={r.id} className="border-b border-gray-100 dark:border-gray-700">
-                    <td className="py-2 pr-4 text-gray-900 dark:text-gray-100 align-top">{r.systemLabel}</td>
+                    <td className="py-2 pr-4 text-gray-900 dark:text-gray-100 align-top">
+                      {r.actualHours > EPS && r.systemId && r.deliverableId && r.activityId ? (
+                        <button
+                          type="button"
+                          onClick={() => openRowHours(r)}
+                          className="text-left text-blue-600 dark:text-blue-400 hover:underline print:text-gray-900 print:no-underline"
+                          title="Approved hours on this row"
+                        >
+                          {r.systemLabel}
+                        </button>
+                      ) : (
+                        r.systemLabel
+                      )}
+                    </td>
                     <td className="py-2 pr-4 text-gray-800 dark:text-gray-200 align-top">{r.deliverableName}</td>
                     <td className="py-2 pr-4 text-gray-800 dark:text-gray-200 align-top">{r.activityName}</td>
                     <td
@@ -2778,6 +3004,213 @@ export default function ProjectBudgetMatrix({
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
           All approved timesheets · total hours on PO: {formatHours(data!.totals.actualHoursAllEntries)}
         </p>
+      )}
+
+      {rowHoursOpen && rowHoursTarget && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:hidden"
+          onClick={handleCloseRowHours}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                  {rowHoursTarget.systemLabel} · {rowHoursTarget.deliverableName} · {rowHoursTarget.activityName}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Approved hours on this cell. The week date opens that timesheet in a new tab.
+                  {canEditMatrix && rowHoursCanReassign
+                    ? ' Reassign moves an entry onto a different matrix cell and updates that line on the approved timesheet. Hours, week, and approval stay the same.'
+                    : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseRowHours}
+                disabled={rowHoursSaving}
+                className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-50"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto px-4 py-3">
+              {rowHoursLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full" />
+                </div>
+              ) : rowHoursEntries.length === 0 ? (
+                <div className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No approved hours on this row.
+                </div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300">
+                      <th className="text-left py-2 pr-2 font-medium">Employee</th>
+                      <th className="text-left py-2 pr-2 font-medium">Week</th>
+                      <th className="text-right py-2 pr-2 font-medium">Hrs</th>
+                      {canEditMatrix && rowHoursCanReassign && (
+                        <th className="text-right py-2 pl-2 font-medium"> </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rowHoursEntries.map((e) => {
+                      const allowReassign = canEditMatrix && rowHoursCanReassign
+                      const expanded = Boolean(rowHoursExpanded[e.entryId])
+                      const pick = rowHoursPicks[e.entryId] || { systemLabel: '', deliverableId: '', activityId: '' }
+                      const delOptions = getDeliverableOptions(pick.systemLabel, rowHoursCombos)
+                      const scopedCombos = pick.systemLabel
+                        ? rowHoursCombos.filter(
+                            (c) => systemLabelFor(c).toLowerCase() === pick.systemLabel.trim().toLowerCase()
+                          )
+                        : rowHoursCombos
+                      const actOptions = getActivityOptions(pick.deliverableId, scopedCombos)
+                      return (
+                        <Fragment key={e.entryId}>
+                          <tr className="border-b border-gray-100 dark:border-gray-700/50 align-top">
+                            <td className="py-2 pr-2 text-gray-900 dark:text-gray-100">{e.userName || '—'}</td>
+                            <td className="py-2 pr-2 whitespace-nowrap">
+                              {e.weekEnding && e.timesheetId ? (
+                                <a
+                                  href={`/dashboard/timesheets/${e.timesheetId}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Open this timesheet in a new tab"
+                                  className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                                >
+                                  {e.weekEnding.slice(0, 10)}
+                                  <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+                                </a>
+                              ) : (
+                                <span className="text-gray-700 dark:text-gray-300">
+                                  {e.weekEnding ? e.weekEnding.slice(0, 10) : '—'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 pr-2 text-right text-gray-900 dark:text-gray-100">
+                              {e.hours.toFixed(2)}
+                            </td>
+                            {allowReassign && (
+                              <td className="py-2 pl-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRowHoursReassign(e.entryId)}
+                                  disabled={rowHoursSaving}
+                                  className="text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+                                >
+                                  {expanded ? 'Cancel' : 'Reassign'}
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                          {allowReassign && expanded && (
+                            <tr key={`${e.entryId}-pick`} className="border-b border-gray-100 dark:border-gray-700/50">
+                              <td colSpan={4} className="pb-3 pt-1">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                  <label className="block text-gray-600 dark:text-gray-400">
+                                    New system
+                                    <select
+                                      value={pick.systemLabel}
+                                      onChange={(ev) => setRowHoursPick(e.entryId, 'systemLabel', ev.target.value)}
+                                      disabled={rowHoursSaving}
+                                      className="mt-1 w-full h-8 px-1 border rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs text-gray-900 dark:text-gray-100"
+                                    >
+                                      <option value="">Select…</option>
+                                      {rowHoursSystemOptions.map((o) => (
+                                        <option key={o.systemLabel} value={o.systemLabel}>{o.label}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="block text-gray-600 dark:text-gray-400">
+                                    New deliverable
+                                    <select
+                                      value={pick.deliverableId}
+                                      onChange={(ev) => setRowHoursPick(e.entryId, 'deliverableId', ev.target.value)}
+                                      disabled={rowHoursSaving || !pick.systemLabel}
+                                      className="mt-1 w-full h-8 px-1 border rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs text-gray-900 dark:text-gray-100 disabled:opacity-50"
+                                    >
+                                      <option value="">Select…</option>
+                                      {delOptions.map((o) => (
+                                        <option key={o.deliverableId} value={o.deliverableId}>
+                                          {o.subtext ? `${o.label} (${o.subtext})` : o.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="block text-gray-600 dark:text-gray-400">
+                                    New activity
+                                    <select
+                                      value={pick.activityId}
+                                      onChange={(ev) => setRowHoursPick(e.entryId, 'activityId', ev.target.value)}
+                                      disabled={rowHoursSaving || !pick.deliverableId}
+                                      className="mt-1 w-full h-8 px-1 border rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs text-gray-900 dark:text-gray-100 disabled:opacity-50"
+                                    >
+                                      <option value="">Select…</option>
+                                      {actOptions.map((o) => (
+                                        <option key={o.activityId} value={o.activityId}>{o.label}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+              {rowHoursError && (
+                <p className="mt-3 text-xs text-red-600 dark:text-red-400">{rowHoursError}</p>
+              )}
+            </div>
+
+            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {canEditMatrix && rowHoursCanReassign
+                  ? `Picked: ${
+                      Object.values(rowHoursPicks).filter(
+                        (p) => p.systemLabel && p.deliverableId && p.activityId
+                      ).length
+                    } of ${rowHoursEntries.length}`
+                  : `${rowHoursEntries.length} entr${rowHoursEntries.length === 1 ? 'y' : 'ies'}`}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseRowHours}
+                  disabled={rowHoursSaving}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm disabled:opacity-50"
+                >
+                  Close
+                </button>
+                {canEditMatrix && rowHoursCanReassign && (
+                  <button
+                    type="button"
+                    onClick={handleSaveRowHours}
+                    disabled={
+                      rowHoursSaving ||
+                      rowHoursLoading ||
+                      Object.values(rowHoursPicks).filter(
+                        (p) => p.systemLabel && p.deliverableId && p.activityId
+                      ).length === 0
+                    }
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                  >
+                    {rowHoursSaving ? 'Saving…' : 'Save'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Reassign manually modal — used when the auto fuzzy match can't pick

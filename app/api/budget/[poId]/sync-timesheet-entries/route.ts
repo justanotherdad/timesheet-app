@@ -79,14 +79,17 @@ type ManualAssignment = {
  *      one candidate is found. dryRun=true previews without writing.
  *
  *   2. Manual assignments ({ assignments: [{ entryId, systemId, deliverableId, activityId }] }):
- *      Used when the auto-fix can't pick a candidate. The budget owner picks
- *      a valid project_details cell for each unmatched entry and submits the
- *      list. Each assignment is validated:
+ *      Used when the auto-fix can't pick a candidate, and when moving hours
+ *      that already sit on a matrix cell. The budget owner picks a valid
+ *      project_details cell and submits the list. Each assignment is validated:
  *        - the entry must belong to this PO
+ *        - the entry must be on an approved timesheet
  *        - the (systemId, deliverableId, activityId) triplet must exist as a
  *          project_details row for this PO
- *      Valid assignments update the entry's FK columns; the matrix and the
- *      CSV export will then place those hours in the chosen cell.
+ *        - the destination must differ from the entry's current cell
+ *      Valid assignments update the entry's FK columns in place (hours, week,
+ *      employee, and approved status stay). The matrix and the CSV export
+ *      then place those hours in the chosen cell.
  */
 export async function POST(
   req: Request,
@@ -153,32 +156,77 @@ export async function POST(
       return NextResponse.json({ error: 'No valid assignments provided' }, { status: 400 })
     }
 
-    // Confirm each entry actually belongs to this PO before we touch it.
+    // Confirm each entry belongs to this PO, is on an approved timesheet, and
+    // is not already on the chosen cell before we touch it.
     const entryIds = [...new Set(assignments.map((a) => a.entryId))]
     const { data: entryOwnership, error: ownErr } = await admin
       .from('timesheet_entries')
-      .select('id, po_id')
+      .select('id, po_id, timesheet_id, system_id, deliverable_id, activity_id')
       .in('id', entryIds)
     if (ownErr) return NextResponse.json({ error: ownErr.message }, { status: 500 })
-    const entryPoMap = new Map<string, string>()
-    for (const row of (entryOwnership || []) as Array<{ id: string; po_id: string }>) {
-      entryPoMap.set(row.id, row.po_id)
+    const entryMap = new Map<
+      string,
+      {
+        po_id: string
+        timesheet_id: string | null
+        system_id: string | null
+        deliverable_id: string | null
+        activity_id: string | null
+      }
+    >()
+    for (const row of (entryOwnership || []) as Array<{
+      id: string
+      po_id: string
+      timesheet_id: string | null
+      system_id: string | null
+      deliverable_id: string | null
+      activity_id: string | null
+    }>) {
+      entryMap.set(row.id, row)
+    }
+
+    const tsIds = [
+      ...new Set(
+        Array.from(entryMap.values())
+          .map((e) => e.timesheet_id)
+          .filter(Boolean) as string[]
+      ),
+    ]
+    const approvedTimesheetIds = new Set<string>()
+    if (tsIds.length > 0) {
+      const { data: tsRows, error: tsErr } = await admin
+        .from('weekly_timesheets')
+        .select('id, status')
+        .in('id', tsIds)
+      if (tsErr) return NextResponse.json({ error: tsErr.message }, { status: 500 })
+      for (const row of (tsRows || []) as Array<{ id: string; status: string | null }>) {
+        if (row.status === 'approved') approvedTimesheetIds.add(row.id)
+      }
     }
 
     type AssignResult = {
       entryId: string
-      status: 'updated' | 'invalid_combo' | 'not_on_po' | 'error'
+      status: 'updated' | 'invalid_combo' | 'not_on_po' | 'not_approved' | 'same_cell' | 'error'
       message?: string
     }
     const results: AssignResult[] = []
     let updatedCount = 0
 
     for (const a of assignments) {
-      if (entryPoMap.get(a.entryId) !== poId) {
+      const entry = entryMap.get(a.entryId)
+      if (!entry || entry.po_id !== poId) {
         results.push({
           entryId: a.entryId,
           status: 'not_on_po',
           message: 'Entry is not on this PO',
+        })
+        continue
+      }
+      if (!entry.timesheet_id || !approvedTimesheetIds.has(entry.timesheet_id)) {
+        results.push({
+          entryId: a.entryId,
+          status: 'not_approved',
+          message: 'Entry is not on an approved timesheet',
         })
         continue
       }
@@ -188,6 +236,18 @@ export async function POST(
           entryId: a.entryId,
           status: 'invalid_combo',
           message: 'Selected (system, deliverable, activity) is not a matrix cell on this PO',
+        })
+        continue
+      }
+      if (
+        entry.system_id === a.systemId &&
+        entry.deliverable_id === a.deliverableId &&
+        entry.activity_id === a.activityId
+      ) {
+        results.push({
+          entryId: a.entryId,
+          status: 'same_cell',
+          message: 'Entry is already on that matrix cell',
         })
         continue
       }
@@ -217,6 +277,8 @@ export async function POST(
       updatedCount,
       invalidComboCount: results.filter((r) => r.status === 'invalid_combo').length,
       notOnPoCount: results.filter((r) => r.status === 'not_on_po').length,
+      notApprovedCount: results.filter((r) => r.status === 'not_approved').length,
+      sameCellCount: results.filter((r) => r.status === 'same_cell').length,
       errorCount: results.filter((r) => r.status === 'error').length,
       results,
     })
