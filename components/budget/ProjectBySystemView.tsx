@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Download, ExternalLink, Printer, RefreshCcw } from 'lucide-react'
-import { formatHours } from '@/lib/utils'
+import { formatHours, formatHoursAmount } from '@/lib/utils'
 
 type EvmCellResult = {
   budgetHours: number
@@ -95,6 +95,11 @@ type ProjectBySystemViewProps = {
 
 const fmtMoney = (n: number) =>
   `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const fmtHours = (n: number) => {
+  const text = formatHoursAmount(n)
+  const [intPart, frac = '00'] = text.split('.')
+  return `${Number(intPart).toLocaleString()}.${frac}`
+}
 const fmtPct = (frac: number) => `${(frac * 100).toFixed(1)}%`
 const fmtCpi = (cpi: number | null) => (cpi == null ? '—' : cpi.toFixed(2))
 
@@ -430,6 +435,8 @@ export default function ProjectBySystemView({
             )}
             <SummaryBlock
               label="Project total"
+              budgetHours={data.projectTotal.budgetHours}
+              actualHours={data.projectTotal.actualHours}
               budget={totalBudgetCost}
               actual={totalActualCost}
               etc={totalEtcCost}
@@ -491,6 +498,14 @@ function SystemCard({ sys, onOpenDetails }: { sys: SystemNode; onOpenDetails: ()
         )}
       </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Budget hours</div>
+          <div className="font-medium tabular-nums">{fmtHours(sys.rollup.budgetHours)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Actual hours</div>
+          <div className="font-medium tabular-nums">{fmtHours(sys.rollup.actualHours)}</div>
+        </div>
         <div>
           <div className="text-xs text-gray-500 dark:text-gray-400">Budget</div>
           <div className="font-medium tabular-nums">{fmtMoney(sys.rollup.budgetCost)}</div>
@@ -597,9 +612,11 @@ function IndirectCard({
 }
 
 function SummaryBlock({
-  label, budget, actual, etc, ev, statusPct, cpi, accent,
+  label, budgetHours, actualHours, budget, actual, etc, ev, statusPct, cpi, accent,
 }: {
   label: string
+  budgetHours: number
+  actualHours: number
   budget: number
   actual: number
   etc: number
@@ -618,6 +635,15 @@ function SummaryBlock({
     >
       <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1 text-xs">
+        <div>
+          <div className="text-gray-500 dark:text-gray-400">Budget hours</div>
+          <div className="font-medium tabular-nums">{fmtHours(budgetHours)}</div>
+        </div>
+        <div>
+          <div className="text-gray-500 dark:text-gray-400">Actual hours</div>
+          <div className="font-medium tabular-nums">{fmtHours(actualHours)}</div>
+        </div>
+        <div aria-hidden />
         <div>
           <div className="text-gray-500 dark:text-gray-400">Budget</div>
           <div className="font-medium tabular-nums">{fmtMoney(budget)}</div>

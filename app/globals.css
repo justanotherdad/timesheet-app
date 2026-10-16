@@ -427,6 +427,32 @@ input[type="number"] {
     break-inside: avoid;
     page-break-inside: avoid;
   }
+
+  /* Project matrix Print / PDF. handlePrint sets letter landscape.
+     Drop the on-screen min width so Est. budget, Actual $, and Var $ fit,
+     keep each row on one page, and repeat the header. */
+  .project-matrix-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-collapse: collapse;
+  }
+  .project-matrix-table th,
+  .project-matrix-table td {
+    font-size: 8pt !important;
+    padding: 2px 4px !important;
+    word-break: break-word;
+  }
+  .project-matrix-table .tabular-nums {
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+  }
+  .project-matrix-table thead {
+    display: table-header-group;
+  }
+  .project-matrix-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
   /* Red banner + header row keep white text (overrides the container's
      blanket dark-text rule, which would be unreadable on red). */
   .generated-report .gr-overage-banner,

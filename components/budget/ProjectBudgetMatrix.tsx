@@ -1675,7 +1675,21 @@ export default function ProjectBudgetMatrix({
   }
 
   const handlePrint = () => {
+    // The matrix has hour and dollar columns. Portrait clips the dollar columns.
+    const style = document.createElement('style')
+    style.setAttribute('data-project-matrix-print', '')
+    style.textContent = '@page { size: letter landscape; margin: 0.4in; }'
+    document.head.appendChild(style)
+    let restored = false
+    const cleanup = () => {
+      if (restored) return
+      restored = true
+      style.remove()
+      window.removeEventListener('afterprint', cleanup)
+    }
+    window.addEventListener('afterprint', cleanup)
     window.print()
+    window.setTimeout(cleanup, 60000)
   }
 
   const hasRows = data && (data.rows.length > 0 || indirectLines.length > 0)
@@ -2251,8 +2265,8 @@ export default function ProjectBudgetMatrix({
       )}
 
       {showTable && (
-        <div className="overflow-x-auto -mx-2 px-2">
-          <table className="w-full text-sm min-w-[1180px]">
+        <div className="overflow-x-auto print:overflow-visible -mx-2 px-2">
+          <table className="project-matrix-table w-full text-sm min-w-[1180px] print:min-w-0">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-600">
                 <th className="text-left py-2 pr-4 font-medium text-gray-700 dark:text-gray-300">
