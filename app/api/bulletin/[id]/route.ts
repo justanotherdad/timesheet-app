@@ -27,6 +27,7 @@ export async function PATCH(
     title?: string
     body_html?: string
     is_pinned?: boolean
+    archived?: boolean
     audience?: string
   }
   try {
@@ -51,6 +52,9 @@ export async function PATCH(
   if (typeof body.is_pinned === 'boolean') {
     updates.is_pinned = body.is_pinned
   }
+  if (typeof body.archived === 'boolean') {
+    updates.archived_at = body.archived ? new Date().toISOString() : null
+  }
   if (body.audience === 'employee' || body.audience === 'client') {
     updates.audience = body.audience
   }
@@ -67,7 +71,7 @@ export async function PATCH(
     .update(updates)
     .eq('id', id)
     .is('deleted_at', null)
-    .select('id, title, body_html, author_id, author_name, audience, is_pinned, created_at, updated_at')
+    .select('id, title, body_html, author_id, author_name, audience, is_pinned, archived_at, created_at, updated_at')
     .single()
 
   if (error) {

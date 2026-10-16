@@ -32,6 +32,17 @@ function postPreview(html: string): { excerpt: string; imageSrc: string | null }
 }
 
 type AudienceMode = 'admin' | 'employee' | 'client'
+type BoardTab = BulletinAudience | 'archive'
+
+function postPlainText(html: string): string {
+  return (html || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
 
 type Props = {
   initialPosts: BulletinPost[]
@@ -53,9 +64,10 @@ export default function BulletinBoard({
   const [error, setError] = useState<string | null>(null)
   const [reading, setReading] = useState<BulletinPost | null>(null)
   const [previewsReady, setPreviewsReady] = useState(false)
-  const [activeTab, setActiveTab] = useState<BulletinAudience>(
+  const [activeTab, setActiveTab] = useState<BoardTab>(
     audienceMode === 'client' ? 'client' : 'employee'
   )
+  const [archiveQuery, setArchiveQuery] = useState('')
 
   useEffect(() => {
     setPosts(initialPosts)
@@ -68,13 +80,23 @@ export default function BulletinBoard({
   const showTabs = audienceMode === 'admin' && canEdit
 
   const visiblePosts = useMemo(() => {
+    const live = posts.filter((p) => !p.archived_at)
+    if (showTabs && activeTab === 'archive') {
+      const query = archiveQuery.trim().toLowerCase()
+      return posts.filter((p) => {
+        if (!p.archived_at) return false
+        if (!query) return true
+        const title = (p.title || '').toLowerCase()
+        return title.includes(query) || postPlainText(p.body_html || '').includes(query)
+      })
+    }
     const audience = showTabs
       ? activeTab
       : audienceMode === 'client'
         ? 'client'
         : 'employee'
-    return posts.filter((p) => (p.audience || 'employee') === audience)
-  }, [posts, showTabs, activeTab, audienceMode])
+    return live.filter((p) => (p.audience || 'employee') === audience)
+  }, [posts, showTabs, activeTab, audienceMode, archiveQuery])
 
   const sorted = useMemo(
     () =>
@@ -112,8 +134,29 @@ export default function BulletinBoard({
       }
       return [post, ...prev]
     })
-    if (post.audience) setActiveTab(post.audience)
+    if (post.archived_at) setActiveTab('archive')
+    else if (post.audience) setActiveTab(post.audience)
     router.refresh()
+  }
+
+  const setArchived = async (post: BulletinPost, archived: boolean) => {
+    setBusyId(post.id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/bulletin/${post.id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || (archived ? 'Archive failed' : 'Restore failed'))
+      onSaved(data.post as BulletinPost)
+    } catch (err: any) {
+      setError(err?.message || (archived ? 'Archive failed' : 'Restore failed'))
+    } finally {
+      setBusyId(null)
+    }
   }
 
   const remove = async (id: string) => {
@@ -187,11 +230,12 @@ export default function BulletinBoard({
       </div>
 
       {showTabs && (
-        <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex flex-wrap items-center gap-1 mb-4 border-b border-gray-200 dark:border-gray-700">
           {(
             [
               { id: 'employee' as const, label: 'Employee View' },
               { id: 'client' as const, label: 'Client View' },
+              { id: 'archive' as const, label: 'Archive' },
             ] as const
           ).map((tab) => (
             <button
@@ -207,6 +251,16 @@ export default function BulletinBoard({
               {tab.label}
             </button>
           ))}
+          {activeTab === 'archive' && (
+            <input
+              type="search"
+              value={archiveQuery}
+              onChange={(e) => setArchiveQuery(e.target.value)}
+              placeholder="Search"
+              aria-label="Search archive"
+              className="ml-2 mb-1 w-48 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+            />
+          )}
         </div>
       )}
 
@@ -216,9 +270,13 @@ export default function BulletinBoard({
 
       {sorted.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400 py-2">
-          {canEdit
-            ? `No posts yet in ${activeTab === 'client' ? 'Client' : 'Employee'} View. Click “New post” to publish the first bulletin.`
-            : 'No bulletin posts right now.'}
+          {activeTab === 'archive'
+            ? archiveQuery.trim()
+              ? 'No archived posts match that search.'
+              : 'No archived posts.'
+            : canEdit
+              ? `No posts yet in ${activeTab === 'client' ? 'Client' : 'Employee'} View. Click “New post” to publish the first bulletin.`
+              : 'No bulletin posts right now.'}
         </p>
       ) : (
         <div className="space-y-4">
@@ -231,8 +289,10 @@ export default function BulletinBoard({
                 post={post}
                 canEdit={canEdit}
                 busy={busyId === post.id}
+                showAudience={activeTab === 'archive'}
                 onPin={() => void togglePin(post)}
                 onEdit={() => setEditing(post)}
+                onArchive={() => void setArchived(post, activeTab !== 'archive')}
                 onDelete={() => void remove(post.id)}
               />
               <div
@@ -257,8 +317,10 @@ export default function BulletinBoard({
                       post={post}
                       canEdit={canEdit}
                       busy={busyId === post.id}
+                      showAudience={activeTab === 'archive'}
                       onPin={() => void togglePin(post)}
                       onEdit={() => setEditing(post)}
+                      onArchive={() => void setArchived(post, activeTab !== 'archive')}
                       onDelete={() => void remove(post.id)}
                     />
                     {preview?.imageSrc && (
@@ -295,7 +357,7 @@ export default function BulletinBoard({
       {editing !== undefined && (
         <BulletinEditorModal
           post={editing}
-          defaultAudience={activeTab}
+          defaultAudience={activeTab === 'archive' ? 'employee' : activeTab}
           onClose={() => setEditing(undefined)}
           onSaved={onSaved}
         />
@@ -308,15 +370,19 @@ function PostHeader({
   post,
   canEdit,
   busy,
+  showAudience,
   onPin,
   onEdit,
+  onArchive,
   onDelete,
 }: {
   post: BulletinPost
   canEdit: boolean
   busy: boolean
+  showAudience: boolean
   onPin: () => void
   onEdit: () => void
+  onArchive: () => void
   onDelete: () => void
 }) {
   return (
@@ -334,6 +400,7 @@ function PostHeader({
           </h3>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400">
+          {showAudience ? `${post.audience === 'client' ? 'Client' : 'Employee'} · ` : ''}
           {formatDate(post.created_at)}
           {post.author_name ? ` · ${post.author_name}` : ''}
         </p>
@@ -355,6 +422,14 @@ function PostHeader({
             className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
           >
             Edit
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onArchive}
+            className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+          >
+            {post.archived_at ? 'Restore' : 'Archive'}
           </button>
           <button
             type="button"

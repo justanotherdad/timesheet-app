@@ -18,7 +18,7 @@ const noStore = {
 }
 
 const SELECT_COLS =
-  'id, title, body_html, author_id, author_name, audience, is_pinned, created_at, updated_at'
+  'id, title, body_html, author_id, author_name, audience, is_pinned, archived_at, created_at, updated_at'
 
 function parseAudience(value: unknown): BulletinAudience | null {
   if (value === 'employee' || value === 'client') return value
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
   if (canEdit) {
     if (requestedAudience) query = query.eq('audience', requestedAudience)
   } else {
-    query = query.eq('audience', isClient ? 'client' : 'employee')
+    query = query.eq('audience', isClient ? 'client' : 'employee').is('archived_at', null)
   }
 
   const { data, error } = await query

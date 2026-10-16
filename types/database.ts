@@ -169,6 +169,8 @@ export interface BulletinPost {
   /** Separate feeds: employee vs client (never shared). */
   audience: BulletinAudience
   is_pinned: boolean
+  /** Set when an admin archives the post. Null means it is on its live feed. */
+  archived_at?: string | null
   deleted_at?: string | null
   created_at: string
   updated_at: string

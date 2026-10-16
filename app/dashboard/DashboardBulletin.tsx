@@ -14,20 +14,33 @@ export default async function DashboardBulletin({
   const supabase = await createClient()
   const canEditBulletin = isBulletinAdmin(user.profile.role)
   let bulletinPosts: BulletinPost[] = []
-  try {
+  const load = async (withArchive: boolean) => {
+    const columns = withArchive
+      ? 'id, title, body_html, author_id, author_name, audience, is_pinned, archived_at, created_at, updated_at'
+      : 'id, title, body_html, author_id, author_name, audience, is_pinned, created_at, updated_at'
     let bulletinQuery = supabase
       .from('bulletin_posts')
-      .select('id, title, body_html, author_id, author_name, audience, is_pinned, created_at, updated_at')
+      .select(columns)
       .is('deleted_at', null)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(canEditBulletin ? 100 : 50)
+      .limit(canEditBulletin ? 200 : 50)
 
     if (!canEditBulletin) {
       bulletinQuery = bulletinQuery.eq('audience', isClient ? 'client' : 'employee')
+      if (withArchive) bulletinQuery = bulletinQuery.is('archived_at', null)
     }
 
-    const { data: bulletinData, error: bulletinError } = await bulletinQuery
+    return bulletinQuery
+  }
+
+  try {
+    let { data: bulletinData, error: bulletinError } = await load(true)
+    if (bulletinError) {
+      const retry = await load(false)
+      bulletinData = retry.data
+      bulletinError = retry.error
+    }
     if (!bulletinError && bulletinData) {
       bulletinPosts = (bulletinData as BulletinPost[]).map((p) => ({
         ...p,
