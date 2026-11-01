@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { Menu, BookOpen, Sun, Moon, ClipboardCheck, CalendarOff, ChevronRight } from 'lucide-react'
 import GuideModal from './GuideModal'
 import { useHeaderNav } from './HeaderNavProvider'
@@ -152,14 +151,15 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
               prefetch={false}
               className="flex items-center shrink-0 hover:opacity-80 transition-opacity pointer-events-auto"
             >
-              <Image
+              {/* Plain img so Vercel image optimization cannot 404 the logo. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src="/ctg-logo.png"
                 alt="CTG Logo"
                 width={120}
                 height={40}
                 className="h-8 sm:h-10 w-auto pointer-events-none select-none"
                 draggable={false}
-                unoptimized
               />
             </Link>
 

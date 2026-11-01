@@ -12,19 +12,26 @@ type BillRateRow = {
   effective_to_date: string | null
 }
 
+type HistoryRateRow = BillRateRow & { current: boolean }
+
 /**
  * GET: the POs a given employee currently has a bill rate on, with the current
  * effective rate for each. Used by the "Bill Rates by Person" quick-view popup.
  *
+ * `?history=1` returns every rate row (current and ended) with effective dates,
+ * including inactive POs, for the add-bill-rate dialog. The default response
+ * stays current-rates-only so the name-click popup is unchanged.
+ *
  * Scope:
- *   - only active POs where the employee has a current (non-ended) rate,
+ *   - default: only active POs where the employee has a current (non-ended) rate,
+ *   - history: every rate row the viewer can open,
  *   - restricted to POs the *viewer* can access (admins: all; others: the
  *     explicit po_budget_access grants) so every returned PO link is reachable.
  *
- * Returns: { rows: [{ po_id, po_number, site_name, project_description, rate }] }
+ * Returns: { rows: [{ po_id, po_number, site_name, project_description, rate, ... }] }
  */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ userId: string }> }
 ) {
   const { userId } = await params
@@ -47,18 +54,29 @@ export async function GET(
   const brRows = (brData || []) as BillRateRow[]
   if (brRows.length === 0) return NextResponse.json({ rows: [] })
 
-  // Keep only currently-active rate rows; pick the one with the latest start per PO.
+  const history = new URL(req.url).searchParams.get('history') === '1'
   const today = new Date().toISOString().slice(0, 10)
+
+  // Default: one current rate per PO. History: every rate row, current and ended.
   const currentRateByPo = new Map<string, { rate: number; from: string }>()
+  const historyRows: HistoryRateRow[] = []
   for (const r of brRows) {
-    if (!r.po_id || !billRateIsActiveOnDate(r, today)) continue
+    if (!r.po_id) continue
+    const current = billRateIsActiveOnDate(r, today)
+    if (history) {
+      historyRows.push({ ...r, current })
+      continue
+    }
+    if (!current) continue
     const from = r.effective_from_date || ''
     const existing = currentRateByPo.get(r.po_id)
     if (!existing || from > existing.from) {
       currentRateByPo.set(r.po_id, { rate: Number(r.rate) || 0, from })
     }
   }
-  const poIds = [...currentRateByPo.keys()]
+  const poIds = history
+    ? [...new Set(historyRows.map((r) => r.po_id))]
+    : [...currentRateByPo.keys()]
   if (poIds.length === 0) return NextResponse.json({ rows: [] })
 
   const { data: pos } = await admin
@@ -72,7 +90,7 @@ export async function GET(
     description: string | null
     project_name: string | null
     active: boolean | null
-  }[]).filter((p) => p.active !== false)
+  }[]).filter((p) => history || p.active !== false)
 
   // Non-admins: restrict to POs the viewer has been explicitly granted.
   const role = user.profile.role
@@ -98,19 +116,52 @@ export async function GET(
     }
   }
 
-  const rows = accessible
-    .map((p) => ({
+  const poById = new Map(accessible.map((p) => [p.id, p]))
+  const describe = (poId: string) => {
+    const p = poById.get(poId)
+    if (!p) return null
+    return {
       po_id: p.id,
       po_number: p.po_number || '(no PO #)',
       site_name: siteNameById.get(p.site_id || '') || 'Unknown',
       project_description: (p.project_name || p.description || '').trim() || '—',
-      rate: currentRateByPo.get(p.id)?.rate ?? 0,
-    }))
-    .sort((a, b) => {
-      const s = a.site_name.localeCompare(b.site_name, undefined, { sensitivity: 'base' })
-      if (s !== 0) return s
-      return a.po_number.localeCompare(b.po_number, undefined, { numeric: true })
-    })
+    }
+  }
+
+  const rows = history
+    ? historyRows
+        .map((r) => {
+          const po = describe(r.po_id)
+          if (!po) return null
+          return {
+            ...po,
+            rate: Number(r.rate) || 0,
+            effective_from_date: r.effective_from_date,
+            effective_to_date: r.effective_to_date,
+            current: r.current,
+          }
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null)
+        .sort((a, b) => {
+          const s = a.site_name.localeCompare(b.site_name, undefined, { sensitivity: 'base' })
+          if (s !== 0) return s
+          const n = a.po_number.localeCompare(b.po_number, undefined, { numeric: true })
+          if (n !== 0) return n
+          return (b.effective_from_date || '').localeCompare(a.effective_from_date || '')
+        })
+    : accessible
+        .map((p) => ({
+          po_id: p.id,
+          po_number: p.po_number || '(no PO #)',
+          site_name: siteNameById.get(p.site_id || '') || 'Unknown',
+          project_description: (p.project_name || p.description || '').trim() || '—',
+          rate: currentRateByPo.get(p.id)?.rate ?? 0,
+        }))
+        .sort((a, b) => {
+          const s = a.site_name.localeCompare(b.site_name, undefined, { sensitivity: 'base' })
+          if (s !== 0) return s
+          return a.po_number.localeCompare(b.po_number, undefined, { numeric: true })
+        })
 
   return NextResponse.json({ rows })
 }

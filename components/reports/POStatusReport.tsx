@@ -178,7 +178,25 @@ export default function POStatusReport() {
   }
 
   const handlePrint = () => {
+    const previousTitle = document.title
+    document.title = 'PO Status Report'
+
+    const style = document.createElement('style')
+    style.setAttribute('data-po-status-print', '')
+    style.textContent = '@page { size: letter landscape; margin: 0.4in; }'
+    document.head.appendChild(style)
+
+    let restored = false
+    const cleanup = () => {
+      if (restored) return
+      restored = true
+      document.title = previousTitle
+      style.remove()
+      window.removeEventListener('afterprint', cleanup)
+    }
+    window.addEventListener('afterprint', cleanup)
     window.print()
+    window.setTimeout(cleanup, 60000)
   }
 
   const handleExportCsv = () => {
@@ -253,7 +271,7 @@ export default function POStatusReport() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden report-print-container">
+    <div className="po-status-report bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden report-print-container">
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -328,7 +346,7 @@ export default function POStatusReport() {
           </div>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="po-status-scroll overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>

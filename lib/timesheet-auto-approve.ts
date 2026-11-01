@@ -1,8 +1,11 @@
 /**
  * Auto-approve / finalize timesheets when approval is complete:
- * - empty profile chain (employee effectively self-approves), or
+ * - empty profile chain (no one is assigned above the employee), or
  * - every assigned profile-chain member has already signed (heals short chains
  *   that previously stayed "submitted" after the last assigned approver).
+ *
+ * An empty chain still marks the timesheet approved. It does not record the
+ * employee as the final approver.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -97,42 +100,7 @@ export async function checkAndAutoApproveIfFinal(timesheetId: string): Promise<b
     return markTimesheetApproved(adminSupabase, timesheetId, approvedById, prevSeq)
   }
 
-  // Empty chain: no one to approve. Auto-approve as the employee approving themselves.
-  const userId = timesheet.user_id
-
-  // Get employee name for snapshot (signer_name doesn't change if profile is updated later)
-  const { data: empProfile } = await adminSupabase
-    .from('user_profiles')
-    .select('name')
-    .eq('id', userId)
-    .single()
-  const signerName = (empProfile as any)?.name || 'Unknown'
-
-  const { error: signatureError } = await adminSupabase
-    .from('timesheet_signatures')
-    .insert({
-      timesheet_id: timesheetId,
-      signer_id: userId,
-      signer_role: 'final_approver',
-      signer_name: signerName,
-    })
-
-  if (signatureError) {
-    if (signatureError.code === '23505' || signatureError.message?.includes('duplicate key')) {
-      // Signature already exists (e.g. from parallel auto-approve or manual approve) - ensure status is updated
-      const { data: current } = await adminSupabase
-        .from('weekly_timesheets')
-        .select('status, approval_confirmation_sequence')
-        .eq('id', timesheetId)
-        .single()
-      if (current?.status === 'submitted') {
-        const currentSeq = (current as { approval_confirmation_sequence?: number }).approval_confirmation_sequence
-        return markTimesheetApproved(adminSupabase, timesheetId, userId, currentSeq)
-      }
-      return true
-    }
-    return false
-  }
-
-  return markTimesheetApproved(adminSupabase, timesheetId, userId, prevSeq)
+  // Empty chain: nobody is assigned above this employee. Approve the timesheet
+  // without writing a final-approver signature for the employee.
+  return markTimesheetApproved(adminSupabase, timesheetId, timesheet.user_id, prevSeq)
 }

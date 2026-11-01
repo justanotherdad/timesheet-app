@@ -113,6 +113,10 @@ export default function BasicBudgetView({
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
+  const [expenseMonth, setExpenseMonth] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
   const [employeePopup, setEmployeePopup] = useState<{ userId: string; userName: string; weekData: Record<string, { hours: number; timesheetId: string }>; mode: 'hours' | 'cost' } | null>(null)
   const [billRatePersonPopup, setBillRatePersonPopup] = useState<{ userId: string; userName: string } | null>(null)
   const [billRatePersonRows, setBillRatePersonRows] = useState<
@@ -542,6 +546,9 @@ export default function BasicBudgetView({
     }))
     .sort((a: any, b: any) => (a.user_profiles?.name || 'Unknown').localeCompare(b.user_profiles?.name || 'Unknown'))
   const expenses = expensesOverride !== null ? expensesOverride : (data?.expenses || [])
+  const expensesForMonth = expenses.filter((ex: { expense_date?: string | null }) =>
+    String(ex.expense_date ?? '').startsWith(expenseMonth)
+  )
   const attachments = attachmentsList !== null ? attachmentsList : data?.attachments || []
   const expenseTypesFromData = data?.expenseTypes || []
   const expenseTypes = expenseTypesFromData.length > 0 ? expenseTypesFromData : expenseTypesFallback
@@ -980,11 +987,13 @@ export default function BasicBudgetView({
   }
 
   const exportDateLabel = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-  const selectedMonthLabel = (() => {
-    const [y, m] = selectedMonth.split('-')
+  const monthYearLabel = (ym: string) => {
+    const [y, m] = ym.split('-')
     const mi = parseInt(m, 10) - 1
     return `${new Date(2000, mi).toLocaleString('default', { month: 'long' })} ${y}`
-  })()
+  }
+  const selectedMonthLabel = monthYearLabel(selectedMonth)
+  const expenseMonthLabel = monthYearLabel(expenseMonth)
 
   return (
     <div id="budget-root" className="space-y-8">
@@ -2379,6 +2388,8 @@ export default function BasicBudgetView({
         </div>
       </div>
 
+      <p className="text-xs text-gray-500 dark:text-gray-400 -mt-4">NTS = No Timesheet</p>
+
       {/* 6. Additional expenses — hidden for limited access */}
       {!hasLimitedAccess && (
       <div className="budget-print-keep bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -2393,6 +2404,33 @@ export default function BasicBudgetView({
           </button>
           )}
         </div>
+        <div className="budget-print-only" style={{ fontSize: '10pt', marginBottom: 8, color: '#374151' }}>Month: {expenseMonthLabel}</div>
+        <div className="budget-print-hide flex flex-wrap gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">Month:</label>
+            <select
+              value={expenseMonth.split('-')[1]}
+              onChange={(e) => setExpenseMonth(`${expenseMonth.split('-')[0]}-${e.target.value}`)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            >
+              {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
+                <option key={m} value={String(m).padStart(2, '0')}>
+                  {new Date(2000, m - 1).toLocaleString('default', { month: 'long' })}
+                </option>
+              ))}
+            </select>
+            <label className="text-sm font-medium">Year:</label>
+            <select
+              value={expenseMonth.split('-')[0]}
+              onChange={(e) => setExpenseMonth(`${e.target.value}-${expenseMonth.split('-')[1]}`)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            >
+              {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+        </div>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-600">
@@ -2404,10 +2442,10 @@ export default function BasicBudgetView({
             </tr>
           </thead>
           <tbody>
-            {expenses.length === 0 ? (
-              <tr><td colSpan={canEdit ? 5 : 4} className="py-4 text-center text-gray-500">No additional expenses</td></tr>
+            {expensesForMonth.length === 0 ? (
+              <tr><td colSpan={canEdit ? 5 : 4} className="py-4 text-center text-gray-500">No additional expenses for this month</td></tr>
             ) : (
-              expenses.map((ex: any) => (
+              expensesForMonth.map((ex: any) => (
                 <tr key={ex.id} className="border-b border-gray-100 dark:border-gray-700">
                   <td className="py-2">{ex.expense_date ? formatDate(ex.expense_date) : '—'}</td>
                   <td className="py-2">{(ex.expense_type_id && expenseTypes.find((t: any) => t.id === ex.expense_type_id)?.name) || ex.custom_type_name || 'Custom'}</td>

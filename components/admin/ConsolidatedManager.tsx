@@ -484,6 +484,18 @@ export default function ConsolidatedManager({
     if (!confirm(`Are you sure you want to delete this item?`)) return
 
     try {
+      if (table === 'purchase_orders') {
+        const { count, error: countError } = await supabase
+          .from('timesheet_entries')
+          .select('id', { count: 'exact', head: true })
+          .eq('po_id', id)
+        if (countError) throw countError
+        if ((count ?? 0) > 0) {
+          setError('This purchase order is on timesheets and cannot be deleted. Archive it instead.')
+          return
+        }
+      }
+
       const { error } = await supabase.from(table).delete().eq('id', id)
       if (error) throw error
 
@@ -495,7 +507,17 @@ export default function ConsolidatedManager({
         setPurchaseOrders(purchaseOrders.filter(po => po.id !== id))
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      const message = err?.message || ''
+      const foreignKey = err?.code === '23503' || /foreign key/i.test(message)
+      if (table === 'purchase_orders' && foreignKey) {
+        setError(
+          /timesheet_entries/i.test(message)
+            ? 'This purchase order is on timesheets and cannot be deleted. Archive it instead.'
+            : 'This purchase order is still linked to other records and cannot be deleted. Archive it instead.'
+        )
+      } else {
+        setError(err.message || 'An error occurred')
+      }
     }
   }
 

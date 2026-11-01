@@ -225,6 +225,16 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
     if (!confirm('Are you sure you want to delete this purchase order?')) return
 
     try {
+      const { count, error: countError } = await supabase
+        .from('timesheet_entries')
+        .select('id', { count: 'exact', head: true })
+        .eq('po_id', id)
+      if (countError) throw countError
+      if ((count ?? 0) > 0) {
+        setError('This purchase order is on timesheets and cannot be deleted. Archive it instead.')
+        return
+      }
+
       const { error: deleteError } = await supabase
         .from('purchase_orders')
         .delete()
@@ -234,7 +244,15 @@ export default function PurchaseOrderManager({ sites: initialSites }: PurchaseOr
 
       setPurchaseOrders(purchaseOrders.filter(po => po.id !== id))
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      const message = err?.message || ''
+      const foreignKey = err?.code === '23503' || /foreign key/i.test(message)
+      setError(
+        !foreignKey
+          ? message || 'An error occurred'
+          : /timesheet_entries/i.test(message)
+            ? 'This purchase order is on timesheets and cannot be deleted. Archive it instead.'
+            : 'This purchase order is still linked to other records and cannot be deleted. Archive it instead.'
+      )
     }
   }
 

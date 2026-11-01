@@ -2,6 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Serve local images as static files. Vercel's image optimizer was returning
+  // a broken image for the header logo after the Pro upgrade.
+  images: {
+    unoptimized: true,
+  },
   // Cloudflare Pages handles output automatically - no standalone needed
   
   // Add timeout configurations for Cloudflare Pages

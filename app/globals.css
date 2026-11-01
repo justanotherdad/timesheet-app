@@ -373,6 +373,38 @@ input[type="number"] {
   }
 }
 
+/* PO Status Report: nine columns (client through budget balance). handlePrint
+   sets letter landscape. Fit the table to the page and keep currency on one line. */
+@media print {
+  .po-status-report,
+  .po-status-report .po-status-scroll {
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+  .po-status-report table {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-collapse: collapse;
+  }
+  .po-status-report th,
+  .po-status-report td {
+    font-size: 7.5pt !important;
+    padding: 2px 3px !important;
+    word-break: break-word;
+  }
+  .po-status-report td.text-right {
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+  }
+  .po-status-report thead {
+    display: table-header-group;
+  }
+  .po-status-report tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
 /* Generated Report (Budget Status Report) PDF export.
    handlePrint injects `@page { size: letter landscape }` for the duration of
    the print; these rules make the content fit that page. */
