@@ -16,7 +16,7 @@ const SECTIONS: { id: string; title: string }[] = [
   { id: 'data-export', title: 'View Timesheet Data & Export' },
   { id: 'holiday-calendar', title: 'Calendars' },
   { id: 'confirmations', title: 'Timesheet Confirmations' },
-  { id: 'pto', title: 'PTO Requests' },
+  { id: 'pto', title: 'Requests (PTO and Comp)' },
   { id: 'need-help', title: 'Need Help?' },
 ]
 
@@ -475,7 +475,7 @@ const GuideContent = memo(function GuideContent() {
           <li><strong>New Timesheet</strong> – Start a timesheet for the current week.</li>
           <li><strong>My Timesheets</strong> – Your own timesheets, with history and status. Admins see all timesheets here with filters. Supervisors and managers open other people’s timesheets from <strong>Pending Approvals</strong> or <strong>Approved Timesheets</strong> instead.</li>
           <li><strong>Calendars</strong> – Holiday &amp; pay and expense calendars. Opens in a new browser tab.</li>
-          <li><strong>Request PTO</strong> – Internal employees can submit and track time-off requests. External employees do not see this tile. See section 13.</li>
+          <li><strong>Requests (PTO and Comp)</strong> – Internal employees can submit and track leave and comp time. External employees and clients do not see this tile. See section 13.</li>
           <li><strong>Most Recent Timesheets</strong> – A panel listing your five most recent timesheets in any status (draft, submitted, approved, rejected), colour-coded, each with a <strong>View</strong> link.</li>
         </ul>
         <h4 className="text-sm font-semibold mt-3 mb-1">Supervisors, Managers, and Admins also see</h4>
@@ -501,6 +501,7 @@ const GuideContent = memo(function GuideContent() {
           <li><strong>Bid Sheets</strong> also appears for an employee who has been granted access to at least one bid sheet — they see only those sheets.</li>
           <li><strong>Timesheet Confirmations</strong> appears only if you have been named as a confirmation assignee under Company Information. A badge shows how many timesheets are awaiting your confirmation. See section 12.</li>
           <li><strong>PTO Requests</strong> appears only if you have been named as a PTO reviewer under Company Information. A badge shows how many leave requests are awaiting review. The first Approve or Deny settles the request for every reviewer. See section 13.</li>
+          <li><strong>Comp Time Requests</strong> appears if you have been named as a comp reviewer, and for every admin. A badge shows how many comp requests are awaiting review. See section 13.</li>
           <li><strong>Pending Approvals</strong> also appears for an employee who is currently an active <strong>approval delegate</strong> for someone else. See section 6.3.</li>
         </ul>
         <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
@@ -912,17 +913,17 @@ const GuideContent = memo(function GuideContent() {
 
       <section data-section="pto" className="scroll-mt-4">
         <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">
-          13. PTO Requests
+          13. Requests (PTO and Comp)
         </h3>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-          Internal employees can request paid time off (and related leave) before the week is worked.
-          This is separate from entering hours on the timesheet. After a request is approved, still
-          put those hours on the <strong>PTO</strong> row of that week’s timesheet so payroll can
-          export them.
+          Internal employees can request leave or comp time. External employees and clients do not
+          see this page. Leave and Use Comp still go on that week’s timesheet after approval. Bank
+          Comp does not. It is added to the running tally on this page only after a reviewer approves it.
         </p>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
-          <li><strong>Request:</strong> Dashboard → <strong>Request PTO</strong>, or the <strong>menu</strong> (☰). External employees do not see this. Choose a type (Paid Time Off, Vacation, Bereavement, Jury Duty, Comp Time Used, or type your own), start and end dates, and hours per day (up to 8). Check the client box if the client has been told; the info icon explains it and closes on its own or when you click elsewhere. Admins set that label and popup text under <strong>Company Information</strong>, beside <strong>PTO Request Reviewers</strong>. You can cancel a request while it is pending, and also after it has been approved. A badge on <strong>Request PTO</strong> counts approvals and denials since you last opened that page. Opening it clears the badge.</li>
-          <li><strong>Review:</strong> people named under <strong>Manage Organization</strong> → <strong>Company Information</strong> → <strong>PTO Request Reviewers</strong> see a <strong>PTO Requests</strong> tile and menu item with a badge. The first Approve or Deny settles the request for every reviewer and moves it to <strong>History</strong>, where you can filter by employee, status, type, and dates. The <strong>Calendar</strong> tab shows approved and pending leave for the month, with each person’s name, leave type, and hours per day. Approve can include an optional note. Deny requires a note. The employee can see that note on the request.</li>
+          <li><strong>Request:</strong> Dashboard → <strong>Requests (PTO and Comp)</strong>, or the <strong>menu</strong> (☰). Leave types are Vacation, Bereavement, Jury Duty, and Other, with a start date, end date, and hours per day (up to 8). Comp Time uses one Sunday week ending and one total hours amount, then Bank Comp or Use Comp. Use Comp is blocked when the hours are more than the available bank. Pending Use hours are held. Bank Comp is blocked until that week’s timesheet is submitted, and only submitted billable hours above the company threshold can be banked. A later bank for the same week only gets what is left. The client checkbox shows for leave and Use Comp. You can cancel your own leave request while it is pending or approved. You cannot cancel a comp request. The badge counts leave and comp decisions since you last opened the page.</li>
+          <li><strong>PTO review:</strong> people named under <strong>Manage Organization</strong> → <strong>Company Information</strong> → <strong>PTO Request Reviewers</strong> see a <strong>PTO Requests</strong> tile and menu item. The first Approve or Deny settles the request. History can be filtered by employee, status, type, and dates. The Calendar tab shows approved and pending leave. Approve can include an optional note. Deny requires a note.</li>
+          <li><strong>Comp review:</strong> people named under <strong>Comp Time Request Reviewers</strong>, and every admin, see <strong>Comp Time Requests</strong>. The waiting list is a table. Approve opens a popup with an optional note. Deny opens the same popup and the note is required. Approve checks the bank or the billable-hours limit again. If it no longer fits, Approve stays off and Deny is still available. Admins can add hours to an internal person’s bank; that posts immediately and is not limited by the weekly threshold. A named reviewer or an admin can cancel an entry. Cancelling an approved bank or an admin add removes those hours. Cancelling an approved Use puts them back. History filters by year and employee and shows who approved or denied, plus the response. The audit trail under that list records approved, denied, added, removed, and cancelled only.</li>
         </ul>
       </section>
 
@@ -939,12 +940,12 @@ const GuideContent = memo(function GuideContent() {
           <li><strong>Timesheet went to the wrong approver:</strong> The chain is Employee → Supervisor → Manager → Final Approver, taken from your profile in <strong>Manage Users</strong>. Where a field is “None,” the next person up is used. Check also whether a <strong>delegation</strong> is active (section 6.3).</li>
           <li><strong>Approvals piling up while someone is away:</strong> Set up a delegation for the dates they are out (section 6.3).</li>
           <li><strong>A tile is missing on your phone:</strong> <strong>View Timesheet Data</strong> and <strong>Export Timesheets</strong> are hidden on small screens. Use the <strong>menu</strong> (☰), or a desktop browser.</li>
-          <li><strong>Request PTO is missing:</strong> Only internal employees see it. Check <strong>Employee Type</strong> on your profile in <strong>Manage Users</strong>.</li>
+          <li><strong>Requests (PTO and Comp) is missing:</strong> Only internal employees see it. Check <strong>Employee Type</strong> on your profile in <strong>Manage Users</strong>.</li>
         </ul>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-6 italic">
           Last updated to match the current CTG Timesheet Management site: bill-rate–driven timesheet
           POs and site access, grant-based budget access, approval delegation, Bid Sheets, Reports,
-          Calendars, Timesheet Confirmations, and PTO requests.
+          Calendars, Timesheet Confirmations, and Requests (PTO and Comp).
         </p>
       </section>
     </div>

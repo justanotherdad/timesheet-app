@@ -327,13 +327,30 @@ export default function Header({ title, titleHref, showBack = false, backUrl, us
                           )}
                         </Link>
                       )}
+                      {nav.comp.showReview && (
+                        <Link
+                          href="/dashboard/comp/review"
+                          className="flex items-center justify-between gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          onClick={closeMenu}
+                        >
+                          <span className="flex items-center gap-2">
+                            <CalendarOff className="h-4 w-4 shrink-0" />
+                            Comp Time Requests
+                          </span>
+                          {nav.comp.pending > 0 && (
+                            <span className="min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold">
+                              {nav.comp.pending > 99 ? '99+' : nav.comp.pending}
+                            </span>
+                          )}
+                        </Link>
+                      )}
                       {nav.pto.showRequest && (
                         <Link
                           href="/dashboard/pto"
                           className="flex items-center justify-between gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                           onClick={closeMenu}
                         >
-                          <span>Request PTO</span>
+                          <span>Requests (PTO and Comp)</span>
                           {nav.pto.decisions > 0 && (
                             <span className="min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold">
                               {nav.pto.decisions > 99 ? '99+' : nav.pto.decisions}

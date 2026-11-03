@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { useRouter } from 'next/navigation'
 import { Info } from 'lucide-react'
 import {
+  COMP_TIME_LEAVE_TYPE,
   DEFAULT_PTO_CLIENT_ACK_INFO,
   DEFAULT_PTO_CLIENT_ACK_LABEL,
   PTO_LEAVE_TYPE_OPTIONS,
@@ -17,7 +18,16 @@ import {
   ptoReviewerNote,
   totalPtoHours,
 } from '@/lib/pto-shared'
-import { formatDate } from '@/lib/utils'
+import {
+  bankRequestError,
+  compKindLabel,
+  formatHours,
+  parseCompHours,
+  requestUseError,
+  type CompPreview,
+  type CompRequest,
+} from '@/lib/comp-shared'
+import { formatDate, formatDateForInput, getPreviousWeekEnding, getWeekEndingSundayOptions } from '@/lib/utils'
 import type { PtoRequest } from '@/types/database'
 
 function statusClass(status: string): string {
@@ -35,7 +45,12 @@ function formatRange(start: string, end: string): string {
 export default function PtoRequestClient() {
   const router = useRouter()
   const clearedBadge = useRef(false)
+  const weekOptions = useMemo(() => getWeekEndingSundayOptions(), [])
   const [leaveType, setLeaveType] = useState<string>(PTO_LEAVE_TYPE_OPTIONS[0])
+  const [compKind, setCompKind] = useState<'bank' | 'use'>('bank')
+  const [weekEnding, setWeekEnding] = useState(() => formatDateForInput(getPreviousWeekEnding()))
+  const [compHours, setCompHours] = useState('8')
+  const [compPreview, setCompPreview] = useState<{ weekEnding: string; data: CompPreview | null } | null>(null)
   const [customLeaveType, setCustomLeaveType] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -48,6 +63,8 @@ export default function PtoRequestClient() {
   const [formOk, setFormOk] = useState<string | null>(null)
 
   const [rows, setRows] = useState<PtoRequest[]>([])
+  const [compRows, setCompRows] = useState<CompRequest[]>([])
+  const [tally, setTally] = useState({ banked: 0, held: 0, available: 0 })
   const [loading, setLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
@@ -56,15 +73,32 @@ export default function PtoRequestClient() {
     setLoading(true)
     setListError(null)
     try {
-      const res = await fetch('/api/pto', { cache: 'no-store', credentials: 'include' })
-      if (!res.ok) {
+      const [ptoRes, compRes] = await Promise.all([
+        fetch('/api/pto', { cache: 'no-store', credentials: 'include' }),
+        fetch('/api/comp', { cache: 'no-store', credentials: 'include' }),
+      ])
+      if (!ptoRes.ok) {
         setListError('Could not load your requests.')
         setRows([])
         return
       }
-      const json = await res.json()
+      const json = await ptoRes.json()
       setRows(Array.isArray(json.requests) ? json.requests : [])
-      const unseen = Number((json as { unseenDecisions?: unknown }).unseenDecisions)
+      let unseen = Number((json as { unseenDecisions?: unknown }).unseenDecisions)
+      if (compRes.ok) {
+        const compJson = await compRes.json()
+        setCompRows(Array.isArray(compJson.requests) ? compJson.requests : [])
+        setTally({
+          banked: Number(compJson.banked) || 0,
+          held: Number(compJson.held) || 0,
+          available: Number(compJson.available) || 0,
+        })
+        const compUnseen = Number(compJson.unseenDecisions)
+        if (Number.isFinite(compUnseen)) unseen += compUnseen
+      } else {
+        const compJson = await compRes.json().catch(() => ({}))
+        setListError((compJson as { error?: string }).error || 'Could not load comp time.')
+      }
       if (!clearedBadge.current && Number.isFinite(unseen) && unseen > 0) {
         clearedBadge.current = true
         router.refresh()
@@ -91,7 +125,32 @@ export default function PtoRequestClient() {
       .catch(() => {})
   }, [])
 
-  const preview = useMemo(() => {
+  const isComp = leaveType === COMP_TIME_LEAVE_TYPE
+
+  useEffect(() => {
+    if (!isComp || !weekEnding) return
+    const requestedWeek = weekEnding
+    let cancelled = false
+    fetch(`/api/comp/preview?weekEnding=${encodeURIComponent(requestedWeek)}`, {
+      cache: 'no-store',
+      credentials: 'include',
+    })
+      .then(async (res) => {
+        if (!res.ok) return null
+        return (await res.json()) as CompPreview
+      })
+      .then((data) => {
+        if (!cancelled) setCompPreview({ weekEnding: requestedWeek, data })
+      })
+      .catch(() => {
+        if (!cancelled) setCompPreview({ weekEnding: requestedWeek, data: null })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isComp, weekEnding, compRows])
+
+  const dayPreview = useMemo(() => {
     const hours = Number(hoursPerDay)
     if (!isYmd(startDate) || !isYmd(endDate) || endDate < startDate || !Number.isFinite(hours)) {
       return null
@@ -106,18 +165,15 @@ export default function PtoRequestClient() {
     setFormError(null)
     setFormOk(null)
     try {
-      const res = await fetch('/api/pto', {
+      const res = await fetch(isComp ? '/api/comp' : '/api/pto', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leaveType,
-          customLeaveType,
-          startDate,
-          endDate,
-          hoursPerDay,
-          clientAcknowledged,
-        }),
+        body: JSON.stringify(
+          isComp
+            ? { kind: compKind, weekEnding, hours: compHours, clientAcknowledged: compKind === 'use' && clientAcknowledged }
+            : { leaveType, customLeaveType, startDate, endDate, hoursPerDay, clientAcknowledged }
+        ),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -154,6 +210,32 @@ export default function PtoRequestClient() {
     }
   }
 
+  const compHoursNumber = parseCompHours(compHours)
+  const weekPreview = compPreview?.weekEnding === weekEnding ? compPreview.data : null
+  const compBlock = !isComp
+    ? null
+    : compHoursNumber == null
+      ? 'Enter hours greater than 0.'
+      : compPreview?.weekEnding !== weekEnding
+        ? 'Checking this week…'
+        : !weekPreview
+          ? 'Could not check this week. Try again.'
+          : compKind === 'use'
+            ? requestUseError(compHoursNumber, weekPreview.available)
+            : bankRequestError({
+                submitted: weekPreview.submitted,
+                hasTimesheet: weekPreview.hasTimesheet,
+                billable: weekPreview.billable,
+                threshold: weekPreview.threshold,
+                alreadyHours: weekPreview.alreadyHours,
+                requestHours: compHoursNumber,
+              })
+
+  const listItems = [
+    ...rows.map((row) => ({ source: 'pto' as const, at: row.submitted_at, row })),
+    ...compRows.map((row) => ({ source: 'comp' as const, at: row.submitted_at, row })),
+  ].sort((a, b) => b.at.localeCompare(a.at))
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
       <form
@@ -162,8 +244,8 @@ export default function PtoRequestClient() {
       >
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">New request</h2>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          Approval is permission to take the time. After it is approved, still enter the hours on
-          that week’s timesheet PTO row so payroll can export them.
+          Approval is permission to take the time. After leave or Use Comp is approved, still enter
+          the hours on that week’s timesheet. Bank Comp is not entered on the timesheet.
         </p>
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="pto-type">
@@ -183,6 +265,27 @@ export default function PtoRequestClient() {
             <option value={PTO_OTHER_LEAVE_TYPE}>{PTO_OTHER_LEAVE_TYPE}</option>
           </select>
         </div>
+        {isComp && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="comp-kind">
+              Comp time
+            </label>
+            <select
+              id="comp-kind"
+              value={compKind}
+              onChange={(e) => setCompKind(e.target.value === 'use' ? 'use' : 'bank')}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+            >
+              <option value="bank">Bank Comp</option>
+              <option value="use">Use Comp</option>
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {compKind === 'bank'
+                ? 'Added to the bank only after approval. These hours are not entered on the timesheet.'
+                : 'Removed from the bank only after approval. Then enter the same hours on that week’s timesheet.'}
+            </p>
+          </div>
+        )}
         {leaveType === PTO_OTHER_LEAVE_TYPE && (
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="pto-custom-type">
@@ -200,6 +303,59 @@ export default function PtoRequestClient() {
             />
           </div>
         )}
+        {isComp ? (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="comp-week">
+                Week ending
+              </label>
+              <select
+                id="comp-week"
+                required
+                value={weekEnding}
+                onChange={(e) => setWeekEnding(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+              >
+                {weekOptions.map((week) => (
+                  <option key={week} value={week}>
+                    {formatDate(week)}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Sundays only, same as timesheets.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="comp-hours">
+                Hours
+              </label>
+              <input
+                id="comp-hours"
+                type="number"
+                required
+                min={0.25}
+                step={0.25}
+                value={compHours}
+                onChange={(e) => setCompHours(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+              />
+              {weekPreview && compKind === 'bank' && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {weekPreview.submitted
+                    ? `Submitted billable ${formatHours(weekPreview.billable)}. Unbillable ${formatHours(weekPreview.unbillable)} is ignored. ${formatHours(weekPreview.alreadyHours)} is already approved or pending, so ${formatHours(weekPreview.remaining)} is left.`
+                    : weekPreview.hasTimesheet
+                      ? `This week’s timesheet is still a draft (${formatHours(weekPreview.billable)} billable). Bank Comp stays blocked until it is submitted.`
+                      : 'There is no timesheet for this week ending yet.'}
+                </p>
+              )}
+              {weekPreview && compKind === 'use' && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {`Banked ${formatHours(weekPreview.banked)}. ${formatHours(weekPreview.held)} pending Use hours are held, so ${formatHours(weekPreview.available)} can be requested.`}
+                </p>
+              )}
+            </div>
+          </>
+        ) : (
+        <>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="pto-start">
@@ -249,20 +405,25 @@ export default function PtoRequestClient() {
           />
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             Maximum {PTO_MAX_HOURS_PER_DAY} hours per day, including weekend dates in the range.
-            {preview ? ` Total ${preview.total} hours across ${preview.days} day${preview.days === 1 ? '' : 's'}.` : ''}
+            {dayPreview ? ` Total ${dayPreview.total} hours across ${dayPreview.days} day${dayPreview.days === 1 ? '' : 's'}.` : ''}
           </p>
         </div>
-        <ClientAckField
-          label={ackLabel}
-          info={ackInfo}
-          checked={clientAcknowledged}
-          onChange={setClientAcknowledged}
-        />
+        </>
+        )}
+        {(!isComp || compKind === 'use') && (
+          <ClientAckField
+            label={ackLabel}
+            info={ackInfo}
+            checked={clientAcknowledged}
+            onChange={setClientAcknowledged}
+          />
+        )}
+        {compBlock && <p className="text-sm text-red-600 dark:text-red-400">{compBlock}</p>}
         {formError && <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>}
         {formOk && <p className="text-sm text-green-700 dark:text-green-400">{formOk}</p>}
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || Boolean(compBlock)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
         >
           {submitting ? 'Submitting…' : 'Submit request'}
@@ -270,53 +431,86 @@ export default function PtoRequestClient() {
       </form>
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">My requests</h2>
-        {loading && rows.length === 0 && (
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">My requests</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Comp time banked {formatHours(tally.banked)} hrs. {formatHours(tally.held)} pending Use hrs are held, so {formatHours(tally.available)} can be requested. Pending banks are not in the total.
+        </p>
+        {loading && listItems.length === 0 && (
           <p className="text-gray-600 dark:text-gray-400">Loading…</p>
         )}
         {listError && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{listError}</p>}
-        {!loading && rows.length === 0 && !listError && (
+        {!loading && listItems.length === 0 && !listError && (
           <p className="text-gray-600 dark:text-gray-400">No requests yet.</p>
         )}
         <div className="space-y-3">
-          {rows.map((r) => (
+          {listItems.map((item) => item.source === 'comp' ? (
             <div
-              key={r.id}
+              key={`comp-${item.row.id}`}
               className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-1"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">{r.leave_type}</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">
+                    {item.row.kind === 'admin_add' ? 'Admin add' : `Comp Time · ${compKindLabel(item.row.kind)}`}
+                  </p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {formatRange(r.start_date, r.end_date)} · {totalPtoHours(r.hours_per_day, r.start_date, r.end_date)} hrs
+                    Week ending {formatDate(item.row.week_ending)} · {formatHours(item.row.hours)} hrs
                   </p>
                 </div>
-                <span className={`text-sm font-semibold capitalize ${statusClass(r.status)}`}>
-                  {r.status}
+                <span className={`text-sm font-semibold capitalize ${statusClass(item.row.status)}`}>
+                  {item.row.kind === 'admin_add' && item.row.status === 'approved' ? 'In bank' : item.row.status}
+                  {item.row.kind === 'use' && item.row.status === 'pending' ? ' · held' : ''}
+                </span>
+              </div>
+              {item.row.kind === 'use' && (
+                <p className="text-sm text-gray-700 dark:text-gray-300">
+                  {ackLabel}: {item.row.client_acknowledged ? 'Yes' : 'No'}
+                </p>
+              )}
+              {item.row.reviewer_note && (item.row.status === 'approved' || item.row.status === 'denied') && (
+                <p className={`text-sm ${item.row.status === 'denied' ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                  Response: {item.row.reviewer_note}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div
+              key={item.row.id}
+              className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-1"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{item.row.leave_type}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {formatRange(item.row.start_date, item.row.end_date)} · {totalPtoHours(item.row.hours_per_day, item.row.start_date, item.row.end_date)} hrs
+                  </p>
+                </div>
+                <span className={`text-sm font-semibold capitalize ${statusClass(item.row.status)}`}>
+                  {item.row.status}
                 </span>
               </div>
               <p className="text-sm text-gray-700 dark:text-gray-300">
-                {ackLabel}: {r.client_acknowledged ? 'Yes' : 'No'}
+                {ackLabel}: {item.row.client_acknowledged ? 'Yes' : 'No'}
               </p>
-              {ptoReviewerNote(r) && (r.status === 'approved' || r.status === 'denied') && (
+              {ptoReviewerNote(item.row) && (item.row.status === 'approved' || item.row.status === 'denied') && (
                 <p
                   className={`text-sm ${
-                    r.status === 'denied'
+                    item.row.status === 'denied'
                       ? 'text-red-600 dark:text-red-400'
                       : 'text-gray-700 dark:text-gray-300'
                   }`}
                 >
-                  Reviewer note: {ptoReviewerNote(r)}
+                  Reviewer note: {ptoReviewerNote(item.row)}
                 </p>
               )}
-              {(r.status === 'pending' || r.status === 'approved') && (
+              {(item.row.status === 'pending' || item.row.status === 'approved') && (
                 <button
                   type="button"
-                  onClick={() => void cancel(r.id, r.status)}
-                  disabled={cancellingId === r.id}
+                  onClick={() => void cancel(item.row.id, item.row.status)}
+                  disabled={cancellingId === item.row.id}
                   className="text-sm text-red-600 dark:text-red-400 hover:underline disabled:opacity-50"
                 >
-                  {cancellingId === r.id ? 'Cancelling…' : 'Cancel request'}
+                  {cancellingId === item.row.id ? 'Cancelling…' : 'Cancel request'}
                 </button>
               )}
             </div>

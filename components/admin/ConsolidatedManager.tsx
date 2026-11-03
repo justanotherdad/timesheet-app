@@ -92,6 +92,9 @@ export default function ConsolidatedManager({
   const [confirmationSaving, setConfirmationSaving] = useState(false)
   const [ptoApproverIds, setPtoApproverIds] = useState<string[]>([])
   const [ptoApproverSaving, setPtoApproverSaving] = useState(false)
+  const [compApproverIds, setCompApproverIds] = useState<string[]>([])
+  const [compApproverSaving, setCompApproverSaving] = useState(false)
+  const [compThreshold, setCompThreshold] = useState('40')
   const [clientAckLabel, setClientAckLabel] = useState(DEFAULT_PTO_CLIENT_ACK_LABEL)
   const [clientAckInfo, setClientAckInfo] = useState(DEFAULT_PTO_CLIENT_ACK_INFO)
   const [clientAckSaving, setClientAckSaving] = useState(false)
@@ -111,6 +114,12 @@ export default function ConsolidatedManager({
           setConfirmationUserIds(Array.isArray(ids) ? ids : [])
           const ptoIds = data?.pto_request_approver_ids
           setPtoApproverIds(Array.isArray(ptoIds) ? ptoIds : [])
+          const compIds = data?.comp_request_approver_ids
+          setCompApproverIds(Array.isArray(compIds) ? compIds : [])
+          const threshold = data?.comp_bank_threshold_hours
+          setCompThreshold(
+            typeof threshold === 'number' && Number.isFinite(threshold) ? String(threshold) : '40'
+          )
           setClientAckLabel(ptoClientAckLabel(data || {}))
           setClientAckInfo(ptoClientAckInfo(data || {}))
           const filters = data?.timesheet_confirmation_site_filters
@@ -201,6 +210,45 @@ export default function ConsolidatedManager({
       : [...ptoApproverIds, id]
     setPtoApproverIds(next)
     void savePtoApprovers(next)
+  }
+
+  const saveCompApprovers = async (nextIds: string[]) => {
+    setCompApproverSaving(true)
+    try {
+      const res = await fetch('/api/company-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comp_request_approver_ids: nextIds }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        const ids = json?.comp_request_approver_ids
+        setCompApproverIds(Array.isArray(ids) ? ids : [])
+      }
+    } finally {
+      setCompApproverSaving(false)
+    }
+  }
+
+  const toggleCompApprover = (id: string) => {
+    const next = compApproverIds.includes(id)
+      ? compApproverIds.filter((x) => x !== id)
+      : [...compApproverIds, id]
+    setCompApproverIds(next)
+    void saveCompApprovers(next)
+  }
+
+  const saveCompThreshold = async (raw: string) => {
+    const res = await fetch('/api/company-settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comp_bank_threshold_hours: raw }),
+    })
+    if (res.ok) {
+      const json = await res.json()
+      const value = json?.comp_bank_threshold_hours
+      setCompThreshold(typeof value === 'number' && Number.isFinite(value) ? String(value) : '40')
+    }
   }
 
   const openFilterModal = (u: { id: string; name: string }) => {
@@ -1277,6 +1325,72 @@ export default function ConsolidatedManager({
               )}
             </div>
             {clientAckSaving && <p className="text-xs text-gray-500">Saving…</p>}
+          </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Comp Time Request Reviewers
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              People listed here see a <strong>Comp Time Requests</strong> area on the dashboard.
+              Admins see it too, so they can add hours. The first Approve or Deny settles the
+              request. Editable by admins only.
+            </p>
+            {isAdminOrAbove ? (
+              <>
+                <div className="max-h-56 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-2 space-y-1">
+                  {confirmationUsersList.length === 0 ? (
+                    <p className="text-sm text-gray-500 py-2">Loading users…</p>
+                  ) : (
+                    confirmationUsersList.map((u) => (
+                      <label
+                        key={u.id}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={compApproverIds.includes(u.id)}
+                          onChange={() => toggleCompApprover(u.id)}
+                          className="rounded border-gray-300 dark:border-gray-600"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{u.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {compApproverSaving && <p className="text-xs text-gray-500 mt-2">Saving…</p>}
+              </>
+            ) : (
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {compApproverIds.length === 0 ? '—' : `${compApproverIds.length} user(s) assigned`}
+              </p>
+            )}
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="comp-bank-threshold">
+              Hours before comp can be banked
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+              A Bank Comp request can only cover submitted billable hours above this number for that week ending. The default is 40.
+            </p>
+            {isAdminOrAbove ? (
+              <input
+                id="comp-bank-threshold"
+                type="number"
+                min={0}
+                max={999}
+                step={0.25}
+                value={compThreshold}
+                onChange={(e) => setCompThreshold(e.target.value)}
+                onBlur={(e) => void saveCompThreshold(e.target.value)}
+                className="w-full max-w-xs px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+              />
+            ) : (
+              <p className="text-sm text-gray-900 dark:text-gray-100 py-2">{compThreshold}</p>
+            )}
           </div>
           </div>
         </div>

@@ -19,6 +19,11 @@ export type AuditAction =
   | 'pto.cancel'
   | 'pto.approve'
   | 'pto.deny'
+  | 'comp.submit'
+  | 'comp.approve'
+  | 'comp.deny'
+  | 'comp.add'
+  | 'comp.cancel'
 
 export type AuditEntityType =
   | 'user'
@@ -28,6 +33,7 @@ export type AuditEntityType =
   | 'po_budget_access'
   | 'bid_sheet_access'
   | 'pto_request'
+  | 'comp_request'
 
 export interface AuditLogParams {
   actorId: string

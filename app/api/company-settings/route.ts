@@ -18,6 +18,13 @@ import {
   parsePtoApproverIds,
   stringifyPtoApproverIds,
 } from '@/lib/pto'
+import {
+  COMP_APPROVER_IDS_KEY,
+  COMP_THRESHOLD_KEY,
+  parseCompApproverIds,
+  parseCompThreshold,
+  stringifyCompApproverIds,
+} from '@/lib/comp-shared'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +52,8 @@ export async function GET() {
     timesheet_confirmation_user_ids: parseConfirmationAssigneeIds(settings),
     timesheet_confirmation_site_filters: parseConfirmationSiteFilters(settings),
     pto_request_approver_ids: parsePtoApproverIds(settings),
+    comp_request_approver_ids: parseCompApproverIds(settings),
+    comp_bank_threshold_hours: parseCompThreshold(settings[COMP_THRESHOLD_KEY]),
   })
 }
 
@@ -117,6 +126,28 @@ export async function PATCH(req: Request) {
     const info = body.pto_client_ack_info.trim().slice(0, 500) || DEFAULT_PTO_CLIENT_ACK_INFO
     updates.push({ key: PTO_CLIENT_ACK_INFO_KEY, value: info })
   }
+  if (body.comp_request_approver_ids !== undefined) {
+    const raw = body.comp_request_approver_ids
+    const ids = Array.isArray(raw)
+      ? raw
+      : typeof raw === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(raw) as unknown
+            } catch {
+              return []
+            }
+          })()
+        : []
+    const cleaned = [...new Set((ids as unknown[]).filter((x): x is string => typeof x === 'string' && x.length > 0))]
+    updates.push({ key: COMP_APPROVER_IDS_KEY, value: stringifyCompApproverIds(cleaned) })
+  }
+  if (body.comp_bank_threshold_hours !== undefined) {
+    updates.push({
+      key: COMP_THRESHOLD_KEY,
+      value: String(parseCompThreshold(body.comp_bank_threshold_hours)),
+    })
+  }
 
   for (const { key, value } of updates) {
     const { error } = await supabase
@@ -137,5 +168,7 @@ export async function PATCH(req: Request) {
     timesheet_confirmation_user_ids: parseConfirmationAssigneeIds(settings),
     timesheet_confirmation_site_filters: parseConfirmationSiteFilters(settings),
     pto_request_approver_ids: parsePtoApproverIds(settings),
+    comp_request_approver_ids: parseCompApproverIds(settings),
+    comp_bank_threshold_hours: parseCompThreshold(settings[COMP_THRESHOLD_KEY]),
   })
 }

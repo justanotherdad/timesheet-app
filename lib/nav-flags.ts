@@ -9,6 +9,7 @@ import {
   isPtoApprover,
   parsePtoApproverIds,
 } from '@/lib/pto'
+import { canManageComp, countPendingCompRequests, countUnseenCompDecisions } from '@/lib/comp'
 import {
   getPendingConfirmationsForUser,
   loadCompanySettingsMap,
@@ -18,12 +19,14 @@ import {
 export type HeaderNavFlags = {
   timesheetConfirm: { show: boolean; pending: number }
   pto: { showRequest: boolean; showReview: boolean; pending: number; decisions: number }
+  comp: { showReview: boolean; pending: number }
   clientBudget: boolean
 }
 
 const emptyHeaderNav: HeaderNavFlags = {
   timesheetConfirm: { show: false, pending: 0 },
   pto: { showRequest: false, showReview: false, pending: 0, decisions: 0 },
+  comp: { showReview: false, pending: 0 },
   clientBudget: false,
 }
 
@@ -65,7 +68,20 @@ export const getHeaderNavFlags = cache(async function getHeaderNavFlags(): Promi
   let confirmPending = 0
   let ptoPending = 0
   let ptoDecisions = 0
+  let compPending = 0
+  let compDecisions = 0
+  let compShowReview = false
   const pendingWork: Promise<void>[] = []
+  pendingWork.push(
+    canManageComp(admin, user.id, user.profile.role)
+      .then(async (access) => {
+        compShowReview = access.allowed
+        if (access.allowed) compPending = await countPendingCompRequests(admin)
+      })
+      .catch((err) => {
+        console.error('[comp] access check failed', err)
+      })
+  )
   if (showRequest) {
     pendingWork.push(
       countUnseenPtoDecisions(admin, user.id)
@@ -74,6 +90,13 @@ export const getHeaderNavFlags = cache(async function getHeaderNavFlags(): Promi
         })
         .catch((err) => {
           console.error('[pto] unseen decision count failed', err)
+        }),
+      countUnseenCompDecisions(admin, user.id)
+        .then((n) => {
+          compDecisions = n
+        })
+        .catch((err) => {
+          console.error('[comp] unseen decision count failed', err)
         })
     )
   }
@@ -103,7 +126,8 @@ export const getHeaderNavFlags = cache(async function getHeaderNavFlags(): Promi
 
   return {
     timesheetConfirm: { show: showConfirm, pending: confirmPending },
-    pto: { showRequest, showReview, pending: ptoPending, decisions: ptoDecisions },
+    pto: { showRequest, showReview, pending: ptoPending, decisions: ptoDecisions + compDecisions },
+    comp: { showReview: compShowReview, pending: compPending },
     clientBudget,
   }
 })

@@ -17,12 +17,13 @@ export function ptoClientAckInfo(settings: Record<string, unknown>): string {
   return text.slice(0, 500) || DEFAULT_PTO_CLIENT_ACK_INFO
 }
 
+export const COMP_TIME_LEAVE_TYPE = 'Comp Time'
+
 export const PTO_LEAVE_TYPE_OPTIONS = [
-  'Paid Time Off',
   'Vacation',
   'Bereavement',
   'Jury Duty',
-  'Comp Time Used',
+  COMP_TIME_LEAVE_TYPE,
 ] as const
 
 export const PTO_OTHER_LEAVE_TYPE = 'Other'

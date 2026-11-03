@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
 import {
+  COMP_TIME_LEAVE_TYPE,
   countUnseenPtoDecisions,
   createPtoRequest,
   isInternalEmployee,
@@ -67,6 +68,9 @@ export async function POST(req: Request) {
   })
   if (!validated.ok) {
     return NextResponse.json({ error: validated.error }, { status: 400 })
+  }
+  if (validated.value.leaveType === COMP_TIME_LEAVE_TYPE) {
+    return NextResponse.json({ error: 'Choose Bank Comp or Use Comp for a comp request.' }, { status: 400 })
   }
 
   try {

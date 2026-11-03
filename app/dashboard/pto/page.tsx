@@ -15,7 +15,7 @@ export default async function PtoRequestPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Header title="Request PTO" showBack backUrl="/dashboard" user={user} />
+      <Header title="Requests (PTO and Comp)" showBack backUrl="/dashboard" user={user} />
       <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
         <PtoRequestClient />
       </div>

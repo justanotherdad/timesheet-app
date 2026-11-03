@@ -75,11 +75,11 @@ export function buildEmployeeDashboardTiles(
     const decisions = nav.pto.decisions
     tiles.push({
       id: 'request-pto',
-      title: 'Request PTO',
+      title: 'Requests (PTO and Comp)',
       description:
         decisions > 0
           ? `${decisions} new decision${decisions === 1 ? '' : 's'}`
-          : 'Submit and track time-off requests',
+          : 'Submit and track PTO and comp requests',
       icon: 'calendarOff',
       color: 'teal',
       href: '/dashboard/pto',
@@ -204,6 +204,21 @@ export function buildEmployeeDashboardTiles(
       color: 'teal',
       href: '/dashboard/pto/review',
       badge: nav.pto.pending,
+    })
+  }
+
+  if (nav.comp.showReview) {
+    tiles.push({
+      id: 'comp-requests',
+      title: 'Comp Time Requests',
+      description:
+        nav.comp.pending > 0
+          ? `${nav.comp.pending} awaiting review`
+          : 'Review comp time bank and use requests',
+      icon: 'calendarOff',
+      color: 'orange',
+      href: '/dashboard/comp/review',
+      badge: nav.comp.pending,
     })
   }
 
