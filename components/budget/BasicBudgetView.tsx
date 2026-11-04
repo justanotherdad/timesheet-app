@@ -2452,8 +2452,8 @@ export default function BasicBudgetView({
               <th className="text-left py-2 font-medium">Date</th>
               <th className="text-left py-2 font-medium">Type</th>
               <th className="text-left py-2 font-medium">Notes</th>
-              <th className="text-right py-2 font-medium">Amount</th>
-              <th className="text-left py-2 font-medium">Files</th>
+              <th className="text-right py-2 pr-8 font-medium whitespace-nowrap">Amount</th>
+              <th className="text-left py-2 pl-4 font-medium whitespace-nowrap">Files</th>
               {canEdit && <th className="w-20 py-2"></th>}
             </tr>
           </thead>
@@ -2469,8 +2469,8 @@ export default function BasicBudgetView({
                   <td className="py-2">{ex.expense_date ? formatDate(ex.expense_date) : '—'}</td>
                   <td className="py-2">{(ex.expense_type_id && expenseTypes.find((t: any) => t.id === ex.expense_type_id)?.name) || ex.custom_type_name || 'Custom'}</td>
                   <td className="py-2">{ex.notes || '—'}</td>
-                  <td className="text-right py-2">${(ex.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                  <td className="py-2">
+                  <td className="text-right py-2 pr-8 whitespace-nowrap">${(ex.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2 pl-4 whitespace-nowrap">
                     {fileCount > 0 || canEdit ? (
                       <button
                         type="button"
