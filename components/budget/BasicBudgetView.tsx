@@ -117,6 +117,7 @@ export default function BasicBudgetView({
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
+  const [showAllExpenses, setShowAllExpenses] = useState(false)
   const [employeePopup, setEmployeePopup] = useState<{ userId: string; userName: string; weekData: Record<string, { hours: number; timesheetId: string }>; mode: 'hours' | 'cost' } | null>(null)
   const [billRatePersonPopup, setBillRatePersonPopup] = useState<{ userId: string; userName: string } | null>(null)
   const [billRatePersonRows, setBillRatePersonRows] = useState<
@@ -549,6 +550,7 @@ export default function BasicBudgetView({
   const expensesForMonth = expenses.filter((ex: { expense_date?: string | null }) =>
     String(ex.expense_date ?? '').startsWith(expenseMonth)
   )
+  const visibleExpenses = showAllExpenses ? expenses : expensesForMonth
   const attachments = attachmentsList !== null ? attachmentsList : data?.attachments || []
   const expenseTypesFromData = data?.expenseTypes || []
   const expenseTypes = expenseTypesFromData.length > 0 ? expenseTypesFromData : expenseTypesFallback
@@ -2404,9 +2406,9 @@ export default function BasicBudgetView({
           </button>
           )}
         </div>
-        <div className="budget-print-only" style={{ fontSize: '10pt', marginBottom: 8, color: '#374151' }}>Month: {expenseMonthLabel}</div>
+        <div className="budget-print-only" style={{ fontSize: '10pt', marginBottom: 8, color: '#374151' }}>{showAllExpenses ? 'All expenses' : `Month: ${expenseMonthLabel}`}</div>
         <div className="budget-print-hide flex flex-wrap gap-4 mb-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <label className="text-sm font-medium">Month:</label>
             <select
               value={expenseMonth.split('-')[1]}
@@ -2429,6 +2431,19 @@ export default function BasicBudgetView({
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
+            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+              <input
+                type="radio"
+                name="additional-expenses-all"
+                checked={showAllExpenses}
+                onClick={(e) => {
+                  e.preventDefault()
+                  setShowAllExpenses((current) => !current)
+                }}
+                onChange={() => {}}
+              />
+              All
+            </label>
           </div>
         </div>
         <table className="w-full text-sm">
@@ -2438,19 +2453,36 @@ export default function BasicBudgetView({
               <th className="text-left py-2 font-medium">Type</th>
               <th className="text-left py-2 font-medium">Notes</th>
               <th className="text-right py-2 font-medium">Amount</th>
+              <th className="text-left py-2 font-medium">Files</th>
               {canEdit && <th className="w-20 py-2"></th>}
             </tr>
           </thead>
           <tbody>
-            {expensesForMonth.length === 0 ? (
-              <tr><td colSpan={canEdit ? 5 : 4} className="py-4 text-center text-gray-500">No additional expenses for this month</td></tr>
+            {visibleExpenses.length === 0 ? (
+              <tr><td colSpan={canEdit ? 6 : 5} className="py-4 text-center text-gray-500">{showAllExpenses ? 'No additional expenses' : 'No additional expenses for this month'}</td></tr>
             ) : (
-              expensesForMonth.map((ex: any) => (
+              visibleExpenses.map((ex: any) => {
+                const fileCount = Number(ex.attachment_count) || 0
+                const fileLabel = fileCount === 1 ? '1 file' : `${fileCount} files`
+                return (
                 <tr key={ex.id} className="border-b border-gray-100 dark:border-gray-700">
                   <td className="py-2">{ex.expense_date ? formatDate(ex.expense_date) : '—'}</td>
                   <td className="py-2">{(ex.expense_type_id && expenseTypes.find((t: any) => t.id === ex.expense_type_id)?.name) || ex.custom_type_name || 'Custom'}</td>
                   <td className="py-2">{ex.notes || '—'}</td>
                   <td className="text-right py-2">${(ex.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2">
+                    {fileCount > 0 || canEdit ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpenseModal(canEdit ? ex : { ...ex, readOnly: true })}
+                        className="text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        {fileLabel}
+                      </button>
+                    ) : (
+                      fileLabel
+                    )}
+                  </td>
                   {canEdit && (
                   <td className="py-2">
                     <div className="flex gap-1">
@@ -2460,7 +2492,8 @@ export default function BasicBudgetView({
                   </td>
                   )}
                 </tr>
-              ))
+                )
+              })
             )}
           </tbody>
         </table>
@@ -2567,6 +2600,7 @@ export default function BasicBudgetView({
           poId={po.id}
           expense={expenseModal.id ? expenseModal : undefined}
           expenseTypes={expenseTypes}
+          readOnly={!!expenseModal.readOnly}
           onSave={loadExpenses}
           onClose={() => setExpenseModal(null)}
         />

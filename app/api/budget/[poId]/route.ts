@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/auth'
 import { canAccessPoBudget } from '@/lib/access'
+import { withExpenseAttachmentCounts } from '@/lib/expense-attachments'
 import { normalizePoIssueDateForDb, parseMoney } from '@/lib/utils'
 import { MISSING_PO_NUMBER_MESSAGE, normalizePoNumber, poNumberSaveError } from '@/lib/po-number'
 import {
@@ -155,6 +156,7 @@ export async function GET(
     const { data: fallback } = await supabase.from('po_expenses').select('*').eq('po_id', poId).order('expense_date', { ascending: false })
     expenses = fallback ?? []
   }
+  expenses = await withExpenseAttachmentCounts(adminSupabase || supabase, poId, expenses)
   let expenseTypes = expenseTypesRes.data || []
   // Fallback when admin query failed or returned empty (RLS may block user client in some envs)
   if ((expenseTypesRes.error || expenseTypes.length === 0) && adminSupabase) {

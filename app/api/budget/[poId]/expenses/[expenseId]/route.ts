@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessPoBudget } from '@/lib/access'
 import { getCurrentUser } from '@/lib/auth'
 import {
@@ -89,6 +90,25 @@ export async function DELETE(
 
   if (existingErr || !existing) {
     return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
+  }
+
+  try {
+    const admin = createAdminClient()
+    const { data: files, error: filesErr } = await admin
+      .from('po_expense_attachments')
+      .select('storage_path')
+      .eq('expense_id', expenseId)
+      .eq('po_id', poId)
+    if (filesErr && filesErr.code !== '42P01' && !/does not exist/i.test(filesErr.message || '')) {
+      return NextResponse.json({ error: filesErr.message }, { status: 500 })
+    }
+    const paths = (files || []).map((row: { storage_path: string }) => row.storage_path).filter(Boolean)
+    if (paths.length) {
+      const { error: storageErr } = await admin.storage.from('site-attachments').remove(paths)
+      if (storageErr) return NextResponse.json({ error: storageErr.message }, { status: 500 })
+    }
+  } catch (err) {
+    console.error('[expenses] attachment cleanup skipped', err)
   }
 
   const { error } = await supabase.from('po_expenses').delete().eq('id', expenseId).eq('po_id', poId)

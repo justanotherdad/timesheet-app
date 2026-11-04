@@ -8,6 +8,7 @@ import {
   fetchExpenseTypeNames,
   logPoBudgetContainerAudit,
 } from '@/lib/po-budget-container-audit'
+import { withExpenseAttachmentCounts } from '@/lib/expense-attachments'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +39,8 @@ export async function GET(
     .order('expense_date', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data || [])
+  const expenses = await withExpenseAttachmentCounts(client, poId, data || [])
+  return NextResponse.json(expenses)
 }
 
 export async function POST(
