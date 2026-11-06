@@ -492,7 +492,7 @@ const GuideContent = memo(function GuideContent() {
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
           <li><strong>Budget Detail</strong> – PO budgets, invoices, expenses, billable hours and cost, and bill rates.</li>
           <li><strong>Reports</strong> – Outstanding Invoices, PO Status, and generated budget status reports.</li>
-          <li><strong>Export Timesheets</strong> – Export timesheets for any week.</li>
+          <li><strong>Export Timesheets</strong> – Export the last 4 weeks, or choose a month for older weeks.</li>
           <li><strong>Payroll</strong> – Weekly payroll export for approved internal timesheets (admins only). Earning types are configured under Manage Organization → Payroll.</li>
         </ul>
         <h4 className="text-sm font-semibold mt-3 mb-1">Tiles that depend on a specific grant</h4>
@@ -871,10 +871,11 @@ const GuideContent = memo(function GuideContent() {
         <h4 className="text-sm font-semibold mt-3 mb-1">10.2 Export Timesheets</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
           <strong>Where:</strong> Dashboard → <strong>Export Timesheets</strong>. Available to{' '}
-          <strong>Managers</strong> and <strong>Admins</strong>. Choose a week and export the
-          timesheets in it, either as a set of printable timesheet pages (one per person, matching
-          the single-timesheet PDF) or as a spreadsheet summary. Filters let you limit the export by
-          client, PO, or system, and to leave out non-billable hours.
+          <strong>Managers</strong> and <strong>Admins</strong>. The page opens on the last 4 weeks.
+          Choose a month under <strong>Period</strong> to load older weeks, then a week ending.
+          Export as a set of printable timesheet pages (one per person, matching the single-timesheet
+          PDF) or as a spreadsheet summary. Filters let you limit the export by client, PO, or
+          system, and to leave out non-billable hours.
         </p>
       </section>
 

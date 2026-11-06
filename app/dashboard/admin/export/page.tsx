@@ -4,23 +4,131 @@ import { requireRole } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchByIds, fetchInIdChunksPaged } from '@/lib/supabase-fetch'
+import { currentWeekEnding, getWeekEndingsForMonth } from '@/lib/utils'
 import Header from '@/components/Header'
 import AdminExport from '@/components/admin/AdminExport'
 
-export default async function AdminExportPage() {
+const PAGE_SIZE = 1000
+const TIMESHEET_SELECT = `
+  *,
+  user_profiles!user_id(name, email, supervisor_id, manager_id, final_approver_id)
+`
+
+type ExportSupabase = Awaited<ReturnType<typeof createClient>>
+
+function addCalendarDays(iso: string, days: number): string {
+  const [year, month, day] = iso.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+function recentBounds(): { start: string; end: string } {
+  const end = currentWeekEnding()
+  return { start: addCalendarDays(end, -21), end }
+}
+
+function boundsForPeriod(periodId: string): { start: string; end: string } {
+  if (periodId === 'recent') return recentBounds()
+  const [year, month] = periodId.split('-').map(Number)
+  const weeks = getWeekEndingsForMonth(year, month, 1)
+  if (weeks.length === 0) return recentBounds()
+  return { start: weeks[0], end: weeks[weeks.length - 1] }
+}
+
+function normalizeRequestedPeriod(raw: string | undefined): string {
+  if (raw && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw)) return raw
+  return 'recent'
+}
+
+function monthLabel(periodId: string): string {
+  const [year, month] = periodId.split('-').map(Number)
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, month - 1, 1)))
+}
+
+async function listVisibleWeekEndings(supabase: ExportSupabase): Promise<string[]> {
+  const dates = new Set<string>()
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('weekly_timesheets')
+      .select('id, week_ending')
+      .order('week_ending', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1)
+    if (error) {
+      console.error('Export week list failed:', error.message)
+      break
+    }
+    const rows = data || []
+    for (const row of rows) {
+      const day = String(row.week_ending || '').slice(0, 10)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(day)) dates.add(day)
+    }
+    if (rows.length < PAGE_SIZE) break
+  }
+  return [...dates]
+}
+
+type TimesheetListRow = {
+  id: string
+  user_id: string
+  week_ending: string | null
+  status: string
+  [key: string]: unknown
+}
+
+async function listTimesheetsBetween(supabase: ExportSupabase, start: string, end: string) {
+  const out: TimesheetListRow[] = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('weekly_timesheets')
+      .select(TIMESHEET_SELECT)
+      .gte('week_ending', start)
+      .lte('week_ending', end)
+      .order('week_ending', { ascending: false })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1)
+    if (error) {
+      console.error('Export timesheet list failed:', error.message)
+      break
+    }
+    const rows = (data || []) as TimesheetListRow[]
+    out.push(...rows)
+    if (rows.length < PAGE_SIZE) break
+  }
+  return out
+}
+
+export default async function AdminExportPage(props: { searchParams?: Promise<{ period?: string }> }) {
+  const params = props.searchParams ? await props.searchParams : {}
   const user = await requireRole(['manager', 'admin', 'super_admin'])
   const supabase = await createClient()
 
-  // Get timesheets with user profiles (include approver ids for conditional signature lines)
-  const { data: timesheets } = await supabase
-    .from('weekly_timesheets')
-    .select(`
-      *,
-      user_profiles!user_id(name, email, supervisor_id, manager_id, final_approver_id)
-    `)
-    .order('week_ending', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(1000)
+  const requested = normalizeRequestedPeriod(params.period)
+  const requestedBounds = boundsForPeriod(requested)
+  const [weekEndingDates, requestedTimesheets] = await Promise.all([
+    listVisibleWeekEndings(supabase),
+    listTimesheetsBetween(supabase, requestedBounds.start, requestedBounds.end),
+  ])
+
+  const monthIds = [...new Set(weekEndingDates.map((day) => day.slice(0, 7)))].sort().reverse()
+  const periods = [
+    { id: 'recent', label: 'Recent' },
+    ...monthIds.map((id) => ({ id, label: monthLabel(id) })),
+  ]
+  const periodId = periods.some((period) => period.id === requested) ? requested : 'recent'
+  const loadedTimesheets = periodId === requested
+    ? requestedTimesheets
+    : await listTimesheetsBetween(supabase, recentBounds().start, recentBounds().end)
+  const timesheets = loadedTimesheets.map((ts) => ({
+    ...ts,
+    week_ending: String(ts.week_ending || '').slice(0, 10),
+  }))
 
   // Deduplicate: when a user has both a draft and a non-draft for the same week_ending,
   // keep only the highest-precedence one (approved > pending > rejected > draft).
@@ -154,11 +262,14 @@ export default async function AdminExportPage() {
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
           <AdminExport
+            key={periodId}
             timesheets={timesheetsWithData || []}
             sites={sites}
             departments={departments}
             purchaseOrders={purchaseOrders}
             systems={systems}
+            periodId={periodId}
+            periods={periods}
           />
         </div>
       </div>

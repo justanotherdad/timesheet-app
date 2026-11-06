@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Download, FileText, FileSpreadsheet, File, ArrowUpDown, ArrowUp, ArrowDown, X, Filter } from 'lucide-react'
 import { formatWeekEnding, formatDate, formatDateShort, formatDateInEastern, formatHoursAmount, formatHoursDayCell, getWeekDates } from '@/lib/utils'
 import { format } from 'date-fns'
@@ -9,17 +10,27 @@ interface Site { id: string; name: string }
 interface Department { id: string; name: string; site_id: string }
 interface PurchaseOrder { id: string; po_number: string; site_id?: string; department_id?: string }
 
+interface ExportPeriod {
+  id: string
+  label: string
+}
+
 interface AdminExportProps {
   timesheets: any[]
   sites: Site[]
   departments: Department[]
   purchaseOrders: PurchaseOrder[]
   systems?: Array<{ id: string; name: string }>
+  periodId: string
+  periods: ExportPeriod[]
 }
 
 type ExportFormat = 'csv' | 'excel' | 'pdf'
 
-export default function AdminExport({ timesheets, sites, departments, purchaseOrders, systems = [] }: AdminExportProps) {
+export default function AdminExport({ timesheets, sites, departments, purchaseOrders, systems = [], periodId, periods }: AdminExportProps) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [periodChoice, setPeriodChoice] = useState(periodId)
   const [selectedWeek, setSelectedWeek] = useState<string>('')
   const [selectedStatus, setSelectedStatus] = useState<string>('')
   const [selectedSite, setSelectedSite] = useState<string>('')
@@ -74,7 +85,16 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
   }, [purchaseOrders, selectedSite, selectedDepartment])
 
   // Get unique filter options from timesheets (for week, status, employee)
-  const weekEndings = Array.from(new Set(timesheets.map(ts => ts.week_ending))).filter(Boolean).sort().reverse()
+  const weekEndings = Array.from(new Set(timesheets.map(ts => String(ts.week_ending || '').slice(0, 10)))).filter(Boolean).sort().reverse()
+
+  const goToPeriod = (nextPeriod: string) => {
+    setPeriodChoice(nextPeriod)
+    setSelectedTimesheets([])
+    const href = nextPeriod === 'recent'
+      ? '/dashboard/admin/export'
+      : `/dashboard/admin/export?period=${encodeURIComponent(nextPeriod)}`
+    startTransition(() => router.push(href))
+  }
   const statuses = Array.from(new Set(timesheets.map(ts => ts.status))).filter(Boolean).sort()
   const employeesList = timesheets.map(ts => ({ id: ts.user_id, name: ts.user_profiles?.name || 'Unknown' }))
   const uniqueEmployees = Array.from(new Map(employeesList.map((e: any) => [e.id, e])).values()).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
@@ -87,14 +107,15 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
     setSelectedPO('')
     setSelectedEmployee('')
     setSelectedTimesheets([])
+    if (periodChoice !== 'recent') goToPeriod('recent')
   }
 
-  const hasActiveFilters = selectedWeek || selectedStatus || selectedSite || selectedDepartment || selectedPO || selectedEmployee
+  const hasActiveFilters = periodChoice !== 'recent' || selectedWeek || selectedStatus || selectedSite || selectedDepartment || selectedPO || selectedEmployee
 
   // Filter timesheets by all selected filters (match if timesheet has ANY of selected site/PO)
   const filteredTimesheets = useMemo(() => {
     return timesheets.filter(ts => {
-      if (selectedWeek && ts.week_ending !== selectedWeek) return false
+      if (selectedWeek && String(ts.week_ending || '').slice(0, 10) !== selectedWeek) return false
       if (selectedStatus && ts.status !== selectedStatus) return false
       if (selectedSite && !(ts._site_ids || []).includes(selectedSite)) return false
       if (selectedPO && !(ts._po_ids || []).includes(selectedPO)) return false
@@ -668,6 +689,16 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
     }
   }, [filterEntriesData, sites, purchaseOrders, systems])
 
+  const activePeriod = periods.find((period) => period.id === periodId)
+  const allWeeksLabel = periodId === 'recent'
+    ? 'All Recent Weeks'
+    : `All Weeks in ${(activePeriod?.label || '').replace(/ \d{4}$/, '') || 'This Month'}`
+  const periodSummary = selectedWeek
+    ? `Week ending ${formatWeekEnding(selectedWeek)}.`
+    : periodId === 'recent'
+      ? 'Last 4 weeks, newest first.'
+      : `Weeks ending in ${activePeriod?.label || 'this month'}.`
+
   const clearFiltersAndSelection = () => setSelectedTimesheets([])
 
   const filterSelectClass = "px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm min-w-0"
@@ -678,13 +709,27 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
         {/* Filters row - all in one row on desktop */}
         <div className="flex flex-col md:flex-row md:items-end md:gap-4 gap-4">
           <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Period</label>
+            <select
+              value={periodChoice}
+              onChange={(e) => goToPeriod(e.target.value)}
+              className={filterSelectClass}
+              disabled={isPending}
+            >
+              {periods.map((period) => (
+                <option key={period.id} value={period.id}>{period.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1 min-w-0">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Week Ending</label>
             <select
               value={selectedWeek}
               onChange={(e) => { setSelectedWeek(e.target.value); clearFiltersAndSelection() }}
               className={filterSelectClass}
+              disabled={isPending}
             >
-              <option value="">All Weeks</option>
+              <option value="">{allWeeksLabel}</option>
               {weekEndings.map(we => (
                 <option key={we} value={we}>{formatWeekEnding(we)}</option>
               ))}
@@ -804,6 +849,10 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
           </div>
         </div>
 
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          {isPending ? 'Loading timesheets…' : periodSummary}
+        </p>
+
         {/* Export format and Export button - all in one row */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
@@ -838,7 +887,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
           </div>
           <button
             onClick={handleExport}
-            disabled={exporting}
+            disabled={exporting || isPending}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="h-4 w-4" />
@@ -847,7 +896,7 @@ export default function AdminExport({ timesheets, sites, departments, purchaseOr
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className={`overflow-x-auto ${isPending ? 'opacity-50' : ''}`}>
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
