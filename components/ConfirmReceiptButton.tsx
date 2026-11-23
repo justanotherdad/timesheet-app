@@ -22,7 +22,7 @@ export default function ConfirmReceiptButton({ timesheetId }: { timesheetId: str
         setError((json as { error?: string }).error || 'Could not confirm.')
         return
       }
-      router.refresh()
+      router.push('/dashboard/timesheet-confirmations')
     } catch {
       setError('Could not confirm.')
     } finally {

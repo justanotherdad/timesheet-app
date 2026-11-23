@@ -51,6 +51,9 @@ interface ConsolidatedManagerProps {
   expenseTypes?: Array<{ id: string; name: string }>
   readOnly?: boolean
   isAdminOrAbove?: boolean
+  initialTab?: TabType
+  initialSiteId?: string
+  initialShowAddForm?: boolean
 }
 
 type TabType = 'sites' | 'departments' | 'purchase-orders' | 'expense-types' | 'company-info' | 'payroll'
@@ -62,18 +65,21 @@ export default function ConsolidatedManager({
   expenseTypes: initialExpenseTypes = [],
   readOnly = false,
   isAdminOrAbove = false,
+  initialTab = 'sites',
+  initialSiteId = '',
+  initialShowAddForm = false,
 }: ConsolidatedManagerProps) {
   const router = useRouter()
   const [sites, setSites] = useState(initialSites)
   const [departments, setDepartments] = useState(initialDepartments)
   const [purchaseOrders, setPurchaseOrders] = useState(initialPOs)
-  const [activeTab, setActiveTab] = useState<TabType>('sites')
-  const [selectedSite, setSelectedSite] = useState<string>('')
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab)
+  const [selectedSite, setSelectedSite] = useState<string>(initialSiteId)
   const [selectedDepartment, setSelectedDepartment] = useState<string>('')
   const [showArchivedPOs, setShowArchivedPOs] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showAddForm, setShowAddForm] = useState(false)
+  const [showAddForm, setShowAddForm] = useState(initialShowAddForm && !readOnly && !!initialSiteId)
   const [editingItem, setEditingItem] = useState<any>(null)
   
   // Sorting state for each table

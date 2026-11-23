@@ -16,6 +16,7 @@ interface POStatusRow {
   total_paid: number
   total_outstanding: number
   po_balance: number
+  labor_expense_total: number
   budget_balance: number
 }
 
@@ -29,7 +30,7 @@ function formatCurrency(val: number): string {
   return `$${(val ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-type SortColumn = 'client' | 'po_number' | 'project_name' | 'original_po_amount_incl_cos' | 'total_invoiced' | 'total_paid' | 'total_outstanding' | 'po_balance' | 'budget_balance'
+type SortColumn = 'client' | 'po_number' | 'project_name' | 'original_po_amount_incl_cos' | 'total_invoiced' | 'total_paid' | 'total_outstanding' | 'po_balance' | 'labor_expense_total' | 'budget_balance'
 
 export default function POStatusReport() {
   const [loading, setLoading] = useState(true)
@@ -133,6 +134,10 @@ export default function POStatusReport() {
           aVal = a.po_balance ?? 0
           bVal = b.po_balance ?? 0
           break
+        case 'labor_expense_total':
+          aVal = a.labor_expense_total ?? 0
+          bVal = b.labor_expense_total ?? 0
+          break
         case 'budget_balance':
           aVal = a.budget_balance ?? 0
           bVal = b.budget_balance ?? 0
@@ -214,6 +219,7 @@ export default function POStatusReport() {
       'Total Paid',
       'Total Outstanding',
       'PO Balance',
+      'Labor & Expense Total',
       'Budget Balance',
     ]
     const lines: string[] = [header.map(q).join(',')]
@@ -229,6 +235,7 @@ export default function POStatusReport() {
             q(n(r.total_paid)),
             q(n(r.total_outstanding)),
             q(n(r.po_balance)),
+            q(n(r.labor_expense_total)),
             q(n(r.budget_balance)),
           ].join(',')
         )
@@ -240,9 +247,10 @@ export default function POStatusReport() {
           total_paid: acc.total_paid + (r.total_paid ?? 0),
           total_outstanding: acc.total_outstanding + (r.total_outstanding ?? 0),
           po_balance: acc.po_balance + (r.po_balance ?? 0),
+          labor_expense_total: acc.labor_expense_total + (r.labor_expense_total ?? 0),
           budget_balance: acc.budget_balance + (r.budget_balance ?? 0),
         }),
-        { original_po_amount_incl_cos: 0, total_invoiced: 0, total_paid: 0, total_outstanding: 0, po_balance: 0, budget_balance: 0 }
+        { original_po_amount_incl_cos: 0, total_invoiced: 0, total_paid: 0, total_outstanding: 0, po_balance: 0, labor_expense_total: 0, budget_balance: 0 }
       )
       lines.push(
         [
@@ -254,6 +262,7 @@ export default function POStatusReport() {
           q(n(t.total_paid)),
           q(n(t.total_outstanding)),
           q(n(t.po_balance)),
+          q(n(t.labor_expense_total)),
           q(n(t.budget_balance)),
         ].join(',')
       )
@@ -391,6 +400,11 @@ export default function POStatusReport() {
                 </button>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
+                <button type="button" onClick={() => handleSort('labor_expense_total')} className="flex items-center gap-1 ml-auto hover:text-gray-900 dark:hover:text-gray-100">
+                  Labor & Expense Total <SortIcon col="labor_expense_total" />
+                </button>
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
                 <button type="button" onClick={() => handleSort('budget_balance')} className="flex items-center gap-1 ml-auto hover:text-gray-900 dark:hover:text-gray-100">
                   Budget Balance <SortIcon col="budget_balance" />
                 </button>
@@ -400,7 +414,7 @@ export default function POStatusReport() {
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
             {sortedRows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan={10} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                   No data found
                 </td>
               </tr>
@@ -415,9 +429,10 @@ export default function POStatusReport() {
                     total_paid: acc.total_paid + (r.total_paid ?? 0),
                     total_outstanding: acc.total_outstanding + (r.total_outstanding ?? 0),
                     po_balance: acc.po_balance + (r.po_balance ?? 0),
+                    labor_expense_total: acc.labor_expense_total + (r.labor_expense_total ?? 0),
                     budget_balance: acc.budget_balance + (r.budget_balance ?? 0),
                   }),
-                  { original_po_amount_incl_cos: 0, total_invoiced: 0, total_paid: 0, total_outstanding: 0, po_balance: 0, budget_balance: 0 }
+                  { original_po_amount_incl_cos: 0, total_invoiced: 0, total_paid: 0, total_outstanding: 0, po_balance: 0, labor_expense_total: 0, budget_balance: 0 }
                 )
                 return (
                   <React.Fragment key={clientName}>
@@ -435,6 +450,7 @@ export default function POStatusReport() {
                         <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.total_paid)}</td>
                         <td className="px-4 py-3 text-sm text-right text-amber-700 dark:text-amber-300">{formatCurrency(row.total_outstanding)}</td>
                         <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.po_balance)}</td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.labor_expense_total)}</td>
                         <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.budget_balance)}</td>
                       </tr>
                     ))}
@@ -448,6 +464,7 @@ export default function POStatusReport() {
                       <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.total_paid)}</td>
                       <td className="px-4 py-2 text-sm text-right text-amber-700 dark:text-amber-300">{formatCurrency(clientTotal.total_outstanding)}</td>
                       <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.po_balance)}</td>
+                      <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.labor_expense_total)}</td>
                       <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.budget_balance)}</td>
                     </tr>
                   </React.Fragment>

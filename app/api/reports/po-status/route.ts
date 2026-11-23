@@ -42,7 +42,7 @@ async function fetchInChunks<T>(
   return out
 }
 
-/** Returns PO status report data: Client, PO #, Original PO + date, COs + dates, Total Invoiced, Total Paid, Total Outstanding, PO Balance, Budget Balance. */
+/** Returns PO status report data: Client, PO #, Original PO + date, COs + dates, Total Invoiced, Total Paid, Total Outstanding, PO Balance, Labor & Expense Total, Budget Balance. */
 export async function GET(req: Request) {
   const user = await getCurrentUser()
   if (!user || !['manager', 'admin', 'super_admin'].includes(user.profile.role)) {
@@ -255,6 +255,7 @@ export async function GET(req: Request) {
         (Number(po.prior_amount_spent) || 0)
       const laborCost = laborByPo[po.id] ?? 0
       const expenseTotal = expenseByPo[po.id] ?? 0
+      const laborExpenseTotal = laborCost + expenseTotal
       const budgetBalance = totalAvailable - priorCost - laborCost - expenseTotal
 
       return {
@@ -268,6 +269,7 @@ export async function GET(req: Request) {
         total_paid: totalPaid,
         total_outstanding: totalOutstanding,
         po_balance: poBalance,
+        labor_expense_total: laborExpenseTotal,
         budget_balance: budgetBalance,
         active: po.active !== false,
       }

@@ -7,7 +7,15 @@ import { withQueryTimeout } from '@/lib/timeout'
 import { getAccessibleSiteIds } from '@/lib/access'
 import ConsolidatedManager from '@/components/admin/ConsolidatedManager'
 
-export default async function OrganizationAdminPage() {
+export default async function OrganizationAdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string | string[]; site?: string | string[]; add?: string | string[] }>
+}) {
+  const params = await searchParams
+  const tab = Array.isArray(params.tab) ? params.tab[0] : params.tab
+  const site = Array.isArray(params.site) ? params.site[0] : params.site
+  const add = Array.isArray(params.add) ? params.add[0] : params.add
   const user = await requireRole(['supervisor', 'manager', 'admin', 'super_admin'])
   const supabase = await createClient()
 
@@ -39,6 +47,9 @@ export default async function OrganizationAdminPage() {
 
   const readOnly = role === 'supervisor'
   const isAdminOrAbove = role === 'admin' || role === 'super_admin'
+  const initialSiteId = site && sites.some((s: { id: string }) => s.id === site) ? site : ''
+  const initialTab = tab === 'purchase-orders' ? 'purchase-orders' : 'sites'
+  const initialShowAddForm = add === '1' && !!initialSiteId && !readOnly
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -52,6 +63,9 @@ export default async function OrganizationAdminPage() {
             expenseTypes={expenseTypes}
             readOnly={readOnly}
             isAdminOrAbove={isAdminOrAbove}
+            initialTab={initialTab}
+            initialSiteId={initialSiteId}
+            initialShowAddForm={initialShowAddForm}
           />
         </div>
       </div>

@@ -1027,6 +1027,15 @@ export default function BasicBudgetView({
           Back to budget list
         </button>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {canEdit && (selectedSiteId || poData.site_id) && (
+            <Link
+              href={`/dashboard/admin/organization?tab=purchase-orders&site=${encodeURIComponent(selectedSiteId || poData.site_id)}&add=1`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Add Purchase Order
+            </Link>
+          )}
           <button
             type="button"
             onClick={handleExportPdf}
