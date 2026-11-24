@@ -163,9 +163,34 @@ export default function POStatusReport() {
   }, [sortedRows])
 
   const SortIcon = ({ col }: { col: SortColumn }) => {
-    if (sortColumn !== col) return <ArrowUpDown className="h-4 w-4 inline opacity-50" />
-    return sortDir === 'asc' ? <ArrowUp className="h-4 w-4 inline" /> : <ArrowDown className="h-4 w-4 inline" />
+    if (sortColumn !== col) return <ArrowUpDown className="h-3.5 w-3.5 inline opacity-50" />
+    return sortDir === 'asc' ? <ArrowUp className="h-3.5 w-3.5 inline" /> : <ArrowDown className="h-3.5 w-3.5 inline" />
   }
+
+  const SortHeader = ({
+    col,
+    align,
+    children,
+  }: {
+    col: SortColumn
+    align: 'left' | 'right'
+    children: React.ReactNode
+  }) => (
+    <th
+      className={`text-xs font-medium text-gray-600 dark:text-gray-300 uppercase ${
+        align === 'right' ? 'text-right' : 'text-left'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => handleSort(col)}
+        className="po-status-sort hover:text-gray-900 dark:hover:text-gray-100"
+      >
+        <span>{children}</span>
+        <SortIcon col={col} />
+      </button>
+    </th>
+  )
 
   if (loading && !data) {
     return (
@@ -355,60 +380,26 @@ export default function POStatusReport() {
           </div>
         </div>
       </div>
-      <div className="po-status-scroll overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+      <div className="po-status-scroll">
+        <table className="divide-y divide-gray-200 dark:divide-gray-700">
+          <colgroup>
+            <col className="po-status-col-client" />
+            <col className="po-status-col-po" />
+            <col className="po-status-col-project" />
+            <col className="po-status-col-money" span={7} />
+          </colgroup>
           <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
-                <button type="button" onClick={() => handleSort('client')} className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100">
-                  Client <SortIcon col="client" />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
-                <button type="button" onClick={() => handleSort('po_number')} className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100">
-                  PO # <SortIcon col="po_number" />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
-                <button type="button" onClick={() => handleSort('project_name')} className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100">
-                  Project Name <SortIcon col="project_name" />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
-                <button type="button" onClick={() => handleSort('original_po_amount_incl_cos')} className="flex items-center gap-1 ml-auto hover:text-gray-900 dark:hover:text-gray-100">
-                  Original PO Amount (incl. COs) <SortIcon col="original_po_amount_incl_cos" />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
-                <button type="button" onClick={() => handleSort('total_invoiced')} className="flex items-center gap-1 ml-auto hover:text-gray-900 dark:hover:text-gray-100">
-                  Total Invoiced <SortIcon col="total_invoiced" />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
-                <button type="button" onClick={() => handleSort('total_paid')} className="flex items-center gap-1 ml-auto hover:text-gray-900 dark:hover:text-gray-100">
-                  Total Paid <SortIcon col="total_paid" />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
-                <button type="button" onClick={() => handleSort('total_outstanding')} className="flex items-center gap-1 ml-auto hover:text-gray-900 dark:hover:text-gray-100">
-                  Total Outstanding <SortIcon col="total_outstanding" />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
-                <button type="button" onClick={() => handleSort('po_balance')} className="flex items-center gap-1 ml-auto hover:text-gray-900 dark:hover:text-gray-100">
-                  PO Balance <SortIcon col="po_balance" />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
-                <button type="button" onClick={() => handleSort('labor_expense_total')} className="flex items-center gap-1 ml-auto hover:text-gray-900 dark:hover:text-gray-100">
-                  Labor & Expense Total <SortIcon col="labor_expense_total" />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
-                <button type="button" onClick={() => handleSort('budget_balance')} className="flex items-center gap-1 ml-auto hover:text-gray-900 dark:hover:text-gray-100">
-                  Budget Balance <SortIcon col="budget_balance" />
-                </button>
-              </th>
+              <SortHeader col="client" align="left">Client</SortHeader>
+              <SortHeader col="po_number" align="left">PO #</SortHeader>
+              <SortHeader col="project_name" align="left">Project Name</SortHeader>
+              <SortHeader col="original_po_amount_incl_cos" align="right">Original PO Amount (incl. COs)</SortHeader>
+              <SortHeader col="total_invoiced" align="right">Total Invoiced</SortHeader>
+              <SortHeader col="total_paid" align="right">Total Paid</SortHeader>
+              <SortHeader col="total_outstanding" align="right">Total Outstanding</SortHeader>
+              <SortHeader col="po_balance" align="right">PO Balance</SortHeader>
+              <SortHeader col="labor_expense_total" align="right">Labor & Expense Total</SortHeader>
+              <SortHeader col="budget_balance" align="right">Budget Balance</SortHeader>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -438,34 +429,34 @@ export default function POStatusReport() {
                   <React.Fragment key={clientName}>
                     {clientRows.map((row) => (
                       <tr key={row.po_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.client}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                        <td className="text-sm text-gray-900 dark:text-gray-100">{row.client}</td>
+                        <td className="text-sm text-gray-900 dark:text-gray-100">
                           <Link href={`/dashboard/budget?poId=${row.po_id}`} className="text-blue-600 dark:text-blue-400 hover:underline">
                             {row.po_number}
                           </Link>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.project_name}</td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.original_po_amount_incl_cos)}</td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.total_invoiced)}</td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.total_paid)}</td>
-                        <td className="px-4 py-3 text-sm text-right text-amber-700 dark:text-amber-300">{formatCurrency(row.total_outstanding)}</td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.po_balance)}</td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.labor_expense_total)}</td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.budget_balance)}</td>
+                        <td className="text-sm text-gray-900 dark:text-gray-100">{row.project_name}</td>
+                        <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.original_po_amount_incl_cos)}</td>
+                        <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.total_invoiced)}</td>
+                        <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.total_paid)}</td>
+                        <td className="text-sm text-right text-amber-700 dark:text-amber-300">{formatCurrency(row.total_outstanding)}</td>
+                        <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.po_balance)}</td>
+                        <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.labor_expense_total)}</td>
+                        <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(row.budget_balance)}</td>
                       </tr>
                     ))}
                     <tr className="bg-gray-100 dark:bg-gray-700/50 font-semibold">
-                      <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100" colSpan={2}>
+                      <td className="text-sm text-gray-900 dark:text-gray-100" colSpan={2}>
                         Subtotal: {clientName}
                       </td>
-                      <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">—</td>
-                      <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.original_po_amount_incl_cos)}</td>
-                      <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.total_invoiced)}</td>
-                      <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.total_paid)}</td>
-                      <td className="px-4 py-2 text-sm text-right text-amber-700 dark:text-amber-300">{formatCurrency(clientTotal.total_outstanding)}</td>
-                      <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.po_balance)}</td>
-                      <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.labor_expense_total)}</td>
-                      <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.budget_balance)}</td>
+                      <td className="text-sm text-gray-500 dark:text-gray-400">—</td>
+                      <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.original_po_amount_incl_cos)}</td>
+                      <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.total_invoiced)}</td>
+                      <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.total_paid)}</td>
+                      <td className="text-sm text-right text-amber-700 dark:text-amber-300">{formatCurrency(clientTotal.total_outstanding)}</td>
+                      <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.po_balance)}</td>
+                      <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.labor_expense_total)}</td>
+                      <td className="text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(clientTotal.budget_balance)}</td>
                     </tr>
                   </React.Fragment>
                 )
